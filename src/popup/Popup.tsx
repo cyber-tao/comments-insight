@@ -67,13 +67,13 @@ const Popup: React.FC = () => {
 
       // Send message to content script to detect platform
       try {
-        const response = await chrome.tabs.sendMessage(tab.id!, { type: 'DETECT_PLATFORM' });
+        const response = await chrome.tabs.sendMessage(tab.id!, { type: 'GET_PLATFORM_INFO' });
         
         if (response?.platform) {
           setPageInfo({
             url: tab.url,
             platform: response.platform,
-            isValid: response.platform !== 'unknown',
+            isValid: response.isValid,
           });
           
           // Check if this page has been extracted/analyzed

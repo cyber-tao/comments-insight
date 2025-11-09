@@ -67,6 +67,9 @@ export class MessageRouter {
         case 'DELETE_HISTORY':
           return await this.handleDeleteHistory(message);
 
+        case 'CLEAR_ALL_HISTORY':
+          return await this.handleClearAllHistory();
+
         case 'GET_AVAILABLE_MODELS':
           return await this.handleGetAvailableModels(message);
 
@@ -317,6 +320,20 @@ export class MessageRouter {
 
     await this.storageManager.deleteHistoryItem(id);
     return { success: true };
+  }
+
+  /**
+   * Handle clear all history message
+   */
+  private async handleClearAllHistory(): Promise<any> {
+    const history = await this.storageManager.getHistory();
+    
+    // Delete all history items
+    for (const item of history) {
+      await this.storageManager.deleteHistoryItem(item.id);
+    }
+    
+    return { success: true, count: history.length };
   }
 
   /**

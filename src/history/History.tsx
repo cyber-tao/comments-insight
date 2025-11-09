@@ -81,6 +81,23 @@ const History: React.FC = () => {
     }
   };
 
+  const handleClearAll = async () => {
+    if (!confirm(t('history.clearAllConfirm'))) return;
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'CLEAR_ALL_HISTORY',
+      });
+      
+      if (response?.success) {
+        setHistory([]);
+        setSelectedItem(null);
+      }
+    } catch (error) {
+      console.error('Failed to clear all:', error);
+    }
+  };
+
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleString();
   };
@@ -125,7 +142,17 @@ const History: React.FC = () => {
       {/* Sidebar - History List */}
       <div className="w-1/3 bg-white border-r flex flex-col">
         <div className="p-4 border-b">
-          <h2 className="text-2xl font-bold mb-4">{t('history.title')}</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-2xl font-bold">{t('history.title')}</h2>
+            {history.length > 0 && (
+              <button
+                onClick={handleClearAll}
+                className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+              >
+                🗑️ {t('history.clearAll')}
+              </button>
+            )}
+          </div>
           <div className="flex gap-2">
             <input
               type="text"

@@ -105,6 +105,7 @@ export type MessageType =
   | 'GET_HISTORY'
   | 'GET_HISTORY_BY_URL'
   | 'DELETE_HISTORY'
+  | 'CLEAR_ALL_HISTORY'
   | 'EXPORT_DATA'
   | 'GET_AVAILABLE_MODELS'
   | 'TEST_MODEL'
