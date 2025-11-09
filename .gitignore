@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# IDE and Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Development documentation (temporary)
+*_FEATURE.md
+*_ENHANCEMENTS.md
+*_FIX*.md
+*_COMPLETE.md
+PROGRESS_*.md
+BUG_*.md
+
+# Kiro specs (optional - uncomment if you don't want to track)
+# .kiro/
+
+# OS files
+Thumbs.db
+Desktop.ini
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Chrome extension specific
+*.crx
+*.pem
+*.zip
