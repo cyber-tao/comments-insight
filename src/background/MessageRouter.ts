@@ -37,6 +37,12 @@ export class MessageRouter {
         case 'AI_EXTRACT_COMMENTS':
           return await this.handleAIExtractComments(message);
 
+        case 'AI_EXTRACT_PROGRESSIVE':
+          return await this.handleAIExtractProgressive(message);
+
+        case 'AI_ANALYZE_STRUCTURE':
+          return await this.handleAIAnalyzeStructure(message);
+
         case 'EXTRACTION_PROGRESS':
           return this.handleExtractionProgress(message);
 
@@ -133,7 +139,9 @@ export class MessageRouter {
    * Handle AI extract comments message (from content script)
    */
   private async handleAIExtractComments(message: Message): Promise<any> {
-    const { prompt } = message.payload || {};
+    // Content script sends 'data' instead of 'payload'
+    const payload = (message as any).data || message.payload || {};
+    const { prompt } = payload;
 
     if (!prompt) {
       throw new Error('Prompt is required');
@@ -167,6 +175,154 @@ export class MessageRouter {
     } catch (error) {
       console.error('[MessageRouter] AI extraction failed:', error);
       return { error: error instanceof Error ? error.message : 'Unknown error', comments: [] };
+    }
+  }
+
+  /**
+   * Handle AI progressive extraction (new iterative approach)
+   */
+  private async handleAIExtractProgressive(message: Message): Promise<any> {
+    const payload = (message as any).data || message.payload || {};
+    const { prompt } = payload;
+
+    if (!prompt) {
+      throw new Error('Prompt is required');
+    }
+
+    try {
+      // Get settings for AI configuration
+      const settings = await this.storageManager.getSettings();
+      
+      // Call AI service
+      const response = await this.aiService.callAI({
+        prompt,
+        config: settings.extractorModel
+      });
+
+      // Parse JSON response
+      let data;
+      try {
+        // Remove markdown code blocks if present
+        let jsonText = response.content.trim();
+        if (jsonText.startsWith('```')) {
+          jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        }
+        
+        // Remove any leading/trailing text that's not JSON
+        const jsonStart = jsonText.indexOf('{');
+        const jsonEnd = jsonText.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+        }
+        
+        data = JSON.parse(jsonText);
+        
+        // Validate response structure
+        if (!data.comments || !Array.isArray(data.comments)) {
+          data.comments = [];
+        }
+        if (!data.nodesToExpand || !Array.isArray(data.nodesToExpand)) {
+          data.nodesToExpand = [];
+        }
+        if (typeof data.needsScroll !== 'boolean') {
+          data.needsScroll = false;
+        }
+        if (typeof data.completed !== 'boolean') {
+          data.completed = false;
+        }
+        if (!data.analysis) {
+          data.analysis = '';
+        }
+        
+      } catch (parseError) {
+        console.error('[MessageRouter] Failed to parse AI progressive response:', parseError);
+        console.error('[MessageRouter] Raw response:', response.content);
+        
+        // Return empty response instead of failing
+        data = {
+          comments: [],
+          nodesToExpand: [],
+          needsScroll: false,
+          completed: true,
+          analysis: 'Failed to parse AI response'
+        };
+      }
+
+      return { data };
+    } catch (error) {
+      console.error('[MessageRouter] AI progressive extraction failed:', error);
+      return { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        data: {
+          comments: [],
+          nodesToExpand: [],
+          needsScroll: false,
+          completed: true,
+          analysis: 'Error occurred'
+        }
+      };
+    }
+  }
+
+  /**
+   * Handle AI structure analysis (selector-based extraction)
+   */
+  private async handleAIAnalyzeStructure(message: Message): Promise<any> {
+    const payload = (message as any).data || message.payload || {};
+    const { prompt } = payload;
+
+    if (!prompt) {
+      throw new Error('Prompt is required');
+    }
+
+    try {
+      // Get settings for AI configuration
+      const settings = await this.storageManager.getSettings();
+      
+      // Call AI service
+      const response = await this.aiService.callAI({
+        prompt,
+        config: settings.extractorModel
+      });
+
+      // Parse JSON response
+      let data;
+      try {
+        // Remove markdown code blocks if present
+        let jsonText = response.content.trim();
+        if (jsonText.startsWith('```')) {
+          jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        }
+        
+        // Remove any leading/trailing text that's not JSON
+        const jsonStart = jsonText.indexOf('{');
+        const jsonEnd = jsonText.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+        }
+        
+        data = JSON.parse(jsonText);
+        
+        // Validate response structure
+        if (!data.selectors) {
+          throw new Error('Missing selectors in response');
+        }
+        if (typeof data.confidence !== 'number') {
+          data.confidence = 0.5;
+        }
+        
+      } catch (parseError) {
+        console.error('[MessageRouter] Failed to parse AI structure analysis:', parseError);
+        console.error('[MessageRouter] Raw response:', response.content);
+        throw new Error('Failed to parse AI response');
+      }
+
+      return { data };
+    } catch (error) {
+      console.error('[MessageRouter] AI structure analysis failed:', error);
+      return { 
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
     }
   }
 
@@ -460,7 +616,8 @@ export class MessageRouter {
       const result = await this.aiService.analyzeComments(
         comments,
         settings.analyzerModel,
-        settings.analyzerPromptTemplate
+        settings.analyzerPromptTemplate,
+        settings.language
       );
 
       this.taskManager.updateTaskProgress(taskId, 75);

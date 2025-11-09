@@ -36,6 +36,7 @@ const DEFAULT_SETTINGS: Settings = {
 ## Output Format:
 Generate a comprehensive analysis report in Markdown format.`,
   language: 'zh-CN',
+  selectorRetryAttempts: 3,
 };
 
 /**

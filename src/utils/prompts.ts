@@ -134,14 +134,21 @@ export function buildAnalysisPrompt(
     platform?: string;
     url?: string;
     totalComments?: number;
+    language?: string;
   }
 ): string {
+  // Add language instruction
+  const languageInstruction = metadata?.language === 'zh-CN' 
+    ? '\n\n## Language Requirement:\nYou MUST write the entire analysis in Chinese (简体中文). All sections, insights, and summaries must be in Chinese.'
+    : '\n\n## Language Requirement:\nYou MUST write the entire analysis in English.';
+  
   let prompt = template
     .replace('{comments_json}', commentsJson)
     .replace('{timestamp}', metadata?.timestamp || new Date().toISOString())
     .replace('{platform}', metadata?.platform || 'social media')
     .replace('{url}', metadata?.url || 'N/A')
-    .replace('{total_comments}', String(metadata?.totalComments || 0));
+    .replace('{total_comments}', String(metadata?.totalComments || 0))
+    + languageInstruction;
 
   return prompt;
 }

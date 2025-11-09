@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HistoryItem, Comment } from '../types';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { exportCommentsAsCSV, exportAnalysisAsMarkdown, exportCompleteData } from '../utils/export';
 import i18n from '../utils/i18n';
 
@@ -266,9 +267,11 @@ const History: React.FC = () => {
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6">
               {viewMode === 'analysis' ? (
-                <div className="prose max-w-none">
+                <div className="prose prose-sm md:prose-base max-w-none prose-table:border-collapse prose-th:border prose-th:border-gray-300 prose-th:bg-gray-100 prose-th:p-2 prose-td:border prose-td:border-gray-300 prose-td:p-2">
                   {selectedItem.analysis ? (
-                    <ReactMarkdown>{selectedItem.analysis.markdown}</ReactMarkdown>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {selectedItem.analysis.markdown}
+                    </ReactMarkdown>
                   ) : (
                     <div className="text-center text-gray-500 py-8">
                       No analysis available yet

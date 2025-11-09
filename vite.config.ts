@@ -20,6 +20,7 @@ export default defineConfig({
         popup: 'src/popup/index.html',
         options: 'src/options/index.html',
         history: 'src/history/index.html',
+        logs: 'src/logs/index.html',
       },
     },
   },

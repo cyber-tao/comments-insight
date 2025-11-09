@@ -3,6 +3,13 @@
  */
 export class PageController {
   /**
+   * Scroll to bottom once
+   */
+  async scrollToBottom(): Promise<void> {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+  }
+
+  /**
    * Scroll to load more content
    * @param maxScrolls - Maximum number of scrolls
    */

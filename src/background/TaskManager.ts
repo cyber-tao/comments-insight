@@ -47,8 +47,16 @@ export class TaskManager {
       throw new Error(`Task not found: ${taskId}`);
     }
 
-    if (task.status !== 'pending') {
-      throw new Error(`Task ${taskId} is not in pending state`);
+    // If task is already running, just return (idempotent)
+    if (task.status === 'running') {
+      console.log(`[TaskManager] Task ${taskId} is already running`);
+      return;
+    }
+
+    // If task is completed or failed, don't restart
+    if (task.status === 'completed' || task.status === 'failed') {
+      console.warn(`[TaskManager] Task ${taskId} is in ${task.status} state, cannot restart`);
+      return;
     }
 
     task.status = 'running';

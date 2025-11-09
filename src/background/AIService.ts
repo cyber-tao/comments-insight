@@ -6,6 +6,30 @@ import { buildExtractionPrompt, buildAnalysisPrompt } from '../utils/prompts';
  * comment extraction and analysis
  */
 export class AIService {
+  private currentLanguage: string = 'en-US';
+  
+  private logToFile(type: 'extraction' | 'analysis', data: { prompt: string; response: string; timestamp: number}) {
+    // Log to console with a special format that can be easily identified
+    console.log(`[AI_LOG_${type.toUpperCase()}]`, JSON.stringify({
+      timestamp: data.timestamp,
+      type,
+      prompt: data.prompt.substring(0, 500) + '...', // First 500 chars
+      response: data.response.substring(0, 500) + '...', // First 500 chars
+      promptLength: data.prompt.length,
+      responseLength: data.response.length,
+    }));
+    
+    // Save full log to chrome.storage.local
+    const logKey = `ai_log_${type}_${data.timestamp}`;
+    chrome.storage.local.set({
+      [logKey]: {
+        type,
+        timestamp: data.timestamp,
+        prompt: data.prompt,
+        response: data.response,
+      }
+    }).catch(err => console.error('[AIService] Failed to save log:', err));
+  }
   /**
    * Call AI API with the given request
    * @param request - AI request configuration
@@ -60,6 +84,14 @@ export class AIService {
         tokensUsed,
         finishReason,
         contentLength: content.length,
+      });
+
+      // Log the interaction for debugging
+      const logType = prompt.includes('extract comments') || prompt.includes('DOM Structure') ? 'extraction' : 'analysis';
+      this.logToFile(logType, {
+        prompt,
+        response: content,
+        timestamp: Date.now(),
       });
 
       return {
@@ -152,8 +184,10 @@ export class AIService {
   async analyzeComments(
     comments: Comment[],
     config: AIConfig,
-    promptTemplate: string
+    promptTemplate: string,
+    language?: string
   ): Promise<AnalysisResult> {
+    this.currentLanguage = language || 'en-US';
     // Split comments if they exceed token limit
     const commentBatches = this.splitCommentsForAnalysis(comments, config.maxTokens);
     
@@ -316,6 +350,7 @@ export class AIService {
       timestamp: new Date().toISOString(),
       platform: 'social media',
       totalComments: JSON.parse(commentsJson).length,
+      language: this.currentLanguage,
     });
   }
 

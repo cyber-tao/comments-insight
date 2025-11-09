@@ -23,6 +23,33 @@ export interface Comment {
   platform: Platform;
 }
 
+// Simplified DOM node for progressive extraction
+export interface SimplifiedNode {
+  tag: string;
+  id?: string;
+  classes?: string[];
+  attributes?: Record<string, string>;
+  text?: string;
+  childCount: number;
+  expanded: boolean;
+  children?: SimplifiedNode[];
+  selector: string;
+  depth: number;
+}
+
+// AI extraction response for progressive extraction
+export interface AIExtractionResponse {
+  comments: Comment[];
+  nodesToExpand: {
+    selector: string;
+    reason: string;
+    priority: number;
+  }[];
+  needsScroll: boolean;
+  completed: boolean;
+  analysis: string;
+}
+
 export interface Task {
   id: string;
   type: 'extract' | 'analyze';
@@ -63,6 +90,7 @@ export interface Settings {
   analyzerModel: AIConfig;
   analyzerPromptTemplate: string;
   language: 'zh-CN' | 'en-US';
+  selectorRetryAttempts: number;
 }
 
 export interface AnalysisResult {
@@ -96,6 +124,8 @@ export interface HistoryItem {
 export type MessageType = 
   | 'START_EXTRACTION'
   | 'AI_EXTRACT_COMMENTS'
+  | 'AI_EXTRACT_PROGRESSIVE'
+  | 'AI_ANALYZE_STRUCTURE'
   | 'EXTRACTION_PROGRESS'
   | 'START_ANALYSIS'
   | 'GET_TASK_STATUS'

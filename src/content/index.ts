@@ -1,8 +1,7 @@
 // Content Script for Comments Insight Extension
 import { PlatformDetector } from './PlatformDetector';
-import { DOMAnalyzer } from './DOMAnalyzer';
 import { PageController } from './PageController';
-import { CommentExtractor } from './CommentExtractor';
+import { CommentExtractorSelector } from './CommentExtractorSelector';
 
 console.log('Comments Insight Content Script loaded');
 
@@ -18,9 +17,8 @@ if (isValid) {
 }
 
 // Initialize extractors
-const domAnalyzer = new DOMAnalyzer();
 const pageController = new PageController();
-const commentExtractor = new CommentExtractor(domAnalyzer, pageController);
+const selectorExtractor = new CommentExtractorSelector(pageController);
 
 // Track current extraction task
 let currentTaskId: string | null = null;
@@ -81,15 +79,15 @@ async function handleStartExtraction(
   currentTaskId = taskId;
   
   try {
-    // Extract comments with AI
-    const comments = await commentExtractor.extractWithAI(
+    // Extract comments with selector-based approach
+    const comments = await selectorExtractor.extractWithAI(
       maxComments,
       platform,
-      (progress, message) => {
+      (message, count) => {
         // Send progress update to background
         chrome.runtime.sendMessage({
           type: 'EXTRACTION_PROGRESS',
-          data: { taskId, progress, message }
+          data: { taskId, progress: 50, message: `${message} (${count} comments)` }
         });
       }
     );

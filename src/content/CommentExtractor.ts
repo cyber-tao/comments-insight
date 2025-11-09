@@ -29,7 +29,8 @@ export class CommentExtractor {
     try {
       // Step 1: Wait for comments section (10%)
       onProgress?.(10, 'Waiting for comments section...');
-      await this.pageController.waitForElement('[role="article"], .comment, .reply', 5000);
+      // Wait for any common comment container elements
+      await this.pageController.waitForElement('[role="article"], .comment, .reply, #comments, [id*="comment"], [class*="comment"]', 5000);
       
       // Step 2: Scroll to load more comments (30%)
       onProgress?.(30, 'Loading more comments...');

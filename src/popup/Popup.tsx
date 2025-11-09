@@ -5,6 +5,7 @@ import { Platform, HistoryItem } from '../types';
 
 interface PageInfo {
   url: string;
+  title: string;
   platform: Platform;
   isValid: boolean;
 }
@@ -27,11 +28,22 @@ const Popup: React.FC = () => {
   });
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState('');
+  const [extractorModelName, setExtractorModelName] = useState('');
+  const [analyzerModelName, setAnalyzerModelName] = useState('');
+  const [currentTask, setCurrentTask] = useState<{
+    id: string;
+    type: 'extract' | 'analyze';
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    progress: number;
+    message?: string;
+  } | null>(null);
 
   useEffect(() => {
     loadLanguage();
     loadPageInfo();
     loadVersion();
+    loadModelName();
+    loadCurrentTask();
   }, []);
 
   const loadLanguage = async () => {
@@ -55,6 +67,59 @@ const Popup: React.FC = () => {
     }
   };
 
+  const loadModelName = async () => {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
+      if (response?.settings) {
+        if (response.settings.extractorModel?.model) {
+          setExtractorModelName(response.settings.extractorModel.model);
+        }
+        if (response.settings.analyzerModel?.model) {
+          setAnalyzerModelName(response.settings.analyzerModel.model);
+        }
+      }
+    } catch (error) {
+      console.error('[Popup] Failed to load model names:', error);
+    }
+  };
+
+  const loadCurrentTask = async () => {
+    try {
+      // Get current tab
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.url) return;
+
+      // Get all running tasks
+      const response = await chrome.runtime.sendMessage({ type: 'GET_TASK_STATUS' });
+      
+      if (response?.tasks) {
+        // Find task for current URL that is running or pending
+        const currentUrlTask = response.tasks.find((task: any) => 
+          task.url === tab.url && 
+          (task.status === 'running' || task.status === 'pending')
+        );
+
+        if (currentUrlTask) {
+          console.log('[Popup] Found current task:', currentUrlTask);
+          setCurrentTask({
+            id: currentUrlTask.id,
+            type: currentUrlTask.type,
+            status: currentUrlTask.status,
+            progress: currentUrlTask.progress,
+            message: currentUrlTask.error,
+          });
+
+          // Start monitoring if task is running
+          if (currentUrlTask.status === 'running' || currentUrlTask.status === 'pending') {
+            monitorTask(currentUrlTask.id);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Popup] Failed to load current task:', error);
+    }
+  };
+
   const loadPageInfo = async () => {
     try {
       // Get current tab
@@ -72,6 +137,7 @@ const Popup: React.FC = () => {
         if (response?.platform) {
           setPageInfo({
             url: tab.url,
+            title: tab.title || '',
             platform: response.platform,
             isValid: response.isValid,
           });
@@ -82,6 +148,7 @@ const Popup: React.FC = () => {
           // No response or invalid response
           setPageInfo({
             url: tab.url,
+            title: tab.title || '',
             platform: 'unknown',
             isValid: false,
           });
@@ -92,6 +159,7 @@ const Popup: React.FC = () => {
         console.log('[Popup] Content script not available (this is normal for some pages)');
         setPageInfo({
           url: tab.url,
+          title: tab.title || '',
           platform: 'unknown',
           isValid: false,
         });
@@ -128,9 +196,15 @@ const Popup: React.FC = () => {
 
   const handleExtractComments = async () => {
     if (!pageInfo?.isValid) return;
+    
+    // Check if task is already running
+    if (currentTask && currentTask.status === 'running') {
+      alert('Task is already in progress. Please wait for it to complete.');
+      return;
+    }
 
     try {
-      await chrome.runtime.sendMessage({
+      const response = await chrome.runtime.sendMessage({
         type: 'START_EXTRACTION',
         payload: {
           url: pageInfo.url,
@@ -138,15 +212,32 @@ const Popup: React.FC = () => {
         },
       });
 
-      // Close popup after starting extraction
-      window.close();
+      if (response?.taskId) {
+        // Set task and start monitoring
+        setCurrentTask({
+          id: response.taskId,
+          type: 'extract',
+          status: 'running',
+          progress: 0,
+        });
+        
+        // Start polling task status
+        monitorTask(response.taskId);
+      }
     } catch (error) {
       console.error('[Popup] Failed to start extraction:', error);
+      setCurrentTask(null);
     }
   };
 
   const handleAnalyzeComments = async () => {
     if (!pageStatus.extracted || !pageStatus.historyId) return;
+    
+    // Check if task is already running
+    if (currentTask && currentTask.status === 'running') {
+      alert('Task is already in progress. Please wait for it to complete.');
+      return;
+    }
 
     try {
       // Get history item
@@ -156,7 +247,7 @@ const Popup: React.FC = () => {
       });
 
       if (response?.item) {
-        await chrome.runtime.sendMessage({
+        const analysisResponse = await chrome.runtime.sendMessage({
           type: 'START_ANALYSIS',
           payload: {
             comments: response.item.comments,
@@ -166,12 +257,64 @@ const Popup: React.FC = () => {
           },
         });
 
-        // Close popup after starting analysis
-        window.close();
+        if (analysisResponse?.taskId) {
+          // Set task and start monitoring
+          setCurrentTask({
+            id: analysisResponse.taskId,
+            type: 'analyze',
+            status: 'running',
+            progress: 0,
+          });
+          
+          // Start polling task status
+          monitorTask(analysisResponse.taskId);
+        }
       }
     } catch (error) {
       console.error('[Popup] Failed to start analysis:', error);
+      setCurrentTask(null);
     }
+  };
+
+  const monitorTask = async (taskId: string) => {
+    const checkStatus = async () => {
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: 'GET_TASK_STATUS',
+          payload: { taskId },
+        });
+
+        if (response?.task) {
+          const task = response.task;
+          setCurrentTask({
+            id: task.id,
+            type: task.type,
+            status: task.status,
+            progress: task.progress,
+            message: task.error,
+          });
+
+          // If task is still running, check again
+          if (task.status === 'running' || task.status === 'pending') {
+            setTimeout(checkStatus, 1000);
+          } else if (task.status === 'completed') {
+            // Reload page status
+            if (pageInfo) {
+              await checkPageStatus(pageInfo.url);
+            }
+            // Clear task after a delay
+            setTimeout(() => setCurrentTask(null), 2000);
+          } else if (task.status === 'failed') {
+            // Clear task after showing error
+            setTimeout(() => setCurrentTask(null), 5000);
+          }
+        }
+      } catch (error) {
+        console.error('[Popup] Failed to check task status:', error);
+      }
+    };
+
+    checkStatus();
   };
 
   const handleOpenHistory = () => {
@@ -181,6 +324,11 @@ const Popup: React.FC = () => {
 
   const handleOpenSettings = () => {
     chrome.tabs.create({ url: chrome.runtime.getURL('src/options/index.html') });
+    window.close();
+  };
+
+  const handleOpenLogs = () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('src/logs/index.html') });
     window.close();
   };
 
@@ -215,16 +363,27 @@ const Popup: React.FC = () => {
             <h1 className="text-xl font-bold">{t('popup.title')}</h1>
             <p className="text-xs opacity-90">{t('popup.version')} {version}</p>
           </div>
-          <button
-            onClick={handleOpenSettings}
-            className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-            title={t('popup.settings')}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleOpenLogs}
+              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              title="View AI Logs"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </button>
+            <button
+              onClick={handleOpenSettings}
+              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              title={t('popup.settings')}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -233,6 +392,9 @@ const Popup: React.FC = () => {
         <h2 className="text-sm font-semibold text-gray-700 mb-2">{t('popup.currentPage')}</h2>
         {pageInfo?.isValid ? (
           <div className="space-y-2">
+            <div className="text-sm mb-2">
+              <span className="font-medium text-gray-800 line-clamp-2">{pageInfo.title}</span>
+            </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600">{t('popup.platform')}:</span>
               <span className="font-medium capitalize">{pageInfo.platform}</span>
@@ -275,29 +437,59 @@ const Popup: React.FC = () => {
         )}
       </div>
 
+      {/* Task Status */}
+      {currentTask && (
+        <div className="px-4 py-3 bg-blue-50 border-t border-b">
+          <div className="flex items-center gap-2">
+            {currentTask.status === 'running' && (
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
+            )}
+            {currentTask.status === 'completed' && (
+              <div className="text-green-500">✓</div>
+            )}
+            {currentTask.status === 'failed' && (
+              <div className="text-red-500">✗</div>
+            )}
+            <span className="text-sm text-gray-700">
+              {currentTask.message || (currentTask.type === 'extract' ? 'Extracting comments...' : 'Analyzing comments...')}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="p-4 space-y-3">
-        <button
-          onClick={handleExtractComments}
-          disabled={!pageInfo?.isValid}
-          className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-          </svg>
-          {t('popup.extractComments')}
-        </button>
+        <div>
+          <button
+            onClick={handleExtractComments}
+            disabled={!pageInfo?.isValid || (currentTask?.status === 'running')}
+            className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+            </svg>
+            {t('popup.extractComments')}
+          </button>
+          {extractorModelName && (
+            <p className="text-xs text-gray-500 mt-1 text-center">🤖 {extractorModelName}</p>
+          )}
+        </div>
 
-        <button
-          onClick={handleAnalyzeComments}
-          disabled={!pageStatus.extracted}
-          className="w-full py-3 px-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg font-medium hover:from-purple-600 hover:to-purple-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
-          {t('popup.analyzeComments')}
-        </button>
+        <div>
+          <button
+            onClick={handleAnalyzeComments}
+            disabled={!pageStatus.extracted || (currentTask?.status === 'running')}
+            className="w-full py-3 px-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg font-medium hover:from-purple-600 hover:to-purple-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            {t('popup.analyzeComments')}
+          </button>
+          {analyzerModelName && (
+            <p className="text-xs text-gray-500 mt-1 text-center">🤖 {analyzerModelName}</p>
+          )}
+        </div>
 
         <button
           onClick={handleOpenHistory}
