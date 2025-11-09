@@ -41,7 +41,17 @@ lerna-debug.log*
 *_FIX*.md
 *_COMPLETE.md
 PROGRESS_*.md
-BUG_*.md
+BUG*.md
+*_GUIDE.md
+*_DESIGN.md
+*_IMPLEMENTATION.md
+*_IMPROVEMENTS.md
+*_SUMMARY.md
+*_STATUS_UPDATE.md
+SELECTOR_*.md
+PROGRESSIVE_*.md
+POPUP_*.md
+FINAL_*.md
 
 # Kiro specs (optional - uncomment if you don't want to track)
 # .kiro/
