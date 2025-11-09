@@ -29,9 +29,22 @@ const Popup: React.FC = () => {
   const [version, setVersion] = useState('');
 
   useEffect(() => {
+    loadLanguage();
     loadPageInfo();
     loadVersion();
   }, []);
+
+  const loadLanguage = async () => {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
+      if (response?.settings?.language) {
+        const i18nModule = await import('../utils/i18n');
+        i18nModule.default.changeLanguage(response.settings.language);
+      }
+    } catch (error) {
+      console.error('[Popup] Failed to load language:', error);
+    }
+  };
 
   const loadVersion = async () => {
     try {
@@ -56,14 +69,7 @@ const Popup: React.FC = () => {
       try {
         const response = await chrome.tabs.sendMessage(tab.id!, { type: 'DETECT_PLATFORM' });
         
-        if (chrome.runtime.lastError) {
-          console.error('[Popup] Content script error:', chrome.runtime.lastError);
-          setPageInfo({
-            url: tab.url,
-            platform: 'unknown',
-            isValid: false,
-          });
-        } else if (response?.platform) {
+        if (response?.platform) {
           setPageInfo({
             url: tab.url,
             platform: response.platform,
@@ -72,9 +78,18 @@ const Popup: React.FC = () => {
           
           // Check if this page has been extracted/analyzed
           await checkPageStatus(tab.url);
+        } else {
+          // No response or invalid response
+          setPageInfo({
+            url: tab.url,
+            platform: 'unknown',
+            isValid: false,
+          });
         }
       } catch (error) {
-        console.error('[Popup] Failed to detect platform:', error);
+        // Content script not loaded or page doesn't support it
+        // This is normal for chrome:// pages, extension pages, etc.
+        console.log('[Popup] Content script not available (this is normal for some pages)');
         setPageInfo({
           url: tab.url,
           platform: 'unknown',
