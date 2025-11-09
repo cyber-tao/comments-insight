@@ -179,8 +179,8 @@ export class StorageManager {
         }
       }
       
-      // Sort by timestamp (newest first)
-      return items.sort((a, b) => b.timestamp - a.timestamp);
+      // Sort by extractedAt (newest first)
+      return items.sort((a, b) => b.extractedAt - a.extractedAt);
     } catch (error) {
       console.error('[StorageManager] Failed to get history:', error);
       return [];

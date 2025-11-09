@@ -58,6 +58,9 @@ export class MessageRouter {
         case 'GET_HISTORY':
           return await this.handleGetHistory(message);
 
+        case 'GET_HISTORY_BY_URL':
+          return await this.handleGetHistoryByUrl(message);
+
         case 'EXPORT_DATA':
           return await this.handleExportData(message);
 
@@ -181,7 +184,7 @@ export class MessageRouter {
    * Handle start analysis message
    */
   private async handleStartAnalysis(message: Message): Promise<any> {
-    const { comments, url, platform } = message.payload || {};
+    const { comments, url, platform, historyId } = message.payload || {};
 
     if (!comments || !Array.isArray(comments)) {
       throw new Error('Comments array is required');
@@ -190,7 +193,7 @@ export class MessageRouter {
     const taskId = this.taskManager.createTask('analyze', url || 'unknown', platform || 'unknown');
     
     // Start the analysis task asynchronously
-    this.startAnalysisTask(taskId, comments).catch(error => {
+    this.startAnalysisTask(taskId, comments, historyId).catch(error => {
       console.error('[MessageRouter] Analysis task failed:', error);
       this.taskManager.failTask(taskId, error.message);
     });
@@ -270,6 +273,22 @@ export class MessageRouter {
 
     const history = await this.storageManager.getHistory();
     return { history };
+  }
+
+  /**
+   * Handle get history by URL message
+   */
+  private async handleGetHistoryByUrl(message: Message): Promise<any> {
+    const { url } = message.payload || {};
+
+    if (!url) {
+      throw new Error('URL is required');
+    }
+
+    const history = await this.storageManager.getHistory();
+    const item = history.find(h => h.url === url);
+    
+    return { item: item || null };
   }
 
   /**
@@ -389,34 +408,13 @@ export class MessageRouter {
           url: postInfo?.url || task.url,
           title: postInfo?.title || 'Untitled',
           platform: task.platform,
-          timestamp: Date.now(),
+          extractedAt: Date.now(),
           commentsCount: comments.length,
           comments,
-          analysis: {
-            markdown: '',
-            summary: {
-              totalComments: comments.length,
-              sentimentDistribution: {
-                positive: 0,
-                negative: 0,
-                neutral: 0,
-              },
-              hotComments: [],
-              keyInsights: [],
-            },
-            generatedAt: Date.now(),
-            tokensUsed: 0,
-          },
+          // No analysis yet - user needs to manually trigger it
         };
 
         await this.storageManager.saveHistory(historyItem);
-
-        // Auto-start analysis
-        const analysisTaskId = this.taskManager.createTask('analyze', task.url, task.platform);
-        this.startAnalysisTask(analysisTaskId, comments, historyItem.id).catch(error => {
-          console.error('[MessageRouter] Auto-analysis failed:', error);
-          this.taskManager.failTask(analysisTaskId, error.message);
-        });
       }
 
       this.taskManager.completeTask(taskId, { tokensUsed: 0, commentsCount: comments?.length || 0 });
@@ -455,10 +453,11 @@ export class MessageRouter {
         const historyItem = await this.storageManager.getHistoryItem(historyId);
         if (historyItem) {
           historyItem.analysis = result;
+          historyItem.analyzedAt = Date.now();
           await this.storageManager.saveHistory(historyItem);
         }
       } else {
-        // Save new history item
+        // Save new history item (shouldn't happen normally)
         const task = this.taskManager.getTask(taskId);
         if (task) {
           await this.storageManager.saveHistory({
@@ -466,10 +465,11 @@ export class MessageRouter {
             url: task.url,
             title: `Analysis ${new Date().toLocaleString()}`,
             platform: task.platform,
-            timestamp: Date.now(),
+            extractedAt: Date.now(),
             commentsCount: comments.length,
             comments,
             analysis: result,
+            analyzedAt: Date.now(),
           });
         }
       }

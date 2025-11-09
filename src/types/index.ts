@@ -86,10 +86,11 @@ export interface HistoryItem {
   url: string;
   title: string;
   platform: Platform;
-  timestamp: number;
+  extractedAt: number; // When comments were extracted
   commentsCount: number;
   comments: Comment[];
-  analysis: AnalysisResult;
+  analysis?: AnalysisResult; // Optional - may not be analyzed yet
+  analyzedAt?: number; // When analysis was performed
 }
 
 export type MessageType = 
@@ -102,6 +103,7 @@ export type MessageType =
   | 'GET_SETTINGS'
   | 'SAVE_SETTINGS'
   | 'GET_HISTORY'
+  | 'GET_HISTORY_BY_URL'
   | 'DELETE_HISTORY'
   | 'EXPORT_DATA'
   | 'GET_AVAILABLE_MODELS'

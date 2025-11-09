@@ -163,7 +163,7 @@ const History: React.FC = () => {
                     <span className="text-2xl">{getPlatformIcon(item.platform)}</span>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium text-gray-800 truncate">{item.title}</h3>
-                      <p className="text-xs text-gray-500">{formatDate(item.timestamp)}</p>
+                      <p className="text-xs text-gray-500">{formatDate(item.extractedAt)}</p>
                     </div>
                     <button
                       onClick={(e) => {
@@ -177,7 +177,7 @@ const History: React.FC = () => {
                   </div>
                   <div className="flex gap-4 text-xs text-gray-500">
                     <span>💬 {item.commentsCount} comments</span>
-                    <span>🔥 {item.analysis.tokensUsed} tokens</span>
+                    {item.analysis && <span>🔥 {item.analysis.tokensUsed} tokens</span>}
                   </div>
                 </div>
               ))}
@@ -205,7 +205,7 @@ const History: React.FC = () => {
               </div>
               <div className="flex gap-4 text-sm text-gray-600">
                 <span>{getPlatformIcon(selectedItem.platform)} {selectedItem.platform}</span>
-                <span>📅 {formatDate(selectedItem.timestamp)}</span>
+                <span>📅 {formatDate(selectedItem.extractedAt)}</span>
                 <span>💬 {selectedItem.commentsCount} comments</span>
               </div>
             </div>
@@ -240,7 +240,13 @@ const History: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-6">
               {viewMode === 'analysis' ? (
                 <div className="prose max-w-none">
-                  <ReactMarkdown>{selectedItem.analysis.markdown}</ReactMarkdown>
+                  {selectedItem.analysis ? (
+                    <ReactMarkdown>{selectedItem.analysis.markdown}</ReactMarkdown>
+                  ) : (
+                    <div className="text-center text-gray-500 py-8">
+                      No analysis available yet
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div>
@@ -291,3 +297,4 @@ const History: React.FC = () => {
 };
 
 export default History;
+

@@ -28,13 +28,17 @@ export function exportCommentsAsCSV(comments: Comment[], filename?: string): voi
  * @param filename - Output filename
  */
 export function exportAnalysisAsMarkdown(item: HistoryItem, filename?: string): void {
+  if (!item.analysis) {
+    throw new Error('No analysis available for this item');
+  }
+
   const markdown = `# Comment Analysis Report
 
 ## Post Information
 - **Title**: ${item.title}
 - **Platform**: ${item.platform}
 - **URL**: ${item.url}
-- **Date**: ${new Date(item.timestamp).toLocaleString()}
+- **Extracted**: ${new Date(item.extractedAt).toLocaleString()}
 - **Total Comments**: ${item.commentsCount}
 
 ## Analysis Results
@@ -62,7 +66,8 @@ export function exportCompleteData(item: HistoryItem, filename?: string): void {
       title: item.title,
       platform: item.platform,
       url: item.url,
-      timestamp: item.timestamp,
+      extractedAt: item.extractedAt,
+      analyzedAt: item.analyzedAt,
       commentsCount: item.commentsCount,
       exportDate: Date.now(),
     },
