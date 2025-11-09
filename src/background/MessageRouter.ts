@@ -101,8 +101,21 @@ export class MessageRouter {
 
     const taskId = this.taskManager.createTask('extract', url, platform);
     
+    // Get tab ID - either from sender or current active tab
+    let tabId = sender.tab?.id;
+    
+    // If no tab ID (e.g., message from popup), get the active tab
+    if (!tabId) {
+      try {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        tabId = activeTab?.id;
+      } catch (error) {
+        console.error('[MessageRouter] Failed to get active tab:', error);
+      }
+    }
+    
     // Start the extraction task asynchronously
-    this.startExtractionTask(taskId, sender.tab?.id, maxComments || 100).catch(error => {
+    this.startExtractionTask(taskId, tabId, maxComments || 100).catch(error => {
       console.error('[MessageRouter] Extraction task failed:', error);
       this.taskManager.failTask(taskId, error.message);
     });
