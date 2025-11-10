@@ -533,6 +533,74 @@ const Options: React.FC = () => {
         </div>
       </section>
 
+      {/* Selector Cache Editor */}
+      <section className="mb-8 bg-white p-6 rounded-lg shadow">
+        <h2 className="text-xl font-semibold mb-4">{t('options.selectorCache')}</h2>
+        <p className="text-sm text-gray-600 mb-4">{t('options.selectorCacheDescription')}</p>
+        
+        {settings.selectorCache && settings.selectorCache.length > 0 ? (
+          <div className="space-y-4">
+            {settings.selectorCache.map((cache, index) => (
+              <div key={index} className="border rounded-lg p-4 bg-gray-50">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <h3 className="font-semibold text-lg">{cache.domain}</h3>
+                    <p className="text-sm text-gray-600">
+                      {t('options.platform')}: <span className="capitalize">{cache.platform}</span> | 
+                      {t('options.successCount')}: {cache.successCount} | 
+                      {t('options.lastUsed')}: {new Date(cache.lastUsed).toLocaleString()}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const newCache = [...settings.selectorCache];
+                      newCache.splice(index, 1);
+                      handleSettingsChange({ ...settings, selectorCache: newCache });
+                    }}
+                    className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
+                  >
+                    {t('common.delete')}
+                  </button>
+                </div>
+                
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-800">
+                    {t('options.viewEditSelectors')}
+                  </summary>
+                  <div className="mt-3 space-y-2 pl-4">
+                    {Object.entries(cache.selectors).map(([key, value]) => (
+                      value && (
+                        <div key={key} className="flex items-center gap-2">
+                          <label className="text-sm font-medium w-32">{key}:</label>
+                          <input
+                            type="text"
+                            value={value as string}
+                            onChange={(e) => {
+                              const newCache = [...settings.selectorCache];
+                              newCache[index] = {
+                                ...newCache[index],
+                                selectors: {
+                                  ...newCache[index].selectors,
+                                  [key]: e.target.value,
+                                },
+                              };
+                              handleSettingsChange({ ...settings, selectorCache: newCache });
+                            }}
+                            className="flex-1 px-2 py-1 border rounded text-sm font-mono"
+                          />
+                        </div>
+                      )
+                    ))}
+                  </div>
+                </details>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500 text-center py-4">{t('options.noSelectorCache')}</p>
+        )}
+      </section>
+
       {/* Import/Export */}
       <section className="mb-8 bg-white p-6 rounded-lg shadow">
         <h2 className="text-xl font-semibold mb-4">{t('options.importExport')}</h2>

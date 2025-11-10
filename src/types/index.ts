@@ -84,6 +84,26 @@ export interface AIResponse {
   finishReason: string;
 }
 
+export interface SelectorMap {
+  commentContainer: string;
+  commentItem: string;
+  username: string;
+  content: string;
+  timestamp: string;
+  likes: string;
+  avatar?: string;
+  replyContainer?: string;
+  replyItem?: string;
+}
+
+export interface SelectorCache {
+  domain: string;
+  platform: Platform;
+  selectors: SelectorMap;
+  lastUsed: number;
+  successCount: number;
+}
+
 export interface Settings {
   maxComments: number;
   extractorModel: AIConfig;
@@ -91,6 +111,7 @@ export interface Settings {
   analyzerPromptTemplate: string;
   language: 'zh-CN' | 'en-US';
   selectorRetryAttempts: number;
+  selectorCache: SelectorCache[];
 }
 
 export interface AnalysisResult {

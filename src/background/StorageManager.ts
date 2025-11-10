@@ -1,5 +1,7 @@
 import { Settings, HistoryItem, AIConfig } from '../types';
 import LZString from 'lz-string';
+import { Logger } from '../utils/logger';
+import { ErrorHandler } from '../utils/errors';
 
 /**
  * Default settings for the extension
@@ -37,6 +39,7 @@ const DEFAULT_SETTINGS: Settings = {
 Generate a comprehensive analysis report in Markdown format.`,
   language: 'zh-CN',
   selectorRetryAttempts: 3,
+  selectorCache: [],
 };
 
 /**
@@ -54,26 +57,27 @@ export class StorageManager {
    */
   async getSettings(): Promise<Settings> {
     try {
-      console.log('[StorageManager] Getting settings from storage...');
+      Logger.debug('[StorageManager] Getting settings from storage');
       const result = await chrome.storage.local.get(StorageManager.SETTINGS_KEY);
-      console.log('[StorageManager] Storage result:', result);
       const settings = result[StorageManager.SETTINGS_KEY];
       
       if (!settings) {
-        console.log('[StorageManager] No settings found, saving defaults...');
+        Logger.info('[StorageManager] No settings found, using defaults');
         // Return default settings if none exist
         await this.saveSettings(DEFAULT_SETTINGS);
-        console.log('[StorageManager] Defaults saved, returning...');
         return DEFAULT_SETTINGS;
       }
       
-      console.log('[StorageManager] Settings found, merging with defaults...');
       // Merge with defaults to ensure all fields exist
       const merged = { ...DEFAULT_SETTINGS, ...settings };
-      console.log('[StorageManager] Merged settings:', merged);
+      Logger.debug('[StorageManager] Settings retrieved successfully');
       return merged;
     } catch (error) {
-      console.error('[StorageManager] Failed to get settings:', error);
+      Logger.error('[StorageManager] Failed to get settings', { error });
+      await ErrorHandler.handleError(
+        error as Error,
+        'StorageManager.getSettings'
+      );
       return DEFAULT_SETTINGS;
     }
   }
@@ -84,7 +88,7 @@ export class StorageManager {
    */
   async saveSettings(settings: Partial<Settings>): Promise<void> {
     try {
-      console.log('[StorageManager] Saving settings:', settings);
+      Logger.debug('[StorageManager] Saving settings');
       
       // Get current settings directly from storage to avoid recursion
       const result = await chrome.storage.local.get(StorageManager.SETTINGS_KEY);

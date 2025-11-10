@@ -1,5 +1,7 @@
 import { Task, Platform } from '../types';
 import { NotificationService } from './NotificationService';
+import { Logger } from '../utils/logger';
+import { ExtensionError, ErrorCode } from '../utils/errors';
 
 /**
  * TaskManager handles the creation, execution, and lifecycle of tasks
@@ -33,7 +35,7 @@ export class TaskManager {
     this.tasks.set(id, task);
     this.queue.push(id);
 
-    console.log(`[TaskManager] Task created: ${id}`, task);
+    Logger.info(`[TaskManager] Task created: ${id}`, { type, url, platform });
     return id;
   }
 
@@ -44,18 +46,22 @@ export class TaskManager {
   async startTask(taskId: string): Promise<void> {
     const task = this.tasks.get(taskId);
     if (!task) {
-      throw new Error(`Task not found: ${taskId}`);
+      throw new ExtensionError(
+        ErrorCode.TASK_NOT_FOUND,
+        `Task not found: ${taskId}`,
+        { taskId }
+      );
     }
 
     // If task is already running, just return (idempotent)
     if (task.status === 'running') {
-      console.log(`[TaskManager] Task ${taskId} is already running`);
+      Logger.debug(`[TaskManager] Task ${taskId} is already running`);
       return;
     }
 
     // If task is completed or failed, don't restart
     if (task.status === 'completed' || task.status === 'failed') {
-      console.warn(`[TaskManager] Task ${taskId} is in ${task.status} state, cannot restart`);
+      Logger.warn(`[TaskManager] Task ${taskId} is in ${task.status} state, cannot restart`);
       return;
     }
 
@@ -63,7 +69,7 @@ export class TaskManager {
     task.startTime = Date.now();
     this.currentTaskId = taskId;
 
-    console.log(`[TaskManager] Task started: ${taskId}`);
+    Logger.info(`[TaskManager] Task started: ${taskId}`);
     this.notifyTaskUpdate(task);
   }
 
@@ -76,12 +82,15 @@ export class TaskManager {
   updateTaskProgress(taskId: string, progress: number, message?: string): void {
     const task = this.tasks.get(taskId);
     if (!task) {
-      console.warn(`[TaskManager] Task not found: ${taskId}`);
+      Logger.warn(`[TaskManager] Task not found: ${taskId}`);
       return;
     }
 
     task.progress = Math.min(100, Math.max(0, progress));
-    console.log(`[TaskManager] Task progress updated: ${taskId} - ${task.progress}%${message ? ` - ${message}` : ''}`);
+    Logger.debug(`[TaskManager] Task progress updated: ${taskId}`, { 
+      progress: task.progress, 
+      message 
+    });
     this.notifyTaskUpdate(task);
   }
 
@@ -93,7 +102,7 @@ export class TaskManager {
   completeTask(taskId: string, result: any): void {
     const task = this.tasks.get(taskId);
     if (!task) {
-      console.warn(`[TaskManager] Task not found: ${taskId}`);
+      Logger.warn(`[TaskManager] Task not found: ${taskId}`);
       return;
     }
 
@@ -106,9 +115,10 @@ export class TaskManager {
       task.tokensUsed = result.tokensUsed;
     }
 
-    console.log(`[TaskManager] Task completed: ${taskId}`, {
+    Logger.info(`[TaskManager] Task completed: ${taskId}`, {
       duration: task.endTime - task.startTime,
       tokensUsed: task.tokensUsed,
+      commentsCount: result?.commentsCount,
     });
 
     // Show completion notification
@@ -131,7 +141,7 @@ export class TaskManager {
   failTask(taskId: string, error: string): void {
     const task = this.tasks.get(taskId);
     if (!task) {
-      console.warn(`[TaskManager] Task not found: ${taskId}`);
+      Logger.warn(`[TaskManager] Task not found: ${taskId}`);
       return;
     }
 
@@ -139,7 +149,7 @@ export class TaskManager {
     task.error = error;
     task.endTime = Date.now();
 
-    console.error(`[TaskManager] Task failed: ${taskId}`, error);
+    Logger.error(`[TaskManager] Task failed: ${taskId}`, { error });
 
     // Show failure notification
     NotificationService.showTaskFailed(task.type, error);
@@ -156,12 +166,12 @@ export class TaskManager {
   cancelTask(taskId: string): void {
     const task = this.tasks.get(taskId);
     if (!task) {
-      console.warn(`[TaskManager] Task not found: ${taskId}`);
+      Logger.warn(`[TaskManager] Task not found: ${taskId}`);
       return;
     }
 
     if (task.status === 'completed' || task.status === 'failed') {
-      console.warn(`[TaskManager] Cannot cancel task in ${task.status} state`);
+      Logger.warn(`[TaskManager] Cannot cancel task in ${task.status} state`);
       return;
     }
 
@@ -179,7 +189,7 @@ export class TaskManager {
       this.currentTaskId = null;
     }
 
-    console.log(`[TaskManager] Task cancelled: ${taskId}`);
+    Logger.info(`[TaskManager] Task cancelled: ${taskId}`);
     this.notifyTaskUpdate(task);
     this.processQueue();
   }
@@ -222,7 +232,7 @@ export class TaskManager {
       this.tasks.delete(task.id);
     });
 
-    console.log(`[TaskManager] Cleared ${finishedTasks.length} finished tasks`);
+    Logger.info(`[TaskManager] Cleared ${finishedTasks.length} finished tasks`);
   }
 
   /**
@@ -244,7 +254,7 @@ export class TaskManager {
     const nextTaskId = this.queue.shift();
     if (nextTaskId) {
       this.startTask(nextTaskId).catch(error => {
-        console.error(`[TaskManager] Failed to start task ${nextTaskId}:`, error);
+        Logger.error(`[TaskManager] Failed to start task ${nextTaskId}`, { error });
         this.failTask(nextTaskId, error.message);
       });
     }
@@ -261,7 +271,7 @@ export class TaskManager {
       payload: task,
     }).catch(error => {
       // Ignore errors if no listeners are active
-      console.debug('[TaskManager] No listeners for task update:', error);
+      Logger.debug('[TaskManager] No listeners for task update', { error });
     });
   }
 }

@@ -14,6 +14,7 @@ const History: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'comments' | 'analysis'>('analysis');
+  const [sortBy, setSortBy] = useState<'time' | 'likes' | 'replies'>('time');
 
   useEffect(() => {
     // Load language from settings
@@ -116,6 +117,32 @@ const History: React.FC = () => {
     return icons[platform] || '❓';
   };
 
+  const sortComments = (comments: Comment[]): Comment[] => {
+    const sorted = [...comments];
+    
+    sorted.sort((a, b) => {
+      switch (sortBy) {
+        case 'time':
+          // Sort by timestamp (newest first)
+          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        case 'likes':
+          // Sort by likes (highest first)
+          return b.likes - a.likes;
+        case 'replies':
+          // Sort by reply count (most replies first)
+          return b.replies.length - a.replies.length;
+        default:
+          return 0;
+      }
+    });
+    
+    // Recursively sort replies
+    return sorted.map(comment => ({
+      ...comment,
+      replies: comment.replies.length > 0 ? sortComments(comment.replies) : comment.replies
+    }));
+  };
+
   const renderCommentTree = (comments: Comment[], depth = 0) => {
     return (
       <div className={`${depth > 0 ? 'ml-6 border-l-2 border-gray-200 pl-4' : ''}`}>
@@ -126,6 +153,9 @@ const History: React.FC = () => {
                 <span className="font-medium text-gray-800">{comment.username}</span>
                 <span className="text-xs text-gray-500">{comment.timestamp}</span>
                 <span className="text-xs text-gray-500">👍 {comment.likes}</span>
+                {comment.replies.length > 0 && (
+                  <span className="text-xs text-gray-500">💬 {comment.replies.length}</span>
+                )}
               </div>
               <p className="text-gray-700">{comment.content}</p>
             </div>
@@ -284,7 +314,18 @@ const History: React.FC = () => {
                     <h3 className="text-lg font-semibold">
                       {t('history.allComments')} ({selectedItem.comments.length})
                     </h3>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
+                      <label className="text-sm text-gray-600">{t('history.sortBy')}:</label>
+                      <select
+                        value={sortBy}
+                        onChange={(e) => setSortBy(e.target.value as 'time' | 'likes' | 'replies')}
+                        className="px-3 py-1 border rounded text-sm"
+                      >
+                        <option value="time">{t('history.sortByTime')}</option>
+                        <option value="likes">{t('history.sortByLikes')}</option>
+                        <option value="replies">{t('history.sortByReplies')}</option>
+                      </select>
+                      <div className="w-px h-6 bg-gray-300 mx-2"></div>
                       <button
                         onClick={() => exportCommentsAsCSV(selectedItem.comments)}
                         className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
@@ -308,7 +349,7 @@ const History: React.FC = () => {
                       </button>
                     </div>
                   </div>
-                  {renderCommentTree(selectedItem.comments)}
+                  {renderCommentTree(sortComments(selectedItem.comments))}
                 </div>
               )}
             </div>

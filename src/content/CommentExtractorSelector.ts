@@ -1,20 +1,5 @@
-import { Comment, Platform } from '../types';
+import { Comment, Platform, SelectorMap } from '../types';
 import { PageController } from './PageController';
-
-/**
- * Selector mapping returned by AI
- */
-interface SelectorMap {
-  commentContainer: string;
-  commentItem: string;
-  username: string;
-  content: string;
-  timestamp: string;
-  likes: string;
-  avatar?: string;
-  replyContainer?: string;
-  replyItem?: string;
-}
 
 /**
  * AI response structure
@@ -83,12 +68,45 @@ export class CommentExtractorSelector {
     platform: Platform,
     onProgress?: (message: string, count: number) => void
   ): Promise<AIAnalysisResponse> {
+    // Get current domain
+    const domain = this.getDomain();
+    
+    // Check if we have cached selectors for this domain
+    const cachedSelectors = await this.getCachedSelectors(domain, platform);
+    
+    if (cachedSelectors) {
+      console.log('[CommentExtractorSelector] Using cached selectors for', domain);
+      onProgress?.('✅ Using cached selectors', 0);
+      
+      // Test cached selectors
+      const testResult = this.testSelectors(cachedSelectors);
+      const isValid = this.validateSelectorResults(testResult);
+      
+      if (isValid) {
+        console.log('[CommentExtractorSelector] Cached selectors are still valid');
+        // Update last used time
+        await this.updateSelectorCacheUsage(domain, platform);
+        
+        return {
+          selectors: cachedSelectors,
+          structure: {
+            hasReplies: !!cachedSelectors.replyItem,
+            repliesNested: true,
+            needsExpand: false,
+          },
+          confidence: 1.0,
+        };
+      } else {
+        console.warn('[CommentExtractorSelector] Cached selectors are no longer valid, analyzing again');
+      }
+    }
+    
     // Get retry attempts from settings
     const settings = await this.getSettings();
     const maxRetries = settings?.selectorRetryAttempts || 3;
     
-    // Extract simplified DOM structure
-    const domStructure = this.extractDOMStructure(document.body);
+    // Extract simplified DOM structure - focus on comment section
+    const domStructure = this.extractDOMStructureForComments();
     
     console.log('[CommentExtractorSelector] DOM Structure length:', domStructure.length);
     console.log('[CommentExtractorSelector] DOM Structure preview:', domStructure.substring(0, 500));
@@ -116,6 +134,10 @@ export class CommentExtractorSelector {
       if (isValid) {
         console.log(`[CommentExtractorSelector] Selectors validated successfully on attempt ${attempt}`);
         onProgress?.('✅ Page structure analyzed successfully', 0);
+        
+        // Save successful selectors to cache
+        await this.saveSelectorCache(domain, platform, response.selectors);
+        
         return response;
       }
       
@@ -146,6 +168,106 @@ export class CommentExtractorSelector {
         resolve(response?.settings || null);
       });
     });
+  }
+  
+  /**
+   * Get current domain
+   */
+  private getDomain(): string {
+    return window.location.hostname;
+  }
+  
+  /**
+   * Get cached selectors for domain
+   */
+  private async getCachedSelectors(domain: string, platform: Platform): Promise<SelectorMap | null> {
+    const settings = await this.getSettings();
+    if (!settings?.selectorCache) {
+      return null;
+    }
+    
+    const cached = settings.selectorCache.find(
+      (cache: any) => cache.domain === domain && cache.platform === platform
+    );
+    
+    return cached ? cached.selectors : null;
+  }
+  
+  /**
+   * Save selector cache
+   */
+  private async saveSelectorCache(domain: string, platform: Platform, selectors: SelectorMap): Promise<void> {
+    const settings = await this.getSettings();
+    if (!settings) return;
+    
+    const selectorCache = settings.selectorCache || [];
+    
+    // Check if cache already exists for this domain
+    const existingIndex = selectorCache.findIndex(
+      (cache: any) => cache.domain === domain && cache.platform === platform
+    );
+    
+    if (existingIndex >= 0) {
+      // Update existing cache
+      selectorCache[existingIndex] = {
+        domain,
+        platform,
+        selectors,
+        lastUsed: Date.now(),
+        successCount: selectorCache[existingIndex].successCount + 1,
+      };
+    } else {
+      // Add new cache
+      selectorCache.push({
+        domain,
+        platform,
+        selectors,
+        lastUsed: Date.now(),
+        successCount: 1,
+      });
+    }
+    
+    // Save updated settings
+    await new Promise<void>((resolve) => {
+      chrome.runtime.sendMessage(
+        {
+          type: 'SAVE_SETTINGS',
+          payload: { settings: { ...settings, selectorCache } },
+        },
+        () => resolve()
+      );
+    });
+    
+    console.log('[CommentExtractorSelector] Saved selector cache for', domain);
+  }
+  
+  /**
+   * Update selector cache usage
+   */
+  private async updateSelectorCacheUsage(domain: string, platform: Platform): Promise<void> {
+    const settings = await this.getSettings();
+    if (!settings?.selectorCache) return;
+    
+    const selectorCache = settings.selectorCache;
+    const existingIndex = selectorCache.findIndex(
+      (cache: any) => cache.domain === domain && cache.platform === platform
+    );
+    
+    if (existingIndex >= 0) {
+      selectorCache[existingIndex].lastUsed = Date.now();
+      selectorCache[existingIndex].successCount++;
+      
+      // Save updated settings
+      await new Promise<void>((resolve) => {
+        chrome.runtime.sendMessage(
+          {
+            type: 'SAVE_SETTINGS',
+            payload: { settings: { ...settings, selectorCache } },
+          },
+          () => resolve()
+        );
+      });
+    }
   }
   
   /**
@@ -195,6 +317,97 @@ export class CommentExtractorSelector {
   }
 
   /**
+   * Extract DOM structure focused on comment section
+   */
+  private extractDOMStructureForComments(): string {
+    // Try to find comment section using common patterns
+    const commentSectionSelectors = [
+      '#comments',
+      '[id*="comment"]',
+      '[class*="comment"]',
+      '[id*="discussion"]',
+      '[class*="discussion"]',
+      'ytd-comments',
+      'ytd-item-section-renderer',
+      '.comments-section',
+      '.comment-section',
+      '[role="article"]',
+    ];
+    
+    let commentSection: Element | null = null;
+    
+    // Try each selector
+    for (const selector of commentSectionSelectors) {
+      try {
+        const elements = document.querySelectorAll(selector);
+        if (elements.length > 0) {
+          // Find the one that likely contains comments (has many children)
+          for (const el of Array.from(elements)) {
+            const childCount = el.querySelectorAll('*').length;
+            if (childCount > 50) { // Likely a comment section
+              commentSection = el;
+              console.log('[CommentExtractorSelector] Found comment section with selector:', selector, 'children:', childCount);
+              break;
+            }
+          }
+          if (commentSection) break;
+        }
+      } catch (error) {
+        // Invalid selector, continue
+      }
+    }
+    
+    // If no comment section found, use body but with better sampling
+    if (!commentSection) {
+      console.log('[CommentExtractorSelector] No comment section found, using body with smart sampling');
+      return this.extractDOMStructureWithSampling(document.body);
+    }
+    
+    // Extract structure from comment section with higher depth limit
+    console.log('[CommentExtractorSelector] Extracting structure from comment section');
+    return this.extractDOMStructure(commentSection, 0, 30);
+  }
+  
+  /**
+   * Extract DOM structure with smart sampling to capture different parts of the page
+   */
+  private extractDOMStructureWithSampling(root: Element): string {
+    let html = '';
+    
+    // Get all elements with comment-related keywords
+    const commentKeywords = ['comment', 'reply', 'discussion', 'thread'];
+    const commentElements: Element[] = [];
+    
+    // Find elements with comment-related classes or IDs
+    const allElements = root.querySelectorAll('*');
+    for (const el of Array.from(allElements)) {
+      const id = el.id.toLowerCase();
+      const classes = Array.from(el.classList).join(' ').toLowerCase();
+      
+      if (commentKeywords.some(keyword => id.includes(keyword) || classes.includes(keyword))) {
+        commentElements.push(el);
+      }
+    }
+    
+    if (commentElements.length > 0) {
+      console.log('[CommentExtractorSelector] Found', commentElements.length, 'comment-related elements');
+      
+      // Extract structure from first few comment elements
+      const samplesToExtract = Math.min(5, commentElements.length);
+      for (let i = 0; i < samplesToExtract; i++) {
+        html += `\n<!-- Comment-related element ${i + 1} -->\n`;
+        html += this.extractDOMStructure(commentElements[i], 0, 25);
+      }
+    } else {
+      // Fallback: extract from body with limited depth
+      console.log('[CommentExtractorSelector] No comment elements found, using body');
+      html = this.extractDOMStructure(root, 0, 15);
+    }
+    
+    return html;
+  }
+
+  /**
    * Extract simplified DOM structure (only tags, ids, classes)
    */
   private extractDOMStructure(element: Element, depth: number = 0, maxDepth: number = 20): string {
@@ -228,14 +441,24 @@ export class CommentExtractorSelector {
     
     // Add children
     if (hasChildren) {
-      // Limit number of children to show (sample first 20)
-      const childrenToShow = Array.from(element.children).slice(0, 20);
-      for (const child of childrenToShow) {
-        html += this.extractDOMStructure(child, depth + 1, maxDepth);
+      const children = Array.from(element.children);
+      
+      // Smart sampling: if many children, sample from beginning, middle, and end
+      let childrenToShow: Element[];
+      if (children.length <= 30) {
+        childrenToShow = children;
+      } else {
+        // Sample: first 10, middle 10, last 10
+        const first10 = children.slice(0, 10);
+        const middle10 = children.slice(Math.floor(children.length / 2) - 5, Math.floor(children.length / 2) + 5);
+        const last10 = children.slice(-10);
+        childrenToShow = [...first10, ...middle10, ...last10];
+        
+        html += '  '.repeat(depth + 1) + `<!-- Showing 30 of ${children.length} children (sampled from start, middle, end) -->\n`;
       }
       
-      if (element.children.length > 20) {
-        html += '  '.repeat(depth + 1) + `<!-- ... ${element.children.length - 20} more children -->\n`;
+      for (const child of childrenToShow) {
+        html += this.extractDOMStructure(child, depth + 1, maxDepth);
       }
     }
     
@@ -289,11 +512,17 @@ ${previousError}
 
 Please analyze the structure more carefully and provide different, more accurate selectors.` : '';
 
+    // Increase limit and add info about structure length
+    const maxLength = 50000; // Increased from 15000 to capture more structure
+    const truncated = domStructure.length > maxLength;
+    const structureToSend = truncated ? domStructure.substring(0, maxLength) : domStructure;
+    
     return `You are a web scraping expert. Analyze this ${platform} page structure and provide CSS selectors for extracting comments.${errorSection}
 
 ## DOM Structure:
+${truncated ? `(Showing first ${maxLength} characters of ${domStructure.length} total)` : ''}
 \`\`\`html
-${domStructure.substring(0, 15000)}
+${structureToSend}
 \`\`\`
 
 ## Task:

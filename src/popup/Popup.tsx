@@ -457,6 +457,48 @@ const Popup: React.FC = () => {
         </div>
       )}
 
+      {/* View Data Buttons */}
+      {pageStatus.extracted && (
+        <div className="px-4 pt-2 pb-3 bg-gray-50 border-t space-y-2">
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                chrome.tabs.create({ 
+                  url: chrome.runtime.getURL(`src/history/index.html?id=${pageStatus.historyId}`) 
+                });
+                window.close();
+              }}
+              className="flex-1 py-2 px-3 bg-white border border-blue-300 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-50 transition-all flex items-center justify-center gap-1"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              </svg>
+              {t('popup.viewComments')}
+            </button>
+            
+            {pageStatus.analyzed && (
+              <button
+                onClick={() => {
+                  chrome.tabs.create({ 
+                    url: chrome.runtime.getURL(`src/history/index.html?id=${pageStatus.historyId}&tab=analysis`) 
+                  });
+                  window.close();
+                }}
+                className="flex-1 py-2 px-3 bg-white border border-purple-300 text-purple-600 rounded-lg text-sm font-medium hover:bg-purple-50 transition-all flex items-center justify-center gap-1"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                {t('popup.viewAnalysis')}
+              </button>
+            )}
+          </div>
+          <div className="text-xs text-gray-500 text-center">
+            {t('popup.lastUpdated')}: {formatDate(pageStatus.analyzedAt || pageStatus.extractedAt!)}
+          </div>
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="p-4 space-y-3">
         <div>

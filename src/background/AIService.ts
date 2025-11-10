@@ -1,5 +1,13 @@
 import { AIConfig, AIRequest, AIResponse, Comment, AnalysisResult } from '../types';
 import { buildExtractionPrompt, buildAnalysisPrompt } from '../utils/prompts';
+import { Logger } from '../utils/logger';
+import { 
+  ErrorHandler, 
+  ExtensionError, 
+  ErrorCode, 
+  createAIError, 
+  createNetworkError 
+} from '../utils/errors';
 
 /**
  * AIService handles all AI-related operations including
@@ -10,14 +18,14 @@ export class AIService {
   
   private logToFile(type: 'extraction' | 'analysis', data: { prompt: string; response: string; timestamp: number}) {
     // Log to console with a special format that can be easily identified
-    console.log(`[AI_LOG_${type.toUpperCase()}]`, JSON.stringify({
+    Logger.debug(`[AI_LOG_${type.toUpperCase()}]`, {
       timestamp: data.timestamp,
       type,
       prompt: data.prompt.substring(0, 500) + '...', // First 500 chars
       response: data.response.substring(0, 500) + '...', // First 500 chars
       promptLength: data.prompt.length,
       responseLength: data.response.length,
-    }));
+    });
     
     // Save full log to chrome.storage.local
     const logKey = `ai_log_${type}_${data.timestamp}`;
@@ -28,7 +36,7 @@ export class AIService {
         prompt: data.prompt,
         response: data.response,
       }
-    }).catch(err => console.error('[AIService] Failed to save log:', err));
+    }).catch(err => Logger.error('[AIService] Failed to save log:', err));
   }
   /**
    * Call AI API with the given request
@@ -38,71 +46,124 @@ export class AIService {
   async callAI(request: AIRequest): Promise<AIResponse> {
     const { prompt, systemPrompt, config } = request;
 
-    try {
-      // Ensure API URL ends with /chat/completions
-      let apiUrl = config.apiUrl.trim();
-      if (!apiUrl.endsWith('/chat/completions')) {
-        apiUrl = apiUrl.replace(/\/$/, '') + '/chat/completions';
-      }
-      
-      console.log('[AIService] Calling AI API:', apiUrl);
+    return await ErrorHandler.withRetry(async () => {
+      try {
+        // Validate configuration
+        if (!config.apiUrl || !config.apiKey) {
+          throw createAIError(
+            ErrorCode.MISSING_API_KEY,
+            'API URL and API Key are required',
+            { hasUrl: !!config.apiUrl, hasKey: !!config.apiKey }
+          );
+        }
 
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${config.apiKey}`,
-        },
-        body: JSON.stringify({
+        // Ensure API URL ends with /chat/completions
+        let apiUrl = config.apiUrl.trim();
+        if (!apiUrl.endsWith('/chat/completions')) {
+          apiUrl = apiUrl.replace(/\/$/, '') + '/chat/completions';
+        }
+        
+        Logger.info('[AIService] Calling AI API', { 
+          url: apiUrl, 
           model: config.model,
-          messages: [
-            ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-            { role: 'user', content: prompt },
-          ],
-          max_tokens: config.maxTokens,
-          temperature: config.temperature,
-          top_p: config.topP,
-        }),
-      });
+          promptLength: prompt.length 
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`AI API error: ${response.status} - ${errorText}`);
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${config.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: config.model,
+            messages: [
+              ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+              { role: 'user', content: prompt },
+            ],
+            max_tokens: config.maxTokens,
+            temperature: config.temperature,
+            top_p: config.topP,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          
+          // Determine specific error type
+          if (response.status === 429) {
+            throw createAIError(
+              ErrorCode.AI_RATE_LIMIT,
+              'Rate limit exceeded',
+              { status: response.status, response: errorText }
+            );
+          } else if (response.status === 404) {
+            throw createAIError(
+              ErrorCode.AI_MODEL_NOT_FOUND,
+              `Model not found: ${config.model}`,
+              { status: response.status, model: config.model }
+            );
+          } else if (response.status === 401 || response.status === 403) {
+            throw createAIError(
+              ErrorCode.MISSING_API_KEY,
+              'Invalid API key or unauthorized',
+              { status: response.status }
+            );
+          } else {
+            throw createAIError(
+              ErrorCode.API_ERROR,
+              `AI API error: ${response.status} - ${errorText}`,
+              { status: response.status, response: errorText }
+            );
+          }
+        }
+
+        const data = await response.json();
+
+        // Extract response content and token usage
+        let content = data.choices?.[0]?.message?.content || '';
+        const tokensUsed = data.usage?.total_tokens || 0;
+        const finishReason = data.choices?.[0]?.finish_reason || 'unknown';
+
+        // Remove <think> tags if present (for thinking models)
+        content = this.removeThinkTags(content);
+
+        Logger.info('[AIService] AI response received', {
+          tokensUsed,
+          finishReason,
+          contentLength: content.length,
+        });
+
+        // Log the interaction for debugging
+        const logType = prompt.includes('extract comments') || prompt.includes('DOM Structure') ? 'extraction' : 'analysis';
+        this.logToFile(logType, {
+          prompt,
+          response: content,
+          timestamp: Date.now(),
+        });
+
+        return {
+          content,
+          tokensUsed,
+          finishReason,
+        };
+      } catch (error) {
+        if (error instanceof ExtensionError) {
+          throw error;
+        }
+        
+        // Handle network errors
+        if (error instanceof TypeError && error.message.includes('fetch')) {
+          throw createNetworkError('Network request failed', { originalError: error.message });
+        }
+        
+        Logger.error('[AIService] AI call failed', { error });
+        throw error;
       }
-
-      const data = await response.json();
-
-      // Extract response content and token usage
-      let content = data.choices?.[0]?.message?.content || '';
-      const tokensUsed = data.usage?.total_tokens || 0;
-      const finishReason = data.choices?.[0]?.finish_reason || 'unknown';
-
-      // Remove <think> tags if present (for thinking models)
-      content = this.removeThinkTags(content);
-
-      console.log('[AIService] AI response received:', {
-        tokensUsed,
-        finishReason,
-        contentLength: content.length,
-      });
-
-      // Log the interaction for debugging
-      const logType = prompt.includes('extract comments') || prompt.includes('DOM Structure') ? 'extraction' : 'analysis';
-      this.logToFile(logType, {
-        prompt,
-        response: content,
-        timestamp: Date.now(),
-      });
-
-      return {
-        content,
-        tokensUsed,
-        finishReason,
-      };
-    } catch (error) {
-      console.error('[AIService] AI call failed:', error);
-      throw error;
-    }
+    }, 'AIService.callAI', {
+      maxAttempts: 3,
+      initialDelay: 1000,
+    });
   }
 
   /**
@@ -119,7 +180,7 @@ export class AIService {
       baseUrl = baseUrl.replace(/\/chat\/completions$/, '');
       const modelsUrl = baseUrl + '/models';
       
-      console.log('[AIService] Fetching available models from:', modelsUrl);
+      Logger.info('[AIService] Fetching available models', { url: modelsUrl });
 
       const response = await fetch(modelsUrl, {
         method: 'GET',
@@ -129,17 +190,19 @@ export class AIService {
       });
 
       if (!response.ok) {
-        console.warn('[AIService] Failed to fetch models, using defaults');
+        Logger.warn('[AIService] Failed to fetch models, using defaults', { 
+          status: response.status 
+        });
         return this.getDefaultModels();
       }
 
       const data = await response.json();
       const models = data.data?.map((model: any) => model.id) || [];
 
-      console.log('[AIService] Available models:', models);
+      Logger.info('[AIService] Available models fetched', { count: models.length });
       return models.length > 0 ? models : this.getDefaultModels();
     } catch (error) {
-      console.error('[AIService] Failed to get models:', error);
+      Logger.error('[AIService] Failed to get models', { error });
       return this.getDefaultModels();
     }
   }
@@ -163,14 +226,26 @@ export class AIService {
       const comments = JSON.parse(response.content);
       
       if (!Array.isArray(comments)) {
-        throw new Error('AI response is not an array');
+        throw createAIError(
+          ErrorCode.AI_INVALID_RESPONSE,
+          'AI response is not an array',
+          { responseType: typeof comments }
+        );
       }
 
-      console.log('[AIService] Extracted comments:', comments.length);
+      Logger.info('[AIService] Extracted comments', { count: comments.length });
       return comments;
     } catch (error) {
-      console.error('[AIService] Failed to parse AI response:', error);
-      throw new Error('Failed to parse comment data from AI response');
+      if (error instanceof ExtensionError) {
+        throw error;
+      }
+      
+      Logger.error('[AIService] Failed to parse AI response', { error });
+      throw createAIError(
+        ErrorCode.AI_INVALID_RESPONSE,
+        'Failed to parse comment data from AI response',
+        { originalError: error instanceof Error ? error.message : 'Unknown error' }
+      );
     }
   }
 

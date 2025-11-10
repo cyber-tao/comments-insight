@@ -2,6 +2,8 @@ import { Message } from '../types';
 import { TaskManager } from './TaskManager';
 import { AIService } from './AIService';
 import { StorageManager } from './StorageManager';
+import { Logger } from '../utils/logger';
+import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
 
 /**
  * MessageRouter handles all incoming messages and routes them
@@ -24,7 +26,10 @@ export class MessageRouter {
     message: Message,
     sender: chrome.runtime.MessageSender
   ): Promise<any> {
-    console.log('[MessageRouter] Handling message:', message.type, sender);
+    Logger.debug('[MessageRouter] Handling message', { 
+      type: message.type, 
+      hasPayload: !!message.payload 
+    });
 
     try {
       switch (message.type) {
@@ -83,10 +88,17 @@ export class MessageRouter {
           return await this.handleTestModel(message);
 
         default:
-          throw new Error(`Unknown message type: ${message.type}`);
+          throw new ExtensionError(
+            ErrorCode.VALIDATION_ERROR,
+            `Unknown message type: ${message.type}`,
+            { type: message.type }
+          );
       }
     } catch (error) {
-      console.error('[MessageRouter] Error handling message:', error);
+      await ErrorHandler.handleError(
+        error as Error,
+        `MessageRouter.handleMessage(${message.type})`
+      );
       throw error;
     }
   }
