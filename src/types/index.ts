@@ -92,6 +92,8 @@ export interface SelectorMap {
   timestamp: string;
   likes: string;
   avatar?: string;
+  replyButton?: string;
+  replyToggle?: string;
   replyContainer?: string;
   replyItem?: string;
 }
@@ -160,6 +162,11 @@ export type MessageType =
   | 'EXPORT_DATA'
   | 'GET_AVAILABLE_MODELS'
   | 'TEST_MODEL'
+  | 'CHECK_SCRAPER_CONFIG'
+  | 'GENERATE_SCRAPER_CONFIG'
+  | 'GET_SCRAPER_CONFIGS'
+  | 'SAVE_SCRAPER_CONFIG'
+  | 'DELETE_SCRAPER_CONFIG'
   | 'PING';
 
 export interface Message {

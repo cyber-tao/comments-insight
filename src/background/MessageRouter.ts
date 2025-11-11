@@ -4,6 +4,7 @@ import { AIService } from './AIService';
 import { StorageManager } from './StorageManager';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
+import { ScraperConfigManager } from '../utils/ScraperConfigManager';
 
 /**
  * MessageRouter handles all incoming messages and routes them
@@ -87,6 +88,21 @@ export class MessageRouter {
         case 'TEST_MODEL':
           return await this.handleTestModel(message);
 
+        case 'CHECK_SCRAPER_CONFIG':
+          return await this.handleCheckScraperConfig(message);
+
+        case 'GENERATE_SCRAPER_CONFIG':
+          return await this.handleGenerateScraperConfig(message, sender);
+
+        case 'GET_SCRAPER_CONFIGS':
+          return await this.handleGetScraperConfigs();
+
+        case 'SAVE_SCRAPER_CONFIG':
+          return await this.handleSaveScraperConfig(message);
+
+        case 'DELETE_SCRAPER_CONFIG':
+          return await this.handleDeleteScraperConfig(message);
+
         default:
           throw new ExtensionError(
             ErrorCode.VALIDATION_ERROR,
@@ -138,8 +154,17 @@ export class MessageRouter {
       }
     }
     
+    // Get maxComments from settings if not provided
+    let finalMaxComments = maxComments;
+    if (!finalMaxComments) {
+      const settings = await this.storageManager.getSettings();
+      finalMaxComments = settings.maxComments || 100;
+    }
+    
+    console.log('[MessageRouter] Starting extraction with maxComments:', finalMaxComments);
+    
     // Start the extraction task asynchronously
-    this.startExtractionTask(taskId, tabId, maxComments || 100).catch(error => {
+    this.startExtractionTask(taskId, tabId, finalMaxComments).catch(error => {
       console.error('[MessageRouter] Extraction task failed:', error);
       this.taskManager.failTask(taskId, error.message);
     });
@@ -663,6 +688,197 @@ export class MessageRouter {
       this.taskManager.completeTask(taskId, { tokensUsed: result.tokensUsed, commentsCount: comments.length });
     } catch (error) {
       throw error;
+    }
+  }
+
+  /**
+   * Handle check scraper config message
+   */
+  private async handleCheckScraperConfig(message: Message): Promise<any> {
+    const { url } = message.payload || {};
+
+    console.log('[MessageRouter] handleCheckScraperConfig called with URL:', url);
+
+    if (!url) {
+      console.error('[MessageRouter] URL is required but not provided');
+      throw new Error('URL is required');
+    }
+
+    try {
+      console.log('[MessageRouter] Calling findMatchingConfig...');
+      const config = await ScraperConfigManager.findMatchingConfig(url);
+      console.log('[MessageRouter] findMatchingConfig result:', config ? 'Found' : 'Not found');
+      
+      return { hasConfig: !!config, config };
+    } catch (error) {
+      console.error('[MessageRouter] Failed to check scraper config:', error);
+      console.error('[MessageRouter] Error stack:', error instanceof Error ? error.stack : 'No stack');
+      return { hasConfig: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  /**
+   * Handle generate scraper config message
+   */
+  private async handleGenerateScraperConfig(
+    message: Message,
+    sender: chrome.runtime.MessageSender
+  ): Promise<any> {
+    const { url, title } = message.payload || {};
+
+    if (!url) {
+      throw new Error('URL is required');
+    }
+
+    try {
+      // Get tab ID
+      let tabId = sender.tab?.id;
+      if (!tabId) {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        tabId = activeTab?.id;
+      }
+
+      if (!tabId) {
+        throw new Error('No tab ID available');
+      }
+
+      // Request DOM structure from content script
+      const domResponse = await chrome.tabs.sendMessage(tabId, {
+        type: 'GET_DOM_STRUCTURE',
+      });
+
+      if (!domResponse?.domStructure) {
+        throw new Error('Failed to get DOM structure');
+      }
+
+      // Generate prompt for AI
+      const { generateScraperConfigPrompt, SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT } = 
+        await import('../utils/prompts-scraper');
+      
+      const prompt = generateScraperConfigPrompt(
+        domResponse.domStructure,
+        url,
+        title || 'Untitled'
+      );
+
+      // Get settings for AI configuration
+      const settings = await this.storageManager.getSettings();
+
+      // Call AI to generate config
+      const response = await this.aiService.callAI({
+        prompt,
+        systemPrompt: SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT,
+        config: settings.extractorModel,
+      });
+
+      // Parse AI response
+      let configData;
+      try {
+        let jsonText = response.content.trim();
+        if (jsonText.startsWith('```')) {
+          jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        }
+        
+        const jsonStart = jsonText.indexOf('{');
+        const jsonEnd = jsonText.lastIndexOf('}');
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+        }
+        
+        configData = JSON.parse(jsonText);
+      } catch (parseError) {
+        console.error('[MessageRouter] Failed to parse AI config response:', parseError);
+        throw new Error('AI returned invalid configuration format');
+      }
+
+      // Extract domain from URL safely
+      let domain: string;
+      try {
+        const urlObj = new URL(url);
+        domain = urlObj.hostname.replace('www.', '');
+      } catch (e) {
+        // Fallback: extract domain manually
+        const match = url.match(/^(?:https?:\/\/)?(?:www\.)?([^\/\?#]+)/i);
+        domain = match ? match[1] : 'unknown';
+      }
+
+      // Create scraper config
+      const config = await ScraperConfigManager.create({
+        name: `${domain} - Auto-generated`,
+        domains: [domain, `www.${domain}`],
+        urlPatterns: [],
+        selectors: configData.selectors,
+        scrollConfig: configData.scrollConfig,
+      });
+
+      return { success: true, config };
+    } catch (error) {
+      console.error('[MessageRouter] Failed to generate scraper config:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+
+  /**
+   * Handle get scraper configs message
+   */
+  private async handleGetScraperConfigs(): Promise<any> {
+    try {
+      const configs = await ScraperConfigManager.getAll();
+      return { configs };
+    } catch (error) {
+      console.error('[MessageRouter] Failed to get scraper configs:', error);
+      return { configs: [] };
+    }
+  }
+
+  /**
+   * Handle save scraper config message
+   */
+  private async handleSaveScraperConfig(message: Message): Promise<any> {
+    const { config } = message.payload || {};
+
+    if (!config) {
+      throw new Error('Config data is required');
+    }
+
+    try {
+      if (config.id) {
+        // Update existing
+        const updated = await ScraperConfigManager.update(config.id, config);
+        return { success: true, config: updated };
+      } else {
+        // Create new
+        const created = await ScraperConfigManager.create(config);
+        return { success: true, config: created };
+      }
+    } catch (error) {
+      console.error('[MessageRouter] Failed to save scraper config:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+
+  /**
+   * Handle delete scraper config message
+   */
+  private async handleDeleteScraperConfig(message: Message): Promise<any> {
+    const { id } = message.payload || {};
+
+    if (!id) {
+      throw new Error('Config ID is required');
+    }
+
+    try {
+      const success = await ScraperConfigManager.delete(id);
+      return { success };
+    } catch (error) {
+      console.error('[MessageRouter] Failed to delete scraper config:', error);
+      return { success: false };
     }
   }
 }

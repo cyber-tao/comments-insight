@@ -250,4 +250,33 @@ export class DOMSimplifier {
 
     return results;
   }
+
+  /**
+   * Simplify DOM for AI analysis (static method)
+   * @param element - Root element to simplify
+   * @param options - Simplification options
+   * @returns Simplified node structure
+   */
+  static simplifyForAI(
+    element: Element,
+    options: {
+      maxDepth?: number;
+      maxNodes?: number;
+      includeText?: boolean;
+    } = {}
+  ): SimplifiedNode {
+    const { maxDepth = 10 } = options;
+    const simplifier = new DOMSimplifier();
+    return simplifier.simplifyElement(element, maxDepth);
+  }
+
+  /**
+   * Convert simplified node to string format for AI
+   * @param node - Simplified node
+   * @returns String representation
+   */
+  static toStringFormat(node: SimplifiedNode): string {
+    const simplifier = new DOMSimplifier();
+    return simplifier.nodeToString(node);
+  }
 }

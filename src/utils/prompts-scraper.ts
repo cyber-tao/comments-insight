@@ -1,0 +1,97 @@
+/**
+ * AI prompts for scraper configuration generation
+ */
+
+export const SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT = `You are an expert web scraper analyzer. Your task is to analyze a simplified DOM structure and identify CSS selectors for extracting comments and their metadata.
+
+You will receive a simplified DOM structure containing only tag names, IDs, and classes. Analyze the structure and identify the appropriate CSS selectors for:
+1. Comment container (the parent element containing all comments)
+2. Individual comment items
+3. Username
+4. Comment content/text
+5. Timestamp
+6. Likes/reactions count
+7. Avatar image (optional)
+8. Reply toggle button (optional, for expanding collapsed replies)
+9. Reply container (optional)
+10. Individual reply items (optional)
+
+Return your analysis in the following JSON format:
+{
+  "selectors": {
+    "commentContainer": "CSS selector",
+    "commentItem": "CSS selector",
+    "username": "CSS selector",
+    "content": "CSS selector",
+    "timestamp": "CSS selector",
+    "likes": "CSS selector",
+    "avatar": "CSS selector or null",
+    "replyToggle": "CSS selector or null",
+    "replyContainer": "CSS selector or null",
+    "replyItem": "CSS selector or null"
+  },
+  "scrollConfig": {
+    "enabled": true/false,
+    "maxScrolls": number,
+    "scrollDelay": number in milliseconds
+  },
+  "confidence": "high/medium/low",
+  "notes": "Any observations or recommendations"
+}
+
+Guidelines:
+- Use specific and reliable selectors (prefer IDs and unique classes)
+- Avoid overly generic selectors that might match unintended elements
+- Consider that the page might load comments dynamically
+- If you're unsure about a selector, set it to null and explain in notes
+- For scrollConfig, enable it if comments appear to be lazy-loaded
+- Be conservative with confidence ratings`;
+
+export function generateScraperConfigPrompt(domStructure: string, url: string, pageTitle: string): string {
+  return `Analyze the following web page and generate scraper configuration:
+
+**Page Information:**
+- URL: ${url}
+- Title: ${pageTitle}
+
+**Simplified DOM Structure:**
+\`\`\`
+${domStructure}
+\`\`\`
+
+Please analyze this structure and provide the CSS selectors needed to extract comments and their metadata. Focus on identifying patterns in the HTML structure that indicate comment sections, user information, timestamps, and engagement metrics.
+
+Return ONLY valid JSON in the format specified in the system prompt. Do not include any explanatory text outside the JSON.`;
+}
+
+export const SCRAPER_CONFIG_TEST_SYSTEM_PROMPT = `You are testing a scraper configuration. Analyze whether the provided CSS selectors correctly identify comment elements in the given DOM structure.
+
+Return your analysis in JSON format:
+{
+  "valid": true/false,
+  "issues": ["list of any problems found"],
+  "suggestions": ["list of improvement suggestions"],
+  "estimatedCommentCount": number
+}`;
+
+export function generateScraperTestPrompt(config: any, domStructure: string): string {
+  return `Test the following scraper configuration against the DOM structure:
+
+**Configuration:**
+\`\`\`json
+${JSON.stringify(config, null, 2)}
+\`\`\`
+
+**DOM Structure:**
+\`\`\`
+${domStructure}
+\`\`\`
+
+Analyze whether the selectors in the configuration correctly identify comment elements. Check for:
+1. Do the selectors match actual elements?
+2. Are the selectors specific enough?
+3. Will they capture all comments?
+4. Are there any potential issues?
+
+Return ONLY valid JSON in the format specified in the system prompt.`;
+}

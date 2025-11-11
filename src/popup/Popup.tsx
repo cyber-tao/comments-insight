@@ -8,6 +8,7 @@ interface PageInfo {
   title: string;
   platform: Platform;
   isValid: boolean;
+  hasConfig: boolean;
 }
 
 interface PageStatus {
@@ -32,11 +33,12 @@ const Popup: React.FC = () => {
   const [analyzerModelName, setAnalyzerModelName] = useState('');
   const [currentTask, setCurrentTask] = useState<{
     id: string;
-    type: 'extract' | 'analyze';
+    type: 'extract' | 'analyze' | 'generate-config';
     status: 'pending' | 'running' | 'completed' | 'failed';
     progress: number;
     message?: string;
   } | null>(null);
+  const [generatingConfig, setGeneratingConfig] = useState(false);
 
   useEffect(() => {
     loadLanguage();
@@ -130,6 +132,17 @@ const Popup: React.FC = () => {
         return;
       }
 
+      // Check if there's a matching scraper config
+      console.log('[Popup] Checking scraper config for URL:', tab.url);
+      const configResponse = await chrome.runtime.sendMessage({
+        type: 'CHECK_SCRAPER_CONFIG',
+        payload: { url: tab.url },
+      });
+
+      console.log('[Popup] Config check response:', configResponse);
+      const hasConfig = configResponse?.hasConfig || false;
+      console.log('[Popup] Has config:', hasConfig);
+
       // Send message to content script to detect platform
       try {
         const response = await chrome.tabs.sendMessage(tab.id!, { type: 'GET_PLATFORM_INFO' });
@@ -140,6 +153,7 @@ const Popup: React.FC = () => {
             title: tab.title || '',
             platform: response.platform,
             isValid: response.isValid,
+            hasConfig,
           });
           
           // Check if this page has been extracted/analyzed
@@ -151,6 +165,7 @@ const Popup: React.FC = () => {
             title: tab.title || '',
             platform: 'unknown',
             isValid: false,
+            hasConfig,
           });
         }
       } catch (error) {
@@ -162,6 +177,7 @@ const Popup: React.FC = () => {
           title: tab.title || '',
           platform: 'unknown',
           isValid: false,
+          hasConfig,
         });
       }
     } catch (error) {
@@ -194,8 +210,37 @@ const Popup: React.FC = () => {
     }
   };
 
+  const handleGenerateConfig = async () => {
+    if (!pageInfo) return;
+
+    setGeneratingConfig(true);
+    
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'GENERATE_SCRAPER_CONFIG',
+        payload: {
+          url: pageInfo.url,
+          title: pageInfo.title,
+        },
+      });
+
+      if (response?.success) {
+        alert('Scraper configuration generated successfully!');
+        // Reload page info to update hasConfig status
+        await loadPageInfo();
+      } else {
+        alert('Failed to generate configuration: ' + (response?.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('[Popup] Failed to generate config:', error);
+      alert('Failed to generate configuration');
+    } finally {
+      setGeneratingConfig(false);
+    }
+  };
+
   const handleExtractComments = async () => {
-    if (!pageInfo?.isValid) return;
+    if (!pageInfo?.isValid || !pageInfo?.hasConfig) return;
     
     // Check if task is already running
     if (currentTask && currentTask.status === 'running') {
@@ -501,10 +546,39 @@ const Popup: React.FC = () => {
 
       {/* Action Buttons */}
       <div className="p-4 space-y-3">
+        {/* Show AI Generate Config button if no config exists */}
+        {pageInfo?.isValid && !pageInfo?.hasConfig && (
+          <div>
+            <button
+              onClick={handleGenerateConfig}
+              disabled={generatingConfig || (currentTask?.status === 'running')}
+              className="w-full py-3 px-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg font-medium hover:from-purple-600 hover:to-purple-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+            >
+              {generatingConfig ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                  {t('popup.generateConfig') || 'AI Analyze Scraper'}
+                </>
+              )}
+            </button>
+            <p className="text-xs text-gray-500 mt-2 text-center">
+              {t('popup.noConfigHint') || 'No scraper configuration found. Use AI to analyze and generate one.'}
+            </p>
+          </div>
+        )}
+
+        {/* Extract Comments button - only enabled if config exists */}
         <div>
           <button
             onClick={handleExtractComments}
-            disabled={!pageInfo?.isValid || (currentTask?.status === 'running')}
+            disabled={!pageInfo?.isValid || !pageInfo?.hasConfig || (currentTask?.status === 'running')}
             className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -514,6 +588,11 @@ const Popup: React.FC = () => {
           </button>
           {extractorModelName && (
             <p className="text-xs text-gray-500 mt-1 text-center">🤖 {extractorModelName}</p>
+          )}
+          {pageInfo?.isValid && !pageInfo?.hasConfig && (
+            <p className="text-xs text-red-500 mt-1 text-center">
+              {t('popup.configRequired') || 'Scraper configuration required'}
+            </p>
           )}
         </div>
 

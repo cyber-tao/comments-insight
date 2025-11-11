@@ -1,0 +1,57 @@
+{
+  "version": "1.0.0",
+  "configs": [
+    {
+      "id": "youtube_default",
+      "name": "YouTube 评论",
+      "domains": ["youtube.com", "www.youtube.com"],
+      "urlPatterns": ["/watch\\?v="],
+      "selectors": {
+        "commentContainer": "#contents.ytd-item-section-renderer",
+        "commentItem": "ytd-comment-thread-renderer",
+        "username": "#author-text span",
+        "content": "yt-attributed-string#content-text span",
+        "timestamp": "#published-time-text a",
+        "likes": "#vote-count-middle",
+        "avatar": "#author-thumbnail img",
+        "replyButton": "ytd-button-renderer#reply-button-end button",
+        "replyToggle": "ytd-button-renderer#more-replies button",
+        "replyContainer": "#expander-contents #contents",
+        "replyItem": "ytd-comment-view-model[is-reply]"
+      },
+      "scrollConfig": {
+        "enabled": true,
+        "maxScrolls": 20,
+        "scrollDelay": 1500
+      },
+      "createdAt": 1731283200000,
+      "updatedAt": 1731283200000
+    },
+    {
+      "id": "bilibili_default",
+      "name": "Bilibili 评论",
+      "domains": ["bilibili.com", "www.bilibili.com"],
+      "urlPatterns": ["/video/"],
+      "selectors": {
+        "commentContainer": ".reply-list, .comment-list",
+        "commentItem": ".reply-item, .list-item",
+        "username": ".user-name, .root-reply-container .user-name",
+        "content": ".reply-content, .root-reply-container .reply-content",
+        "timestamp": ".reply-time, .sub-reply-time",
+        "likes": ".reply-btn span, .like-text",
+        "avatar": ".user-face img, .root-reply-avatar img",
+        "replyToggle": ".view-more-btn, .btn-more",
+        "replyContainer": ".sub-reply-list, .reply-box",
+        "replyItem": ".sub-reply-item, .reply-box-item"
+      },
+      "scrollConfig": {
+        "enabled": true,
+        "maxScrolls": 15,
+        "scrollDelay": 1200
+      },
+      "createdAt": 1731283200000,
+      "updatedAt": 1731283200000
+    }
+  ]
+}
+

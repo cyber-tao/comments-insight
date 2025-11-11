@@ -46,6 +46,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       sendResponse({ success: true });
       break;
     
+    case 'GET_DOM_STRUCTURE':
+      handleGetDOMStructure(sendResponse);
+      return true; // Keep channel open for async response
+    
     default:
       sendResponse({ status: 'received' });
   }
@@ -133,5 +137,41 @@ function handleCancelExtraction(taskId: string) {
   if (currentTaskId === taskId) {
     console.log('[Content] Cancelling extraction:', taskId);
     currentTaskId = null;
+  }
+}
+
+/**
+ * Handle GET_DOM_STRUCTURE message
+ * Get simplified DOM structure for AI analysis
+ */
+async function handleGetDOMStructure(sendResponse: (response: any) => void) {
+  try {
+    console.log('[Content] Getting DOM structure for AI analysis');
+    
+    // Import DOMSimplifier
+    const { DOMSimplifier } = await import('./DOMSimplifier');
+    
+    // Get simplified DOM structure
+    const domStructure = DOMSimplifier.simplifyForAI(document.body, {
+      maxDepth: 10,
+      maxNodes: 1000,
+      includeText: true,
+    });
+    
+    // Convert to string format
+    const domString = DOMSimplifier.toStringFormat(domStructure);
+    
+    console.log('[Content] DOM structure generated, length:', domString.length);
+    
+    sendResponse({
+      success: true,
+      domStructure: domString,
+    });
+  } catch (error) {
+    console.error('[Content] Failed to get DOM structure:', error);
+    sendResponse({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
   }
 }

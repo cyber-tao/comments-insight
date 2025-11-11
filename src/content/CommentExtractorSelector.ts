@@ -559,6 +559,89 @@ Identify the comment section and provide CSS selectors for each field.
   }
 
   /**
+   * Expand reply sections
+   */
+  private async expandReplies(selectors: SelectorMap, onProgress?: (message: string, count: number) => void): Promise<void> {
+    try {
+      let totalExpanded = 0;
+      
+      // Step 1: Click "Reply" buttons to show reply sections
+      if (selectors.replyButton) {
+        onProgress?.('💬 Opening reply sections...', 0);
+        const replyButtons = document.querySelectorAll(selectors.replyButton);
+        console.log(`[CommentExtractorSelector] Found ${replyButtons.length} reply buttons`);
+        
+        let clickedReplyButtons = 0;
+        for (let i = 0; i < replyButtons.length; i++) {
+          const button = replyButtons[i] as HTMLElement;
+          
+          // Check if button is visible and clickable
+          if (button.offsetParent !== null && !button.hasAttribute('aria-pressed')) {
+            try {
+              button.click();
+              clickedReplyButtons++;
+              
+              // Wait a bit for reply section to appear
+              if (i % 5 === 0) {
+                await this.delay(200);
+                onProgress?.(`💬 Opening reply sections... (${clickedReplyButtons}/${replyButtons.length})`, 0);
+              }
+            } catch (error) {
+              console.warn('[CommentExtractorSelector] Failed to click reply button:', error);
+            }
+          }
+        }
+        
+        // Wait for reply sections to load
+        await this.delay(500);
+        console.log(`[CommentExtractorSelector] Clicked ${clickedReplyButtons} reply buttons`);
+      }
+      
+      // Step 2: Click "Show more replies" buttons to expand collapsed replies
+      if (selectors.replyToggle) {
+        onProgress?.('🔽 Expanding replies...', 0);
+        
+        // Re-query for reply toggle buttons (they might have appeared after clicking reply buttons)
+        const replyToggleButtons = document.querySelectorAll(selectors.replyToggle);
+        console.log(`[CommentExtractorSelector] Found ${replyToggleButtons.length} reply toggle buttons`);
+        
+        let expandedCount = 0;
+        for (let i = 0; i < replyToggleButtons.length; i++) {
+          const button = replyToggleButtons[i] as HTMLElement;
+          
+          // Check if button is visible and clickable
+          if (button.offsetParent !== null) {
+            try {
+              button.click();
+              expandedCount++;
+              totalExpanded++;
+              
+              // Wait a bit for replies to load
+              if (i % 5 === 0) {
+                await this.delay(300);
+                onProgress?.(`🔽 Expanding replies... (${expandedCount}/${replyToggleButtons.length})`, 0);
+              }
+            } catch (error) {
+              console.warn('[CommentExtractorSelector] Failed to click reply toggle button:', error);
+            }
+          }
+        }
+        
+        console.log(`[CommentExtractorSelector] Expanded ${expandedCount} reply toggle buttons`);
+      }
+      
+      // Final wait for all replies to load
+      if (totalExpanded > 0) {
+        await this.delay(1000);
+      }
+      
+      console.log(`[CommentExtractorSelector] Total reply expansion completed`);
+    } catch (error) {
+      console.error('[CommentExtractorSelector] Error expanding replies:', error);
+    }
+  }
+
+  /**
    * Extract comments with scrolling
    */
   private async extractWithScrolling(
@@ -575,6 +658,11 @@ Identify the comment section and provide CSS selectors for each field.
     const maxScrollAttempts = 20;
     
     while (allComments.length < maxComments && scrollAttempts < maxScrollAttempts) {
+      // Expand replies before extracting
+      if (scrollAttempts === 0 || scrollAttempts % 5 === 0) {
+        await this.expandReplies(selectors, onProgress);
+      }
+      
       // Extract current visible comments
       onProgress?.('📥 Extracting comments...', allComments.length);
       const newComments = this.extractCommentsBySelector(selectors, platform);
@@ -766,9 +854,11 @@ Identify the comment section and provide CSS selectors for each field.
   /**
    * Generate unique comment ID
    */
-  private generateCommentId(username: string, content: string, timestamp: string, index: number): string {
+  private generateCommentId(username: string, content: string, timestamp: string, _index: number): string {
+    // Use content hash as primary ID to avoid duplicates
+    // Don't use Date.now() as it changes every time
     const hash = this.simpleHash(username + content + timestamp);
-    return `comment_${hash}_${index}_${Date.now()}`;
+    return `comment_${hash}`;
   }
 
   /**

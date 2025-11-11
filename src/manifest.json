@@ -22,16 +22,7 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "https://www.youtube.com/*",
-        "https://www.bilibili.com/*",
-        "https://weibo.com/*",
-        "https://www.douyin.com/*",
-        "https://twitter.com/*",
-        "https://x.com/*",
-        "https://www.tiktok.com/*",
-        "https://www.reddit.com/*"
-      ],
+      "matches": ["<all_urls>"],
       "js": ["src/content/index.ts"],
       "run_at": "document_idle"
     }
@@ -42,17 +33,14 @@
     "scripting",
     "notifications"
   ],
-  "host_permissions": [
-    "https://www.youtube.com/*",
-    "https://www.bilibili.com/*",
-    "https://weibo.com/*",
-    "https://www.douyin.com/*",
-    "https://twitter.com/*",
-    "https://x.com/*",
-    "https://www.tiktok.com/*",
-    "https://www.reddit.com/*"
-  ],
+  "host_permissions": ["<all_urls>"],
   "options_page": "src/options/index.html",
+  "web_accessible_resources": [
+    {
+      "resources": ["src/config/default-scrapers.json"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"
   }
