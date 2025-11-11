@@ -35,9 +35,19 @@ Return your analysis in the following JSON format:
     "maxScrolls": number,
     "scrollDelay": number in milliseconds
   },
+  "domAnalysisConfig": {
+    "initialDepth": number (1-5, recommended: 3),
+    "expandDepth": number (1-3, recommended: 2),
+    "maxDepth": number (5-15, recommended: 10)
+  },
   "confidence": "high/medium/low",
   "notes": "Any observations or recommendations"
 }
+
+For domAnalysisConfig:
+- initialDepth: How deep to initially analyze the DOM tree (lower for simple pages, higher for complex nested structures)
+- expandDepth: How deep to expand when exploring specific nodes (usually 2 is sufficient)
+- maxDepth: Maximum depth for full DOM structure analysis (higher for very complex pages)
 
 Guidelines:
 - Use specific and reliable selectors (prefer IDs and unique classes)

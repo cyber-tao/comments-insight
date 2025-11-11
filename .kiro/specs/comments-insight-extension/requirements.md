@@ -169,3 +169,27 @@ Comments Insight（评论洞察）是一款智能Chrome浏览器扩展，旨在�
 3. WHILE 运行在发布模式时，THE Extension SHALL 仅输出关键错误日志
 4. THE Extension SHALL 包含所有代码注释和日志输出均使用英文
 5. WHEN 创建版本tag时，THE Extension SHALL 通过GitHub Actions自动构建并发布到Chrome Web Store
+
+### 需求 13: 评论文本显示修复
+
+**用户故事:** 作为用户，我希望评论页面中的所有文本都能正确显示，以便准确阅读评论内容。
+
+#### 验收标准
+
+1. THE Extension SHALL 正确显示评论中的所有Unicode字符，包括中文、日文、韩文、表情符号等
+2. THE Extension SHALL 正确处理评论中的特殊字符和转义字符
+3. THE Extension SHALL 保持评论文本的原始格式，包括换行符和空格
+4. THE Extension SHALL 正确渲染评论中的URL链接
+5. WHEN 评论包含HTML实体编码时，THE Extension SHALL 正确解码并显示
+
+### 需求 14: 导出功能优化
+
+**用户故事:** 作为用户，我希望导出功能清晰明确，评论数据导出为CSV格式，分析结果导出为Markdown格式，以便在不同场景下使用数据。
+
+#### 验收标准
+
+1. WHEN 用户在评论视图中时，THE Export Module SHALL 仅提供CSV格式的导出选项
+2. WHEN 用户在分析视图中时，THE Export Module SHALL 仅提供Markdown格式的导出选项
+3. THE Export Module SHALL 从评论视图中移除Markdown和JSON导出按钮
+4. THE Export Module SHALL 从分析视图中移除CSV和JSON导出按钮
+5. THE Extension SHALL 在导出按钮上清晰标注导出格式和用途

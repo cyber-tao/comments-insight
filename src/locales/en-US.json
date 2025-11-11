@@ -9,7 +9,11 @@
     "import": "Import",
     "search": "Search",
     "settings": "Settings",
-    "history": "History"
+    "history": "History",
+    "previous": "Previous",
+    "next": "Next",
+    "noResults": "No results found",
+    "noData": "No data"
   },
   "popup": {
     "title": "Comments Insight",
@@ -87,7 +91,11 @@
     "analysis": "Analysis",
     "comments": "Comments",
     "allComments": "All Comments",
+    "noAnalysis": "No analysis available yet",
     "exportCsv": "Export CSV",
+    "exportCsvTooltip": "Export all comments as CSV file",
+    "exportMarkdown": "Export Markdown",
+    "exportMarkdownTooltip": "Export analysis report as Markdown file",
     "deleteConfirm": "Are you sure you want to delete this item?",
     "clearAll": "Clear All",
     "clearAllConfirm": "Are you sure you want to clear all history? This action cannot be undone!",
@@ -95,7 +103,13 @@
     "sortBy": "Sort by",
     "sortByTime": "Time",
     "sortByLikes": "Likes",
-    "sortByReplies": "Replies"
+    "sortByReplies": "Replies",
+    "searchComments": "🔍 Search comments, usernames...",
+    "searchResults": "Found {{count}} / {{total}} comments",
+    "commentsPerPage": "Per page",
+    "showingComments": "Showing {{start}}-{{end}} / {{total}}",
+    "noCommentsFound": "No matching comments found",
+    "noComments": "No comments yet"
   },
   "task": {
     "pending": "Pending",
@@ -154,7 +168,7 @@
     "created": "Created",
     "updated": "Updated",
     "edit": "Edit",
-    "importSuccess": "Successfully imported {count} configuration(s)",
+    "importSuccess": "Successfully imported {{count}} configuration(s)",
     "importError": "Failed to import configurations",
     "required": "Required",
     "optional": "Optional",
@@ -169,8 +183,8 @@
     "skipThis": "Skip This",
     "overwriteThis": "Overwrite Existing",
     "applyDecisions": "Apply Decisions",
-    "skippedCount": "Skipped {count}",
-    "overwrittenCount": "Overwritten {count}",
+    "skippedCount": "Skipped {{count}}",
+    "overwrittenCount": "Overwritten {{count}}",
     "noChanges": "No changes made"
   }
 }

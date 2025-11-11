@@ -1,20 +1,11 @@
 // Content Script for Comments Insight Extension
-import { PlatformDetector } from './PlatformDetector';
 import { PageController } from './PageController';
 import { CommentExtractorSelector } from './CommentExtractorSelector';
 
 console.log('Comments Insight Content Script loaded');
 
-// Detect platform
-const platform = PlatformDetector.detect();
-const isValid = PlatformDetector.isValidPage();
-
-console.log('[Content] Platform detected:', platform, 'Valid page:', isValid);
-
-if (isValid) {
-  const postInfo = PlatformDetector.getPostInfo();
-  console.log('[Content] Post info:', postInfo);
-}
+// Get basic page info
+console.log('[Content] Page loaded:', window.location.href);
 
 // Initialize extractors
 const pageController = new PageController();
@@ -31,9 +22,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   switch (message.type) {
     case 'GET_PLATFORM_INFO':
       sendResponse({
-        platform,
-        isValid,
-        postInfo: isValid ? PlatformDetector.getPostInfo() : null,
+        url: window.location.href,
+        title: document.title,
       });
       break;
     
@@ -70,15 +60,6 @@ async function handleStartExtraction(
   
   console.log('[Content] Starting extraction, taskId:', taskId);
   
-  // Check if valid page
-  if (!isValid) {
-    sendResponse({
-      success: false,
-      error: 'Not a valid page for extraction'
-    });
-    return;
-  }
-  
   // Set current task
   currentTaskId = taskId;
   
@@ -86,8 +67,8 @@ async function handleStartExtraction(
     // Extract comments with selector-based approach
     const comments = await selectorExtractor.extractWithAI(
       maxComments,
-      platform,
-      (message, count) => {
+      'unknown', // Platform is now determined by scraper config
+      (message: string, count: number) => {
         // Send progress update to background
         chrome.runtime.sendMessage({
           type: 'EXTRACTION_PROGRESS',
@@ -106,8 +87,11 @@ async function handleStartExtraction(
       return;
     }
     
-    // Get post info
-    const postInfo = PlatformDetector.getPostInfo();
+    // Get post info from page
+    const postInfo = {
+      url: window.location.href,
+      title: document.title
+    };
     
     // Send success response
     sendResponse({

@@ -181,7 +181,7 @@ export function getAvailablePlaceholders(): Array<{ key: string; description: st
   return [
     { key: '{comments_json}', description: 'Comments data in JSON format (required)' },
     { key: '{timestamp}', description: 'Current timestamp' },
-    { key: '{platform}', description: 'Platform name (e.g., YouTube, Twitter)' },
+    { key: '{platform}', description: 'Platform/domain name (e.g., youtube.com, twitter.com)' },
     { key: '{url}', description: 'Post URL' },
     { key: '{total_comments}', description: 'Total number of comments' },
   ];

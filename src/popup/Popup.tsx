@@ -1,13 +1,12 @@
 import * as React from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Platform, HistoryItem } from '../types';
+import { HistoryItem } from '../types';
 
 interface PageInfo {
   url: string;
   title: string;
-  platform: Platform;
-  isValid: boolean;
+  domain: string; // Domain extracted from URL
   hasConfig: boolean;
 }
 
@@ -143,43 +142,24 @@ const Popup: React.FC = () => {
       const hasConfig = configResponse?.hasConfig || false;
       console.log('[Popup] Has config:', hasConfig);
 
-      // Send message to content script to detect platform
+      // Extract domain from URL
+      let domain = 'unknown';
       try {
-        const response = await chrome.tabs.sendMessage(tab.id!, { type: 'GET_PLATFORM_INFO' });
-        
-        if (response?.platform) {
-          setPageInfo({
-            url: tab.url,
-            title: tab.title || '',
-            platform: response.platform,
-            isValid: response.isValid,
-            hasConfig,
-          });
-          
-          // Check if this page has been extracted/analyzed
-          await checkPageStatus(tab.url);
-        } else {
-          // No response or invalid response
-          setPageInfo({
-            url: tab.url,
-            title: tab.title || '',
-            platform: 'unknown',
-            isValid: false,
-            hasConfig,
-          });
-        }
-      } catch (error) {
-        // Content script not loaded or page doesn't support it
-        // This is normal for chrome:// pages, extension pages, etc.
-        console.log('[Popup] Content script not available (this is normal for some pages)');
-        setPageInfo({
-          url: tab.url,
-          title: tab.title || '',
-          platform: 'unknown',
-          isValid: false,
-          hasConfig,
-        });
+        const urlObj = new URL(tab.url);
+        domain = urlObj.hostname.replace('www.', '');
+      } catch (e) {
+        console.warn('[Popup] Failed to parse URL:', tab.url);
       }
+
+      setPageInfo({
+        url: tab.url,
+        title: tab.title || '',
+        domain,
+        hasConfig,
+      });
+      
+      // Check if this page has been extracted/analyzed
+      await checkPageStatus(tab.url);
     } catch (error) {
       console.error('[Popup] Failed to load page info:', error);
     } finally {
@@ -240,7 +220,7 @@ const Popup: React.FC = () => {
   };
 
   const handleExtractComments = async () => {
-    if (!pageInfo?.isValid || !pageInfo?.hasConfig) return;
+    if (!pageInfo?.hasConfig) return;
     
     // Check if task is already running
     if (currentTask && currentTask.status === 'running') {
@@ -253,7 +233,6 @@ const Popup: React.FC = () => {
         type: 'START_EXTRACTION',
         payload: {
           url: pageInfo.url,
-          platform: pageInfo.platform,
         },
       });
 
@@ -297,7 +276,6 @@ const Popup: React.FC = () => {
           payload: {
             comments: response.item.comments,
             url: pageInfo?.url,
-            platform: pageInfo?.platform,
             historyId: pageStatus.historyId,
           },
         });
@@ -385,10 +363,10 @@ const Popup: React.FC = () => {
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
 
-    if (minutes < 1) return t('popup.justNow') || 'Just now';
-    if (minutes < 60) return `${minutes}${t('popup.minutesAgo') || ' min ago'}`;
-    if (hours < 24) return `${hours}${t('popup.hoursAgo') || ' hours ago'}`;
-    return `${days}${t('popup.daysAgo') || ' days ago'}`;
+    if (minutes < 1) return t('popup.justNow');
+    if (minutes < 60) return `${minutes}${t('popup.minutesAgo')}`;
+    if (hours < 24) return `${hours}${t('popup.hoursAgo')}`;
+    return `${days}${t('popup.daysAgo')}`;
   };
 
   if (loading) {
@@ -435,14 +413,14 @@ const Popup: React.FC = () => {
       {/* Page Status */}
       <div className="p-4 bg-white border-b">
         <h2 className="text-sm font-semibold text-gray-700 mb-2">{t('popup.currentPage')}</h2>
-        {pageInfo?.isValid ? (
+        {pageInfo ? (
           <div className="space-y-2">
             <div className="text-sm mb-2">
               <span className="font-medium text-gray-800 line-clamp-2">{pageInfo.title}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600">{t('popup.platform')}:</span>
-              <span className="font-medium capitalize">{pageInfo.platform}</span>
+              <span className="font-medium">{pageInfo.domain}</span>
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600">{t('popup.status')}:</span>
@@ -547,7 +525,7 @@ const Popup: React.FC = () => {
       {/* Action Buttons */}
       <div className="p-4 space-y-3">
         {/* Show AI Generate Config button if no config exists */}
-        {pageInfo?.isValid && !pageInfo?.hasConfig && (
+        {pageInfo && !pageInfo?.hasConfig && (
           <div>
             <button
               onClick={handleGenerateConfig}
@@ -564,12 +542,12 @@ const Popup: React.FC = () => {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                   </svg>
-                  {t('popup.generateConfig') || 'AI Analyze Scraper'}
+                  {t('popup.generateConfig')}
                 </>
               )}
             </button>
             <p className="text-xs text-gray-500 mt-2 text-center">
-              {t('popup.noConfigHint') || 'No scraper configuration found. Use AI to analyze and generate one.'}
+              {t('popup.noConfigHint')}
             </p>
           </div>
         )}
@@ -578,7 +556,7 @@ const Popup: React.FC = () => {
         <div>
           <button
             onClick={handleExtractComments}
-            disabled={!pageInfo?.isValid || !pageInfo?.hasConfig || (currentTask?.status === 'running')}
+            disabled={!pageInfo?.hasConfig || (currentTask?.status === 'running')}
             className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -589,9 +567,9 @@ const Popup: React.FC = () => {
           {extractorModelName && (
             <p className="text-xs text-gray-500 mt-1 text-center">🤖 {extractorModelName}</p>
           )}
-          {pageInfo?.isValid && !pageInfo?.hasConfig && (
+          {pageInfo && !pageInfo?.hasConfig && (
             <p className="text-xs text-red-500 mt-1 text-center">
-              {t('popup.configRequired') || 'Scraper configuration required'}
+              {t('popup.configRequired')}
             </p>
           )}
         </div>

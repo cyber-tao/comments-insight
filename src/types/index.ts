@@ -1,14 +1,7 @@
 // Core type definitions for Comments Insight Extension
 
-export type Platform = 
-  | 'youtube' 
-  | 'bilibili' 
-  | 'weibo' 
-  | 'douyin' 
-  | 'twitter' 
-  | 'tiktok' 
-  | 'reddit' 
-  | 'unknown';
+// Platform is now determined by scraper config domain, not hardcoded
+export type Platform = string;
 
 export interface Comment {
   id: string;
@@ -20,7 +13,7 @@ export interface Comment {
   content: string;
   replies: Comment[];
   isHot?: boolean;
-  platform: Platform;
+  platform?: string; // Optional: domain or platform identifier
 }
 
 // Simplified DOM node for progressive extraction
@@ -55,7 +48,7 @@ export interface Task {
   type: 'extract' | 'analyze';
   status: 'pending' | 'running' | 'completed' | 'failed';
   url: string;
-  platform: Platform;
+  platform?: string; // Optional: domain or platform identifier
   progress: number;
   startTime: number;
   endTime?: number;
@@ -100,7 +93,7 @@ export interface SelectorMap {
 
 export interface SelectorCache {
   domain: string;
-  platform: Platform;
+  platform?: string; // Optional: for backward compatibility
   selectors: SelectorMap;
   lastUsed: number;
   successCount: number;
@@ -136,7 +129,7 @@ export interface HistoryItem {
   id: string;
   url: string;
   title: string;
-  platform: Platform;
+  platform: string; // Domain or platform identifier
   extractedAt: number; // When comments were extracted
   commentsCount: number;
   comments: Comment[];

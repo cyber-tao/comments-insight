@@ -62,17 +62,23 @@ function displayLogs() {
   }
 
   listEl.innerHTML = filteredLogs.map((log) => {
+    const index = allLogs.indexOf(log);
+    const detailId = `log-detail-${index}`;
+    
     if (log.logType === 'ai') {
       const aiLog = log as AILog & { key: string; logType: 'ai' };
       return `
-        <div class="log-item ai-log" data-index="${allLogs.indexOf(log)}">
-          <div class="log-header">
-            <span class="log-type">${aiLog.type === 'extraction' ? '📥 AI Extraction' : '📊 AI Analysis'}</span>
-            <span class="log-time">${new Date(aiLog.timestamp).toLocaleString()}</span>
+        <div class="log-item-wrapper">
+          <div class="log-item ai-log" data-index="${index}" data-detail-id="${detailId}">
+            <div class="log-header">
+              <span class="log-type">${aiLog.type === 'extraction' ? '📥 AI Extraction' : '📊 AI Analysis'}</span>
+              <span class="log-time">${new Date(aiLog.timestamp).toLocaleString()}</span>
+            </div>
+            <div class="log-stats">
+              Prompt: ${aiLog.prompt?.length || 0} chars | Response: ${aiLog.response?.length || 0} chars
+            </div>
           </div>
-          <div class="log-stats">
-            Prompt: ${aiLog.prompt?.length || 0} chars | Response: ${aiLog.response?.length || 0} chars
-          </div>
+          <div id="${detailId}" class="log-detail-inline" style="display: none;"></div>
         </div>
       `;
     } else {
@@ -86,12 +92,15 @@ function displayLogs() {
       }[sysLog.level];
       
       return `
-        <div class="log-item system-log ${levelClass}" data-index="${allLogs.indexOf(log)}">
-          <div class="log-header">
-            <span class="log-type">${levelIcon} ${sysLog.level}</span>
-            <span class="log-time">${new Date(sysLog.timestamp).toLocaleString()}</span>
+        <div class="log-item-wrapper">
+          <div class="log-item system-log ${levelClass}" data-index="${index}" data-detail-id="${detailId}">
+            <div class="log-header">
+              <span class="log-type">${levelIcon} ${sysLog.level}</span>
+              <span class="log-time">${new Date(sysLog.timestamp).toLocaleString()}</span>
+            </div>
+            <div class="log-message">${escapeHtml(sysLog.message)}</div>
           </div>
-          <div class="log-message">${escapeHtml(sysLog.message)}</div>
+          <div id="${detailId}" class="log-detail-inline" style="display: none;"></div>
         </div>
       `;
     }
@@ -101,16 +110,29 @@ function displayLogs() {
   listEl.querySelectorAll('.log-item').forEach(item => {
     item.addEventListener('click', () => {
       const index = parseInt((item as HTMLElement).dataset.index || '0');
-      showLogDetail(index);
+      const detailId = (item as HTMLElement).dataset.detailId || '';
+      showLogDetail(index, detailId);
     });
   });
 }
 
-function showLogDetail(index: number) {
+function showLogDetail(index: number, detailId: string) {
   const log = allLogs[index];
-  const detailEl = document.getElementById('logDetail');
+  const detailEl = document.getElementById(detailId);
   if (!detailEl) return;
 
+  // Toggle visibility - if already shown, hide it
+  if (detailEl.style.display === 'block') {
+    detailEl.style.display = 'none';
+    return;
+  }
+
+  // Hide all other detail sections
+  document.querySelectorAll('.log-detail-inline').forEach(el => {
+    (el as HTMLElement).style.display = 'none';
+  });
+
+  // Show this detail section
   detailEl.style.display = 'block';
   
   if (log.logType === 'ai') {
@@ -130,15 +152,15 @@ function showLogDetail(index: number) {
           <div class="log-content">${escapeHtml(aiLog.response || 'No response')}</div>
         </div>
         
-        <button id="copyPromptBtn" data-index="${index}">📋 Copy Prompt</button>
-        <button id="copyResponseBtn" data-index="${index}">📋 Copy Response</button>
-        <button id="deleteLogBtn" class="danger" data-key="${aiLog.key}">🗑️ Delete This Log</button>
+        <button id="copyPromptBtn-${index}" data-index="${index}">📋 Copy Prompt</button>
+        <button id="copyResponseBtn-${index}" data-index="${index}">📋 Copy Response</button>
+        <button id="deleteLogBtn-${index}" class="danger" data-key="${aiLog.key}">🗑️ Delete This Log</button>
       </div>
     `;
     
-    detailEl.querySelector('#copyPromptBtn')?.addEventListener('click', () => copyToClipboard('prompt', index));
-    detailEl.querySelector('#copyResponseBtn')?.addEventListener('click', () => copyToClipboard('response', index));
-    detailEl.querySelector('#deleteLogBtn')?.addEventListener('click', () => deleteLog(aiLog.key));
+    detailEl.querySelector(`#copyPromptBtn-${index}`)?.addEventListener('click', () => copyToClipboard('prompt', index));
+    detailEl.querySelector(`#copyResponseBtn-${index}`)?.addEventListener('click', () => copyToClipboard('response', index));
+    detailEl.querySelector(`#deleteLogBtn-${index}`)?.addEventListener('click', () => deleteLog(aiLog.key));
   } else {
     const sysLog = log as SystemLog & { key: string; logType: 'system' };
     const levelIcon = {
@@ -168,16 +190,14 @@ function showLogDetail(index: number) {
           </div>
         ` : ''}
         
-        <button id="copyLogBtn" data-index="${index}">📋 Copy Log</button>
-        <button id="deleteLogBtn" class="danger" data-key="${sysLog.key}">🗑️ Delete This Log</button>
+        <button id="copyLogBtn-${index}" data-index="${index}">📋 Copy Log</button>
+        <button id="deleteLogBtn-${index}" class="danger" data-key="${sysLog.key}">🗑️ Delete This Log</button>
       </div>
     `;
     
-    detailEl.querySelector('#copyLogBtn')?.addEventListener('click', () => copySystemLog(index));
-    detailEl.querySelector('#deleteLogBtn')?.addEventListener('click', () => deleteLog(sysLog.key));
+    detailEl.querySelector(`#copyLogBtn-${index}`)?.addEventListener('click', () => copySystemLog(index));
+    detailEl.querySelector(`#deleteLogBtn-${index}`)?.addEventListener('click', () => deleteLog(sysLog.key));
   }
-  
-  detailEl.scrollIntoView({ behavior: 'smooth' });
 }
 
 function escapeHtml(text: string): string {
@@ -223,7 +243,6 @@ async function deleteLog(key: string) {
   
   await chrome.storage.local.remove(key);
   await loadLogs();
-  document.getElementById('logDetail')!.style.display = 'none';
 }
 
 async function clearLogs() {
@@ -234,7 +253,6 @@ async function clearLogs() {
   allLogs = [];
   displayLogs();
   updateStats();
-  document.getElementById('logDetail')!.style.display = 'none';
   alert('All logs cleared');
 }
 

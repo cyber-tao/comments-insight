@@ -517,7 +517,7 @@ Please analyze the structure more carefully and provide different, more accurate
     const truncated = domStructure.length > maxLength;
     const structureToSend = truncated ? domStructure.substring(0, maxLength) : domStructure;
     
-    return `You are a web scraping expert. Analyze this ${platform} page structure and provide CSS selectors for extracting comments.${errorSection}
+    return `You are a web scraping expert. Analyze this page structure (domain: ${platform}) and provide CSS selectors for extracting comments.${errorSection}
 
 ## DOM Structure:
 ${truncated ? `(Showing first ${maxLength} characters of ${domStructure.length} total)` : ''}

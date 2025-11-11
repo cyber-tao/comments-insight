@@ -4,22 +4,65 @@
 import { HistoryItem, Comment } from '../types';
 
 /**
+ * Flatten comment tree to include all replies
+ * @param comments - Comments to flatten
+ * @param depth - Current depth level
+ * @returns Flattened array of comments with depth information
+ */
+function flattenComments(comments: Comment[], depth: number = 0): Array<Comment & { depth: number }> {
+  const result: Array<Comment & { depth: number }> = [];
+  
+  for (const comment of comments) {
+    result.push({ ...comment, depth });
+    if (comment.replies && comment.replies.length > 0) {
+      result.push(...flattenComments(comment.replies, depth + 1));
+    }
+  }
+  
+  return result;
+}
+
+/**
+ * Sanitize filename by removing invalid characters
+ * @param filename - Original filename
+ * @returns Sanitized filename
+ */
+function sanitizeFilename(filename: string): string {
+  return filename
+    .replace(/[<>:"/\\|?*]/g, '-')  // Replace invalid characters
+    .replace(/\s+/g, '_')            // Replace spaces with underscores
+    .substring(0, 100);              // Limit length
+}
+
+/**
  * Export comments as CSV
  * @param comments - Comments to export
- * @param filename - Output filename
+ * @param title - Title for filename
+ * @param filename - Output filename (optional)
  */
-export function exportCommentsAsCSV(comments: Comment[], filename?: string): void {
-  const headers = ['Username', 'Timestamp', 'Likes', 'Content', 'Replies Count'];
-  const rows = comments.map(comment => [
+export function exportCommentsAsCSV(comments: Comment[], title?: string, filename?: string): void {
+  // Flatten the comment tree to include all replies
+  const flatComments = flattenComments(comments);
+  
+  const headers = ['Depth', 'Username', 'Timestamp', 'Likes', 'Content', 'Replies Count'];
+  const rows = flatComments.map(comment => [
+    comment.depth.toString(),
     `"${comment.username.replace(/"/g, '""')}"`,
     `"${comment.timestamp}"`,
     comment.likes.toString(),
-    `"${comment.content.replace(/"/g, '""')}"`,
+    `"${comment.content.replace(/"/g, '""').replace(/\n/g, ' ').replace(/\r/g, '')}"`,
     comment.replies.length.toString()
   ]);
   
   const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-  downloadFile(csv, filename || `comments-${Date.now()}.csv`, 'text/csv');
+  
+  // Generate filename with title and timestamp
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+  const defaultFilename = title 
+    ? `${sanitizeFilename(title)}_comments_${timestamp}.csv`
+    : `comments_${timestamp}.csv`;
+  
+  downloadFile(csv, filename || defaultFilename, 'text/csv');
 }
 
 /**
@@ -52,7 +95,11 @@ ${item.analysis.markdown}
 *Tokens Used: ${item.analysis.tokensUsed}*
 `;
 
-  downloadFile(markdown, filename || `analysis-${Date.now()}.md`, 'text/markdown');
+  // Generate filename with title and timestamp
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+  const defaultFilename = `${sanitizeFilename(item.title)}_analysis_${timestamp}.md`;
+  
+  downloadFile(markdown, filename || defaultFilename, 'text/markdown');
 }
 
 /**

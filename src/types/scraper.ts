@@ -1,6 +1,7 @@
 // Scraper configuration types
 
 export interface ScraperSelectors {
+  postTitle?: string;          // Post/video title selector (optional, fallback to document.title)
   commentContainer: string;    // Container holding all comments
   commentItem: string;         // Individual comment element
   username: string;            // Username selector
@@ -19,6 +20,12 @@ export interface ScrollConfig {
   scrollDelay: number;         // Delay between scrolls (ms)
 }
 
+export interface DOMAnalysisConfig {
+  initialDepth: number;        // Initial DOM tree depth for analysis (default: 3)
+  expandDepth: number;         // Depth when expanding specific nodes (default: 2)
+  maxDepth: number;            // Maximum depth for full DOM structure (default: 10)
+}
+
 export interface ScraperConfig {
   id: string;                  // Unique identifier
   name: string;                // Configuration name
@@ -26,6 +33,7 @@ export interface ScraperConfig {
   urlPatterns: string[];       // URL regex patterns (e.g., ["/watch\\?v="])
   selectors: ScraperSelectors; // CSS selectors for extraction
   scrollConfig?: ScrollConfig; // Scroll configuration (optional)
+  domAnalysisConfig?: DOMAnalysisConfig; // DOM analysis configuration (optional)
   createdAt: number;           // Creation timestamp
   updatedAt: number;           // Last update timestamp
 }

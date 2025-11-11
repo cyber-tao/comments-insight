@@ -5,6 +5,10 @@ import { StorageManager } from './StorageManager';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
 import { ScraperConfigManager } from '../utils/ScraperConfigManager';
+import { 
+  generateScraperConfigPrompt, 
+  SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT 
+} from '../utils/prompts-scraper';
 
 /**
  * MessageRouter handles all incoming messages and routes them
@@ -133,13 +137,22 @@ export class MessageRouter {
     message: Message,
     sender: chrome.runtime.MessageSender
   ): Promise<any> {
-    const { url, platform, maxComments } = message.payload || {};
+    const { url, maxComments } = message.payload || {};
 
-    if (!url || !platform) {
-      throw new Error('URL and platform are required');
+    if (!url) {
+      throw new Error('URL is required');
     }
 
-    const taskId = this.taskManager.createTask('extract', url, platform);
+    // Extract domain from URL
+    let domain = 'unknown';
+    try {
+      const urlObj = new URL(url);
+      domain = urlObj.hostname.replace('www.', '');
+    } catch (e) {
+      console.warn('[MessageRouter] Failed to parse URL:', url);
+    }
+
+    const taskId = this.taskManager.createTask('extract', url, domain);
     
     // Get tab ID - either from sender or current active tab
     let tabId = sender.tab?.id;
@@ -380,13 +393,24 @@ export class MessageRouter {
    * Handle start analysis message
    */
   private async handleStartAnalysis(message: Message): Promise<any> {
-    const { comments, url, platform, historyId } = message.payload || {};
+    const { comments, url, historyId } = message.payload || {};
 
     if (!comments || !Array.isArray(comments)) {
       throw new Error('Comments array is required');
     }
 
-    const taskId = this.taskManager.createTask('analyze', url || 'unknown', platform || 'unknown');
+    // Extract domain from URL
+    let domain = 'unknown';
+    if (url) {
+      try {
+        const urlObj = new URL(url);
+        domain = urlObj.hostname.replace('www.', '');
+      } catch (e) {
+        console.warn('[MessageRouter] Failed to parse URL:', url);
+      }
+    }
+
+    const taskId = this.taskManager.createTask('analyze', url || 'unknown', domain);
     
     // Start the analysis task asynchronously
     this.startAnalysisTask(taskId, comments, historyId).catch(error => {
@@ -617,7 +641,7 @@ export class MessageRouter {
           id: `history_${Date.now()}`,
           url: postInfo?.url || task.url,
           title: postInfo?.title || 'Untitled',
-          platform: task.platform,
+          platform: task.platform || 'unknown',
           extractedAt: Date.now(),
           commentsCount: comments.length,
           comments,
@@ -675,7 +699,7 @@ export class MessageRouter {
             id: `history_${Date.now()}`,
             url: task.url,
             title: `Analysis ${new Date().toLocaleString()}`,
-            platform: task.platform,
+            platform: task.platform || 'unknown',
             extractedAt: Date.now(),
             commentsCount: comments.length,
             comments,
@@ -752,9 +776,6 @@ export class MessageRouter {
       }
 
       // Generate prompt for AI
-      const { generateScraperConfigPrompt, SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT } = 
-        await import('../utils/prompts-scraper');
-      
       const prompt = generateScraperConfigPrompt(
         domResponse.domStructure,
         url,
@@ -809,6 +830,11 @@ export class MessageRouter {
         urlPatterns: [],
         selectors: configData.selectors,
         scrollConfig: configData.scrollConfig,
+        domAnalysisConfig: configData.domAnalysisConfig || {
+          initialDepth: 3,
+          expandDepth: 2,
+          maxDepth: 10
+        },
       });
 
       return { success: true, config };

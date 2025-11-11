@@ -9,7 +9,9 @@
     "import": "导入",
     "search": "搜索",
     "settings": "设置",
-    "history": "历史记录"
+    "history": "历史记录",
+    "previous": "上一页",
+    "next": "下一页"
   },
   "popup": {
     "title": "评论洞察",
@@ -127,7 +129,7 @@
     "created": "创建时间",
     "updated": "更新时间",
     "edit": "编辑",
-    "importSuccess": "成功导入 {count} 个配置",
+    "importSuccess": "成功导入 {{count}} 个配置",
     "importError": "导入配置失败",
     "required": "必填",
     "optional": "可选",
@@ -142,8 +144,8 @@
     "skipThis": "跳过此项",
     "overwriteThis": "覆盖现有",
     "applyDecisions": "应用决定",
-    "skippedCount": "跳过 {count} 个",
-    "overwrittenCount": "覆盖 {count} 个",
+    "skippedCount": "跳过 {{count}} 个",
+    "overwrittenCount": "覆盖 {{count}} 个",
     "noChanges": "未进行任何更改"
   },
   "history": {
@@ -154,7 +156,11 @@
     "analysis": "分析",
     "comments": "评论",
     "allComments": "所有评论",
-    "exportCsv": "导出CSV",
+    "noAnalysis": "暂无分析结果",
+    "exportCsv": "导出 CSV",
+    "exportCsvTooltip": "将所有评论导出为 CSV 文件",
+    "exportMarkdown": "导出 Markdown",
+    "exportMarkdownTooltip": "将分析报告导出为 Markdown 文件",
     "deleteConfirm": "确定要删除这条记录吗？",
     "clearAll": "清空全部",
     "clearAllConfirm": "确定要清空所有历史记录吗？此操作不可恢复！",
@@ -162,7 +168,13 @@
     "sortBy": "排序",
     "sortByTime": "按时间",
     "sortByLikes": "按点赞数",
-    "sortByReplies": "按回复数"
+    "sortByReplies": "按回复数",
+    "searchComments": "🔍 搜索评论内容、用户名...",
+    "searchResults": "找到 {{count}} / {{total}} 条评论",
+    "commentsPerPage": "每页",
+    "showingComments": "显示 {{start}}-{{end}} / {{total}} 条",
+    "noCommentsFound": "没有找到匹配的评论",
+    "noComments": "暂无评论"
   },
   "task": {
     "pending": "等待中",

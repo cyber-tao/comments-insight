@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ScraperConfig, ScraperSelectors, ScrollConfig } from '../types/scraper';
+import { ScraperConfig, ScraperSelectors, ScrollConfig, DOMAnalysisConfig } from '../types/scraper';
 import { ScraperConfigManager } from '../utils/ScraperConfigManager';
 
 interface ScraperConfigEditorProps {
@@ -36,6 +36,13 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
       scrollDelay: 1000,
     }
   );
+  const [domAnalysisConfig, setDomAnalysisConfig] = useState<DOMAnalysisConfig>(
+    config?.domAnalysisConfig || {
+      initialDepth: 3,
+      expandDepth: 2,
+      maxDepth: 10,
+    }
+  );
   const [errors, setErrors] = useState<string[]>([]);
 
   const handleSave = async () => {
@@ -45,6 +52,7 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
       urlPatterns: urlPatterns.filter(p => p.trim() !== ''),
       selectors,
       scrollConfig: scrollConfig.enabled ? scrollConfig : undefined,
+      domAnalysisConfig,
     };
 
     const validation = ScraperConfigManager.validateConfig(configData);
@@ -288,6 +296,70 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
             </div>
           </div>
         )}
+      </div>
+
+      {/* DOM Analysis Configuration */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold mb-3">DOM 分析配置</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          配置 AI 分析 DOM 结构的深度参数（高级选项）
+        </p>
+        
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              初始深度 (Initial Depth)
+              <span className="text-xs text-gray-500 ml-2">推荐: 3</span>
+            </label>
+            <input
+              type="number"
+              value={domAnalysisConfig.initialDepth}
+              onChange={(e) => setDomAnalysisConfig({ ...domAnalysisConfig, initialDepth: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 border rounded"
+              min="1"
+              max="5"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              初始分析 DOM 树的深度（简单页面用较低值，复杂嵌套结构用较高值）
+            </p>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              展开深度 (Expand Depth)
+              <span className="text-xs text-gray-500 ml-2">推荐: 2</span>
+            </label>
+            <input
+              type="number"
+              value={domAnalysisConfig.expandDepth}
+              onChange={(e) => setDomAnalysisConfig({ ...domAnalysisConfig, expandDepth: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 border rounded"
+              min="1"
+              max="3"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              探索特定节点时的展开深度（通常 2 就足够）
+            </p>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              最大深度 (Max Depth)
+              <span className="text-xs text-gray-500 ml-2">推荐: 10</span>
+            </label>
+            <input
+              type="number"
+              value={domAnalysisConfig.maxDepth}
+              onChange={(e) => setDomAnalysisConfig({ ...domAnalysisConfig, maxDepth: parseInt(e.target.value) })}
+              className="w-full px-3 py-2 border rounded"
+              min="5"
+              max="15"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              完整 DOM 结构分析的最大深度（非常复杂的页面用较高值）
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Actions */}

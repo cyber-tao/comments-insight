@@ -228,7 +228,7 @@ const Options: React.FC = () => {
                   : 'border-transparent text-gray-600 hover:text-gray-800'
               }`}
             >
-              {t('options.generalSettings') || 'General Settings'}
+              {t('options.generalSettings')}
             </button>
             <button
               onClick={() => setActiveTab('scrapers')}
@@ -238,7 +238,7 @@ const Options: React.FC = () => {
                   : 'border-transparent text-gray-600 hover:text-gray-800'
               }`}
             >
-              {t('options.scraperConfigs') || 'Scraper Configurations'}
+              {t('options.scraperConfigs')}
             </button>
           </div>
         </div>

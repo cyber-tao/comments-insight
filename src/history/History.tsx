@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { HistoryItem, Comment } from '../types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { exportCommentsAsCSV, exportAnalysisAsMarkdown, exportCompleteData } from '../utils/export';
+import { exportCommentsAsCSV, exportAnalysisAsMarkdown } from '../utils/export';
 import i18n from '../utils/i18n';
 
 const History: React.FC = () => {
@@ -107,19 +107,6 @@ const History: React.FC = () => {
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleString();
-  };
-
-  const getPlatformIcon = (platform: string) => {
-    const icons: Record<string, string> = {
-      youtube: '📺',
-      bilibili: '📱',
-      weibo: '🐦',
-      douyin: '🎵',
-      twitter: '🐦',
-      tiktok: '🎵',
-      reddit: '🤖',
-    };
-    return icons[platform] || '❓';
   };
 
   const sortComments = (comments: Comment[]): Comment[] => {
@@ -274,7 +261,6 @@ const History: React.FC = () => {
                   }`}
                 >
                   <div className="flex items-start gap-2 mb-2">
-                    <span className="text-2xl">{getPlatformIcon(item.platform)}</span>
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium text-gray-800 truncate">{item.title}</h3>
                       <p className="text-xs text-gray-500">{formatDate(item.extractedAt)}</p>
@@ -306,19 +292,18 @@ const History: React.FC = () => {
           <>
             {/* Header */}
             <div className="bg-white border-b p-4">
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="text-xl font-bold">{selectedItem.title}</h2>
+              <div className="mb-2">
                 <a
                   href={selectedItem.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                  className="text-xl font-bold text-blue-600 hover:text-blue-800 hover:underline"
                 >
-                  {t('history.openOriginal')}
+                  {selectedItem.title}
                 </a>
               </div>
               <div className="flex gap-4 text-sm text-gray-600">
-                <span>{getPlatformIcon(selectedItem.platform)} {selectedItem.platform}</span>
+                <span>{selectedItem.platform}</span>
                 <span>📅 {formatDate(selectedItem.extractedAt)}</span>
                 <span>💬 {selectedItem.commentsCount} comments</span>
               </div>
@@ -353,47 +338,52 @@ const History: React.FC = () => {
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6">
               {viewMode === 'analysis' ? (
-                <div className="prose prose-sm md:prose-base max-w-none prose-table:border-collapse prose-th:border prose-th:border-gray-300 prose-th:bg-gray-100 prose-th:p-2 prose-td:border prose-td:border-gray-300 prose-td:p-2">
-                  {selectedItem.analysis ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {selectedItem.analysis.markdown}
-                    </ReactMarkdown>
-                  ) : (
-                    <div className="text-center text-gray-500 py-8">
-                      No analysis available yet
-                    </div>
-                  )}
+                <div>
+                  {/* Analysis View Header with Export Button */}
+                  <div className="mb-4 flex justify-between items-center">
+                    <h3 className="text-lg font-semibold">
+                      {t('history.analysis')}
+                    </h3>
+                    {selectedItem.analysis && (
+                      <button
+                        onClick={() => exportAnalysisAsMarkdown(selectedItem)}
+                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm flex items-center gap-2 transition-colors shadow-sm"
+                        title={t('history.exportMarkdownTooltip')}
+                      >
+                        <span>📝</span>
+                        <span>{t('history.exportMarkdown')}</span>
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Analysis Content */}
+                  <div className="prose prose-sm md:prose-base max-w-none prose-table:border-collapse prose-th:border prose-th:border-gray-300 prose-th:bg-gray-100 prose-th:p-2 prose-td:border prose-td:border-gray-300 prose-td:p-2">
+                    {selectedItem.analysis ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {selectedItem.analysis.markdown}
+                      </ReactMarkdown>
+                    ) : (
+                      <div className="text-center text-gray-500 py-8">
+                        {t('history.noAnalysis')}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div>
-                  {/* Header with title and export buttons */}
+                  {/* Comments View Header with Export Button */}
                   <div className="mb-4 flex justify-between items-center">
                     <h3 className="text-lg font-semibold">
                       {t('history.allComments')} ({selectedItem.comments.length})
                     </h3>
-                    <div className="flex gap-2 items-center">
-                      <button
-                        onClick={() => exportCommentsAsCSV(selectedItem.comments)}
-                        className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-sm"
-                        title="Export comments as CSV"
-                      >
-                        📄 CSV
-                      </button>
-                      <button
-                        onClick={() => exportAnalysisAsMarkdown(selectedItem)}
-                        className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-                        title="Export analysis as Markdown"
-                      >
-                        📝 Markdown
-                      </button>
-                      <button
-                        onClick={() => exportCompleteData(selectedItem)}
-                        className="px-3 py-1 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm"
-                        title="Export complete data as JSON"
-                      >
-                        📦 JSON
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => exportCommentsAsCSV(selectedItem.comments, selectedItem.title)}
+                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm flex items-center gap-2 transition-colors shadow-sm"
+                      title={t('history.exportCsvTooltip')}
+                    >
+                      <span>📄</span>
+                      <span>{t('history.exportCsv')}</span>
+                    </button>
                   </div>
 
                   {/* Search and Filter Bar */}
@@ -404,7 +394,7 @@ const History: React.FC = () => {
                           type="text"
                           value={commentSearchTerm}
                           onChange={(e) => setCommentSearchTerm(e.target.value)}
-                          placeholder={t('history.searchComments') || '🔍 搜索评论内容、用户名...'}
+                          placeholder={t('history.searchComments')}
                           className="w-full px-3 py-2 border rounded-lg text-sm"
                         />
                       </div>
@@ -421,7 +411,7 @@ const History: React.FC = () => {
                         </select>
                       </div>
                       <div className="flex items-center gap-2">
-                        <label className="text-sm text-gray-600">{t('history.commentsPerPage') || '每页'}:</label>
+                        <label className="text-sm text-gray-600">{t('history.commentsPerPage')}:</label>
                         <select
                           value={commentsPerPage}
                           onChange={(e) => {
@@ -441,8 +431,7 @@ const History: React.FC = () => {
                     {/* Search Results Info */}
                     {commentSearchTerm && (
                       <div className="text-sm text-gray-600">
-                        {t('history.searchResults', { count: totalComments, total: selectedItem.comments.length }) || 
-                         `找到 ${totalComments} / ${selectedItem.comments.length} 条评论`}
+                        {t('history.searchResults', { count: totalComments, total: selectedItem.comments.length })}
                       </div>
                     )}
                   </div>
@@ -455,7 +444,7 @@ const History: React.FC = () => {
                           start: (currentPage - 1) * commentsPerPage + 1, 
                           end: Math.min(currentPage * commentsPerPage, totalComments), 
                           total: totalComments 
-                        }) || `显示 ${(currentPage - 1) * commentsPerPage + 1}-${Math.min(currentPage * commentsPerPage, totalComments)} / ${totalComments} 条`}
+                        })}
                       </div>
                       <div className="flex gap-2 items-center">
                         <button
@@ -463,7 +452,7 @@ const History: React.FC = () => {
                           disabled={currentPage === 1}
                           className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
                         >
-                          ← {t('common.previous') || '上一页'}
+                          ← {t('common.previous')}
                         </button>
                         <span className="px-3 py-1 text-sm font-medium">
                           {currentPage} / {totalPages}
@@ -473,7 +462,7 @@ const History: React.FC = () => {
                           disabled={currentPage === totalPages}
                           className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
                         >
-                          {t('common.next') || '下一页'} →
+                          {t('common.next')} →
                         </button>
                       </div>
                     </div>
@@ -482,7 +471,7 @@ const History: React.FC = () => {
                   {/* Comment List */}
                   {totalComments === 0 ? (
                     <div className="text-center text-gray-500 py-8">
-                      {commentSearchTerm ? '没有找到匹配的评论' : '暂无评论'}
+                      {commentSearchTerm ? t('history.noCommentsFound') : t('history.noComments')}
                     </div>
                   ) : (
                     renderCommentTree(paginatedComments)
@@ -497,7 +486,7 @@ const History: React.FC = () => {
                           disabled={currentPage === 1}
                           className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
                         >
-                          ← {t('common.previous') || '上一页'}
+                          ← {t('common.previous')}
                         </button>
                         <span className="px-3 py-1 text-sm font-medium">
                           {currentPage} / {totalPages}
@@ -507,7 +496,7 @@ const History: React.FC = () => {
                           disabled={currentPage === totalPages}
                           className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
                         >
-                          {t('common.next') || '下一页'} →
+                          {t('common.next')} →
                         </button>
                       </div>
                     </div>

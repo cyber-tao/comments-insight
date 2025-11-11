@@ -46,16 +46,23 @@
       padding: 20px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    .log-item {
+    .log-item-wrapper {
       border-bottom: 1px solid #eee;
-      padding: 15px 0;
+    }
+    .log-item-wrapper:last-child {
+      border-bottom: none;
+    }
+    .log-item {
+      padding: 15px;
       cursor: pointer;
     }
     .log-item:hover {
       background: #f9f9f9;
     }
-    .log-item:last-child {
-      border-bottom: none;
+    .log-detail-inline {
+      padding: 0 15px 15px 15px;
+      background: #f9f9f9;
+      border-top: 2px solid #e0e0e0;
     }
     .log-header {
       display: flex;
@@ -181,8 +188,6 @@
     <div id="logList" class="log-list">
       <div class="empty-state">Loading logs...</div>
     </div>
-
-    <div id="logDetail" style="display: none;"></div>
   </div>
 
   <script type="module" src="./logs.ts"></script>

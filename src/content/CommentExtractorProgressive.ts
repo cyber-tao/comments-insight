@@ -9,9 +9,19 @@ export class CommentExtractorProgressive {
   private domSimplifier: DOMSimplifier;
   private maxIterations = 10;
   private currentIteration = 0;
+  private initialDepth: number;
+  private expandDepth: number;
 
-  constructor(private pageController: PageController) {
+  constructor(
+    private pageController: PageController,
+    options?: {
+      initialDepth?: number;
+      expandDepth?: number;
+    }
+  ) {
     this.domSimplifier = new DOMSimplifier();
+    this.initialDepth = options?.initialDepth ?? 3;
+    this.expandDepth = options?.expandDepth ?? 2;
   }
 
   /**
@@ -69,8 +79,8 @@ export class CommentExtractorProgressive {
     const allComments: Comment[] = [];
     this.currentIteration = 0;
     
-    // Start with simplified body structure (depth 1)
-    let currentDOM = this.domSimplifier.simplifyElement(document.body, 1);
+    // Start with simplified body structure using configured depth
+    let currentDOM = this.domSimplifier.simplifyElement(document.body, this.initialDepth);
     
     while (this.currentIteration < this.maxIterations) {
       this.currentIteration++;
@@ -114,8 +124,8 @@ export class CommentExtractorProgressive {
         await this.pageController.scrollToLoadMore(2);
         await this.delay(1500); // Wait for content to load
         
-        // Re-simplify DOM after scroll
-        currentDOM = this.domSimplifier.simplifyElement(document.body, 1);
+        // Re-simplify DOM after scroll using configured depth
+        currentDOM = this.domSimplifier.simplifyElement(document.body, this.initialDepth);
         continue;
       }
       
@@ -132,7 +142,7 @@ export class CommentExtractorProgressive {
         for (const nodeInfo of nodesToExpand) {
           console.log(`[CommentExtractorProgressive] Expanding: ${nodeInfo.selector} (${nodeInfo.reason})`);
           
-          const expanded = this.domSimplifier.expandNode(nodeInfo.selector, 2);
+          const expanded = this.domSimplifier.expandNode(nodeInfo.selector, this.expandDepth);
           if (expanded) {
             currentDOM = this.domSimplifier.updateTreeWithExpanded(currentDOM, expanded);
           } else {
