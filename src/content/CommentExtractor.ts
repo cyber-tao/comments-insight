@@ -164,10 +164,11 @@ export class CommentExtractor {
   private extractCommentsFromDOM(): Comment[] {
     const comments: Comment[] = [];
     
-    // This is a simplified extraction
-    // Real implementation would use AI to identify comment elements
-    const commentElements = document.querySelectorAll(
-      '[role="article"], .comment, .ytd-comment-thread-renderer, .reply-item'
+    // Use Shadow DOM-aware query to find comment elements
+    // This will traverse into Shadow DOM (e.g., Bilibili's bili-comments)
+    const commentElements = this.domAnalyzer.querySelectorAllDeep(
+      document,
+      '[role="article"], .comment, .ytd-comment-thread-renderer, .reply-item, bili-comment-renderer'
     );
     
     commentElements.forEach((element, index) => {

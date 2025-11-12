@@ -19,9 +19,14 @@ export class DOMSimplifier {
     currentDepth: number = 0
   ): SimplifiedNode {
     const shouldExpand = currentDepth < maxDepth;
-    const children = Array.from(element.children);
+    
+    // Check for Shadow DOM
+    const shadowRoot = (element as any).shadowRoot;
+    const children = shadowRoot 
+      ? Array.from(shadowRoot.children)
+      : Array.from(element.children);
 
-    return {
+    const node: SimplifiedNode = {
       tag: element.tagName.toLowerCase(),
       id: element.id || undefined,
       classes: this.getClasses(element),
@@ -30,11 +35,18 @@ export class DOMSimplifier {
       childCount: children.length,
       expanded: shouldExpand && children.length > 0,
       children: shouldExpand && children.length > 0
-        ? children.map(child => this.simplifyElement(child, maxDepth, currentDepth + 1))
+        ? children.map(child => this.simplifyElement(child as Element, maxDepth, currentDepth + 1))
         : undefined,
       selector: this.generateSelector(element),
       depth: currentDepth,
     };
+
+    // Mark if element has Shadow DOM
+    if (shadowRoot) {
+      node.attributes = { ...node.attributes, 'has-shadow-root': 'true' };
+    }
+
+    return node;
   }
 
   /**
@@ -148,14 +160,14 @@ export class DOMSimplifier {
   }
 
   /**
-   * Expand a specific node by selector
+   * Expand a specific node by selector (supports Shadow DOM)
    * @param selector - CSS selector
    * @param depth - Depth to expand
    * @returns Simplified node or null if not found
    */
   expandNode(selector: string, depth: number = 2): SimplifiedNode | null {
     try {
-      const element = document.querySelector(selector);
+      const element = this.querySelectorDeep(document, selector);
       if (!element) {
         console.warn(`[DOMSimplifier] Element not found: ${selector}`);
         return null;
@@ -165,6 +177,34 @@ export class DOMSimplifier {
       console.error(`[DOMSimplifier] Failed to expand node: ${selector}`, error);
       return null;
     }
+  }
+
+  /**
+   * Query selector that traverses Shadow DOM
+   * @param root - Root element or document
+   * @param selector - CSS selector
+   * @returns Found element or null
+   */
+  private querySelectorDeep(root: Document | Element | ShadowRoot, selector: string): Element | null {
+    // Try to find in current root
+    const element = root.querySelector(selector);
+    if (element) {
+      return element;
+    }
+
+    // Search in Shadow DOM
+    const elements = root.querySelectorAll('*');
+    for (const el of Array.from(elements)) {
+      const shadowRoot = (el as any).shadowRoot;
+      if (shadowRoot) {
+        const found = this.querySelectorDeep(shadowRoot, selector);
+        if (found) {
+          return found;
+        }
+      }
+    }
+
+    return null;
   }
 
   /**

@@ -7,8 +7,11 @@ console.log('Comments Insight Content Script loaded');
 // Get basic page info
 console.log('[Content] Page loaded:', window.location.href);
 
-// Initialize extractors
-const pageController = new PageController();
+// Initialize extractors with Shadow DOM support
+import { DOMAnalyzer } from './DOMAnalyzer';
+
+const domAnalyzer = new DOMAnalyzer();
+const pageController = new PageController(domAnalyzer);
 const selectorExtractor = new CommentExtractorSelector(pageController);
 
 // Track current extraction task

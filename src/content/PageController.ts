@@ -1,7 +1,10 @@
+import { DOMAnalyzer } from './DOMAnalyzer';
+
 /**
  * PageController handles page interactions like scrolling and clicking
  */
 export class PageController {
+  constructor(private domAnalyzer?: DOMAnalyzer) {}
   /**
    * Scroll to bottom once
    */
@@ -39,14 +42,18 @@ export class PageController {
   }
 
   /**
-   * Expand collapsed replies
+   * Expand collapsed replies (supports Shadow DOM)
    * @param selector - Selector for expand buttons
    */
   async expandReplies(selector: string): Promise<void> {
-    const buttons = document.querySelectorAll(selector);
+    // Use Shadow DOM-aware query if available
+    const buttons = this.domAnalyzer 
+      ? this.domAnalyzer.querySelectorAllDeep(document, selector)
+      : Array.from(document.querySelectorAll(selector));
+    
     console.log(`[PageController] Found ${buttons.length} expand buttons`);
     
-    for (const button of Array.from(buttons)) {
+    for (const button of buttons) {
       try {
         (button as HTMLElement).click();
         await this.wait(500);
@@ -85,7 +92,7 @@ export class PageController {
   }
 
   /**
-   * Wait for element to appear
+   * Wait for element to appear (supports Shadow DOM)
    * @param selector - CSS selector
    * @param timeout - Timeout in milliseconds
    * @returns Element or null
@@ -94,7 +101,11 @@ export class PageController {
     const startTime = Date.now();
     
     while (Date.now() - startTime < timeout) {
-      const element = document.querySelector(selector);
+      // Use Shadow DOM-aware query if available
+      const element = this.domAnalyzer
+        ? this.domAnalyzer.querySelectorAllDeep(document, selector)[0]
+        : document.querySelector(selector);
+      
       if (element) {
         return element;
       }

@@ -36,13 +36,67 @@ export class DOMAnalyzer {
   }
 
   /**
-   * Get content by CSS selector
+   * Get content by CSS selector (supports Shadow DOM)
    * @param selector - CSS selector
    * @returns Text content
    */
   getContentBySelector(selector: string): string {
-    const element = document.querySelector(selector);
+    const element = this.querySelectorDeep(document, selector);
     return element?.textContent?.trim() || '';
+  }
+
+  /**
+   * Query selector that traverses Shadow DOM
+   * @param root - Root element or document
+   * @param selector - CSS selector
+   * @returns Found element or null
+   */
+  private querySelectorDeep(root: Document | Element | ShadowRoot, selector: string): Element | null {
+    // Try to find in current root
+    const element = root.querySelector(selector);
+    if (element) {
+      return element;
+    }
+
+    // Search in Shadow DOM
+    const elements = root.querySelectorAll('*');
+    for (const el of Array.from(elements)) {
+      const shadowRoot = (el as any).shadowRoot;
+      if (shadowRoot) {
+        const found = this.querySelectorDeep(shadowRoot, selector);
+        if (found) {
+          return found;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Query all selectors that traverse Shadow DOM
+   * @param root - Root element or document
+   * @param selector - CSS selector
+   * @returns Array of found elements
+   */
+  querySelectorAllDeep(root: Document | Element | ShadowRoot, selector: string): Element[] {
+    const results: Element[] = [];
+
+    // Find in current root
+    const elements = root.querySelectorAll(selector);
+    results.push(...Array.from(elements));
+
+    // Search in Shadow DOM
+    const allElements = root.querySelectorAll('*');
+    for (const el of Array.from(allElements)) {
+      const shadowRoot = (el as any).shadowRoot;
+      if (shadowRoot) {
+        const found = this.querySelectorAllDeep(shadowRoot, selector);
+        results.push(...found);
+      }
+    }
+
+    return results;
   }
 
   /**
@@ -109,7 +163,23 @@ export class DOMAnalyzer {
       return node;
     }
 
-    // Analyze children
+    // Check for Shadow DOM
+    const shadowRoot = (element as any).shadowRoot;
+    if (shadowRoot) {
+      // Add a marker to indicate this element has Shadow DOM
+      node.attributes = { ...node.attributes, 'has-shadow-root': 'true' };
+      
+      // Analyze Shadow DOM children
+      const shadowChildren = Array.from(shadowRoot.children);
+      if (shadowChildren.length > 0 && shadowChildren.length < 50) {
+        node.children = shadowChildren
+          .slice(0, 20)
+          .map(child => this.analyzeNode(child as Element, currentDepth + 1, maxDepth));
+      }
+      return node;
+    }
+
+    // Analyze regular children
     const children = Array.from(element.children);
     if (children.length > 0 && children.length < 50) { // Limit children
       node.children = children
