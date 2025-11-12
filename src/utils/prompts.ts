@@ -47,6 +47,11 @@ Return ONLY a valid JSON array with no additional text:
  */
 export const DEFAULT_ANALYSIS_PROMPT_TEMPLATE = `You are a professional social media analyst. Analyze the following comments and provide insights.
 
+## Post Information:
+- **Title**: {title}
+- **Platform**: {platform}
+- **URL**: {url}
+
 ## Comments Data:
 {comments_json}
 
@@ -106,7 +111,7 @@ Generate a comprehensive analysis report in Markdown format with the following s
 [Actionable suggestions based on the analysis]
 
 ---
-*Analysis generated on {timestamp}*
+*Post published on: {datetime}*
 *Platform: {platform}*
 *Total comments analyzed: {total_comments}*`;
 
@@ -130,9 +135,10 @@ export function buildAnalysisPrompt(
   commentsJson: string,
   template: string = DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
   metadata?: {
-    timestamp?: string;
+    datetime?: string;
     platform?: string;
     url?: string;
+    title?: string;
     totalComments?: number;
     language?: string;
   }
@@ -144,9 +150,10 @@ export function buildAnalysisPrompt(
   
   let prompt = template
     .replace('{comments_json}', commentsJson)
-    .replace('{timestamp}', metadata?.timestamp || new Date().toISOString())
-    .replace('{platform}', metadata?.platform || 'social media')
-    .replace('{url}', metadata?.url || 'N/A')
+    .replace(/{datetime}/g, metadata?.datetime || new Date().toISOString())
+    .replace(/{platform}/g, metadata?.platform || 'Unknown Platform')
+    .replace(/{url}/g, metadata?.url || 'N/A')
+    .replace(/{title}/g, metadata?.title || 'Untitled')
     .replace('{total_comments}', String(metadata?.totalComments || 0))
     + languageInstruction;
 
@@ -177,12 +184,37 @@ export function validatePromptTemplate(template: string): boolean {
  * Get available placeholders for prompt templates
  * @returns List of available placeholders with descriptions
  */
-export function getAvailablePlaceholders(): Array<{ key: string; description: string }> {
+export function getAvailablePlaceholders(): Array<{ key: string; description: string; detailedDescription: string }> {
   return [
-    { key: '{comments_json}', description: 'Comments data in JSON format (required)' },
-    { key: '{timestamp}', description: 'Current timestamp' },
-    { key: '{platform}', description: 'Platform/domain name (e.g., youtube.com, twitter.com)' },
-    { key: '{url}', description: 'Post URL' },
-    { key: '{total_comments}', description: 'Total number of comments' },
+    { 
+      key: '{comments_json}', 
+      description: 'Comments data in JSON format (required)',
+      detailedDescription: 'The complete comments data structure in JSON format, including all comment fields like username, content, timestamp, likes, and nested replies. This is the main data source for analysis.'
+    },
+    { 
+      key: '{datetime}', 
+      description: 'Post/video publication date and time',
+      detailedDescription: 'The date and time when the post or video was published. This helps provide temporal context for the analysis. Format: ISO 8601 (e.g., 2024-01-15T10:30:00Z)'
+    },
+    { 
+      key: '{platform}', 
+      description: 'Platform/domain name',
+      detailedDescription: 'The platform or domain where the comments were extracted from (e.g., youtube.com, twitter.com, reddit.com). This helps the AI understand platform-specific comment patterns and culture.'
+    },
+    { 
+      key: '{url}', 
+      description: 'Post/video URL',
+      detailedDescription: 'The complete URL of the post or video being analyzed. This provides context about the source and can be used for reference in the analysis report.'
+    },
+    { 
+      key: '{title}', 
+      description: 'Post/video title',
+      detailedDescription: 'The title or headline of the post/video. This is crucial context for understanding what the comments are discussing and helps the AI provide more relevant analysis.'
+    },
+    { 
+      key: '{total_comments}', 
+      description: 'Total number of comments',
+      detailedDescription: 'The total count of comments being analyzed (including all nested replies). This helps the AI understand the scale of engagement and adjust its analysis accordingly.'
+    },
   ];
 }

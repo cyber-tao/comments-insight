@@ -50,6 +50,9 @@ export class CommentExtractorSelector {
         onProgress
       );
       
+      // Step 3: Update selector validation status based on extraction results
+      await this.updateSelectorValidation(analysis.selectors, comments.length > 0);
+      
       onProgress?.('✅ Extraction complete!', comments.length);
       console.log('[CommentExtractorSelector] Extraction complete:', comments.length, 'comments');
       
@@ -792,7 +795,6 @@ Identify the comment section and provide CSS selectors for each field.
       likes,
       avatar,
       replies,
-      platform,
     };
   }
 
@@ -872,6 +874,51 @@ Identify the comment section and provide CSS selectors for each field.
       hash = hash & hash;
     }
     return Math.abs(hash).toString(36);
+  }
+
+  /**
+   * Update selector validation status
+   */
+  private async updateSelectorValidation(selectors: SelectorMap, success: boolean): Promise<void> {
+    try {
+      // Get current URL to find matching config
+      const url = window.location.href;
+      
+      // Request config ID from background
+      const configResponse = await new Promise<any>((resolve) => {
+        chrome.runtime.sendMessage(
+          { type: 'CHECK_SCRAPER_CONFIG', payload: { url } },
+          resolve
+        );
+      });
+      
+      if (!configResponse?.config?.id) {
+        console.log('[CommentExtractorSelector] No config found for validation update');
+        return;
+      }
+      
+      const configId = configResponse.config.id;
+      const status = success ? 'success' : 'failed';
+      
+      // Update validation status for each selector
+      for (const [key, value] of Object.entries(selectors)) {
+        if (value) {
+          await new Promise<void>((resolve) => {
+            chrome.runtime.sendMessage(
+              {
+                type: 'UPDATE_SELECTOR_VALIDATION',
+                payload: { configId, selectorKey: key, status }
+              },
+              () => resolve()
+            );
+          });
+        }
+      }
+      
+      console.log('[CommentExtractorSelector] Updated selector validation:', configId, status);
+    } catch (error) {
+      console.error('[CommentExtractorSelector] Failed to update selector validation:', error);
+    }
   }
 
   /**

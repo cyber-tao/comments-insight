@@ -432,6 +432,27 @@ export class ScraperConfigManager {
   }
 
   /**
+   * Update selector validation status for a configuration
+   */
+  static async updateSelectorValidation(
+    id: string,
+    selectorKey: string,
+    status: 'success' | 'failed'
+  ): Promise<void> {
+    const config = await this.getById(id);
+    if (!config) {
+      console.warn('[ScraperConfigManager] Config not found for validation update:', id);
+      return;
+    }
+
+    const selectorValidation = config.selectorValidation || {};
+    selectorValidation[selectorKey] = status;
+
+    await this.update(id, { selectorValidation });
+    console.log('[ScraperConfigManager] Updated selector validation:', id, selectorKey, status);
+  }
+
+  /**
    * Validate a configuration
    */
   static validateConfig(config: Partial<ScraperConfig>): { valid: boolean; errors: string[] } {

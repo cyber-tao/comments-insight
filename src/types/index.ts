@@ -13,7 +13,6 @@ export interface Comment {
   content: string;
   replies: Comment[];
   isHot?: boolean;
-  platform?: string; // Optional: domain or platform identifier
 }
 
 // Simplified DOM node for progressive extraction
@@ -91,12 +90,22 @@ export interface SelectorMap {
   replyItem?: string;
 }
 
+export interface SelectorValidation {
+  [key: string]: 'success' | 'failed' | 'untested';
+}
+
 export interface SelectorCache {
   domain: string;
   platform?: string; // Optional: for backward compatibility
   selectors: SelectorMap;
   lastUsed: number;
   successCount: number;
+}
+
+export interface DOMAnalysisConfig {
+  initialDepth: number;        // Initial DOM tree depth for analysis (default: 3)
+  expandDepth: number;         // Depth when expanding specific nodes (default: 2)
+  maxDepth: number;            // Maximum depth for full DOM structure (default: 10)
 }
 
 export interface Settings {
@@ -107,6 +116,7 @@ export interface Settings {
   language: 'zh-CN' | 'en-US';
   selectorRetryAttempts: number;
   selectorCache: SelectorCache[];
+  domAnalysisConfig: DOMAnalysisConfig; // DOM analysis configuration for structure analysis
 }
 
 export interface AnalysisResult {
@@ -160,6 +170,7 @@ export type MessageType =
   | 'GET_SCRAPER_CONFIGS'
   | 'SAVE_SCRAPER_CONFIG'
   | 'DELETE_SCRAPER_CONFIG'
+  | 'UPDATE_SELECTOR_VALIDATION'
   | 'PING';
 
 export interface Message {

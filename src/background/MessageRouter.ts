@@ -107,6 +107,9 @@ export class MessageRouter {
         case 'DELETE_SCRAPER_CONFIG':
           return await this.handleDeleteScraperConfig(message);
 
+        case 'UPDATE_SELECTOR_VALIDATION':
+          return await this.handleUpdateSelectorValidation(message);
+
         default:
           throw new ExtensionError(
             ErrorCode.VALIDATION_ERROR,
@@ -673,12 +676,41 @@ export class MessageRouter {
       
       this.taskManager.updateTaskProgress(taskId, 25);
 
-      // Analyze comments using AI
+      // Get history item to extract metadata
+      let platform = 'Unknown Platform';
+      let url = 'N/A';
+      let title = 'Untitled';
+      let datetime = new Date().toISOString();
+      
+      if (historyId) {
+        const historyItem = await this.storageManager.getHistoryItem(historyId);
+        if (historyItem) {
+          platform = historyItem.platform || 'Unknown Platform';
+          url = historyItem.url || 'N/A';
+          title = historyItem.title || 'Untitled';
+          datetime = new Date(historyItem.extractedAt).toISOString();
+        }
+      } else {
+        const task = this.taskManager.getTask(taskId);
+        if (task) {
+          platform = task.platform || 'Unknown Platform';
+          url = task.url || 'N/A';
+          datetime = new Date(task.startTime).toISOString();
+        }
+      }
+
+      // Analyze comments using AI with metadata
       const result = await this.aiService.analyzeComments(
         comments,
         settings.analyzerModel,
         settings.analyzerPromptTemplate,
-        settings.language
+        settings.language,
+        {
+          platform,
+          url,
+          title,
+          datetime,
+        }
       );
 
       this.taskManager.updateTaskProgress(taskId, 75);
@@ -830,11 +862,6 @@ export class MessageRouter {
         urlPatterns: [],
         selectors: configData.selectors,
         scrollConfig: configData.scrollConfig,
-        domAnalysisConfig: configData.domAnalysisConfig || {
-          initialDepth: 3,
-          expandDepth: 2,
-          maxDepth: 10
-        },
       });
 
       return { success: true, config };
@@ -904,6 +931,25 @@ export class MessageRouter {
       return { success };
     } catch (error) {
       console.error('[MessageRouter] Failed to delete scraper config:', error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Handle update selector validation message
+   */
+  private async handleUpdateSelectorValidation(message: Message): Promise<any> {
+    const { configId, selectorKey, status } = message.payload || {};
+
+    if (!configId || !selectorKey || !status) {
+      throw new Error('Config ID, selector key, and status are required');
+    }
+
+    try {
+      await ScraperConfigManager.updateSelectorValidation(configId, selectorKey, status);
+      return { success: true };
+    } catch (error) {
+      console.error('[MessageRouter] Failed to update selector validation:', error);
       return { success: false };
     }
   }

@@ -14,16 +14,14 @@ export interface ScraperSelectors {
   replyItem?: string;          // Individual reply element (optional)
 }
 
+export interface SelectorValidation {
+  [key: string]: 'success' | 'failed' | 'untested';
+}
+
 export interface ScrollConfig {
   enabled: boolean;            // Whether to enable auto-scrolling
   maxScrolls: number;          // Maximum number of scrolls
   scrollDelay: number;         // Delay between scrolls (ms)
-}
-
-export interface DOMAnalysisConfig {
-  initialDepth: number;        // Initial DOM tree depth for analysis (default: 3)
-  expandDepth: number;         // Depth when expanding specific nodes (default: 2)
-  maxDepth: number;            // Maximum depth for full DOM structure (default: 10)
 }
 
 export interface ScraperConfig {
@@ -33,7 +31,7 @@ export interface ScraperConfig {
   urlPatterns: string[];       // URL regex patterns (e.g., ["/watch\\?v="])
   selectors: ScraperSelectors; // CSS selectors for extraction
   scrollConfig?: ScrollConfig; // Scroll configuration (optional)
-  domAnalysisConfig?: DOMAnalysisConfig; // DOM analysis configuration (optional)
+  selectorValidation?: SelectorValidation; // Validation status for each selector
   createdAt: number;           // Creation timestamp
   updatedAt: number;           // Last update timestamp
 }

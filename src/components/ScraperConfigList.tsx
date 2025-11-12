@@ -345,14 +345,26 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
                   {t('scraper.viewSelectors')}
                 </summary>
                 <div className="mt-2 pl-4 space-y-1 text-sm font-mono bg-gray-50 p-3 rounded">
-                  {Object.entries(config.selectors).map(([key, value]) => (
-                    value && (
-                      <div key={key} className="flex">
+                  {Object.entries(config.selectors).map(([key, value]) => {
+                    if (!value) return null;
+                    
+                    const validationStatus = config.selectorValidation?.[key];
+                    let statusIcon = null;
+                    
+                    if (validationStatus === 'success') {
+                      statusIcon = <span className="text-green-600 ml-2" title="Validated successfully">✓</span>;
+                    } else if (validationStatus === 'failed') {
+                      statusIcon = <span className="text-red-600 ml-2" title="Validation failed">✗</span>;
+                    }
+                    
+                    return (
+                      <div key={key} className="flex items-center">
                         <span className="text-gray-600 w-40">{key}:</span>
-                        <span className="text-gray-800">{value}</span>
+                        <span className="text-gray-800 flex-1">{value}</span>
+                        {statusIcon}
                       </div>
-                    )
-                  ))}
+                    );
+                  })}
                 </div>
               </details>
 

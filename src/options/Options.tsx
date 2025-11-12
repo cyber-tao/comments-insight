@@ -20,6 +20,7 @@ const Options: React.FC = () => {
   const isSavingRef = useRef(false);
   const [testingModel, setTestingModel] = useState<'extractor' | 'analyzer' | null>(null);
   const isUserChangeRef = useRef(false); // Track if change is from user interaction
+  const [showPlaceholders, setShowPlaceholders] = useState(false);
 
   useEffect(() => {
     // Load settings only once on mount
@@ -280,6 +281,94 @@ const Options: React.FC = () => {
             <option value="zh-CN">中文</option>
             <option value="en-US">English</option>
           </select>
+        </div>
+      </section>
+
+      {/* DOM Analysis Configuration */}
+      <section className="mb-8 bg-white p-6 rounded-lg shadow">
+        <h2 className="text-xl font-semibold mb-4">{t('options.domAnalysisConfig')}</h2>
+        <p className="text-sm text-gray-600 mb-4">
+          {t('options.domAnalysisHint')}
+        </p>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              {t('options.initialDepth')}
+              <span className="text-xs text-gray-500 ml-2">{t('options.recommended')}: 3</span>
+            </label>
+            <input
+              type="number"
+              value={settings.domAnalysisConfig?.initialDepth || 3}
+              onChange={(e) => handleSettingsChange({
+                ...settings,
+                domAnalysisConfig: {
+                  ...settings.domAnalysisConfig,
+                  initialDepth: parseInt(e.target.value),
+                  expandDepth: settings.domAnalysisConfig?.expandDepth || 2,
+                  maxDepth: settings.domAnalysisConfig?.maxDepth || 10,
+                }
+              })}
+              className="w-full px-3 py-2 border rounded"
+              min="1"
+              max="5"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              {t('options.initialDepthHint')}
+            </p>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              {t('options.expandDepth')}
+              <span className="text-xs text-gray-500 ml-2">{t('options.recommended')}: 2</span>
+            </label>
+            <input
+              type="number"
+              value={settings.domAnalysisConfig?.expandDepth || 2}
+              onChange={(e) => handleSettingsChange({
+                ...settings,
+                domAnalysisConfig: {
+                  ...settings.domAnalysisConfig,
+                  initialDepth: settings.domAnalysisConfig?.initialDepth || 3,
+                  expandDepth: parseInt(e.target.value),
+                  maxDepth: settings.domAnalysisConfig?.maxDepth || 10,
+                }
+              })}
+              className="w-full px-3 py-2 border rounded"
+              min="1"
+              max="3"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              {t('options.expandDepthHint')}
+            </p>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              {t('options.maxDepth')}
+              <span className="text-xs text-gray-500 ml-2">{t('options.recommended')}: 10</span>
+            </label>
+            <input
+              type="number"
+              value={settings.domAnalysisConfig?.maxDepth || 10}
+              onChange={(e) => handleSettingsChange({
+                ...settings,
+                domAnalysisConfig: {
+                  ...settings.domAnalysisConfig,
+                  initialDepth: settings.domAnalysisConfig?.initialDepth || 3,
+                  expandDepth: settings.domAnalysisConfig?.expandDepth || 2,
+                  maxDepth: parseInt(e.target.value),
+                }
+              })}
+              className="w-full px-3 py-2 border rounded"
+              min="5"
+              max="15"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              {t('options.maxDepthHint')}
+            </p>
+          </div>
         </div>
       </section>
 
@@ -561,9 +650,55 @@ const Options: React.FC = () => {
             className="w-full px-3 py-2 border rounded font-mono text-sm"
             rows={10}
           />
-          <p className="text-xs text-gray-500 mt-1">
-            {t('options.placeholdersHint')}
-          </p>
+          
+          {/* Collapsible placeholders help */}
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => setShowPlaceholders(!showPlaceholders)}
+              className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            >
+              <span>{showPlaceholders ? '▼' : '▶'}</span>
+              <span>{t('options.availablePlaceholders')}</span>
+            </button>
+            
+            {showPlaceholders && (
+              <div className="mt-3 p-4 bg-gray-50 rounded border border-gray-200">
+                <div className="space-y-3">
+                  <div>
+                    <code className="text-sm font-mono bg-blue-100 px-2 py-1 rounded text-blue-800">{'{comments_json}'}</code>
+                    <span className="text-red-600 text-xs ml-2">*{t('options.required')}</span>
+                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_comments_json')}</p>
+                  </div>
+                  
+                  <div>
+                    <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">{'{datetime}'}</code>
+                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_datetime')}</p>
+                  </div>
+                  
+                  <div>
+                    <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">{'{platform}'}</code>
+                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_platform')}</p>
+                  </div>
+                  
+                  <div>
+                    <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">{'{url}'}</code>
+                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_url')}</p>
+                  </div>
+                  
+                  <div>
+                    <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">{'{title}'}</code>
+                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_title')}</p>
+                  </div>
+                  
+                  <div>
+                    <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">{'{total_comments}'}</code>
+                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_total_comments')}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </section>
 

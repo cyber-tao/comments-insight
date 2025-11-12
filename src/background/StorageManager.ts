@@ -26,6 +26,12 @@ const DEFAULT_SETTINGS: Settings = {
   },
   analyzerPromptTemplate: `You are a professional social media analyst. Analyze the following comments and provide insights.
 
+## Post Information:
+- **Title**: {title}
+- **Platform**: {platform}
+- **URL**: {url}
+- **Published**: {datetime}
+
 ## Comments Data:
 {comments_json}
 
@@ -40,6 +46,11 @@ Generate a comprehensive analysis report in Markdown format.`,
   language: 'zh-CN',
   selectorRetryAttempts: 3,
   selectorCache: [],
+  domAnalysisConfig: {
+    initialDepth: 3,
+    expandDepth: 2,
+    maxDepth: 10,
+  },
 };
 
 /**

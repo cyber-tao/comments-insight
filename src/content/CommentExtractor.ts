@@ -207,7 +207,6 @@ export class CommentExtractor {
       likes: 0, // Would extract from element
       content: textContent.substring(0, 500), // Limit length
       replies: [],
-      platform: 'unknown',
     };
   }
 }

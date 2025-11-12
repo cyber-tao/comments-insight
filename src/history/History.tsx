@@ -186,27 +186,53 @@ const History: React.FC = () => {
     setCurrentPage(1);
   }, [commentSearchTerm, selectedItem]);
 
+  // Track expanded replies
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
+
+  const toggleReplies = (commentId: string) => {
+    setExpandedReplies(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(commentId)) {
+        newSet.delete(commentId);
+      } else {
+        newSet.add(commentId);
+      }
+      return newSet;
+    });
+  };
+
   const renderCommentTree = (comments: Comment[], depth = 0) => {
     return (
       <div className={`${depth > 0 ? 'ml-6 border-l-2 border-gray-200 pl-4' : ''}`}>
-        {comments.map((comment) => (
-          <div key={comment.id} className="mb-4">
-            <div className="bg-gray-50 p-3 rounded">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="font-medium text-gray-800">{comment.username}</span>
-                <span className="text-xs text-gray-500">{comment.timestamp}</span>
-                <span className="text-xs text-gray-500">👍 {comment.likes}</span>
-                {comment.replies.length > 0 && (
-                  <span className="text-xs text-gray-500">💬 {comment.replies.length}</span>
-                )}
+        {comments.map((comment) => {
+          const hasReplies = comment.replies && comment.replies.length > 0;
+          const isExpanded = expandedReplies.has(comment.id);
+          
+          return (
+            <div key={comment.id} className="mb-4">
+              <div className="bg-gray-50 p-3 rounded">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-medium text-gray-800">{comment.username}</span>
+                  <span className="text-xs text-gray-500">{comment.timestamp}</span>
+                  <span className="text-xs text-gray-500">👍 {comment.likes}</span>
+                  {hasReplies && (
+                    <button
+                      onClick={() => toggleReplies(comment.id)}
+                      className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <span>{isExpanded ? '▼' : '▶'}</span>
+                      <span>💬 {comment.replies.length} {comment.replies.length === 1 ? 'reply' : 'replies'}</span>
+                    </button>
+                  )}
+                </div>
+                <p className="text-gray-700">{comment.content}</p>
               </div>
-              <p className="text-gray-700">{comment.content}</p>
+              {hasReplies && isExpanded && (
+                <div className="mt-2">{renderCommentTree(comment.replies, depth + 1)}</div>
+              )}
             </div>
-            {comment.replies && comment.replies.length > 0 && (
-              <div className="mt-2">{renderCommentTree(comment.replies, depth + 1)}</div>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };

@@ -254,13 +254,21 @@ export class AIService {
    * @param comments - Comments to analyze
    * @param config - AI configuration
    * @param promptTemplate - Custom prompt template
+   * @param language - Language for analysis
+   * @param metadata - Additional metadata (platform, url, title, datetime)
    * @returns Analysis result
    */
   async analyzeComments(
     comments: Comment[],
     config: AIConfig,
     promptTemplate: string,
-    language?: string
+    language?: string,
+    metadata?: {
+      platform?: string;
+      url?: string;
+      title?: string;
+      datetime?: string;
+    }
   ): Promise<AnalysisResult> {
     this.currentLanguage = language || 'en-US';
     // Split comments if they exceed token limit
@@ -270,11 +278,11 @@ export class AIService {
 
     if (commentBatches.length === 1) {
       // Single batch - analyze directly
-      return await this.analyzeSingleBatch(commentBatches[0], config, promptTemplate);
+      return await this.analyzeSingleBatch(commentBatches[0], config, promptTemplate, metadata);
     } else {
       // Multiple batches - analyze separately and merge
       const results = await Promise.all(
-        commentBatches.map(batch => this.analyzeSingleBatch(batch, config, promptTemplate))
+        commentBatches.map(batch => this.analyzeSingleBatch(batch, config, promptTemplate, metadata))
       );
       return this.mergeAnalysisResults(results);
     }
@@ -285,15 +293,22 @@ export class AIService {
    * @param comments - Comments to analyze
    * @param config - AI configuration
    * @param promptTemplate - Custom prompt template
+   * @param metadata - Additional metadata
    * @returns Analysis result
    */
   private async analyzeSingleBatch(
     comments: Comment[],
     config: AIConfig,
-    promptTemplate: string
+    promptTemplate: string,
+    metadata?: {
+      platform?: string;
+      url?: string;
+      title?: string;
+      datetime?: string;
+    }
   ): Promise<AnalysisResult> {
     const commentsJson = JSON.stringify(comments, null, 2);
-    const prompt = this.buildAnalysisPromptWrapper(commentsJson, promptTemplate);
+    const prompt = this.buildAnalysisPromptWrapper(commentsJson, promptTemplate, metadata);
 
     const response = await this.callAI({
       prompt,
@@ -418,12 +433,24 @@ export class AIService {
    * Build analysis prompt for AI (wrapper)
    * @param commentsJson - Comments in JSON format
    * @param template - Prompt template
+   * @param metadata - Additional metadata
    * @returns Formatted prompt
    */
-  private buildAnalysisPromptWrapper(commentsJson: string, template: string): string {
+  private buildAnalysisPromptWrapper(
+    commentsJson: string, 
+    template: string,
+    metadata?: {
+      platform?: string;
+      url?: string;
+      title?: string;
+      datetime?: string;
+    }
+  ): string {
     return buildAnalysisPrompt(commentsJson, template, {
-      timestamp: new Date().toISOString(),
-      platform: 'social media',
+      datetime: metadata?.datetime || new Date().toISOString(),
+      platform: metadata?.platform || 'Unknown Platform',
+      url: metadata?.url || 'N/A',
+      title: metadata?.title || 'Untitled',
       totalComments: JSON.parse(commentsJson).length,
       language: this.currentLanguage,
     });
