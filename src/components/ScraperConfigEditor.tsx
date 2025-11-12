@@ -243,6 +243,7 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
           {/* Optional selectors */}
           {[
             { key: 'postTitle', label: t('scraper.postTitle') },
+            { key: 'videoTime', label: t('scraper.videoTime') },
             { key: 'avatar', label: t('scraper.avatar') },
             { key: 'replyToggle', label: t('scraper.replyToggle') },
             { key: 'replyContainer', label: t('scraper.replyContainer') },

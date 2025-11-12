@@ -87,11 +87,8 @@ async function handleStartExtraction(
       return;
     }
     
-    // Get post info from page
-    const postInfo = {
-      url: window.location.href,
-      title: document.title
-    };
+    // Get post info from page (including video time if available)
+    const postInfo = await getPostInfo();
     
     // Send success response
     sendResponse({
@@ -122,6 +119,39 @@ function handleCancelExtraction(taskId: string) {
     console.log('[Content] Cancelling extraction:', taskId);
     currentTaskId = null;
   }
+}
+
+/**
+ * Get post information including video time
+ */
+async function getPostInfo(): Promise<{ url: string; title: string; videoTime?: string }> {
+  const url = window.location.href;
+  const title = document.title;
+  
+  // Try to get video time from scraper config
+  try {
+    const configResponse = await chrome.runtime.sendMessage({
+      type: 'CHECK_SCRAPER_CONFIG',
+      payload: { url }
+    });
+    
+    if (configResponse?.config?.selectors?.videoTime) {
+      const videoTimeSelector = configResponse.config.selectors.videoTime;
+      const videoTimeElement = document.querySelector(videoTimeSelector);
+      
+      if (videoTimeElement) {
+        const videoTime = videoTimeElement.textContent?.trim() || videoTimeElement.getAttribute('datetime');
+        if (videoTime) {
+          console.log('[Content] Extracted video time:', videoTime);
+          return { url, title, videoTime };
+        }
+      }
+    }
+  } catch (error) {
+    console.warn('[Content] Failed to extract video time:', error);
+  }
+  
+  return { url, title };
 }
 
 /**

@@ -140,6 +140,7 @@ export interface HistoryItem {
   url: string;
   title: string;
   platform: string; // Domain or platform identifier
+  videoTime?: string; // Video/post publication time (extracted from page)
   extractedAt: number; // When comments were extracted
   commentsCount: number;
   comments: Comment[];

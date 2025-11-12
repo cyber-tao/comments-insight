@@ -114,34 +114,101 @@ export class CommentExtractorSelector {
     console.log('[CommentExtractorSelector] DOM Structure length:', domStructure.length);
     console.log('[CommentExtractorSelector] DOM Structure preview:', domStructure.substring(0, 500));
     
+    let successfulSelectors: Partial<SelectorMap> = {};
     let lastError = '';
+    let lastResponse: AIAnalysisResponse | null = null;
     
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       onProgress?.(`🔍 Analyzing page structure (attempt ${attempt}/${maxRetries})...`, 0);
       
-      // Build prompt (include previous error if retrying)
-      const prompt = this.buildAnalysisPrompt(domStructure, platform, lastError);
+      // Build prompt with successful selectors info
+      const successfulInfo = Object.keys(successfulSelectors).length > 0
+        ? `\n\n## Previous Successful Selectors (KEEP THESE):\n${JSON.stringify(successfulSelectors, null, 2)}\n\n## Only provide selectors for these missing fields:\n${this.getMissingFields(successfulSelectors).join(', ')}`
+        : '';
+      
+      const errorInfo = lastError ? `\n\n## Previous Attempt Failed:\n${lastError}\n\nPlease analyze more carefully and provide different, more accurate selectors.` : '';
+      
+      // Build detailed prompt
+      const maxLength = 50000;
+      const truncated = domStructure.length > maxLength;
+      const structureToSend = truncated ? domStructure.substring(0, maxLength) : domStructure;
+      
+      const prompt = `You are a web scraping expert. Analyze this page structure (domain: ${platform}) and provide CSS selectors for extracting comments.${successfulInfo}${errorInfo}
+
+## DOM Structure:
+${truncated ? `(Showing first ${maxLength} characters of ${domStructure.length} total)` : ''}
+\`\`\`html
+${structureToSend}
+\`\`\`
+
+## Task:
+Identify the comment section and provide CSS selectors for each field.
+
+## Response Format (STRICT JSON ONLY, NO MARKDOWN):
+{
+  "selectors": {
+    "commentContainer": "css_selector_for_comment_list_container",
+    "commentItem": "css_selector_for_each_comment_item",
+    "username": "css_selector_for_username_relative_to_item",
+    "content": "css_selector_for_content_relative_to_item",
+    "timestamp": "css_selector_for_time_relative_to_item",
+    "likes": "css_selector_for_likes_relative_to_item",
+    "avatar": "css_selector_for_avatar_relative_to_item",
+    "replyToggle": "css_selector_for_show_more_replies_button",
+    "replyContainer": "css_selector_for_reply_container_relative_to_item",
+    "replyItem": "css_selector_for_each_reply_item"
+  },
+  "structure": {
+    "hasReplies": true,
+    "repliesNested": true,
+    "needsExpand": false
+  },
+  "confidence": 0.95
+}
+
+## CRITICAL RULES:
+- Return ONLY valid JSON, NO markdown code blocks, NO explanations
+- Start your response with { and end with }
+- Selectors for username/content/timestamp/likes should be relative to commentItem
+- Use specific selectors (prefer class/id over generic tags)
+- For nested replies, replyItem selector should be relative to replyContainer
+- Set confidence between 0.0-1.0 based on how certain you are
+- If no replies exist, set hasReplies to false and omit reply selectors`;
       
       // Call AI
       const response = await this.callAI(prompt);
+      lastResponse = response;
       
       console.log(`[CommentExtractorSelector] Attempt ${attempt}: AI returned selectors:`, response.selectors);
       
+      // Merge with successful selectors (AI response takes precedence for new fields)
+      const mergedSelectors = { ...successfulSelectors, ...response.selectors };
+      
       // Validate selectors by testing them
-      const testResult = this.testSelectors(response.selectors);
+      const testResult = this.testSelectors(mergedSelectors);
       console.log(`[CommentExtractorSelector] Attempt ${attempt}: Selector test results:`, testResult);
       
-      // Check if selectors are valid
+      // Update successful selectors
+      const { successful, failed } = this.categorizeSelectors(mergedSelectors, testResult);
+      successfulSelectors = successful;
+      
+      console.log(`[CommentExtractorSelector] Attempt ${attempt}: Successful: ${Object.keys(successfulSelectors).length}, Failed: ${failed.length}`);
+      
+      // Check if all required selectors are valid
       const isValid = this.validateSelectorResults(testResult);
       
       if (isValid) {
-        console.log(`[CommentExtractorSelector] Selectors validated successfully on attempt ${attempt}`);
+        console.log(`[CommentExtractorSelector] All selectors validated successfully on attempt ${attempt}`);
         onProgress?.('✅ Page structure analyzed successfully', 0);
         
         // Save successful selectors to cache
-        await this.saveSelectorCache(domain, platform, response.selectors);
+        await this.saveSelectorCache(domain, platform, successfulSelectors as SelectorMap);
         
-        return response;
+        return {
+          selectors: successfulSelectors as SelectorMap,
+          structure: response.structure,
+          confidence: response.confidence,
+        };
       }
       
       // Build error message for next attempt
@@ -149,17 +216,25 @@ export class CommentExtractorSelector {
       console.warn(`[CommentExtractorSelector] Attempt ${attempt} failed:`, lastError);
       
       if (attempt < maxRetries) {
-        onProgress?.(`⚠️ Retrying analysis (${attempt}/${maxRetries})...`, 0);
+        onProgress?.(`⚠️ Retrying analysis for ${failed.length} failed selectors (${attempt}/${maxRetries})...`, 0);
         await this.delay(1000); // Wait before retry
       }
     }
     
-    // All attempts failed, but return the last response anyway
-    console.error('[CommentExtractorSelector] All validation attempts failed, using last response');
-    onProgress?.('⚠️ Using best-effort selectors', 0);
+    // All attempts exhausted, return what we have
+    console.warn('[CommentExtractorSelector] Max retries reached, using best-effort selectors');
+    console.warn('[CommentExtractorSelector] Successful selectors:', Object.keys(successfulSelectors));
+    onProgress?.('⚠️ Using partial selectors', 0);
     
-    const finalPrompt = this.buildAnalysisPrompt(domStructure, platform, lastError);
-    return await this.callAI(finalPrompt);
+    return {
+      selectors: successfulSelectors as SelectorMap,
+      structure: lastResponse?.structure || {
+        hasReplies: !!successfulSelectors.replyItem,
+        repliesNested: true,
+        needsExpand: false,
+      },
+      confidence: Object.keys(successfulSelectors).length >= 6 ? 0.7 : 0.3,
+    };
   }
   
   /**
@@ -326,6 +401,8 @@ export class CommentExtractorSelector {
     // Try to find comment section using common patterns
     const commentSectionSelectors = [
       '#comments',
+      '#commentapp',
+      'bili-comments',
       '[id*="comment"]',
       '[class*="comment"]',
       '[id*="discussion"]',
@@ -338,14 +415,35 @@ export class CommentExtractorSelector {
     ];
     
     let commentSection: Element | null = null;
+    let html = '';
     
     // Try each selector
     for (const selector of commentSectionSelectors) {
       try {
         const elements = document.querySelectorAll(selector);
         if (elements.length > 0) {
-          // Find the one that likely contains comments (has many children)
+          // Find the one that likely contains comments
           for (const el of Array.from(elements)) {
+            // Check if element has Shadow DOM
+            const shadowRoot = (el as any).shadowRoot;
+            if (shadowRoot) {
+              console.log('[CommentExtractorSelector] Found Shadow DOM in:', selector);
+              const shadowChildCount = shadowRoot.querySelectorAll('*').length;
+              console.log('[CommentExtractorSelector] Shadow DOM children:', shadowChildCount);
+              
+              // Always extract from Shadow DOM if it exists, regardless of child count
+              // because Shadow DOM is where the actual content is
+              html = '<!-- Shadow DOM Content -->\n';
+              html += this.extractDOMStructure(shadowRoot, 0, 30);
+              console.log('[CommentExtractorSelector] Extracted from Shadow DOM, length:', html.length);
+              
+              // If Shadow DOM has content, return it
+              if (shadowChildCount > 0) {
+                return html;
+              }
+            }
+            
+            // Check regular DOM
             const childCount = el.querySelectorAll('*').length;
             if (childCount > 50) { // Likely a comment section
               commentSection = el;
@@ -356,19 +454,19 @@ export class CommentExtractorSelector {
           if (commentSection) break;
         }
       } catch (error) {
-        // Invalid selector, continue
+        console.warn('[CommentExtractorSelector] Error checking selector:', selector, error);
       }
     }
     
-    // If no comment section found, use body but with better sampling
-    if (!commentSection) {
-      console.log('[CommentExtractorSelector] No comment section found, using body with smart sampling');
-      return this.extractDOMStructureWithSampling(document.body);
+    // If found a comment section, extract from it
+    if (commentSection) {
+      console.log('[CommentExtractorSelector] Extracting structure from comment section');
+      return this.extractDOMStructure(commentSection, 0, 30);
     }
     
-    // Extract structure from comment section with higher depth limit
-    console.log('[CommentExtractorSelector] Extracting structure from comment section');
-    return this.extractDOMStructure(commentSection, 0, 30);
+    // If no comment section found, use body but with better sampling
+    console.log('[CommentExtractorSelector] No comment section found, using body with smart sampling');
+    return this.extractDOMStructureWithSampling(document.body);
   }
   
   /**
@@ -413,10 +511,22 @@ export class CommentExtractorSelector {
   /**
    * Extract simplified DOM structure (only tags, ids, classes)
    */
-  private extractDOMStructure(element: Element, depth: number = 0, maxDepth: number = 20): string {
+  private extractDOMStructure(element: any, depth: number = 0, maxDepth: number = 20): string {
     // Limit depth to avoid huge output
     if (depth > maxDepth) {
       return '';
+    }
+    
+    // Handle DocumentFragment (Shadow DOM root) - it doesn't have tagName
+    if (!element.tagName) {
+      let html = '';
+      if (element.children) {
+        const children = Array.from(element.children) as Element[];
+        for (const child of children) {
+          html += this.extractDOMStructure(child, depth, maxDepth);
+        }
+      }
+      return html;
     }
     
     const tag = element.tagName.toLowerCase();
@@ -444,7 +554,7 @@ export class CommentExtractorSelector {
     
     // Add children
     if (hasChildren) {
-      const children = Array.from(element.children);
+      const children = Array.from(element.children) as Element[];
       
       // Smart sampling: if many children, sample from beginning, middle, and end
       let childrenToShow: Element[];
@@ -473,7 +583,7 @@ export class CommentExtractorSelector {
   /**
    * Test selectors to see if they find elements
    */
-  private testSelectors(selectors: SelectorMap): Record<string, number> {
+  private testSelectors(selectors: Partial<SelectorMap>): Record<string, number> {
     const results: Record<string, number> = {};
     
     for (const [key, selector] of Object.entries(selectors)) {
@@ -491,6 +601,55 @@ export class CommentExtractorSelector {
   }
 
   /**
+   * Categorize selectors into successful and failed
+   */
+  private categorizeSelectors(
+    selectors: Partial<SelectorMap>,
+    testResults: Record<string, number>
+  ): { successful: Partial<SelectorMap>; failed: string[] } {
+    const successful: Partial<SelectorMap> = {};
+    const failed: string[] = [];
+    
+    const requiredFields = ['commentContainer', 'commentItem', 'username', 'content', 'timestamp', 'likes'];
+    
+    for (const [key, selector] of Object.entries(selectors)) {
+      if (!selector) continue;
+      
+      const count = testResults[key] || 0;
+      
+      // For required fields, need at least 1 element
+      if (requiredFields.includes(key)) {
+        if (count > 0) {
+          successful[key as keyof SelectorMap] = selector;
+        } else {
+          failed.push(key);
+        }
+      } else {
+        // Optional fields are considered successful even if not found
+        successful[key as keyof SelectorMap] = selector;
+      }
+    }
+    
+    return { successful, failed };
+  }
+
+  /**
+   * Get missing required fields
+   */
+  private getMissingFields(selectors: Partial<SelectorMap>): string[] {
+    const requiredFields = ['commentContainer', 'commentItem', 'username', 'content', 'timestamp', 'likes'];
+    const missing: string[] = [];
+    
+    for (const field of requiredFields) {
+      if (!selectors[field as keyof SelectorMap]) {
+        missing.push(field);
+      }
+    }
+    
+    return missing;
+  }
+
+  /**
    * Get classes from element
    */
   private getClasses(element: Element): string[] | null {
@@ -502,63 +661,6 @@ export class CommentExtractorSelector {
     } catch {
       return null;
     }
-  }
-
-  /**
-   * Build analysis prompt for AI
-   */
-  private buildAnalysisPrompt(domStructure: string, platform: Platform, previousError?: string): string {
-    const errorSection = previousError ? `
-
-## Previous Attempt Failed:
-${previousError}
-
-Please analyze the structure more carefully and provide different, more accurate selectors.` : '';
-
-    // Increase limit and add info about structure length
-    const maxLength = 50000; // Increased from 15000 to capture more structure
-    const truncated = domStructure.length > maxLength;
-    const structureToSend = truncated ? domStructure.substring(0, maxLength) : domStructure;
-    
-    return `You are a web scraping expert. Analyze this page structure (domain: ${platform}) and provide CSS selectors for extracting comments.${errorSection}
-
-## DOM Structure:
-${truncated ? `(Showing first ${maxLength} characters of ${domStructure.length} total)` : ''}
-\`\`\`html
-${structureToSend}
-\`\`\`
-
-## Task:
-Identify the comment section and provide CSS selectors for each field.
-
-## Response Format (strict JSON, no markdown):
-{
-  "selectors": {
-    "commentContainer": "css_selector_for_comment_list_container",
-    "commentItem": "css_selector_for_each_comment_item",
-    "username": "css_selector_for_username_relative_to_item",
-    "content": "css_selector_for_content_relative_to_item",
-    "timestamp": "css_selector_for_time_relative_to_item",
-    "likes": "css_selector_for_likes_relative_to_item",
-    "avatar": "css_selector_for_avatar_relative_to_item",
-    "replyContainer": "css_selector_for_reply_container_relative_to_item",
-    "replyItem": "css_selector_for_each_reply_item"
-  },
-  "structure": {
-    "hasReplies": true,
-    "repliesNested": true,
-    "needsExpand": false
-  },
-  "confidence": 0.95
-}
-
-## Important Rules:
-- Return ONLY valid JSON, no markdown code blocks
-- Selectors for username/content/timestamp/likes should be relative to commentItem
-- Use specific selectors (prefer class/id over generic tags)
-- For nested replies, replyItem selector should be relative to replyContainer
-- Set confidence between 0.0-1.0 based on how certain you are
-- If no replies exist, set hasReplies to false and omit reply selectors`;
   }
 
   /**
@@ -879,7 +981,7 @@ Identify the comment section and provide CSS selectors for each field.
   /**
    * Update selector validation status
    */
-  private async updateSelectorValidation(selectors: SelectorMap, success: boolean): Promise<void> {
+  private async updateSelectorValidation(selectors: SelectorMap, _success: boolean): Promise<void> {
     try {
       // Get current URL to find matching config
       const url = window.location.href;
@@ -898,11 +1000,27 @@ Identify the comment section and provide CSS selectors for each field.
       }
       
       const configId = configResponse.config.id;
-      const status = success ? 'success' : 'failed';
       
-      // Update validation status for each selector
+      // Test each selector individually to determine its status
+      const testResults = this.testSelectors(selectors);
+      
+      // Update validation status for each selector based on test results
       for (const [key, value] of Object.entries(selectors)) {
         if (value) {
+          const count = testResults[key] || 0;
+          let status: 'success' | 'failed';
+          
+          // Required fields must have at least 1 element
+          const requiredFields = ['commentContainer', 'commentItem', 'username', 'content', 'timestamp', 'likes'];
+          if (requiredFields.includes(key)) {
+            status = count > 0 ? 'success' : 'failed';
+          } else {
+            // Optional fields: if selector exists and finds elements, it's success
+            // If selector exists but finds no elements, it's failed (selector might be wrong)
+            // This helps identify if optional selectors like replyToggle are working
+            status = count > 0 ? 'success' : 'failed';
+          }
+          
           await new Promise<void>((resolve) => {
             chrome.runtime.sendMessage(
               {
@@ -912,10 +1030,12 @@ Identify the comment section and provide CSS selectors for each field.
               () => resolve()
             );
           });
+          
+          console.log(`[CommentExtractorSelector] Selector ${key}: ${status} (found ${count} elements)`);
         }
       }
       
-      console.log('[CommentExtractorSelector] Updated selector validation:', configId, status);
+      console.log('[CommentExtractorSelector] Updated selector validation for config:', configId);
     } catch (error) {
       console.error('[CommentExtractorSelector] Failed to update selector validation:', error);
     }

@@ -255,7 +255,7 @@ export class AIService {
    * @param config - AI configuration
    * @param promptTemplate - Custom prompt template
    * @param language - Language for analysis
-   * @param metadata - Additional metadata (platform, url, title, datetime)
+   * @param metadata - Additional metadata (platform, url, title, datetime, videoTime)
    * @returns Analysis result
    */
   async analyzeComments(
@@ -268,6 +268,7 @@ export class AIService {
       url?: string;
       title?: string;
       datetime?: string;
+      videoTime?: string;
     }
   ): Promise<AnalysisResult> {
     this.currentLanguage = language || 'en-US';
@@ -305,6 +306,7 @@ export class AIService {
       url?: string;
       title?: string;
       datetime?: string;
+      videoTime?: string;
     }
   ): Promise<AnalysisResult> {
     const commentsJson = JSON.stringify(comments, null, 2);
@@ -444,10 +446,12 @@ export class AIService {
       url?: string;
       title?: string;
       datetime?: string;
+      videoTime?: string;
     }
   ): string {
     return buildAnalysisPrompt(commentsJson, template, {
-      datetime: metadata?.datetime || new Date().toISOString(),
+      datetime: new Date().toISOString(),
+      videoTime: metadata?.videoTime || 'N/A',
       platform: metadata?.platform || 'Unknown Platform',
       url: metadata?.url || 'N/A',
       title: metadata?.title || 'Untitled',

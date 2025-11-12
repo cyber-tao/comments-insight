@@ -30,7 +30,7 @@ const DEFAULT_SETTINGS: Settings = {
 - **Title**: {title}
 - **Platform**: {platform}
 - **URL**: {url}
-- **Published**: {datetime}
+- **Published**: {video_time}
 
 ## Comments Data:
 {comments_json}

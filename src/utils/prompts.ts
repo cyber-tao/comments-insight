@@ -111,7 +111,8 @@ Generate a comprehensive analysis report in Markdown format with the following s
 [Actionable suggestions based on the analysis]
 
 ---
-*Post published on: {datetime}*
+*Analysis performed on: {datetime}*
+*Video/Post published on: {video_time}*
 *Platform: {platform}*
 *Total comments analyzed: {total_comments}*`;
 
@@ -136,6 +137,7 @@ export function buildAnalysisPrompt(
   template: string = DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
   metadata?: {
     datetime?: string;
+    videoTime?: string;
     platform?: string;
     url?: string;
     title?: string;
@@ -151,6 +153,7 @@ export function buildAnalysisPrompt(
   let prompt = template
     .replace('{comments_json}', commentsJson)
     .replace(/{datetime}/g, metadata?.datetime || new Date().toISOString())
+    .replace(/{video_time}/g, metadata?.videoTime || 'N/A')
     .replace(/{platform}/g, metadata?.platform || 'Unknown Platform')
     .replace(/{url}/g, metadata?.url || 'N/A')
     .replace(/{title}/g, metadata?.title || 'Untitled')
@@ -193,8 +196,13 @@ export function getAvailablePlaceholders(): Array<{ key: string; description: st
     },
     { 
       key: '{datetime}', 
-      description: 'Post/video publication date and time',
-      detailedDescription: 'The date and time when the post or video was published. This helps provide temporal context for the analysis. Format: ISO 8601 (e.g., 2024-01-15T10:30:00Z)'
+      description: 'Current analysis date and time',
+      detailedDescription: 'The current date and time when the analysis is being performed. Format: ISO 8601 (e.g., 2024-01-15T10:30:00Z)'
+    },
+    { 
+      key: '{video_time}', 
+      description: 'Video/post publication date and time',
+      detailedDescription: 'The date and time when the video or post was originally published. This is extracted from the page using the videoTime selector in scraper config. Helps provide temporal context for understanding comment trends over time.'
     },
     { 
       key: '{platform}', 

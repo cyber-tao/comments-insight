@@ -135,12 +135,17 @@ export class ScraperConfigManager {
         console.log('[ScraperConfigManager] Domain matched for config:', config.name);
         
         // Check URL pattern match
-        if (config.urlPatterns.length === 0) {
+        // Filter out empty patterns
+        const validPatterns = config.urlPatterns.filter(p => p && p.trim() !== '');
+        
+        if (validPatterns.length === 0) {
           console.log('[ScraperConfigManager] No URL patterns, returning config:', config.name);
           return config; // No pattern means match all URLs for this domain
         }
         
-        const patternMatch = config.urlPatterns.some(pattern => {
+        console.log('[ScraperConfigManager] Testing URL patterns:', validPatterns);
+        
+        const patternMatch = validPatterns.some(pattern => {
           try {
             const regex = new RegExp(pattern);
             const matches = regex.test(url);
@@ -157,6 +162,7 @@ export class ScraperConfigManager {
           return config;
         } else {
           console.log('[ScraperConfigManager] Pattern not matched for config:', config.name);
+          console.log('[ScraperConfigManager] Tried patterns:', validPatterns, 'against URL:', url);
         }
       }
       

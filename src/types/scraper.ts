@@ -2,6 +2,7 @@
 
 export interface ScraperSelectors {
   postTitle?: string;          // Post/video title selector (optional, fallback to document.title)
+  videoTime?: string;          // Video/post publication time selector (optional)
   commentContainer: string;    // Container holding all comments
   commentItem: string;         // Individual comment element
   username: string;            // Username selector

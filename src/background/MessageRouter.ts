@@ -332,9 +332,10 @@ export class MessageRouter {
       // Get settings for AI configuration
       const settings = await this.storageManager.getSettings();
       
-      // Call AI service
+      // Call AI service with system prompt for JSON output
       const response = await this.aiService.callAI({
         prompt,
+        systemPrompt: 'You are a web scraping expert. You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start your response with { and end with }.',
         config: settings.extractorModel
       });
 
@@ -645,6 +646,7 @@ export class MessageRouter {
           url: postInfo?.url || task.url,
           title: postInfo?.title || 'Untitled',
           platform: task.platform || 'unknown',
+          videoTime: postInfo?.videoTime,
           extractedAt: Date.now(),
           commentsCount: comments.length,
           comments,
@@ -680,7 +682,7 @@ export class MessageRouter {
       let platform = 'Unknown Platform';
       let url = 'N/A';
       let title = 'Untitled';
-      let datetime = new Date().toISOString();
+      let videoTime = 'N/A';
       
       if (historyId) {
         const historyItem = await this.storageManager.getHistoryItem(historyId);
@@ -688,14 +690,14 @@ export class MessageRouter {
           platform = historyItem.platform || 'Unknown Platform';
           url = historyItem.url || 'N/A';
           title = historyItem.title || 'Untitled';
-          datetime = new Date(historyItem.extractedAt).toISOString();
+          // Try to get video time from history item metadata if available
+          videoTime = (historyItem as any).videoTime || 'N/A';
         }
       } else {
         const task = this.taskManager.getTask(taskId);
         if (task) {
           platform = task.platform || 'Unknown Platform';
           url = task.url || 'N/A';
-          datetime = new Date(task.startTime).toISOString();
         }
       }
 
@@ -709,7 +711,7 @@ export class MessageRouter {
           platform,
           url,
           title,
-          datetime,
+          videoTime,
         }
       );
 
@@ -844,7 +846,7 @@ export class MessageRouter {
         throw new Error('AI returned invalid configuration format');
       }
 
-      // Extract domain from URL safely
+      // Extract domain from URL as fallback
       let domain: string;
       try {
         const urlObj = new URL(url);
@@ -855,11 +857,18 @@ export class MessageRouter {
         domain = match ? match[1] : 'unknown';
       }
 
+      // Use AI-generated domains and urlPatterns if available, otherwise use fallback
+      const domains = configData.domains && configData.domains.length > 0 
+        ? configData.domains 
+        : [domain, `www.${domain}`];
+      
+      const urlPatterns = configData.urlPatterns || [];
+
       // Create scraper config
       const config = await ScraperConfigManager.create({
         name: `${domain} - Auto-generated`,
-        domains: [domain, `www.${domain}`],
-        urlPatterns: [],
+        domains,
+        urlPatterns,
         selectors: configData.selectors,
         scrollConfig: configData.scrollConfig,
       });

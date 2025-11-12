@@ -677,6 +677,11 @@ const Options: React.FC = () => {
                   </div>
                   
                   <div>
+                    <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">{'{video_time}'}</code>
+                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_video_time')}</p>
+                  </div>
+                  
+                  <div>
                     <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">{'{platform}'}</code>
                     <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_platform')}</p>
                   </div>

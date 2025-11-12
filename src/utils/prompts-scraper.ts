@@ -18,6 +18,8 @@ You will receive a simplified DOM structure containing only tag names, IDs, and 
 
 Return your analysis in the following JSON format:
 {
+  "domains": ["domain1.com", "www.domain1.com"],
+  "urlPatterns": ["regex pattern for specific URLs, or empty array for all URLs"],
   "selectors": {
     "commentContainer": "CSS selector",
     "commentItem": "CSS selector",
@@ -35,14 +37,15 @@ Return your analysis in the following JSON format:
     "maxScrolls": number,
     "scrollDelay": number in milliseconds
   },
-  "domAnalysisConfig": {
-    "initialDepth": number (1-5, recommended: 3),
-    "expandDepth": number (1-3, recommended: 2),
-    "maxDepth": number (5-15, recommended: 10)
-  },
   "confidence": "high/medium/low",
   "notes": "Any observations or recommendations"
 }
+
+For domains and urlPatterns:
+- Extract the domain from the provided URL
+- Include both with and without "www." prefix
+- For urlPatterns: if this config should only work on specific URL patterns (e.g., only video pages), provide regex patterns. Otherwise, use empty array [] to match all URLs on the domain.
+- Example urlPatterns: ["/watch\\?v="] for YouTube videos, ["/video/BV\\w+"] for Bilibili videos
 
 For domAnalysisConfig:
 - initialDepth: How deep to initially analyze the DOM tree (lower for simple pages, higher for complex nested structures)
