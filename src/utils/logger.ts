@@ -61,9 +61,10 @@ export class Logger {
     try {
       const manifest = chrome.runtime.getManifest();
       // Development builds typically have version like "0.0.0" or include "dev"
-      this.isDevelopment = manifest.version === '0.0.0' || 
-                          manifest.version.includes('dev') ||
-                          !('update_url' in manifest); // No update_url means not from store
+      this.isDevelopment =
+        manifest.version === '0.0.0' ||
+        manifest.version.includes('dev') ||
+        !('update_url' in manifest); // No update_url means not from store
     } catch (error) {
       // If we can't detect, assume production for safety
       this.isDevelopment = false;
@@ -81,9 +82,9 @@ export class Logger {
     }
 
     this.initialized = true;
-    this.info('[Logger] Initialized', { 
+    this.info('[Logger] Initialized', {
       environment: this.isDevelopment ? 'development' : 'production',
-      config: this.config 
+      config: this.config,
     });
   }
 
@@ -181,7 +182,7 @@ export class Logger {
 
     // Storage output (async, don't wait)
     if (this.config.enableStorage) {
-      this.logToStorage(entry).catch(err => {
+      this.logToStorage(entry).catch((err) => {
         console.error('[Logger] Failed to save log to storage:', err);
       });
     }
@@ -227,8 +228,6 @@ export class Logger {
     }
   }
 
-
-
   /**
    * Save log to chrome.storage.local
    * @param entry - Log entry
@@ -237,7 +236,7 @@ export class Logger {
     try {
       // Create storage key
       const logKey = `log_${entry.level.toLowerCase()}_${entry.timestamp}`;
-      
+
       // Save log entry
       await chrome.storage.local.set({
         [logKey]: entry,
@@ -257,12 +256,12 @@ export class Logger {
   private static async cleanupOldLogs(): Promise<void> {
     try {
       const storage = await chrome.storage.local.get(null);
-      const logKeys = Object.keys(storage).filter(key => key.startsWith('log_'));
+      const logKeys = Object.keys(storage).filter((key) => key.startsWith('log_'));
 
       if (logKeys.length > this.config.maxStoredLogs) {
         // Sort by timestamp (embedded in key)
         logKeys.sort();
-        
+
         // Remove oldest logs
         const toRemove = logKeys.slice(0, logKeys.length - this.config.maxStoredLogs);
         await chrome.storage.local.remove(toRemove);
@@ -288,7 +287,7 @@ export class Logger {
 
       // Filter by level if specified
       if (level) {
-        logs = logs.filter(log => log.level === level);
+        logs = logs.filter((log) => log.level === level);
       }
 
       // Limit results if specified
@@ -309,7 +308,7 @@ export class Logger {
   static async clearLogs(): Promise<void> {
     try {
       const storage = await chrome.storage.local.get(null);
-      const logKeys = Object.keys(storage).filter(key => key.startsWith('log_'));
+      const logKeys = Object.keys(storage).filter((key) => key.startsWith('log_'));
       await chrome.storage.local.remove(logKeys);
       this.info('[Logger] All logs cleared');
     } catch (error) {
@@ -339,7 +338,7 @@ export class Logger {
     newestTimestamp: number;
   }> {
     const logs = await this.getLogs();
-    
+
     const stats = {
       total: logs.length,
       byLevel: {
@@ -352,7 +351,7 @@ export class Logger {
       newestTimestamp: logs.length > 0 ? logs[0].timestamp : 0,
     };
 
-    logs.forEach(log => {
+    logs.forEach((log) => {
       stats.byLevel[log.level]++;
     });
 

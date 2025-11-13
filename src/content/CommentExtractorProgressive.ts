@@ -1,5 +1,6 @@
 import { Comment, Platform, AIExtractionResponse } from '../types';
 import { DOMSimplifier } from './DOMSimplifier';
+import { TIMING, SCROLL } from '@/config/constants';
 import { PageController } from './PageController';
 
 /**
@@ -17,7 +18,7 @@ export class CommentExtractorProgressive {
     options?: {
       initialDepth?: number;
       expandDepth?: number;
-    }
+    },
   ) {
     this.domSimplifier = new DOMSimplifier();
     this.initialDepth = options?.initialDepth ?? 3;
@@ -34,35 +35,38 @@ export class CommentExtractorProgressive {
   async extractWithAI(
     maxComments: number,
     platform: Platform,
-    onProgress?: (progress: number, message: string) => void
+    onProgress?: (progress: number, message: string) => void,
   ): Promise<Comment[]> {
     console.log('[CommentExtractorProgressive] Starting progressive extraction');
-    
+
     try {
       // Step 1: Wait for page to be ready (10%)
       onProgress?.(10, 'Waiting for page to load...');
       await this.pageController.waitForElement('body', 5000);
-      await this.delay(1000); // Give page time to render
-      
+      await this.delay(TIMING.XL);
+
       // Step 2: Start progressive extraction (10-90%)
       onProgress?.(20, 'Starting AI-driven exploration...');
       const comments = await this.progressiveExtraction(platform, (iterProgress, msg) => {
         // Map iteration progress to 20-90%
-        const overallProgress = 20 + (iterProgress * 0.7);
+        const overallProgress = 20 + iterProgress * 0.7;
         onProgress?.(overallProgress, msg);
       });
-      
+
       // Step 3: Validate and clean (90%)
       onProgress?.(90, 'Validating extracted data...');
       const validComments = this.validateComments(comments, platform);
-      
+
       // Step 4: Limit to maxComments (100%)
       onProgress?.(100, 'Extraction complete!');
       const limitedComments = validComments.slice(0, maxComments);
-      
-      console.log('[CommentExtractorProgressive] Extraction complete:', limitedComments.length, 'comments');
+
+      console.log(
+        '[CommentExtractorProgressive] Extraction complete:',
+        limitedComments.length,
+        'comments',
+      );
       return limitedComments;
-      
     } catch (error) {
       console.error('[CommentExtractorProgressive] Extraction failed:', error);
       throw error;
@@ -74,74 +78,81 @@ export class CommentExtractorProgressive {
    */
   private async progressiveExtraction(
     platform: Platform,
-    onProgress?: (progress: number, message: string) => void
+    onProgress?: (progress: number, message: string) => void,
   ): Promise<Comment[]> {
     const allComments: Comment[] = [];
     this.currentIteration = 0;
-    
+
     // Start with simplified body structure using configured depth
     let currentDOM = this.domSimplifier.simplifyElement(document.body, this.initialDepth);
-    
+
     while (this.currentIteration < this.maxIterations) {
       this.currentIteration++;
       const iterProgress = (this.currentIteration / this.maxIterations) * 100;
-      
-      console.log(`[CommentExtractorProgressive] Iteration ${this.currentIteration}/${this.maxIterations}`);
+
+      console.log(
+        `[CommentExtractorProgressive] Iteration ${this.currentIteration}/${this.maxIterations}`,
+      );
       onProgress?.(iterProgress, `Exploring page structure (round ${this.currentIteration})...`);
-      
+
       // Convert DOM to string for AI
       const domString = this.domSimplifier.nodeToString(currentDOM);
-      
+
       // Build prompt for this iteration
       const prompt = this.buildProgressivePrompt(domString, this.currentIteration, platform);
-      
+
       // Call AI
       const response = await this.callAIExtraction(prompt, platform);
-      
+
       console.log(`[CommentExtractorProgressive] AI Response:`, {
         commentsFound: response.comments.length,
         nodesToExpand: response.nodesToExpand.length,
         needsScroll: response.needsScroll,
         completed: response.completed,
-        analysis: response.analysis
+        analysis: response.analysis,
       });
-      
+
       // Collect comments from this iteration
       if (response.comments.length > 0) {
         allComments.push(...response.comments);
-        onProgress?.(iterProgress, `Found ${response.comments.length} comments (total: ${allComments.length})...`);
+        onProgress?.(
+          iterProgress,
+          `Found ${response.comments.length} comments (total: ${allComments.length})...`,
+        );
       }
-      
+
       // Check if completed
       if (response.completed) {
         console.log('[CommentExtractorProgressive] AI indicated extraction is complete');
         break;
       }
-      
+
       // Handle scrolling if needed
       if (response.needsScroll) {
         onProgress?.(iterProgress, 'Scrolling to load more content...');
-        await this.pageController.scrollToLoadMore(2);
-        await this.delay(1500); // Wait for content to load
-        
+        await this.pageController.scrollToLoadMore(SCROLL.PROGRESSIVE_SCROLLS_PER_ITERATION);
+        await this.delay(TIMING.XXL);
+
         // Re-simplify DOM after scroll using configured depth
         currentDOM = this.domSimplifier.simplifyElement(document.body, this.initialDepth);
         continue;
       }
-      
+
       // Expand nodes as instructed by AI
       if (response.nodesToExpand.length > 0) {
         onProgress?.(iterProgress, `Expanding ${response.nodesToExpand.length} nodes...`);
-        
+
         // Sort by priority (highest first)
         const sortedNodes = response.nodesToExpand.sort((a, b) => b.priority - a.priority);
-        
+
         // Expand top priority nodes (limit to 5 per iteration to avoid token explosion)
         const nodesToExpand = sortedNodes.slice(0, 5);
-        
+
         for (const nodeInfo of nodesToExpand) {
-          console.log(`[CommentExtractorProgressive] Expanding: ${nodeInfo.selector} (${nodeInfo.reason})`);
-          
+          console.log(
+            `[CommentExtractorProgressive] Expanding: ${nodeInfo.selector} (${nodeInfo.reason})`,
+          );
+
           const expanded = this.domSimplifier.expandNode(nodeInfo.selector, this.expandDepth);
           if (expanded) {
             currentDOM = this.domSimplifier.updateTreeWithExpanded(currentDOM, expanded);
@@ -154,15 +165,15 @@ export class CommentExtractorProgressive {
         console.warn('[CommentExtractorProgressive] No nodes to expand but not completed');
         break;
       }
-      
+
       // Small delay between iterations
-      await this.delay(500);
+      await this.delay(TIMING.LG);
     }
-    
+
     if (this.currentIteration >= this.maxIterations) {
       console.warn('[CommentExtractorProgressive] Reached max iterations');
     }
-    
+
     return allComments;
   }
 
@@ -231,26 +242,29 @@ Return ONLY a valid JSON object (no markdown, no code blocks):
   /**
    * Call AI extraction via background service
    */
-  private async callAIExtraction(prompt: string, platform: Platform): Promise<AIExtractionResponse> {
+  private async callAIExtraction(
+    prompt: string,
+    platform: Platform,
+  ): Promise<AIExtractionResponse> {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
         {
           type: 'AI_EXTRACT_PROGRESSIVE',
-          data: { prompt, platform }
+          data: { prompt, platform },
         },
         (response) => {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
             return;
           }
-          
+
           if (response.error) {
             reject(new Error(response.error));
             return;
           }
-          
+
           resolve(response.data);
-        }
+        },
       );
     });
   }
@@ -260,28 +274,28 @@ Return ONLY a valid JSON object (no markdown, no code blocks):
    */
   private validateComments(comments: Comment[], platform: Platform): Comment[] {
     const seen = new Set<string>();
-    
+
     return comments
-      .filter(comment => {
+      .filter((comment) => {
         // Must have content
         if (!comment.content || comment.content.trim().length === 0) {
           return false;
         }
-        
+
         // Must have username
         if (!comment.username || comment.username.trim().length === 0) {
           return false;
         }
-        
+
         // Deduplicate by ID
         if (seen.has(comment.id)) {
           return false;
         }
         seen.add(comment.id);
-        
+
         return true;
       })
-      .map(comment => ({
+      .map((comment) => ({
         ...comment,
         platform,
         likes: Math.max(0, comment.likes || 0),
@@ -293,6 +307,6 @@ Return ONLY a valid JSON object (no markdown, no code blocks):
    * Delay helper
    */
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

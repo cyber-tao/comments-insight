@@ -11,7 +11,8 @@
     "settings": "设置",
     "history": "历史记录",
     "previous": "上一页",
-    "next": "下一页"
+    "next": "下一页",
+    "untitled": "未命名"
   },
   "popup": {
     "title": "评论洞察",
@@ -41,7 +42,23 @@
     "daysAgo": "天前",
     "generateConfig": "AI 分析爬取器",
     "noConfigHint": "未找到爬取配置，使用 AI 分析并生成配置",
-    "configRequired": "需要爬取配置"
+    "configRequired": "需要爬取配置",
+    "generateConfigSuccess": "爬取配置生成成功！",
+    "generateConfigFailedWithMsg": "生成爬取配置失败：{{msg}}",
+    "generateConfigFailed": "生成爬取配置失败",
+    "taskAlreadyRunning": "任务正在进行中，请稍候。",
+    "viewAILogs": "查看 AI 日志",
+    "extracting": "正在提取评论...",
+    "analyzing": "正在分析评论...",
+    "extractionCompleted": "评论提取完成",
+    "analysisCompleted": "评论分析完成",
+    "taskFailed": "任务失败",
+    "extractionStarted": "开始提取",
+    "analysisStarted": "开始分析",
+    "analysisConfigStarted": "开始分析爬取器",
+    "analyzingConfig": "正在分析爬取器...",
+    "viewComments": "查看评论",
+    "viewAnalysis": "查看分析"
   },
   "options": {
     "title": "设置",
@@ -204,5 +221,13 @@
     "extract": "提取",
     "analyze": "分析",
     "cancel": "取消"
+  },
+  "logs": {
+    "empty": "暂无日志。执行操作后会在这里显示。",
+    "copySuccess": "已复制到剪贴板！",
+    "copyFailed": "复制到剪贴板失败",
+    "confirmDeleteLog": "删除此日志？",
+    "confirmClearLogs": "清空所有日志？此操作不可撤销！",
+    "logsCleared": "日志已清空"
   }
 }

@@ -60,7 +60,11 @@ Guidelines:
 - For scrollConfig, enable it if comments appear to be lazy-loaded
 - Be conservative with confidence ratings`;
 
-export function generateScraperConfigPrompt(domStructure: string, url: string, pageTitle: string): string {
+export function generateScraperConfigPrompt(
+  domStructure: string,
+  url: string,
+  pageTitle: string,
+): string {
   return `Analyze the following web page and generate scraper configuration:
 
 **Page Information:**

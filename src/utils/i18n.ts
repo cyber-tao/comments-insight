@@ -13,22 +13,20 @@ const getBrowserLanguage = (): string => {
 };
 
 // Initialize i18next
-i18n
-  .use(initReactI18next)
-  .init({
-    resources: {
-      'zh-CN': {
-        translation: zhCN,
-      },
-      'en-US': {
-        translation: enUS,
-      },
+i18n.use(initReactI18next).init({
+  resources: {
+    'zh-CN': {
+      translation: zhCN,
     },
-    lng: getBrowserLanguage(),
-    fallbackLng: 'en-US',
-    interpolation: {
-      escapeValue: false,
+    'en-US': {
+      translation: enUS,
     },
-  });
+  },
+  lng: getBrowserLanguage(),
+  fallbackLng: 'en-US',
+  interpolation: {
+    escapeValue: false,
+  },
+});
 
 export default i18n;

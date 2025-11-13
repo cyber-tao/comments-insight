@@ -1,6 +1,8 @@
 import * as React from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PAGINATION } from '@/config/constants';
+import { MESSAGES } from '@/config/constants';
 import { HistoryItem, Comment } from '../types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -15,15 +17,15 @@ const History: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'comments' | 'analysis'>('analysis');
   const [sortBy, setSortBy] = useState<'time' | 'likes' | 'replies'>('time');
-  
+
   // Comment view search and pagination
   const [commentSearchTerm, setCommentSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [commentsPerPage, setCommentsPerPage] = useState(20);
+  const [commentsPerPage, setCommentsPerPage] = useState(PAGINATION.DEFAULT_PER_PAGE);
 
   useEffect(() => {
     // Load language from settings
-    chrome.runtime.sendMessage({ type: 'GET_SETTINGS' }, (response) => {
+    chrome.runtime.sendMessage({ type: MESSAGES.GET_SETTINGS }, (response) => {
       if (response?.settings?.language) {
         i18n.changeLanguage(response.settings.language);
       }
@@ -35,13 +37,13 @@ const History: React.FC = () => {
   const loadHistory = async () => {
     setLoading(true);
     try {
-      const response = await chrome.runtime.sendMessage({ type: 'GET_HISTORY' });
-      
+      const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_HISTORY });
+
       if (chrome.runtime.lastError) {
         console.error('[History] Failed to load history:', chrome.runtime.lastError);
         return;
       }
-      
+
       if (response?.history) {
         setHistory(response.history);
       }
@@ -60,7 +62,7 @@ const History: React.FC = () => {
 
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'GET_HISTORY',
+        type: MESSAGES.GET_HISTORY,
         payload: { query: searchQuery },
       });
       if (response?.items) {
@@ -76,7 +78,7 @@ const History: React.FC = () => {
 
     try {
       await chrome.runtime.sendMessage({
-        type: 'DELETE_HISTORY',
+        type: MESSAGES.DELETE_HISTORY,
         payload: { id },
       });
       setHistory(history.filter((item) => item.id !== id));
@@ -93,9 +95,9 @@ const History: React.FC = () => {
 
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'CLEAR_ALL_HISTORY',
+        type: MESSAGES.CLEAR_ALL_HISTORY,
       });
-      
+
       if (response?.success) {
         setHistory([]);
         setSelectedItem(null);
@@ -111,7 +113,7 @@ const History: React.FC = () => {
 
   const sortComments = (comments: Comment[]): Comment[] => {
     const sorted = [...comments];
-    
+
     sorted.sort((a, b) => {
       switch (sortBy) {
         case 'time':
@@ -127,40 +129,45 @@ const History: React.FC = () => {
           return 0;
       }
     });
-    
+
     // Recursively sort replies
-    return sorted.map(comment => ({
+    return sorted.map((comment) => ({
       ...comment,
-      replies: comment.replies.length > 0 ? sortComments(comment.replies) : comment.replies
+      replies: comment.replies.length > 0 ? sortComments(comment.replies) : comment.replies,
     }));
   };
 
   // Filter comments by search term (including replies)
   const filterComments = (comments: Comment[], searchTerm: string): Comment[] => {
     if (!searchTerm) return comments;
-    
+
     const searchLower = searchTerm.toLowerCase();
-    
-    return comments.filter(comment => {
-      // Check if comment matches
-      const commentMatches = 
-        comment.username.toLowerCase().includes(searchLower) ||
-        comment.content.toLowerCase().includes(searchLower) ||
-        (comment.timestamp && comment.timestamp.toLowerCase().includes(searchLower));
-      
-      // Check if any reply matches
-      const replyMatches = comment.replies && comment.replies.some(reply =>
-        reply.username.toLowerCase().includes(searchLower) ||
-        reply.content.toLowerCase().includes(searchLower) ||
-        (reply.timestamp && reply.timestamp.toLowerCase().includes(searchLower))
-      );
-      
-      return commentMatches || replyMatches;
-    }).map(comment => ({
-      ...comment,
-      // Also filter replies recursively
-      replies: comment.replies ? filterComments(comment.replies, searchTerm) : []
-    }));
+
+    return comments
+      .filter((comment) => {
+        // Check if comment matches
+        const commentMatches =
+          comment.username.toLowerCase().includes(searchLower) ||
+          comment.content.toLowerCase().includes(searchLower) ||
+          (comment.timestamp && comment.timestamp.toLowerCase().includes(searchLower));
+
+        // Check if any reply matches
+        const replyMatches =
+          comment.replies &&
+          comment.replies.some(
+            (reply) =>
+              reply.username.toLowerCase().includes(searchLower) ||
+              reply.content.toLowerCase().includes(searchLower) ||
+              (reply.timestamp && reply.timestamp.toLowerCase().includes(searchLower)),
+          );
+
+        return commentMatches || replyMatches;
+      })
+      .map((comment) => ({
+        ...comment,
+        // Also filter replies recursively
+        replies: comment.replies ? filterComments(comment.replies, searchTerm) : [],
+      }));
   };
 
   // Get filtered and sorted comments
@@ -190,7 +197,7 @@ const History: React.FC = () => {
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
 
   const toggleReplies = (commentId: string) => {
-    setExpandedReplies(prev => {
+    setExpandedReplies((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(commentId)) {
         newSet.delete(commentId);
@@ -207,7 +214,7 @@ const History: React.FC = () => {
         {comments.map((comment) => {
           const hasReplies = comment.replies && comment.replies.length > 0;
           const isExpanded = expandedReplies.has(comment.id);
-          
+
           return (
             <div key={comment.id} className="mb-4">
               <div className="bg-gray-50 p-3 rounded">
@@ -221,7 +228,10 @@ const History: React.FC = () => {
                       className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex items-center gap-1"
                     >
                       <span>{isExpanded ? '▼' : '▶'}</span>
-                      <span>💬 {comment.replies.length} {comment.replies.length === 1 ? 'reply' : 'replies'}</span>
+                      <span>
+                        💬 {comment.replies.length}{' '}
+                        {comment.replies.length === 1 ? 'reply' : 'replies'}
+                      </span>
                     </button>
                   )}
                 </div>
@@ -367,9 +377,7 @@ const History: React.FC = () => {
                 <div>
                   {/* Analysis View Header with Export Button */}
                   <div className="mb-4 flex justify-between items-center">
-                    <h3 className="text-lg font-semibold">
-                      {t('history.analysis')}
-                    </h3>
+                    <h3 className="text-lg font-semibold">{t('history.analysis')}</h3>
                     {selectedItem.analysis && (
                       <button
                         onClick={() => exportAnalysisAsMarkdown(selectedItem)}
@@ -381,7 +389,7 @@ const History: React.FC = () => {
                       </button>
                     )}
                   </div>
-                  
+
                   {/* Analysis Content */}
                   <div className="prose prose-sm md:prose-base max-w-none prose-table:border-collapse prose-th:border prose-th:border-gray-300 prose-th:bg-gray-100 prose-th:p-2 prose-td:border prose-td:border-gray-300 prose-td:p-2">
                     {selectedItem.analysis ? (
@@ -428,7 +436,9 @@ const History: React.FC = () => {
                         <label className="text-sm text-gray-600">{t('history.sortBy')}:</label>
                         <select
                           value={sortBy}
-                          onChange={(e) => setSortBy(e.target.value as 'time' | 'likes' | 'replies')}
+                          onChange={(e) =>
+                            setSortBy(e.target.value as 'time' | 'likes' | 'replies')
+                          }
                           className="px-3 py-2 border rounded text-sm"
                         >
                           <option value="time">{t('history.sortByTime')}</option>
@@ -437,7 +447,9 @@ const History: React.FC = () => {
                         </select>
                       </div>
                       <div className="flex items-center gap-2">
-                        <label className="text-sm text-gray-600">{t('history.commentsPerPage')}:</label>
+                        <label className="text-sm text-gray-600">
+                          {t('history.commentsPerPage')}:
+                        </label>
                         <select
                           value={commentsPerPage}
                           onChange={(e) => {
@@ -446,18 +458,22 @@ const History: React.FC = () => {
                           }}
                           className="px-2 py-2 border rounded text-sm"
                         >
-                          <option value={10}>10</option>
-                          <option value={20}>20</option>
-                          <option value={50}>50</option>
-                          <option value={100}>100</option>
+                          {PAGINATION.OPTIONS.map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
-                    
+
                     {/* Search Results Info */}
                     {commentSearchTerm && (
                       <div className="text-sm text-gray-600">
-                        {t('history.searchResults', { count: totalComments, total: selectedItem.comments.length })}
+                        {t('history.searchResults', {
+                          count: totalComments,
+                          total: selectedItem.comments.length,
+                        })}
                       </div>
                     )}
                   </div>
@@ -466,10 +482,10 @@ const History: React.FC = () => {
                   {totalPages > 1 && (
                     <div className="mb-4 flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                       <div className="text-sm text-gray-600">
-                        {t('history.showingComments', { 
-                          start: (currentPage - 1) * commentsPerPage + 1, 
-                          end: Math.min(currentPage * commentsPerPage, totalComments), 
-                          total: totalComments 
+                        {t('history.showingComments', {
+                          start: (currentPage - 1) * commentsPerPage + 1,
+                          end: Math.min(currentPage * commentsPerPage, totalComments),
+                          total: totalComments,
                         })}
                       </div>
                       <div className="flex gap-2 items-center">
@@ -545,4 +561,3 @@ const History: React.FC = () => {
 };
 
 export default History;
-

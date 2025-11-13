@@ -13,7 +13,8 @@
     "previous": "Previous",
     "next": "Next",
     "noResults": "No results found",
-    "noData": "No data"
+    "noData": "No data",
+    "untitled": "Untitled"
   },
   "popup": {
     "title": "Comments Insight",
@@ -43,7 +44,23 @@
     "daysAgo": " days ago",
     "generateConfig": "AI Analyze Scraper",
     "noConfigHint": "No scraper configuration found. Use AI to analyze and generate one.",
-    "configRequired": "Scraper configuration required"
+    "configRequired": "Scraper configuration required",
+    "generateConfigSuccess": "Scraper configuration generated successfully!",
+    "generateConfigFailedWithMsg": "Failed to generate configuration: {{msg}}",
+    "generateConfigFailed": "Failed to generate configuration",
+    "taskAlreadyRunning": "Task is already in progress. Please wait for it to complete.",
+    "viewAILogs": "View AI Logs",
+    "extracting": "Extracting comments...",
+    "analyzing": "Analyzing comments...",
+    "extractionCompleted": "Comments extraction completed",
+    "analysisCompleted": "Comments analysis completed",
+    "taskFailed": "Task failed",
+    "extractionStarted": "Extraction started",
+    "analysisStarted": "Analysis started",
+    "analysisConfigStarted": "Scraper analysis started",
+    "analyzingConfig": "Analyzing scraper...",
+    "viewComments": "View Comments",
+    "viewAnalysis": "View Analysis"
   },
   "options": {
     "title": "Settings",
@@ -99,7 +116,9 @@
     "placeholder_platform": "The platform or domain where the comments were extracted from (e.g., youtube.com, twitter.com, reddit.com). This helps the AI understand platform-specific comment patterns and culture.",
     "placeholder_url": "The complete URL of the post or video being analyzed. This provides context about the source and can be used for reference in the analysis report.",
     "placeholder_title": "The title or headline of the post/video. This is crucial context for understanding what the comments are discussing and helps the AI provide more relevant analysis.",
-    "placeholder_total_comments": "The total count of comments being analyzed (including all nested replies). This helps the AI understand the scale of engagement and adjust its analysis accordingly."
+    "placeholder_total_comments": "The total count of comments being analyzed (including all nested replies). This helps the AI understand the scale of engagement and adjust its analysis accordingly.",
+    "apiKeyPlaceholder": "sk-...",
+    "defaultModelName": "gpt-4"
   },
   "history": {
     "title": "History",
@@ -206,5 +225,13 @@
     "skippedCount": "Skipped {{count}}",
     "overwrittenCount": "Overwritten {{count}}",
     "noChanges": "No changes made"
+  },
+  "logs": {
+    "empty": "No logs found. Logs will appear here after operations.",
+    "copySuccess": "Copied to clipboard!",
+    "copyFailed": "Failed to copy to clipboard",
+    "confirmDeleteLog": "Delete this log?",
+    "confirmClearLogs": "Clear all logs? This cannot be undone!",
+    "logsCleared": "All logs cleared"
   }
 }

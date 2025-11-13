@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { API, MESSAGES, TIMING } from '@/config/constants';
 import { Settings } from '../types';
 import i18n from '../utils/i18n';
 import { useToast } from '../hooks/useToast';
@@ -26,15 +27,15 @@ const Options: React.FC = () => {
     // Load settings only once on mount
     const loadSettings = async () => {
       try {
-        const response = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
+        const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_SETTINGS });
         console.log('[Options] Settings response:', response);
-        
+
         if (chrome.runtime.lastError) {
           console.error('[Options] Runtime error:', chrome.runtime.lastError);
           toast.error('Failed to load settings: ' + chrome.runtime.lastError.message);
           return;
         }
-        
+
         if (response?.settings) {
           setSettings(response.settings);
           // Set i18n language from settings
@@ -50,10 +51,12 @@ const Options: React.FC = () => {
         }
       } catch (error) {
         console.error('[Options] Failed to load settings:', error);
-        toast.error('Failed to load settings: ' + (error instanceof Error ? error.message : 'Unknown error'));
+        toast.error(
+          'Failed to load settings: ' + (error instanceof Error ? error.message : 'Unknown error'),
+        );
       }
     };
-    
+
     loadSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // 只在组件挂载时加载一次
@@ -68,10 +71,10 @@ const Options: React.FC = () => {
 
       try {
         await chrome.runtime.sendMessage({
-          type: 'SAVE_SETTINGS',
+          type: MESSAGES.SAVE_SETTINGS,
           payload: { settings },
         });
-        
+
         // Only show success message if it's a user-initiated change
         if (isUserChangeRef.current) {
           toast.success(t('options.savedSuccess'));
@@ -86,16 +89,14 @@ const Options: React.FC = () => {
     };
 
     // Debounce auto-save by 500ms
-    const timeoutId = setTimeout(saveSettings, 500);
+    const timeoutId = setTimeout(saveSettings, TIMING.DEBOUNCE_SAVE_MS);
     return () => clearTimeout(timeoutId);
   }, [settings, isInitialLoad, t]); // 保留 t 依赖用于消息显示
-
-
 
   const handleExport = async () => {
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'EXPORT_DATA',
+        type: MESSAGES.EXPORT_DATA,
         payload: { type: 'settings' },
       });
 
@@ -136,7 +137,7 @@ const Options: React.FC = () => {
     if (!settings) return;
 
     const config = modelType === 'extractor' ? settings.extractorModel : settings.analyzerModel;
-    
+
     if (!config.apiUrl || !config.apiKey) {
       toast.warning('Please configure API URL and API Key first');
       return;
@@ -146,7 +147,7 @@ const Options: React.FC = () => {
 
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'GET_AVAILABLE_MODELS',
+        type: MESSAGES.GET_AVAILABLE_MODELS,
         payload: {
           apiUrl: config.apiUrl,
           apiKey: config.apiKey,
@@ -170,7 +171,7 @@ const Options: React.FC = () => {
     if (!settings) return;
 
     const config = modelType === 'extractor' ? settings.extractorModel : settings.analyzerModel;
-    
+
     if (!config.apiUrl || !config.apiKey || !config.model) {
       toast.warning('Please configure all required fields');
       return;
@@ -180,17 +181,21 @@ const Options: React.FC = () => {
 
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'TEST_MODEL',
+        type: MESSAGES.TEST_MODEL,
         payload: { config },
       });
 
       if (response?.success) {
-        toast.success(t('options.testSuccess') + (response.response ? `: ${response.response}` : ''));
+        toast.success(
+          t('options.testSuccess') + (response.response ? `: ${response.response}` : ''),
+        );
       } else {
         toast.error(t('options.testFailed') + ': ' + (response?.error || 'Unknown error'));
       }
     } catch (error) {
-      toast.error(t('options.testFailed') + ': ' + (error instanceof Error ? error.message : 'Unknown error'));
+      toast.error(
+        t('options.testFailed') + ': ' + (error instanceof Error ? error.message : 'Unknown error'),
+      );
     } finally {
       setTestingModel(null);
     }
@@ -249,494 +254,594 @@ const Options: React.FC = () => {
           <ScraperConfigList />
         ) : (
           <div>
+            {/* Basic Settings */}
+            <section className="mb-8 bg-white p-6 rounded-lg shadow">
+              <h2 className="text-xl font-semibold mb-4">{t('options.basicSettings')}</h2>
 
-      {/* Basic Settings */}
-      <section className="mb-8 bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-4">{t('options.basicSettings')}</h2>
-        
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">{t('options.maxComments')}</label>
-          <input
-            type="number"
-            value={settings.maxComments}
-            onChange={(e) => handleSettingsChange({ ...settings, maxComments: parseInt(e.target.value) })}
-            className="w-full px-3 py-2 border rounded"
-            min="1"
-            max="10000"
-          />
-        </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">{t('options.maxComments')}</label>
+                <input
+                  type="number"
+                  value={settings.maxComments}
+                  onChange={(e) =>
+                    handleSettingsChange({ ...settings, maxComments: parseInt(e.target.value) })
+                  }
+                  className="w-full px-3 py-2 border rounded"
+                  min="1"
+                  max="10000"
+                />
+              </div>
 
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">{t('options.language')}</label>
-          <select
-            value={settings.language}
-            onChange={(e) => {
-              const newLang = e.target.value as 'zh-CN' | 'en-US';
-              handleSettingsChange({ ...settings, language: newLang });
-              // Change i18n language immediately
-              i18n.changeLanguage(newLang);
-            }}
-            className="w-full px-3 py-2 border rounded"
-          >
-            <option value="zh-CN">中文</option>
-            <option value="en-US">English</option>
-          </select>
-        </div>
-      </section>
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">{t('options.language')}</label>
+                <select
+                  value={settings.language}
+                  onChange={(e) => {
+                    const newLang = e.target.value as 'zh-CN' | 'en-US';
+                    handleSettingsChange({ ...settings, language: newLang });
+                    // Change i18n language immediately
+                    i18n.changeLanguage(newLang);
+                  }}
+                  className="w-full px-3 py-2 border rounded"
+                >
+                  <option value="zh-CN">中文</option>
+                  <option value="en-US">English</option>
+                </select>
+              </div>
+            </section>
 
-      {/* DOM Analysis Configuration */}
-      <section className="mb-8 bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-4">{t('options.domAnalysisConfig')}</h2>
-        <p className="text-sm text-gray-600 mb-4">
-          {t('options.domAnalysisHint')}
-        </p>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              {t('options.initialDepth')}
-              <span className="text-xs text-gray-500 ml-2">{t('options.recommended')}: 3</span>
-            </label>
-            <input
-              type="number"
-              value={settings.domAnalysisConfig?.initialDepth || 3}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                domAnalysisConfig: {
-                  ...settings.domAnalysisConfig,
-                  initialDepth: parseInt(e.target.value),
-                  expandDepth: settings.domAnalysisConfig?.expandDepth || 2,
-                  maxDepth: settings.domAnalysisConfig?.maxDepth || 10,
-                }
-              })}
-              className="w-full px-3 py-2 border rounded"
-              min="1"
-              max="5"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              {t('options.initialDepthHint')}
-            </p>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              {t('options.expandDepth')}
-              <span className="text-xs text-gray-500 ml-2">{t('options.recommended')}: 2</span>
-            </label>
-            <input
-              type="number"
-              value={settings.domAnalysisConfig?.expandDepth || 2}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                domAnalysisConfig: {
-                  ...settings.domAnalysisConfig,
-                  initialDepth: settings.domAnalysisConfig?.initialDepth || 3,
-                  expandDepth: parseInt(e.target.value),
-                  maxDepth: settings.domAnalysisConfig?.maxDepth || 10,
-                }
-              })}
-              className="w-full px-3 py-2 border rounded"
-              min="1"
-              max="3"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              {t('options.expandDepthHint')}
-            </p>
-          </div>
-          
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              {t('options.maxDepth')}
-              <span className="text-xs text-gray-500 ml-2">{t('options.recommended')}: 10</span>
-            </label>
-            <input
-              type="number"
-              value={settings.domAnalysisConfig?.maxDepth || 10}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                domAnalysisConfig: {
-                  ...settings.domAnalysisConfig,
-                  initialDepth: settings.domAnalysisConfig?.initialDepth || 3,
-                  expandDepth: settings.domAnalysisConfig?.expandDepth || 2,
-                  maxDepth: parseInt(e.target.value),
-                }
-              })}
-              className="w-full px-3 py-2 border rounded"
-              min="5"
-              max="15"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              {t('options.maxDepthHint')}
-            </p>
-          </div>
-        </div>
-      </section>
+            {/* DOM Analysis Configuration */}
+            <section className="mb-8 bg-white p-6 rounded-lg shadow">
+              <h2 className="text-xl font-semibold mb-4">{t('options.domAnalysisConfig')}</h2>
+              <p className="text-sm text-gray-600 mb-4">{t('options.domAnalysisHint')}</p>
 
-      {/* Extractor Model */}
-      <section className="mb-8 bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-4">{t('options.extractorModel')}</h2>
-        
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">{t('options.apiUrl')}</label>
-          <input
-            type="text"
-            value={settings.extractorModel.apiUrl}
-            onChange={(e) => handleSettingsChange({
-              ...settings,
-              extractorModel: { ...settings.extractorModel, apiUrl: e.target.value }
-            })}
-            className="w-full px-3 py-2 border rounded"
-            placeholder="https://api.openai.com/v1/chat/completions"
-          />
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">{t('options.apiKey')}</label>
-          <div className="flex gap-2">
-            <input
-              type={showExtractorKey ? "text" : "password"}
-              value={showExtractorKey ? settings.extractorModel.apiKey : maskApiKey(settings.extractorModel.apiKey)}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                extractorModel: { ...settings.extractorModel, apiKey: e.target.value }
-              })}
-              className="flex-1 px-3 py-2 border rounded"
-              placeholder="sk-..."
-            />
-            <button
-              type="button"
-              onClick={() => setShowExtractorKey(!showExtractorKey)}
-              className="px-3 py-2 border rounded hover:bg-gray-100"
-            >
-              {showExtractorKey ? '🙈' : '👁️'}
-            </button>
-          </div>
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">{t('options.model')}</label>
-          {availableModels.length > 0 ? (
-            <select
-              value={settings.extractorModel.model}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                extractorModel: { ...settings.extractorModel, model: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded"
-            >
-              {availableModels.map(model => (
-                <option key={model} value={model}>{model}</option>
-              ))}
-            </select>
-          ) : (
-            <input
-              type="text"
-              value={settings.extractorModel.model}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                extractorModel: { ...settings.extractorModel, model: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded"
-              placeholder="gpt-4"
-            />
-          )}
-        </div>
-
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">{t('options.maxTokens')}</label>
-            <input
-              type="number"
-              value={settings.extractorModel.maxTokens}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                extractorModel: { ...settings.extractorModel, maxTokens: parseInt(e.target.value) }
-              })}
-              className="w-full px-3 py-2 border rounded"
-              min="1"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">{t('options.temperature')}</label>
-            <input
-              type="number"
-              step="0.1"
-              value={settings.extractorModel.temperature}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                extractorModel: { ...settings.extractorModel, temperature: parseFloat(e.target.value) }
-              })}
-              className="w-full px-3 py-2 border rounded"
-              min="0"
-              max="2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">{t('options.topP')}</label>
-            <input
-              type="number"
-              step="0.1"
-              value={settings.extractorModel.topP}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                extractorModel: { ...settings.extractorModel, topP: parseFloat(e.target.value) }
-              })}
-              className="w-full px-3 py-2 border rounded"
-              min="0"
-              max="1"
-            />
-          </div>
-        </div>
-
-        <div className="mt-4 flex gap-2">
-          <button
-            type="button"
-            onClick={() => handleFetchModels('extractor')}
-            disabled={loadingModels || testingModel !== null}
-            className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-400"
-          >
-            {loadingModels ? t('common.loading') : '🔄 ' + t('options.fetchModels')}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTestModel('extractor')}
-            disabled={testingModel !== null || loadingModels}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400"
-          >
-            {testingModel === 'extractor' ? t('options.testing') : '🧪 ' + t('options.testModel')}
-          </button>
-        </div>
-      </section>
-
-      {/* Analyzer Model */}
-      <section className="mb-8 bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-4">{t('options.analyzerModel')}</h2>
-        
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">{t('options.apiUrl')}</label>
-          <input
-            type="text"
-            value={settings.analyzerModel.apiUrl}
-            onChange={(e) => handleSettingsChange({
-              ...settings,
-              analyzerModel: { ...settings.analyzerModel, apiUrl: e.target.value }
-            })}
-            className="w-full px-3 py-2 border rounded"
-          />
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">{t('options.apiKey')}</label>
-          <div className="flex gap-2">
-            <input
-              type={showAnalyzerKey ? "text" : "password"}
-              value={showAnalyzerKey ? settings.analyzerModel.apiKey : maskApiKey(settings.analyzerModel.apiKey)}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                analyzerModel: { ...settings.analyzerModel, apiKey: e.target.value }
-              })}
-              className="flex-1 px-3 py-2 border rounded"
-              placeholder="sk-..."
-            />
-            <button
-              type="button"
-              onClick={() => setShowAnalyzerKey(!showAnalyzerKey)}
-              className="px-3 py-2 border rounded hover:bg-gray-100"
-            >
-              {showAnalyzerKey ? '🙈' : '👁️'}
-            </button>
-          </div>
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">{t('options.model')}</label>
-          {availableModels.length > 0 ? (
-            <select
-              value={settings.analyzerModel.model}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                analyzerModel: { ...settings.analyzerModel, model: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded"
-            >
-              {availableModels.map(model => (
-                <option key={model} value={model}>{model}</option>
-              ))}
-            </select>
-          ) : (
-            <input
-              type="text"
-              value={settings.analyzerModel.model}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                analyzerModel: { ...settings.analyzerModel, model: e.target.value }
-              })}
-              className="w-full px-3 py-2 border rounded"
-              placeholder="gpt-4"
-            />
-          )}
-        </div>
-
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">{t('options.maxTokens')}</label>
-            <input
-              type="number"
-              value={settings.analyzerModel.maxTokens}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                analyzerModel: { ...settings.analyzerModel, maxTokens: parseInt(e.target.value) }
-              })}
-              className="w-full px-3 py-2 border rounded"
-              min="1"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">{t('options.temperature')}</label>
-            <input
-              type="number"
-              step="0.1"
-              value={settings.analyzerModel.temperature}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                analyzerModel: { ...settings.analyzerModel, temperature: parseFloat(e.target.value) }
-              })}
-              className="w-full px-3 py-2 border rounded"
-              min="0"
-              max="2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">{t('options.topP')}</label>
-            <input
-              type="number"
-              step="0.1"
-              value={settings.analyzerModel.topP}
-              onChange={(e) => handleSettingsChange({
-                ...settings,
-                analyzerModel: { ...settings.analyzerModel, topP: parseFloat(e.target.value) }
-              })}
-              className="w-full px-3 py-2 border rounded"
-              min="0"
-              max="1"
-            />
-          </div>
-        </div>
-
-        <div className="mb-4 flex gap-2">
-          <button
-            type="button"
-            onClick={() => handleFetchModels('analyzer')}
-            disabled={loadingModels || testingModel !== null}
-            className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-400"
-          >
-            {loadingModels ? t('common.loading') : '🔄 ' + t('options.fetchModels')}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleTestModel('analyzer')}
-            disabled={testingModel !== null || loadingModels}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400"
-          >
-            {testingModel === 'analyzer' ? t('options.testing') : '🧪 ' + t('options.testModel')}
-          </button>
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">{t('options.promptTemplate')}</label>
-          <textarea
-            value={settings.analyzerPromptTemplate}
-            onChange={(e) => handleSettingsChange({ ...settings, analyzerPromptTemplate: e.target.value })}
-            className="w-full px-3 py-2 border rounded font-mono text-sm"
-            rows={10}
-          />
-          
-          {/* Collapsible placeholders help */}
-          <div className="mt-2">
-            <button
-              type="button"
-              onClick={() => setShowPlaceholders(!showPlaceholders)}
-              className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
-            >
-              <span>{showPlaceholders ? '▼' : '▶'}</span>
-              <span>{t('options.availablePlaceholders')}</span>
-            </button>
-            
-            {showPlaceholders && (
-              <div className="mt-3 p-4 bg-gray-50 rounded border border-gray-200">
-                <div className="space-y-3">
-                  <div>
-                    <code className="text-sm font-mono bg-blue-100 px-2 py-1 rounded text-blue-800">{'{comments_json}'}</code>
-                    <span className="text-red-600 text-xs ml-2">*{t('options.required')}</span>
-                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_comments_json')}</p>
-                  </div>
-                  
-                  <div>
-                    <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">{'{datetime}'}</code>
-                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_datetime')}</p>
-                  </div>
-                  
-                  <div>
-                    <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">{'{video_time}'}</code>
-                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_video_time')}</p>
-                  </div>
-                  
-                  <div>
-                    <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">{'{platform}'}</code>
-                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_platform')}</p>
-                  </div>
-                  
-                  <div>
-                    <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">{'{url}'}</code>
-                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_url')}</p>
-                  </div>
-                  
-                  <div>
-                    <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">{'{title}'}</code>
-                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_title')}</p>
-                  </div>
-                  
-                  <div>
-                    <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">{'{total_comments}'}</code>
-                    <p className="text-sm text-gray-700 mt-1">{t('options.placeholder_total_comments')}</p>
-                  </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    {t('options.initialDepth')}
+                    <span className="text-xs text-gray-500 ml-2">
+                      {t('options.recommended')}: 3
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    value={settings.domAnalysisConfig?.initialDepth || 3}
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        domAnalysisConfig: {
+                          ...settings.domAnalysisConfig,
+                          initialDepth: parseInt(e.target.value),
+                          expandDepth: settings.domAnalysisConfig?.expandDepth || 2,
+                          maxDepth: settings.domAnalysisConfig?.maxDepth || 10,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                    min="1"
+                    max="5"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">{t('options.initialDepthHint')}</p>
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    {t('options.expandDepth')}
+                    <span className="text-xs text-gray-500 ml-2">
+                      {t('options.recommended')}: 2
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    value={settings.domAnalysisConfig?.expandDepth || 2}
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        domAnalysisConfig: {
+                          ...settings.domAnalysisConfig,
+                          initialDepth: settings.domAnalysisConfig?.initialDepth || 3,
+                          expandDepth: parseInt(e.target.value),
+                          maxDepth: settings.domAnalysisConfig?.maxDepth || 10,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                    min="1"
+                    max="3"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">{t('options.expandDepthHint')}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    {t('options.maxDepth')}
+                    <span className="text-xs text-gray-500 ml-2">
+                      {t('options.recommended')}: 10
+                    </span>
+                  </label>
+                  <input
+                    type="number"
+                    value={settings.domAnalysisConfig?.maxDepth || 10}
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        domAnalysisConfig: {
+                          ...settings.domAnalysisConfig,
+                          initialDepth: settings.domAnalysisConfig?.initialDepth || 3,
+                          expandDepth: settings.domAnalysisConfig?.expandDepth || 2,
+                          maxDepth: parseInt(e.target.value),
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                    min="5"
+                    max="15"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">{t('options.maxDepthHint')}</p>
+                </div>
+              </div>
+            </section>
+
+            {/* Extractor Model */}
+            <section className="mb-8 bg-white p-6 rounded-lg shadow">
+              <h2 className="text-xl font-semibold mb-4">{t('options.extractorModel')}</h2>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">{t('options.apiUrl')}</label>
+                <input
+                  type="text"
+                  value={settings.extractorModel.apiUrl}
+                  onChange={(e) =>
+                    handleSettingsChange({
+                      ...settings,
+                      extractorModel: { ...settings.extractorModel, apiUrl: e.target.value },
+                    })
+                  }
+                  className="w-full px-3 py-2 border rounded"
+                  placeholder={API.EXAMPLE_COMPLETIONS_URL}
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">{t('options.apiKey')}</label>
+                <div className="flex gap-2">
+                  <input
+                    type={showExtractorKey ? 'text' : 'password'}
+                    value={
+                      showExtractorKey
+                        ? settings.extractorModel.apiKey
+                        : maskApiKey(settings.extractorModel.apiKey)
+                    }
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        extractorModel: { ...settings.extractorModel, apiKey: e.target.value },
+                      })
+                    }
+                    className="flex-1 px-3 py-2 border rounded"
+                    placeholder={t('options.apiKeyPlaceholder')}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowExtractorKey(!showExtractorKey)}
+                    className="px-3 py-2 border rounded hover:bg-gray-100"
+                  >
+                    {showExtractorKey ? '🙈' : '👁️'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">{t('options.model')}</label>
+                {availableModels.length > 0 ? (
+                  <select
+                    value={settings.extractorModel.model}
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        extractorModel: { ...settings.extractorModel, model: e.target.value },
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                  >
+                    {availableModels.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={settings.extractorModel.model}
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        extractorModel: { ...settings.extractorModel, model: e.target.value },
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                    placeholder={t('options.defaultModelName')}
+                  />
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">{t('options.maxTokens')}</label>
+                  <input
+                    type="number"
+                    value={settings.extractorModel.maxTokens}
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        extractorModel: {
+                          ...settings.extractorModel,
+                          maxTokens: parseInt(e.target.value),
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    {t('options.temperature')}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={settings.extractorModel.temperature}
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        extractorModel: {
+                          ...settings.extractorModel,
+                          temperature: parseFloat(e.target.value),
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                    min="0"
+                    max="2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">{t('options.topP')}</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={settings.extractorModel.topP}
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        extractorModel: {
+                          ...settings.extractorModel,
+                          topP: parseFloat(e.target.value),
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                    min="0"
+                    max="1"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleFetchModels('extractor')}
+                  disabled={loadingModels || testingModel !== null}
+                  className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-400"
+                >
+                  {loadingModels ? t('common.loading') : '🔄 ' + t('options.fetchModels')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTestModel('extractor')}
+                  disabled={testingModel !== null || loadingModels}
+                  className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400"
+                >
+                  {testingModel === 'extractor'
+                    ? t('options.testing')
+                    : '🧪 ' + t('options.testModel')}
+                </button>
+              </div>
+            </section>
+
+            {/* Analyzer Model */}
+            <section className="mb-8 bg-white p-6 rounded-lg shadow">
+              <h2 className="text-xl font-semibold mb-4">{t('options.analyzerModel')}</h2>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">{t('options.apiUrl')}</label>
+                <input
+                  type="text"
+                  value={settings.analyzerModel.apiUrl}
+                  onChange={(e) =>
+                    handleSettingsChange({
+                      ...settings,
+                      analyzerModel: { ...settings.analyzerModel, apiUrl: e.target.value },
+                    })
+                  }
+                  className="w-full px-3 py-2 border rounded"
+                />
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">{t('options.apiKey')}</label>
+                <div className="flex gap-2">
+                  <input
+                    type={showAnalyzerKey ? 'text' : 'password'}
+                    value={
+                      showAnalyzerKey
+                        ? settings.analyzerModel.apiKey
+                        : maskApiKey(settings.analyzerModel.apiKey)
+                    }
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        analyzerModel: { ...settings.analyzerModel, apiKey: e.target.value },
+                      })
+                    }
+                    className="flex-1 px-3 py-2 border rounded"
+                    placeholder="sk-..."
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAnalyzerKey(!showAnalyzerKey)}
+                    className="px-3 py-2 border rounded hover:bg-gray-100"
+                  >
+                    {showAnalyzerKey ? '🙈' : '👁️'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">{t('options.model')}</label>
+                {availableModels.length > 0 ? (
+                  <select
+                    value={settings.analyzerModel.model}
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        analyzerModel: { ...settings.analyzerModel, model: e.target.value },
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                  >
+                    {availableModels.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={settings.analyzerModel.model}
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        analyzerModel: { ...settings.analyzerModel, model: e.target.value },
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                    placeholder="gpt-4"
+                  />
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">{t('options.maxTokens')}</label>
+                  <input
+                    type="number"
+                    value={settings.analyzerModel.maxTokens}
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        analyzerModel: {
+                          ...settings.analyzerModel,
+                          maxTokens: parseInt(e.target.value),
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                    min="1"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    {t('options.temperature')}
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={settings.analyzerModel.temperature}
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        analyzerModel: {
+                          ...settings.analyzerModel,
+                          temperature: parseFloat(e.target.value),
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                    min="0"
+                    max="2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">{t('options.topP')}</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={settings.analyzerModel.topP}
+                    onChange={(e) =>
+                      handleSettingsChange({
+                        ...settings,
+                        analyzerModel: {
+                          ...settings.analyzerModel,
+                          topP: parseFloat(e.target.value),
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2 border rounded"
+                    min="0"
+                    max="1"
+                  />
+                </div>
+              </div>
+
+              <div className="mb-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleFetchModels('analyzer')}
+                  disabled={loadingModels || testingModel !== null}
+                  className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-400"
+                >
+                  {loadingModels ? t('common.loading') : '🔄 ' + t('options.fetchModels')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTestModel('analyzer')}
+                  disabled={testingModel !== null || loadingModels}
+                  className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400"
+                >
+                  {testingModel === 'analyzer'
+                    ? t('options.testing')
+                    : '🧪 ' + t('options.testModel')}
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">
+                  {t('options.promptTemplate')}
+                </label>
+                <textarea
+                  value={settings.analyzerPromptTemplate}
+                  onChange={(e) =>
+                    handleSettingsChange({ ...settings, analyzerPromptTemplate: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border rounded font-mono text-sm"
+                  rows={10}
+                />
+
+                {/* Collapsible placeholders help */}
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowPlaceholders(!showPlaceholders)}
+                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                  >
+                    <span>{showPlaceholders ? '▼' : '▶'}</span>
+                    <span>{t('options.availablePlaceholders')}</span>
+                  </button>
+
+                  {showPlaceholders && (
+                    <div className="mt-3 p-4 bg-gray-50 rounded border border-gray-200">
+                      <div className="space-y-3">
+                        <div>
+                          <code className="text-sm font-mono bg-blue-100 px-2 py-1 rounded text-blue-800">
+                            {'{comments_json}'}
+                          </code>
+                          <span className="text-red-600 text-xs ml-2">
+                            *{t('options.required')}
+                          </span>
+                          <p className="text-sm text-gray-700 mt-1">
+                            {t('options.placeholder_comments_json')}
+                          </p>
+                        </div>
+
+                        <div>
+                          <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">
+                            {'{datetime}'}
+                          </code>
+                          <p className="text-sm text-gray-700 mt-1">
+                            {t('options.placeholder_datetime')}
+                          </p>
+                        </div>
+
+                        <div>
+                          <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">
+                            {'{video_time}'}
+                          </code>
+                          <p className="text-sm text-gray-700 mt-1">
+                            {t('options.placeholder_video_time')}
+                          </p>
+                        </div>
+
+                        <div>
+                          <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">
+                            {'{platform}'}
+                          </code>
+                          <p className="text-sm text-gray-700 mt-1">
+                            {t('options.placeholder_platform')}
+                          </p>
+                        </div>
+
+                        <div>
+                          <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">
+                            {'{url}'}
+                          </code>
+                          <p className="text-sm text-gray-700 mt-1">
+                            {t('options.placeholder_url')}
+                          </p>
+                        </div>
+
+                        <div>
+                          <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">
+                            {'{title}'}
+                          </code>
+                          <p className="text-sm text-gray-700 mt-1">
+                            {t('options.placeholder_title')}
+                          </p>
+                        </div>
+
+                        <div>
+                          <code className="text-sm font-mono bg-green-100 px-2 py-1 rounded text-green-800">
+                            {'{total_comments}'}
+                          </code>
+                          <p className="text-sm text-gray-700 mt-1">
+                            {t('options.placeholder_total_comments')}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {/* Import/Export */}
+            <section className="mb-8 bg-white p-6 rounded-lg shadow">
+              <h2 className="text-xl font-semibold mb-4">{t('options.importExport')}</h2>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={handleExport}
+                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                >
+                  {t('options.exportSettings')}
+                </button>
+                <label className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 cursor-pointer">
+                  {t('options.importSettings')}
+                  <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                </label>
+              </div>
+            </section>
+
+            {/* Auto-save indicator */}
+            {saving && (
+              <div className="fixed bottom-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
+                {t('options.saving')}
               </div>
             )}
           </div>
-        </div>
-      </section>
-
-      {/* Import/Export */}
-      <section className="mb-8 bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-4">{t('options.importExport')}</h2>
-        
-        <div className="flex gap-4">
-          <button
-            onClick={handleExport}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            {t('options.exportSettings')}
-          </button>
-          <label className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 cursor-pointer">
-            {t('options.importSettings')}
-            <input
-              type="file"
-              accept=".json"
-              onChange={handleImport}
-              className="hidden"
-            />
-          </label>
-        </div>
-      </section>
-
-        {/* Auto-save indicator */}
-        {saving && (
-          <div className="fixed bottom-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
-            {t('options.saving')}
-          </div>
-        )}
-        </div>
         )}
       </div>
     </>
@@ -744,4 +849,3 @@ const Options: React.FC = () => {
 };
 
 export default Options;
-

@@ -103,7 +103,7 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
       try {
         const json = event.target?.result as string;
         const result = await ScraperConfigManager.importConfigs(json, 'ask');
-        
+
         // Check if there are conflicts
         if (result.conflicts && result.conflicts.length > 0) {
           setImportConflicts(result.conflicts);
@@ -117,11 +117,15 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
         }
       } catch (error) {
         console.error('[ScraperConfigList] Failed to import:', error);
-        alert(t('scraper.importError') + ': ' + (error instanceof Error ? error.message : 'Unknown error'));
+        alert(
+          t('scraper.importError') +
+            ': ' +
+            (error instanceof Error ? error.message : 'Unknown error'),
+        );
       }
     };
     reader.readAsText(file);
-    
+
     // Reset file input
     e.target.value = '';
   };
@@ -136,12 +140,12 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
     try {
       const importedCount = await ScraperConfigManager.resolveImportConflicts(
         importConflicts,
-        conflictDecisions
+        conflictDecisions,
       );
-      
-      const skippedCount = conflictDecisions.filter(d => d === 'skip').length;
-      const overwrittenCount = conflictDecisions.filter(d => d === 'overwrite').length;
-      
+
+      const skippedCount = conflictDecisions.filter((d) => d === 'skip').length;
+      const overwrittenCount = conflictDecisions.filter((d) => d === 'overwrite').length;
+
       let message = '';
       if (importedCount > 0) {
         message += t('scraper.importSuccess', { count: importedCount });
@@ -152,9 +156,9 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
       if (overwrittenCount > 0) {
         message += `\n${t('scraper.overwrittenCount', { count: overwrittenCount })}`;
       }
-      
+
       alert(message || t('scraper.noChanges'));
-      
+
       setShowConflictDialog(false);
       setImportConflicts([]);
       setConflictDecisions([]);
@@ -162,7 +166,11 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
       onConfigChange?.();
     } catch (error) {
       console.error('[ScraperConfigList] Failed to resolve conflicts:', error);
-      alert(t('scraper.importError') + ': ' + (error instanceof Error ? error.message : 'Unknown error'));
+      alert(
+        t('scraper.importError') +
+          ': ' +
+          (error instanceof Error ? error.message : 'Unknown error'),
+      );
     }
   };
 
@@ -182,9 +190,7 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
       <div className="max-w-4xl mx-auto">
         <div className="bg-white p-6 rounded-lg shadow-lg">
           <h2 className="text-2xl font-bold mb-4">{t('scraper.importConflicts')}</h2>
-          <p className="text-gray-600 mb-6">
-            {t('scraper.importConflictsHint')}
-          </p>
+          <p className="text-gray-600 mb-6">{t('scraper.importConflictsHint')}</p>
 
           <div className="space-y-4 mb-6 max-h-96 overflow-y-auto">
             {importConflicts.map((conflict, index) => (
@@ -192,19 +198,30 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex-1">
                     <h3 className="font-semibold text-lg text-red-600">
-                      ⚠️ {conflict.reason === 'duplicate_id' ? t('scraper.duplicateId') : t('scraper.duplicateDomain')}
+                      ⚠️{' '}
+                      {conflict.reason === 'duplicate_id'
+                        ? t('scraper.duplicateId')
+                        : t('scraper.duplicateDomain')}
                     </h3>
                     <div className="mt-2 grid grid-cols-2 gap-4">
                       <div className="bg-blue-50 p-3 rounded">
-                        <p className="text-xs font-semibold text-blue-800 mb-1">{t('scraper.importedConfig')}</p>
+                        <p className="text-xs font-semibold text-blue-800 mb-1">
+                          {t('scraper.importedConfig')}
+                        </p>
                         <p className="font-medium">{conflict.imported.name}</p>
-                        <p className="text-sm text-gray-600">{conflict.imported.domains.join(', ')}</p>
+                        <p className="text-sm text-gray-600">
+                          {conflict.imported.domains.join(', ')}
+                        </p>
                         <p className="text-xs text-gray-500 mt-1">ID: {conflict.imported.id}</p>
                       </div>
                       <div className="bg-yellow-50 p-3 rounded">
-                        <p className="text-xs font-semibold text-yellow-800 mb-1">{t('scraper.existingConfig')}</p>
+                        <p className="text-xs font-semibold text-yellow-800 mb-1">
+                          {t('scraper.existingConfig')}
+                        </p>
                         <p className="font-medium">{conflict.existing.name}</p>
-                        <p className="text-sm text-gray-600">{conflict.existing.domains.join(', ')}</p>
+                        <p className="text-sm text-gray-600">
+                          {conflict.existing.domains.join(', ')}
+                        </p>
                         <p className="text-xs text-gray-500 mt-1">ID: {conflict.existing.id}</p>
                       </div>
                     </div>
@@ -273,12 +290,7 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
           </button>
           <label className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 cursor-pointer text-sm">
             📥 {t('scraper.importConfigs')}
-            <input
-              type="file"
-              accept=".json"
-              onChange={handleImport}
-              className="hidden"
-            />
+            <input type="file" accept=".json" onChange={handleImport} className="hidden" />
           </label>
           <button
             onClick={handleNew}
@@ -294,9 +306,7 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
       ) : configs.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-lg">
           <p className="text-gray-600 mb-4">{t('scraper.noConfigs')}</p>
-          <p className="text-sm text-gray-500 mb-6">
-            {t('scraper.noConfigsHint')}
-          </p>
+          <p className="text-sm text-gray-500 mb-6">{t('scraper.noConfigsHint')}</p>
           <button
             onClick={handleNew}
             className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
@@ -307,20 +317,25 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
       ) : (
         <div className="space-y-4">
           {configs.map((config) => (
-            <div key={config.id} className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow">
+            <div
+              key={config.id}
+              className="border rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow"
+            >
               <div className="flex justify-between items-start mb-3">
                 <div>
                   <h3 className="text-lg font-semibold">{config.name}</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    <span className="font-medium">{t('scraper.domains')}:</span> {config.domains.join(', ')}
+                    <span className="font-medium">{t('scraper.domains')}:</span>{' '}
+                    {config.domains.join(', ')}
                   </p>
                   {config.urlPatterns.length > 0 && (
                     <p className="text-sm text-gray-600 mt-1">
-                      <span className="font-medium">{t('scraper.urlPatterns')}:</span> {config.urlPatterns.length} {t('scraper.patterns')}
+                      <span className="font-medium">{t('scraper.urlPatterns')}:</span>{' '}
+                      {config.urlPatterns.length} {t('scraper.patterns')}
                     </p>
                   )}
                   <p className="text-xs text-gray-500 mt-2">
-                    {t('scraper.created')}: {new Date(config.createdAt).toLocaleString()} | 
+                    {t('scraper.created')}: {new Date(config.createdAt).toLocaleString()} |
                     {t('scraper.updated')}: {new Date(config.updatedAt).toLocaleString()}
                   </p>
                 </div>
@@ -347,16 +362,24 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
                 <div className="mt-2 pl-4 space-y-1 text-sm font-mono bg-gray-50 p-3 rounded">
                   {Object.entries(config.selectors).map(([key, value]) => {
                     if (!value) return null;
-                    
+
                     const validationStatus = config.selectorValidation?.[key];
                     let statusIcon = null;
-                    
+
                     if (validationStatus === 'success') {
-                      statusIcon = <span className="text-green-600 ml-2" title="Validated successfully">✓</span>;
+                      statusIcon = (
+                        <span className="text-green-600 ml-2" title="Validated successfully">
+                          ✓
+                        </span>
+                      );
                     } else if (validationStatus === 'failed') {
-                      statusIcon = <span className="text-red-600 ml-2" title="Validation failed">✗</span>;
+                      statusIcon = (
+                        <span className="text-red-600 ml-2" title="Validation failed">
+                          ✗
+                        </span>
+                      );
                     }
-                    
+
                     return (
                       <div key={key} className="flex items-center">
                         <span className="text-gray-600 w-40">{key}:</span>
@@ -370,7 +393,8 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
 
               {config.scrollConfig?.enabled && (
                 <div className="mt-2 text-sm text-gray-600 bg-blue-50 p-2 rounded">
-                  🔄 {t('scraper.autoScrollEnabled')}: {config.scrollConfig.maxScrolls} {t('scraper.scrollsDelay')} {config.scrollConfig.scrollDelay}ms
+                  🔄 {t('scraper.autoScrollEnabled')}: {config.scrollConfig.maxScrolls}{' '}
+                  {t('scraper.scrollsDelay')} {config.scrollConfig.scrollDelay}ms
                 </div>
               )}
             </div>

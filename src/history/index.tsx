@@ -6,5 +6,5 @@ import History from './History';
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <History />
-  </React.StrictMode>
+  </React.StrictMode>,
 );

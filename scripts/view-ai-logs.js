@@ -1,8 +1,8 @@
 /**
  * View AI Extraction Logs
- * 
+ *
  * This script helps you view the AI extraction logs stored in chrome.storage.local
- * 
+ *
  * Usage:
  * 1. Open Chrome DevTools Console in the extension's background page
  * 2. Copy and paste this script
@@ -17,7 +17,7 @@ async function viewAILogs() {
     .filter(([key]) => key.startsWith('ai_log_'))
     .map(([key, value]) => ({ key, ...value }))
     .sort((a, b) => b.timestamp - a.timestamp);
-  
+
   console.log(`Found ${logs.length} AI logs:`);
   logs.forEach((log, index) => {
     console.log(`\n=== Log ${index + 1} ===`);
@@ -26,7 +26,7 @@ async function viewAILogs() {
     console.log('Prompt length:', log.prompt?.length || 0);
     console.log('Response length:', log.response?.length || 0);
   });
-  
+
   return logs;
 }
 
@@ -36,7 +36,7 @@ async function viewLatestLog() {
     console.log('No logs found');
     return null;
   }
-  
+
   const latest = logs[0];
   console.log('\n=== LATEST LOG DETAILS ===');
   console.log('Type:', latest.type);
@@ -45,19 +45,19 @@ async function viewLatestLog() {
   console.log(latest.prompt);
   console.log('\n--- RESPONSE ---');
   console.log(latest.response);
-  
+
   return latest;
 }
 
 async function clearAILogs() {
   const storage = await chrome.storage.local.get(null);
-  const logKeys = Object.keys(storage).filter(key => key.startsWith('ai_log_'));
-  
+  const logKeys = Object.keys(storage).filter((key) => key.startsWith('ai_log_'));
+
   if (logKeys.length === 0) {
     console.log('No logs to clear');
     return;
   }
-  
+
   await chrome.storage.local.remove(logKeys);
   console.log(`Cleared ${logKeys.length} logs`);
 }

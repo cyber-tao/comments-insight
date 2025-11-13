@@ -51,7 +51,10 @@ export class DOMAnalyzer {
    * @param selector - CSS selector
    * @returns Found element or null
    */
-  private querySelectorDeep(root: Document | Element | ShadowRoot, selector: string): Element | null {
+  private querySelectorDeep(
+    root: Document | Element | ShadowRoot,
+    selector: string,
+  ): Element | null {
     // Try to find in current root
     const element = root.querySelector(selector);
     if (element) {
@@ -108,24 +111,23 @@ export class DOMAnalyzer {
   serializeForAI(node: DOMNode, depth: number = 0): string {
     const indent = '  '.repeat(depth);
     let result = `${indent}<${node.tag}`;
-    
+
     if (node.id) {
       result += ` id="${node.id}"`;
     }
-    
+
     if (node.classes.length > 0) {
       result += ` class="${node.classes.join(' ')}"`;
     }
-    
+
     result += '>';
-    
+
     if (node.text && node.text.length > 0) {
-      const truncatedText = node.text.length > 100 
-        ? node.text.substring(0, 100) + '...' 
-        : node.text;
+      const truncatedText =
+        node.text.length > 100 ? node.text.substring(0, 100) + '...' : node.text;
       result += `\n${indent}  ${truncatedText}`;
     }
-    
+
     if (node.children && node.children.length > 0) {
       result += '\n';
       for (const child of node.children) {
@@ -133,7 +135,7 @@ export class DOMAnalyzer {
       }
       result += indent;
     }
-    
+
     result += `</${node.tag}>`;
     return result;
   }
@@ -145,11 +147,7 @@ export class DOMAnalyzer {
    * @param maxDepth - Maximum depth
    * @returns DOM node
    */
-  private analyzeNode(
-    element: Element,
-    currentDepth: number,
-    maxDepth: number
-  ): DOMNode {
+  private analyzeNode(element: Element, currentDepth: number, maxDepth: number): DOMNode {
     const node: DOMNode = {
       tag: element.tagName.toLowerCase(),
       classes: Array.from(element.classList),
@@ -168,23 +166,24 @@ export class DOMAnalyzer {
     if (shadowRoot) {
       // Add a marker to indicate this element has Shadow DOM
       node.attributes = { ...node.attributes, 'has-shadow-root': 'true' };
-      
+
       // Analyze Shadow DOM children
       const shadowChildren = Array.from(shadowRoot.children);
       if (shadowChildren.length > 0 && shadowChildren.length < 50) {
         node.children = shadowChildren
           .slice(0, 20)
-          .map(child => this.analyzeNode(child as Element, currentDepth + 1, maxDepth));
+          .map((child) => this.analyzeNode(child as Element, currentDepth + 1, maxDepth));
       }
       return node;
     }
 
     // Analyze regular children
     const children = Array.from(element.children);
-    if (children.length > 0 && children.length < 50) { // Limit children
+    if (children.length > 0 && children.length < 50) {
+      // Limit children
       node.children = children
         .slice(0, 20) // Limit to first 20 children
-        .map(child => this.analyzeNode(child, currentDepth + 1, maxDepth));
+        .map((child) => this.analyzeNode(child, currentDepth + 1, maxDepth));
     }
 
     return node;

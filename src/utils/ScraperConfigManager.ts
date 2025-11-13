@@ -1,4 +1,5 @@
 import { ScraperConfig, ScraperConfigList } from '../types/scraper';
+import { PATHS, REGEX } from '@/config/constants';
 
 const STORAGE_KEY = 'scraperConfigs';
 const CONFIG_VERSION = '1.0.0';
@@ -24,7 +25,10 @@ export class ScraperConfigManager {
       if (defaultConfigs.length > 0) {
         await this.saveAll(defaultConfigs);
         await chrome.storage.local.set({ [INITIALIZED_KEY]: true });
-        console.log('[ScraperConfigManager] Initialized with default configs:', defaultConfigs.length);
+        console.log(
+          '[ScraperConfigManager] Initialized with default configs:',
+          defaultConfigs.length,
+        );
       }
     } catch (error) {
       console.error('[ScraperConfigManager] Failed to initialize defaults:', error);
@@ -37,16 +41,16 @@ export class ScraperConfigManager {
   private static async loadDefaultConfigs(): Promise<ScraperConfig[]> {
     try {
       console.log('[ScraperConfigManager] Loading default configs...');
-      const configUrl = chrome.runtime.getURL('src/config/default-scrapers.json');
+      const configUrl = chrome.runtime.getURL(PATHS.DEFAULT_SCRAPERS_JSON);
       console.log('[ScraperConfigManager] Config URL:', configUrl);
-      
+
       const response = await fetch(configUrl);
       console.log('[ScraperConfigManager] Fetch response status:', response.status);
-      
+
       if (!response.ok) {
         throw new Error(`Failed to fetch config: ${response.status} ${response.statusText}`);
       }
-      
+
       const data: ScraperConfigList = await response.json();
       console.log('[ScraperConfigManager] Loaded configs:', data.configs?.length || 0);
       return data.configs || [];
@@ -65,7 +69,10 @@ export class ScraperConfigManager {
       await this.initializeDefaults();
 
       const result = await chrome.storage.local.get(STORAGE_KEY);
-      const data: ScraperConfigList = result[STORAGE_KEY] || { configs: [], version: CONFIG_VERSION };
+      const data: ScraperConfigList = result[STORAGE_KEY] || {
+        configs: [],
+        version: CONFIG_VERSION,
+      };
       return data.configs;
     } catch (error) {
       console.error('[ScraperConfigManager] Failed to get configs:', error);
@@ -78,7 +85,7 @@ export class ScraperConfigManager {
    */
   static async getById(id: string): Promise<ScraperConfig | null> {
     const configs = await this.getAll();
-    return configs.find(c => c.id === id) || null;
+    return configs.find((c) => c.id === id) || null;
   }
 
   /**
@@ -90,12 +97,12 @@ export class ScraperConfigManager {
       const configs = await this.getAll();
       console.log('[ScraperConfigManager] Finding config for URL:', url);
       console.log('[ScraperConfigManager] Available configs:', configs.length);
-      
+
       if (configs.length === 0) {
         console.warn('[ScraperConfigManager] No configs available!');
         return null;
       }
-      
+
       // Parse hostname from URL safely
       let hostname: string;
       try {
@@ -104,48 +111,54 @@ export class ScraperConfigManager {
         hostname = urlObj.hostname;
       } catch (e) {
         // Fallback: extract hostname manually
-        const match = url.match(/^(?:https?:\/\/)?(?:www\.)?([^\/\?#]+)/i);
+        const match = url.match(REGEX.DOMAIN_EXTRACT);
         hostname = match ? match[1] : '';
       }
-      
+
       if (!hostname) {
         console.warn('[ScraperConfigManager] Could not extract hostname from URL:', url);
         return null;
       }
-      
+
       console.log('[ScraperConfigManager] Extracted hostname:', hostname);
-      
+
       for (const config of configs) {
-        console.log('[ScraperConfigManager] Checking config:', config.name, 'domains:', config.domains);
-        
+        console.log(
+          '[ScraperConfigManager] Checking config:',
+          config.name,
+          'domains:',
+          config.domains,
+        );
+
         // Check domain match
-        const domainMatch = config.domains.some(domain => {
-          const matches = hostname === domain || 
-                         hostname.endsWith('.' + domain) || 
-                         domain.endsWith('.' + hostname);
+        const domainMatch = config.domains.some((domain) => {
+          const matches =
+            hostname === domain ||
+            hostname.endsWith('.' + domain) ||
+            domain.endsWith('.' + hostname);
           console.log('[ScraperConfigManager] Domain check:', domain, 'vs', hostname, '=', matches);
           return matches;
         });
-        
+
         if (!domainMatch) {
           console.log('[ScraperConfigManager] Domain not matched for config:', config.name);
           continue;
         }
-        
+
         console.log('[ScraperConfigManager] Domain matched for config:', config.name);
-        
+
         // Check URL pattern match
         // Filter out empty patterns
-        const validPatterns = config.urlPatterns.filter(p => p && p.trim() !== '');
-        
+        const validPatterns = config.urlPatterns.filter((p) => p && p.trim() !== '');
+
         if (validPatterns.length === 0) {
           console.log('[ScraperConfigManager] No URL patterns, returning config:', config.name);
           return config; // No pattern means match all URLs for this domain
         }
-        
+
         console.log('[ScraperConfigManager] Testing URL patterns:', validPatterns);
-        
-        const patternMatch = validPatterns.some(pattern => {
+
+        const patternMatch = validPatterns.some((pattern) => {
           try {
             const regex = new RegExp(pattern);
             const matches = regex.test(url);
@@ -156,7 +169,7 @@ export class ScraperConfigManager {
             return false;
           }
         });
-        
+
         if (patternMatch) {
           console.log('[ScraperConfigManager] Pattern matched, returning config:', config.name);
           return config;
@@ -165,7 +178,7 @@ export class ScraperConfigManager {
           console.log('[ScraperConfigManager] Tried patterns:', validPatterns, 'against URL:', url);
         }
       }
-      
+
       console.log('[ScraperConfigManager] No matching config found');
       return null;
     } catch (error) {
@@ -177,39 +190,44 @@ export class ScraperConfigManager {
   /**
    * Save a new configuration
    */
-  static async create(config: Omit<ScraperConfig, 'id' | 'createdAt' | 'updatedAt'>): Promise<ScraperConfig> {
+  static async create(
+    config: Omit<ScraperConfig, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<ScraperConfig> {
     const configs = await this.getAll();
-    
+
     const newConfig: ScraperConfig = {
       ...config,
       id: this.generateId(),
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    
+
     configs.push(newConfig);
     await this.saveAll(configs);
-    
+
     return newConfig;
   }
 
   /**
    * Update an existing configuration
    */
-  static async update(id: string, updates: Partial<Omit<ScraperConfig, 'id' | 'createdAt'>>): Promise<ScraperConfig | null> {
+  static async update(
+    id: string,
+    updates: Partial<Omit<ScraperConfig, 'id' | 'createdAt'>>,
+  ): Promise<ScraperConfig | null> {
     const configs = await this.getAll();
-    const index = configs.findIndex(c => c.id === id);
-    
+    const index = configs.findIndex((c) => c.id === id);
+
     if (index === -1) {
       return null;
     }
-    
+
     configs[index] = {
       ...configs[index],
       ...updates,
       updatedAt: Date.now(),
     };
-    
+
     await this.saveAll(configs);
     return configs[index];
   }
@@ -219,12 +237,12 @@ export class ScraperConfigManager {
    */
   static async delete(id: string): Promise<boolean> {
     const configs = await this.getAll();
-    const filtered = configs.filter(c => c.id !== id);
-    
+    const filtered = configs.filter((c) => c.id !== id);
+
     if (filtered.length === configs.length) {
       return false; // Config not found
     }
-    
+
     await this.saveAll(filtered);
     return true;
   }
@@ -237,7 +255,7 @@ export class ScraperConfigManager {
       configs,
       version: CONFIG_VERSION,
     };
-    
+
     await chrome.storage.local.set({ [STORAGE_KEY]: data });
   }
 
@@ -274,7 +292,7 @@ export class ScraperConfigManager {
 
     for (const imported of importedConfigs) {
       // Check for ID conflict
-      const idConflict = existing.find(e => e.id === imported.id);
+      const idConflict = existing.find((e) => e.id === imported.id);
       if (idConflict) {
         conflicts.push({
           imported,
@@ -285,8 +303,8 @@ export class ScraperConfigManager {
       }
 
       // Check for domain conflict
-      const domainConflict = existing.find(e =>
-        e.domains.some(d => imported.domains.includes(d))
+      const domainConflict = existing.find((e) =>
+        e.domains.some((d) => imported.domains.includes(d)),
       );
       if (domainConflict) {
         conflicts.push({
@@ -311,7 +329,7 @@ export class ScraperConfigManager {
    */
   static async importConfigs(
     jsonString: string,
-    conflictResolution: 'skip' | 'overwrite' | 'ask' = 'ask'
+    conflictResolution: 'skip' | 'overwrite' | 'ask' = 'ask',
   ): Promise<{
     imported: number;
     skipped: number;
@@ -324,11 +342,11 @@ export class ScraperConfigManager {
   }> {
     try {
       const data: ScraperConfigList = JSON.parse(jsonString);
-      
+
       if (!data.configs || !Array.isArray(data.configs)) {
         throw new Error('Invalid configuration format');
       }
-      
+
       const existing = await this.getAll();
       const { conflicts, newConfigs } = await this.checkImportConflicts(data.configs);
 
@@ -350,7 +368,7 @@ export class ScraperConfigManager {
       if (conflictResolution === 'overwrite') {
         for (const conflict of conflicts) {
           // Remove existing config
-          const index = existing.findIndex(e => e.id === conflict.existing.id);
+          const index = existing.findIndex((e) => e.id === conflict.existing.id);
           if (index !== -1) {
             existing.splice(index, 1);
           }
@@ -368,7 +386,7 @@ export class ScraperConfigManager {
       // If 'skip', conflicts are already excluded
 
       // Regenerate IDs and timestamps for new configs
-      toImport = toImport.map(c => ({
+      toImport = toImport.map((c) => ({
         ...c,
         id: this.generateId(),
         createdAt: Date.now(),
@@ -399,7 +417,7 @@ export class ScraperConfigManager {
       existing: ScraperConfig;
       reason: string;
     }>,
-    decisions: Array<'skip' | 'overwrite'>
+    decisions: Array<'skip' | 'overwrite'>,
   ): Promise<number> {
     const existing = await this.getAll();
     let importedCount = 0;
@@ -410,7 +428,7 @@ export class ScraperConfigManager {
 
       if (decision === 'overwrite') {
         // Remove existing config
-        const index = existing.findIndex(e => e.id === conflict.existing.id);
+        const index = existing.findIndex((e) => e.id === conflict.existing.id);
         if (index !== -1) {
           existing.splice(index, 1);
         }
@@ -443,7 +461,7 @@ export class ScraperConfigManager {
   static async updateSelectorValidation(
     id: string,
     selectorKey: string,
-    status: 'success' | 'failed'
+    status: 'success' | 'failed',
   ): Promise<void> {
     const config = await this.getById(id);
     if (!config) {
@@ -463,26 +481,33 @@ export class ScraperConfigManager {
    */
   static validateConfig(config: Partial<ScraperConfig>): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
-    
+
     if (!config.name || config.name.trim() === '') {
       errors.push('Name is required');
     }
-    
+
     if (!config.domains || config.domains.length === 0) {
       errors.push('At least one domain is required');
     }
-    
+
     if (!config.selectors) {
       errors.push('Selectors are required');
     } else {
-      const required = ['commentContainer', 'commentItem', 'username', 'content', 'timestamp', 'likes'];
+      const required = [
+        'commentContainer',
+        'commentItem',
+        'username',
+        'content',
+        'timestamp',
+        'likes',
+      ];
       for (const field of required) {
         if (!config.selectors[field as keyof typeof config.selectors]) {
           errors.push(`Selector '${field}' is required`);
         }
       }
     }
-    
+
     // Validate URL patterns are valid regex
     if (config.urlPatterns) {
       for (const pattern of config.urlPatterns) {
@@ -493,7 +518,7 @@ export class ScraperConfigManager {
         }
       }
     }
-    
+
     return {
       valid: errors.length === 0,
       errors,

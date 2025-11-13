@@ -12,7 +12,7 @@ const outputPath = path.resolve(__dirname, '../dist/extension.zip');
 // Create a file to stream archive data to
 const output = fs.createWriteStream(outputPath);
 const archive = archiver('zip', {
-  zlib: { level: 9 } // Maximum compression
+  zlib: { level: 9 }, // Maximum compression
 });
 
 output.on('close', () => {

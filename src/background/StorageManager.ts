@@ -1,4 +1,5 @@
 import { Settings, HistoryItem, AIConfig } from '../types';
+import { SECURITY, API, STORAGE } from '@/config/constants';
 import LZString from 'lz-string';
 import { Logger } from '../utils/logger';
 import { ErrorHandler } from '../utils/errors';
@@ -9,7 +10,7 @@ import { ErrorHandler } from '../utils/errors';
 const DEFAULT_SETTINGS: Settings = {
   maxComments: 500,
   extractorModel: {
-    apiUrl: 'https://api.openai.com/v1',
+    apiUrl: API.DEFAULT_URL,
     apiKey: '',
     model: 'gpt-4',
     maxTokens: 4000,
@@ -17,7 +18,7 @@ const DEFAULT_SETTINGS: Settings = {
     topP: 0.9,
   },
   analyzerModel: {
-    apiUrl: 'https://api.openai.com/v1',
+    apiUrl: API.DEFAULT_URL,
     apiKey: '',
     model: 'gpt-4',
     maxTokens: 4000,
@@ -58,9 +59,91 @@ Generate a comprehensive analysis report in Markdown format.`,
  * using Chrome's storage API
  */
 export class StorageManager {
-  private static readonly SETTINGS_KEY = 'settings';
-  private static readonly HISTORY_KEY = 'history';
-  private static readonly HISTORY_INDEX_KEY = 'history_index';
+  private static readonly SETTINGS_KEY = STORAGE.SETTINGS_KEY;
+  private static readonly HISTORY_KEY = STORAGE.HISTORY_KEY;
+  private static readonly HISTORY_INDEX_KEY = STORAGE.HISTORY_INDEX_KEY;
+  private static readonly ENCRYPTION_SALT_KEY = STORAGE.ENCRYPTION_SALT_KEY;
+  private encryptionKey?: CryptoKey;
+  private encryptionEnabled = false;
+
+  async enableEncryption(passphrase: string): Promise<void> {
+    const salt = await this.getOrCreateSalt();
+    const keyMaterial = await this.importKeyMaterial(passphrase);
+    this.encryptionKey = await this.deriveKey(keyMaterial, salt);
+    this.encryptionEnabled = true;
+  }
+
+  disableEncryption(): void {
+    this.encryptionKey = undefined;
+    this.encryptionEnabled = false;
+  }
+
+  private async getOrCreateSalt(): Promise<ArrayBuffer> {
+    const result = await chrome.storage.local.get(StorageManager.ENCRYPTION_SALT_KEY);
+    let saltBase64 = result[StorageManager.ENCRYPTION_SALT_KEY];
+    if (!saltBase64) {
+      const salt = crypto.getRandomValues(new Uint8Array(SECURITY.SALT_LENGTH));
+      saltBase64 = btoa(String.fromCharCode(...salt));
+      await chrome.storage.local.set({ [StorageManager.ENCRYPTION_SALT_KEY]: saltBase64 });
+    }
+    const bytes = Uint8Array.from(atob(saltBase64), (c) => c.charCodeAt(0));
+    return bytes.buffer;
+  }
+
+  private async importKeyMaterial(passphrase: string): Promise<CryptoKey> {
+    const enc = new TextEncoder();
+    return crypto.subtle.importKey('raw', enc.encode(passphrase), { name: 'PBKDF2' }, false, [
+      'deriveBits',
+      'deriveKey',
+    ]);
+  }
+
+  private async deriveKey(keyMaterial: CryptoKey, salt: ArrayBuffer): Promise<CryptoKey> {
+    return crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        hash: SECURITY.PBKDF2_HASH,
+        salt,
+        iterations: SECURITY.PBKDF2_ITERATIONS,
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt'],
+    );
+  }
+
+  private async encrypt(text: string): Promise<string> {
+    if (!this.encryptionEnabled || !this.encryptionKey) return text;
+    const iv = crypto.getRandomValues(new Uint8Array(SECURITY.IV_LENGTH));
+    const enc = new TextEncoder();
+    const ciphertext = await crypto.subtle.encrypt(
+      { name: 'AES-GCM', iv },
+      this.encryptionKey,
+      enc.encode(text),
+    );
+    const combined = new Uint8Array(iv.byteLength + ciphertext.byteLength);
+    combined.set(iv, 0);
+    combined.set(new Uint8Array(ciphertext), iv.byteLength);
+    const base64 = btoa(String.fromCharCode(...combined));
+    return `enc:${base64}`;
+  }
+
+  private async decrypt(text: string): Promise<string> {
+    if (!text.startsWith('enc:')) return text;
+    if (!this.encryptionKey) return '';
+    const base64 = text.slice(4);
+    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+    const iv = bytes.slice(0, 12);
+    const data = bytes.slice(12);
+    const plaintext = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      this.encryptionKey,
+      data,
+    );
+    const dec = new TextDecoder();
+    return dec.decode(plaintext);
+  }
 
   /**
    * Get current settings
@@ -71,24 +154,29 @@ export class StorageManager {
       Logger.debug('[StorageManager] Getting settings from storage');
       const result = await chrome.storage.local.get(StorageManager.SETTINGS_KEY);
       const settings = result[StorageManager.SETTINGS_KEY];
-      
+
       if (!settings) {
         Logger.info('[StorageManager] No settings found, using defaults');
         // Return default settings if none exist
         await this.saveSettings(DEFAULT_SETTINGS);
         return DEFAULT_SETTINGS;
       }
-      
+
       // Merge with defaults to ensure all fields exist
       const merged = { ...DEFAULT_SETTINGS, ...settings };
+      merged.extractorModel = {
+        ...merged.extractorModel,
+        apiKey: await this.decrypt(merged.extractorModel.apiKey || ''),
+      };
+      merged.analyzerModel = {
+        ...merged.analyzerModel,
+        apiKey: await this.decrypt(merged.analyzerModel.apiKey || ''),
+      };
       Logger.debug('[StorageManager] Settings retrieved successfully');
       return merged;
     } catch (error) {
       Logger.error('[StorageManager] Failed to get settings', { error });
-      await ErrorHandler.handleError(
-        error as Error,
-        'StorageManager.getSettings'
-      );
+      await ErrorHandler.handleError(error as Error, 'StorageManager.getSettings');
       return DEFAULT_SETTINGS;
     }
   }
@@ -100,19 +188,37 @@ export class StorageManager {
   async saveSettings(settings: Partial<Settings>): Promise<void> {
     try {
       Logger.debug('[StorageManager] Saving settings');
-      
+
       // Get current settings directly from storage to avoid recursion
       const result = await chrome.storage.local.get(StorageManager.SETTINGS_KEY);
       const currentSettings = result[StorageManager.SETTINGS_KEY] || DEFAULT_SETTINGS;
       const updatedSettings = { ...currentSettings, ...settings };
-      
+      if (
+        updatedSettings.extractorModel &&
+        typeof updatedSettings.extractorModel.apiKey === 'string'
+      ) {
+        updatedSettings.extractorModel = {
+          ...updatedSettings.extractorModel,
+          apiKey: await this.encrypt(updatedSettings.extractorModel.apiKey),
+        } as AIConfig;
+      }
+      if (
+        updatedSettings.analyzerModel &&
+        typeof updatedSettings.analyzerModel.apiKey === 'string'
+      ) {
+        updatedSettings.analyzerModel = {
+          ...updatedSettings.analyzerModel,
+          apiKey: await this.encrypt(updatedSettings.analyzerModel.apiKey),
+        } as AIConfig;
+      }
+
       await chrome.storage.local.set({
         [StorageManager.SETTINGS_KEY]: updatedSettings,
       });
-      
-      console.log('[StorageManager] Settings saved successfully');
+
+      Logger.info('[StorageManager] Settings saved successfully');
     } catch (error) {
-      console.error('[StorageManager] Failed to save settings:', error);
+      Logger.error('[StorageManager] Failed to save settings', { error });
       throw new Error('Failed to save settings');
     }
   }
@@ -126,7 +232,7 @@ export class StorageManager {
       const settings = await this.getSettings();
       return JSON.stringify(settings, null, 2);
     } catch (error) {
-      console.error('[StorageManager] Failed to export settings:', error);
+      Logger.error('[StorageManager] Failed to export settings', { error });
       throw new Error('Failed to export settings');
     }
   }
@@ -138,16 +244,16 @@ export class StorageManager {
   async importSettings(data: string): Promise<void> {
     try {
       const settings = JSON.parse(data) as Settings;
-      
+
       // Validate settings structure
       if (!this.validateSettings(settings)) {
         throw new Error('Invalid settings format');
       }
-      
+
       await this.saveSettings(settings);
-      console.log('[StorageManager] Settings imported successfully');
+      Logger.info('[StorageManager] Settings imported successfully');
     } catch (error) {
-      console.error('[StorageManager] Failed to import settings:', error);
+      Logger.error('[StorageManager] Failed to import settings', { error });
       throw new Error('Failed to import settings: ' + (error as Error).message);
     }
   }
@@ -163,18 +269,18 @@ export class StorageManager {
         ...item,
         comments: LZString.compressToUTF16(JSON.stringify(item.comments)),
       };
-      
+
       // Save the item with its ID as key
       await chrome.storage.local.set({
         [`${StorageManager.HISTORY_KEY}_${item.id}`]: compressedItem,
       });
-      
+
       // Update history index
       await this.updateHistoryIndex(item.id);
-      
-      console.log('[StorageManager] History item saved:', item.id);
+
+      Logger.info('[StorageManager] History item saved', { id: item.id });
     } catch (error) {
-      console.error('[StorageManager] Failed to save history:', error);
+      Logger.error('[StorageManager] Failed to save history', { error });
       throw new Error('Failed to save history');
     }
   }
@@ -187,18 +293,18 @@ export class StorageManager {
     try {
       const index = await this.getHistoryIndex();
       const items: HistoryItem[] = [];
-      
+
       for (const id of index) {
         const item = await this.getHistoryItem(id);
         if (item) {
           items.push(item);
         }
       }
-      
+
       // Sort by extractedAt (newest first)
       return items.sort((a, b) => b.extractedAt - a.extractedAt);
     } catch (error) {
-      console.error('[StorageManager] Failed to get history:', error);
+      Logger.error('[StorageManager] Failed to get history', { error });
       return [];
     }
   }
@@ -212,21 +318,21 @@ export class StorageManager {
     try {
       const result = await chrome.storage.local.get(`${StorageManager.HISTORY_KEY}_${id}`);
       const compressedItem = result[`${StorageManager.HISTORY_KEY}_${id}`];
-      
+
       if (!compressedItem) {
         return undefined;
       }
-      
+
       // Decompress comments data
       const decompressed = LZString.decompressFromUTF16(compressedItem.comments);
       const comments = decompressed ? JSON.parse(decompressed) : [];
-      
+
       return {
         ...compressedItem,
         comments,
       };
     } catch (error) {
-      console.error(`[StorageManager] Failed to get history item ${id}:`, error);
+      Logger.error('[StorageManager] Failed to get history item', { id, error });
       return undefined;
     }
   }
@@ -239,9 +345,9 @@ export class StorageManager {
     try {
       await chrome.storage.local.remove(`${StorageManager.HISTORY_KEY}_${id}`);
       await this.removeFromHistoryIndex(id);
-      console.log('[StorageManager] History item deleted:', id);
+      Logger.info('[StorageManager] History item deleted', { id });
     } catch (error) {
-      console.error(`[StorageManager] Failed to delete history item ${id}:`, error);
+      Logger.error('[StorageManager] Failed to delete history item', { id, error });
       throw new Error('Failed to delete history item');
     }
   }
@@ -255,14 +361,15 @@ export class StorageManager {
     try {
       const allHistory = await this.getHistory();
       const lowerQuery = query.toLowerCase();
-      
-      return allHistory.filter(item => 
-        item.title.toLowerCase().includes(lowerQuery) ||
-        item.url.toLowerCase().includes(lowerQuery) ||
-        item.platform.toLowerCase().includes(lowerQuery)
+
+      return allHistory.filter(
+        (item) =>
+          item.title.toLowerCase().includes(lowerQuery) ||
+          item.url.toLowerCase().includes(lowerQuery) ||
+          item.platform.toLowerCase().includes(lowerQuery),
       );
     } catch (error) {
-      console.error('[StorageManager] Failed to search history:', error);
+      Logger.error('[StorageManager] Failed to search history', { error });
       return [];
     }
   }
@@ -276,7 +383,7 @@ export class StorageManager {
       const result = await chrome.storage.local.get(StorageManager.HISTORY_INDEX_KEY);
       return result[StorageManager.HISTORY_INDEX_KEY] || [];
     } catch (error) {
-      console.error('[StorageManager] Failed to get history index:', error);
+      Logger.error('[StorageManager] Failed to get history index', { error });
       return [];
     }
   }
@@ -288,7 +395,7 @@ export class StorageManager {
   private async updateHistoryIndex(id: string): Promise<void> {
     try {
       const index = await this.getHistoryIndex();
-      
+
       if (!index.includes(id)) {
         index.push(id);
         await chrome.storage.local.set({
@@ -296,7 +403,7 @@ export class StorageManager {
         });
       }
     } catch (error) {
-      console.error('[StorageManager] Failed to update history index:', error);
+      Logger.error('[StorageManager] Failed to update history index', { error });
     }
   }
 
@@ -307,13 +414,13 @@ export class StorageManager {
   private async removeFromHistoryIndex(id: string): Promise<void> {
     try {
       const index = await this.getHistoryIndex();
-      const filteredIndex = index.filter(itemId => itemId !== id);
-      
+      const filteredIndex = index.filter((itemId) => itemId !== id);
+
       await chrome.storage.local.set({
         [StorageManager.HISTORY_INDEX_KEY]: filteredIndex,
       });
     } catch (error) {
-      console.error('[StorageManager] Failed to remove from history index:', error);
+      Logger.error('[StorageManager] Failed to remove from history index', { error });
     }
   }
 

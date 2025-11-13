@@ -27,12 +27,7 @@
       "run_at": "document_idle"
     }
   ],
-  "permissions": [
-    "storage",
-    "activeTab",
-    "scripting",
-    "notifications"
-  ],
+  "permissions": ["storage", "activeTab", "scripting", "notifications"],
   "host_permissions": ["<all_urls>"],
   "options_page": "src/options/index.html",
   "web_accessible_resources": [

@@ -9,16 +9,19 @@ import { HistoryItem, Comment } from '../types';
  * @param depth - Current depth level
  * @returns Flattened array of comments with depth information
  */
-function flattenComments(comments: Comment[], depth: number = 0): Array<Comment & { depth: number }> {
+function flattenComments(
+  comments: Comment[],
+  depth: number = 0,
+): Array<Comment & { depth: number }> {
   const result: Array<Comment & { depth: number }> = [];
-  
+
   for (const comment of comments) {
     result.push({ ...comment, depth });
     if (comment.replies && comment.replies.length > 0) {
       result.push(...flattenComments(comment.replies, depth + 1));
     }
   }
-  
+
   return result;
 }
 
@@ -29,9 +32,9 @@ function flattenComments(comments: Comment[], depth: number = 0): Array<Comment 
  */
 function sanitizeFilename(filename: string): string {
   return filename
-    .replace(/[<>:"/\\|?*]/g, '-')  // Replace invalid characters
-    .replace(/\s+/g, '_')            // Replace spaces with underscores
-    .substring(0, 100);              // Limit length
+    .replace(REGEX.FILENAME_INVALID, '-')
+    .replace(REGEX.WHITESPACE, '_')
+    .substring(0, 100);
 }
 
 /**
@@ -43,25 +46,25 @@ function sanitizeFilename(filename: string): string {
 export function exportCommentsAsCSV(comments: Comment[], title?: string, filename?: string): void {
   // Flatten the comment tree to include all replies
   const flatComments = flattenComments(comments);
-  
+
   const headers = ['Depth', 'Username', 'Timestamp', 'Likes', 'Content', 'Replies Count'];
-  const rows = flatComments.map(comment => [
+  const rows = flatComments.map((comment) => [
     comment.depth.toString(),
     `"${comment.username.replace(/"/g, '""')}"`,
     `"${comment.timestamp}"`,
     comment.likes.toString(),
     `"${comment.content.replace(/"/g, '""').replace(/\n/g, ' ').replace(/\r/g, '')}"`,
-    comment.replies.length.toString()
+    comment.replies.length.toString(),
   ]);
-  
-  const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
-  
+
+  const csv = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+
   // Generate filename with title and timestamp
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-  const defaultFilename = title 
+  const defaultFilename = title
     ? `${sanitizeFilename(title)}_comments_${timestamp}.csv`
     : `comments_${timestamp}.csv`;
-  
+
   downloadFile(csv, filename || defaultFilename, 'text/csv');
 }
 
@@ -98,7 +101,7 @@ ${item.analysis.markdown}
   // Generate filename with title and timestamp
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
   const defaultFilename = `${sanitizeFilename(item.title)}_analysis_${timestamp}.md`;
-  
+
   downloadFile(markdown, filename || defaultFilename, 'text/markdown');
 }
 
@@ -121,7 +124,7 @@ export function exportCompleteData(item: HistoryItem, filename?: string): void {
     comments: item.comments,
     analysis: item.analysis,
   };
-  
+
   const json = JSON.stringify(data, null, 2);
   downloadFile(json, filename || `complete-data-${Date.now()}.json`, 'application/json');
 }
@@ -143,3 +146,4 @@ function downloadFile(content: string, filename: string, mimeType: string): void
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+import { REGEX } from '@/config/constants';

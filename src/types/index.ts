@@ -103,9 +103,9 @@ export interface SelectorCache {
 }
 
 export interface DOMAnalysisConfig {
-  initialDepth: number;        // Initial DOM tree depth for analysis (default: 3)
-  expandDepth: number;         // Depth when expanding specific nodes (default: 2)
-  maxDepth: number;            // Maximum depth for full DOM structure (default: 10)
+  initialDepth: number; // Initial DOM tree depth for analysis (default: 3)
+  expandDepth: number; // Depth when expanding specific nodes (default: 2)
+  maxDepth: number; // Maximum depth for full DOM structure (default: 10)
 }
 
 export interface Settings {
@@ -148,7 +148,7 @@ export interface HistoryItem {
   analyzedAt?: number; // When analysis was performed
 }
 
-export type MessageType = 
+export type MessageType =
   | 'START_EXTRACTION'
   | 'AI_EXTRACT_COMMENTS'
   | 'AI_EXTRACT_PROGRESSIVE'

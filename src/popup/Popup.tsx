@@ -1,7 +1,9 @@
 import * as React from 'react';
+import { PATHS, HOST, MESSAGES, TIMING } from '@/config/constants';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HistoryItem } from '../types';
+import { useToast } from '../hooks/useToast';
 
 interface PageInfo {
   url: string;
@@ -21,6 +23,7 @@ interface PageStatus {
 
 const Popup: React.FC = () => {
   const { t } = useTranslation();
+  const toast = useToast();
   const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
   const [pageStatus, setPageStatus] = useState<PageStatus>({
     extracted: false,
@@ -91,13 +94,13 @@ const Popup: React.FC = () => {
       if (!tab?.url) return;
 
       // Get all running tasks
-      const response = await chrome.runtime.sendMessage({ type: 'GET_TASK_STATUS' });
-      
+      const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_TASK_STATUS });
+
       if (response?.tasks) {
         // Find task for current URL that is running or pending
-        const currentUrlTask = response.tasks.find((task: any) => 
-          task.url === tab.url && 
-          (task.status === 'running' || task.status === 'pending')
+        const currentUrlTask = response.tasks.find(
+          (task: any) =>
+            task.url === tab.url && (task.status === 'running' || task.status === 'pending'),
         );
 
         if (currentUrlTask) {
@@ -125,7 +128,7 @@ const Popup: React.FC = () => {
     try {
       // Get current tab
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      
+
       if (!tab?.url) {
         setLoading(false);
         return;
@@ -134,7 +137,7 @@ const Popup: React.FC = () => {
       // Check if there's a matching scraper config
       console.log('[Popup] Checking scraper config for URL:', tab.url);
       const configResponse = await chrome.runtime.sendMessage({
-        type: 'CHECK_SCRAPER_CONFIG',
+        type: MESSAGES.CHECK_SCRAPER_CONFIG,
         payload: { url: tab.url },
       });
 
@@ -146,7 +149,7 @@ const Popup: React.FC = () => {
       let domain = 'unknown';
       try {
         const urlObj = new URL(tab.url);
-        domain = urlObj.hostname.replace('www.', '');
+        domain = urlObj.hostname.replace(HOST.WWW_PREFIX, '');
       } catch (e) {
         console.warn('[Popup] Failed to parse URL:', tab.url);
       }
@@ -157,7 +160,7 @@ const Popup: React.FC = () => {
         domain,
         hasConfig,
       });
-      
+
       // Check if this page has been extracted/analyzed
       await checkPageStatus(tab.url);
     } catch (error) {
@@ -194,10 +197,11 @@ const Popup: React.FC = () => {
     if (!pageInfo) return;
 
     setGeneratingConfig(true);
-    
+    toast.info(t('popup.analysisConfigStarted'));
+
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'GENERATE_SCRAPER_CONFIG',
+        type: MESSAGES.GENERATE_SCRAPER_CONFIG,
         payload: {
           url: pageInfo.url,
           title: pageInfo.title,
@@ -205,15 +209,17 @@ const Popup: React.FC = () => {
       });
 
       if (response?.success) {
-        alert('Scraper configuration generated successfully!');
+        toast.success(t('popup.generateConfigSuccess'));
         // Reload page info to update hasConfig status
         await loadPageInfo();
       } else {
-        alert('Failed to generate configuration: ' + (response?.error || 'Unknown error'));
+        toast.error(
+          t('popup.generateConfigFailedWithMsg', { msg: response?.error || 'Unknown error' }),
+        );
       }
     } catch (error) {
       console.error('[Popup] Failed to generate config:', error);
-      alert('Failed to generate configuration');
+      toast.error(t('popup.generateConfigFailed'));
     } finally {
       setGeneratingConfig(false);
     }
@@ -221,10 +227,10 @@ const Popup: React.FC = () => {
 
   const handleExtractComments = async () => {
     if (!pageInfo?.hasConfig) return;
-    
+
     // Check if task is already running
     if (currentTask && currentTask.status === 'running') {
-      alert('Task is already in progress. Please wait for it to complete.');
+      toast.warning(t('popup.taskAlreadyRunning'));
       return;
     }
 
@@ -244,35 +250,37 @@ const Popup: React.FC = () => {
           status: 'running',
           progress: 0,
         });
-        
+        toast.info(t('popup.extractionStarted'));
+
         // Start polling task status
         monitorTask(response.taskId);
       }
     } catch (error) {
       console.error('[Popup] Failed to start extraction:', error);
       setCurrentTask(null);
+      toast.error(t('popup.extractionFailed'));
     }
   };
 
   const handleAnalyzeComments = async () => {
     if (!pageStatus.extracted || !pageStatus.historyId) return;
-    
+
     // Check if task is already running
     if (currentTask && currentTask.status === 'running') {
-      alert('Task is already in progress. Please wait for it to complete.');
+      toast.warning(t('popup.taskAlreadyRunning'));
       return;
     }
 
     try {
       // Get history item
       const response = await chrome.runtime.sendMessage({
-        type: 'GET_HISTORY',
+        type: MESSAGES.GET_HISTORY,
         payload: { id: pageStatus.historyId },
       });
 
       if (response?.item) {
         const analysisResponse = await chrome.runtime.sendMessage({
-          type: 'START_ANALYSIS',
+          type: MESSAGES.START_ANALYSIS,
           payload: {
             comments: response.item.comments,
             url: pageInfo?.url,
@@ -288,7 +296,8 @@ const Popup: React.FC = () => {
             status: 'running',
             progress: 0,
           });
-          
+          toast.info(t('popup.analysisStarted'));
+
           // Start polling task status
           monitorTask(analysisResponse.taskId);
         }
@@ -296,6 +305,7 @@ const Popup: React.FC = () => {
     } catch (error) {
       console.error('[Popup] Failed to start analysis:', error);
       setCurrentTask(null);
+      toast.error(t('popup.analysisFailed'));
     }
   };
 
@@ -303,7 +313,7 @@ const Popup: React.FC = () => {
     const checkStatus = async () => {
       try {
         const response = await chrome.runtime.sendMessage({
-          type: 'GET_TASK_STATUS',
+          type: MESSAGES.GET_TASK_STATUS,
           payload: { taskId },
         });
 
@@ -319,17 +329,25 @@ const Popup: React.FC = () => {
 
           // If task is still running, check again
           if (task.status === 'running' || task.status === 'pending') {
-            setTimeout(checkStatus, 1000);
+            setTimeout(checkStatus, TIMING.POLL_TASK_RUNNING_MS);
           } else if (task.status === 'completed') {
             // Reload page status
             if (pageInfo) {
               await checkPageStatus(pageInfo.url);
             }
+            toast.success(
+              task.type === 'extract'
+                ? t('popup.extractionCompleted')
+                : t('popup.analysisCompleted'),
+            );
             // Clear task after a delay
-            setTimeout(() => setCurrentTask(null), 2000);
+            setTimeout(() => setCurrentTask(null), TIMING.CLEAR_TASK_DELAY_MS);
           } else if (task.status === 'failed') {
+            toast.error(
+              task.error ? `${t('popup.taskFailed')}: ${task.error}` : t('popup.taskFailed'),
+            );
             // Clear task after showing error
-            setTimeout(() => setCurrentTask(null), 5000);
+            setTimeout(() => setCurrentTask(null), TIMING.CLEAR_TASK_FAILED_MS);
           }
         }
       } catch (error) {
@@ -341,17 +359,17 @@ const Popup: React.FC = () => {
   };
 
   const handleOpenHistory = () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL('src/history/index.html') });
+    chrome.tabs.create({ url: chrome.runtime.getURL(PATHS.HISTORY_PAGE) });
     window.close();
   };
 
   const handleOpenSettings = () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL('src/options/index.html') });
+    chrome.tabs.create({ url: chrome.runtime.getURL(PATHS.OPTIONS_PAGE) });
     window.close();
   };
 
   const handleOpenLogs = () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL('src/logs/index.html') });
+    chrome.tabs.create({ url: chrome.runtime.getURL(PATHS.LOGS_PAGE) });
     window.close();
   };
 
@@ -379,21 +397,29 @@ const Popup: React.FC = () => {
 
   return (
     <div className="w-96 bg-gradient-to-br from-blue-50 to-purple-50">
+      <toast.ToastContainer />
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold">{t('popup.title')}</h1>
-            <p className="text-xs opacity-90">{t('popup.version')} {version}</p>
+            <p className="text-xs opacity-90">
+              {t('popup.version')} {version}
+            </p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={handleOpenLogs}
               className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-              title="View AI Logs"
+              title={t('popup.viewAILogs')}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
               </svg>
             </button>
             <button
@@ -402,8 +428,18 @@ const Popup: React.FC = () => {
               title={t('popup.settings')}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
               </svg>
             </button>
           </div>
@@ -424,14 +460,20 @@ const Popup: React.FC = () => {
             </div>
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600">{t('popup.status')}:</span>
-              <span className={`px-2 py-1 rounded text-xs font-medium ${
-                pageStatus.analyzed ? 'bg-green-100 text-green-700' :
-                pageStatus.extracted ? 'bg-blue-100 text-blue-700' :
-                'bg-gray-100 text-gray-700'
-              }`}>
-                {pageStatus.analyzed ? t('popup.analyzed') :
-                 pageStatus.extracted ? t('popup.extracted') :
-                 t('popup.notExtracted')}
+              <span
+                className={`px-2 py-1 rounded text-xs font-medium ${
+                  pageStatus.analyzed
+                    ? 'bg-green-100 text-green-700'
+                    : pageStatus.extracted
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'bg-gray-100 text-gray-700'
+                }`}
+              >
+                {pageStatus.analyzed
+                  ? t('popup.analyzed')
+                  : pageStatus.extracted
+                    ? t('popup.extracted')
+                    : t('popup.notExtracted')}
               </span>
             </div>
             {pageStatus.extracted && (
@@ -442,85 +484,29 @@ const Popup: React.FC = () => {
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">{t('popup.extractedAt')}:</span>
-                  <span className="text-gray-500 text-xs">{formatDate(pageStatus.extractedAt!)}</span>
+                  <span className="text-gray-500 text-xs">
+                    {formatDate(pageStatus.extractedAt!)}
+                  </span>
                 </div>
                 {pageStatus.analyzed && pageStatus.analyzedAt && (
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">{t('popup.analyzedAt')}:</span>
-                    <span className="text-gray-500 text-xs">{formatDate(pageStatus.analyzedAt)}</span>
+                    <span className="text-gray-500 text-xs">
+                      {formatDate(pageStatus.analyzedAt)}
+                    </span>
                   </div>
                 )}
               </>
             )}
           </div>
         ) : (
-          <div className="text-sm text-gray-500 text-center py-2">
-            {t('popup.invalidPage')}
-          </div>
+          <div className="text-sm text-gray-500 text-center py-2">{t('popup.invalidPage')}</div>
         )}
       </div>
 
-      {/* Task Status */}
-      {currentTask && (
-        <div className="px-4 py-3 bg-blue-50 border-t border-b">
-          <div className="flex items-center gap-2">
-            {currentTask.status === 'running' && (
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
-            )}
-            {currentTask.status === 'completed' && (
-              <div className="text-green-500">✓</div>
-            )}
-            {currentTask.status === 'failed' && (
-              <div className="text-red-500">✗</div>
-            )}
-            <span className="text-sm text-gray-700">
-              {currentTask.message || (currentTask.type === 'extract' ? 'Extracting comments...' : 'Analyzing comments...')}
-            </span>
-          </div>
-        </div>
-      )}
+      {/* Task Status removed to prevent layout shift; use button states and toasts instead */}
 
-      {/* View Data Buttons */}
-      {pageStatus.extracted && (
-        <div className="px-4 pt-2 pb-3 bg-gray-50 border-t space-y-2">
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                chrome.tabs.create({ 
-                  url: chrome.runtime.getURL(`src/history/index.html?id=${pageStatus.historyId}`) 
-                });
-                window.close();
-              }}
-              className="flex-1 py-2 px-3 bg-white border border-blue-300 text-blue-600 rounded-lg text-sm font-medium hover:bg-blue-50 transition-all flex items-center justify-center gap-1"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-              </svg>
-              {t('popup.viewComments')}
-            </button>
-            
-            {pageStatus.analyzed && (
-              <button
-                onClick={() => {
-                  chrome.tabs.create({ 
-                    url: chrome.runtime.getURL(`src/history/index.html?id=${pageStatus.historyId}&tab=analysis`) 
-                  });
-                  window.close();
-                }}
-                className="flex-1 py-2 px-3 bg-white border border-purple-300 text-purple-600 rounded-lg text-sm font-medium hover:bg-purple-50 transition-all flex items-center justify-center gap-1"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                {t('popup.viewAnalysis')}
-              </button>
-            )}
-          </div>
-          <div className="text-xs text-gray-500 text-center">
-            {t('popup.lastUpdated')}: {formatDate(pageStatus.analyzedAt || pageStatus.extractedAt!)}
-          </div>
-        </div>
-      )}
+      {/* View Data Buttons removed to keep header compact; access via dynamic action buttons below */}
 
       {/* Action Buttons */}
       <div className="p-4 space-y-3">
@@ -529,61 +515,139 @@ const Popup: React.FC = () => {
           <div>
             <button
               onClick={handleGenerateConfig}
-              disabled={generatingConfig || (currentTask?.status === 'running')}
+              disabled={generatingConfig || currentTask?.status === 'running'}
               className="w-full py-3 px-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg font-medium hover:from-purple-600 hover:to-purple-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
             >
               {generatingConfig ? (
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                  Analyzing...
+                  {t('popup.analyzingConfig')}
                 </>
               ) : (
                 <>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                    />
                   </svg>
                   {t('popup.generateConfig')}
                 </>
               )}
             </button>
-            <p className="text-xs text-gray-500 mt-2 text-center">
-              {t('popup.noConfigHint')}
-            </p>
+            <p className="text-xs text-gray-500 mt-2 text-center">{t('popup.noConfigHint')}</p>
           </div>
         )}
 
         {/* Extract Comments button - only enabled if config exists */}
-        <div>
-          <button
-            onClick={handleExtractComments}
-            disabled={!pageInfo?.hasConfig || (currentTask?.status === 'running')}
-            className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-            </svg>
-            {t('popup.extractComments')}
-          </button>
-          {extractorModelName && (
-            <p className="text-xs text-gray-500 mt-1 text-center">🤖 {extractorModelName}</p>
-          )}
-          {pageInfo && !pageInfo?.hasConfig && (
-            <p className="text-xs text-red-500 mt-1 text-center">
-              {t('popup.configRequired')}
-            </p>
-          )}
-        </div>
+        {pageInfo?.hasConfig && (
+          <div>
+            <button
+              onClick={() => {
+                if (pageStatus.extracted) {
+                  chrome.tabs.create({
+                    url: chrome.runtime.getURL(`${PATHS.HISTORY_PAGE}?id=${pageStatus.historyId}`),
+                  });
+                  window.close();
+                } else {
+                  handleExtractComments();
+                }
+              }}
+              disabled={
+                !pageInfo?.hasConfig ||
+                (currentTask?.status === 'running' && currentTask?.type === 'extract')
+              }
+              className={`w-full py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${currentTask?.status === 'running' && currentTask?.type === 'extract' ? 'bg-gray-300 text-gray-700 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700'}`}
+            >
+              {currentTask?.status === 'running' && currentTask?.type === 'extract' ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                  {t('popup.extracting')}
+                </>
+              ) : pageStatus.extracted ? (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
+                    />
+                  </svg>
+                  {t('popup.viewComments')}
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"
+                    />
+                  </svg>
+                  {t('popup.extractComments')}
+                </>
+              )}
+            </button>
+            {extractorModelName && (
+              <p className="text-xs text-gray-500 mt-1 text-center">🤖 {extractorModelName}</p>
+            )}
+          </div>
+        )}
 
         <div>
           <button
-            onClick={handleAnalyzeComments}
-            disabled={!pageStatus.extracted || (currentTask?.status === 'running')}
-            className="w-full py-3 px-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg font-medium hover:from-purple-600 hover:to-purple-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+            onClick={() => {
+              if (pageStatus.analyzed && pageStatus.historyId) {
+                chrome.tabs.create({
+                  url: chrome.runtime.getURL(
+                    `${PATHS.HISTORY_PAGE}?id=${pageStatus.historyId}&tab=analysis`,
+                  ),
+                });
+                window.close();
+              } else {
+                handleAnalyzeComments();
+              }
+            }}
+            disabled={
+              !pageStatus.extracted ||
+              (currentTask?.status === 'running' && currentTask?.type === 'analyze')
+            }
+            className={`w-full py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${!pageStatus.extracted || (currentTask?.status === 'running' && currentTask?.type === 'analyze') ? 'bg-gray-300 text-gray-700 cursor-not-allowed' : 'bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700'}`}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            {t('popup.analyzeComments')}
+            {currentTask?.status === 'running' && currentTask?.type === 'analyze' ? (
+              <>
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                {t('popup.analyzing')}
+              </>
+            ) : pageStatus.analyzed ? (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
+                </svg>
+                {t('popup.viewAnalysis')}
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+                  />
+                </svg>
+                {t('popup.analyzeComments')}
+              </>
+            )}
           </button>
           {analyzerModelName && (
             <p className="text-xs text-gray-500 mt-1 text-center">🤖 {analyzerModelName}</p>
@@ -595,7 +659,12 @@ const Popup: React.FC = () => {
           className="w-full py-3 px-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-medium hover:from-green-600 hover:to-green-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
           </svg>
           {t('popup.viewHistory')}
         </button>

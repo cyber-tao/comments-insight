@@ -46,11 +46,7 @@ export class TaskManager {
   async startTask(taskId: string): Promise<void> {
     const task = this.tasks.get(taskId);
     if (!task) {
-      throw new ExtensionError(
-        ErrorCode.TASK_NOT_FOUND,
-        `Task not found: ${taskId}`,
-        { taskId }
-      );
+      throw new ExtensionError(ErrorCode.TASK_NOT_FOUND, `Task not found: ${taskId}`, { taskId });
     }
 
     // If task is already running, just return (idempotent)
@@ -87,9 +83,9 @@ export class TaskManager {
     }
 
     task.progress = Math.min(100, Math.max(0, progress));
-    Logger.debug(`[TaskManager] Task progress updated: ${taskId}`, { 
-      progress: task.progress, 
-      message 
+    Logger.debug(`[TaskManager] Task progress updated: ${taskId}`, {
+      progress: task.progress,
+      message,
     });
     this.notifyTaskUpdate(task);
   }
@@ -122,11 +118,7 @@ export class TaskManager {
     });
 
     // Show completion notification
-    NotificationService.showTaskCompleted(
-      task.type,
-      `Task completed`,
-      result?.commentsCount
-    );
+    NotificationService.showTaskCompleted(task.type, `Task completed`, result?.commentsCount);
 
     this.currentTaskId = null;
     this.notifyTaskUpdate(task);
@@ -217,7 +209,7 @@ export class TaskManager {
    * @returns Array of tasks with the specified status
    */
   getTasksByStatus(status: Task['status']): Task[] {
-    return this.getAllTasks().filter(task => task.status === status);
+    return this.getAllTasks().filter((task) => task.status === status);
   }
 
   /**
@@ -225,10 +217,10 @@ export class TaskManager {
    */
   clearFinishedTasks(): void {
     const finishedTasks = this.getAllTasks().filter(
-      task => task.status === 'completed' || task.status === 'failed'
+      (task) => task.status === 'completed' || task.status === 'failed',
     );
 
-    finishedTasks.forEach(task => {
+    finishedTasks.forEach((task) => {
       this.tasks.delete(task.id);
     });
 
@@ -253,7 +245,7 @@ export class TaskManager {
 
     const nextTaskId = this.queue.shift();
     if (nextTaskId) {
-      this.startTask(nextTaskId).catch(error => {
+      this.startTask(nextTaskId).catch((error) => {
         Logger.error(`[TaskManager] Failed to start task ${nextTaskId}`, { error });
         this.failTask(nextTaskId, error.message);
       });
@@ -266,13 +258,15 @@ export class TaskManager {
    */
   private notifyTaskUpdate(task: Task): void {
     // Send message to all extension contexts (popup, options, etc.)
-    chrome.runtime.sendMessage({
-      type: 'TASK_UPDATE',
-      payload: task,
-    }).catch(error => {
-      // Ignore errors if no listeners are active
-      Logger.debug('[TaskManager] No listeners for task update', { error });
-    });
+    chrome.runtime
+      .sendMessage({
+        type: 'TASK_UPDATE',
+        payload: task,
+      })
+      .catch((error) => {
+        // Ignore errors if no listeners are active
+        Logger.debug('[TaskManager] No listeners for task update', { error });
+      });
   }
 }
 

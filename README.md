@@ -24,21 +24,21 @@
 
 ## 🎯 Supported Platforms
 
-| Platform | Status | Notes |
-|----------|--------|-------|
-| YouTube | ✅ | Full support |
-| Bilibili | ✅ | Full support |
-| Weibo | ✅ | Full support |
-| Douyin | ✅ | Full support |
-| Twitter/X | ✅ | Full support |
-| TikTok | ✅ | Full support |
-| Reddit | ✅ | Full support |
+| Platform  | Status | Notes        |
+| --------- | ------ | ------------ |
+| YouTube   | ✅     | Full support |
+| Bilibili  | ✅     | Full support |
+| Weibo     | ✅     | Full support |
+| Douyin    | ✅     | Full support |
+| Twitter/X | ✅     | Full support |
+| TikTok    | ✅     | Full support |
+| Reddit    | ✅     | Full support |
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - npm or yarn
 - Chrome Browser
 

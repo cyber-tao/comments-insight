@@ -1,6 +1,8 @@
 /**
  * NotificationService handles browser notifications
  */
+import { ICONS, PATHS, TEXT } from '@/config/constants';
+
 export class NotificationService {
   /**
    * Show task completion notification
@@ -11,19 +13,16 @@ export class NotificationService {
   static async showTaskCompleted(
     taskType: 'extract' | 'analyze',
     title: string,
-    commentsCount?: number
+    commentsCount?: number,
   ): Promise<void> {
     try {
       const notificationId = `task_completed_${Date.now()}`;
       const options = {
         type: 'basic' as const,
-        iconUrl: 'icons/icon-48.png',
-        title: 'Comments Insight',
+        iconUrl: ICONS.ICON_48,
+        title: TEXT.APP_NAME,
         message: this.getCompletionMessage(taskType, title, commentsCount),
-        buttons: [
-          { title: 'View Results' },
-          { title: 'Dismiss' }
-        ],
+        buttons: [{ title: TEXT.VIEW_RESULTS }, { title: TEXT.DISMISS }],
         requireInteraction: true,
       };
 
@@ -32,7 +31,7 @@ export class NotificationService {
       // Auto-clear after 10 seconds if not interacted with
       setTimeout(() => {
         chrome.notifications.clear(notificationId);
-      }, 10000);
+      }, TEXT.NOTIFICATION_AUTOCLEAR_MS);
     } catch (error) {
       console.error('[NotificationService] Failed to show notification:', error);
     }
@@ -43,16 +42,13 @@ export class NotificationService {
    * @param taskType - Type of failed task
    * @param error - Error message
    */
-  static async showTaskFailed(
-    taskType: 'extract' | 'analyze',
-    error: string
-  ): Promise<void> {
+  static async showTaskFailed(taskType: 'extract' | 'analyze', error: string): Promise<void> {
     try {
       const notificationId = `task_failed_${Date.now()}`;
       const options = {
         type: 'basic' as const,
-        iconUrl: 'icons/icon-48.png',
-        title: 'Comments Insight - Task Failed',
+        iconUrl: ICONS.ICON_48,
+        title: TEXT.TASK_FAILED_TITLE,
         message: `${taskType === 'extract' ? 'Extraction' : 'Analysis'} failed: ${error}`,
         requireInteraction: false,
       };
@@ -71,16 +67,17 @@ export class NotificationService {
       if (notificationId.startsWith('task_completed_')) {
         // Open history page
         chrome.tabs.create({
-          url: chrome.runtime.getURL('src/history/index.html')
+          url: chrome.runtime.getURL(PATHS.HISTORY_PAGE),
         });
       }
       chrome.notifications.clear(notificationId);
     });
 
     chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
-      if (buttonIndex === 0) { // View Results
+      if (buttonIndex === 0) {
+        // View Results
         chrome.tabs.create({
-          url: chrome.runtime.getURL('src/history/index.html')
+          url: chrome.runtime.getURL(PATHS.HISTORY_PAGE),
         });
       }
       chrome.notifications.clear(notificationId);
@@ -93,10 +90,10 @@ export class NotificationService {
   private static getCompletionMessage(
     taskType: 'extract' | 'analyze',
     title: string,
-    commentsCount?: number
+    commentsCount?: number,
   ): string {
     const truncatedTitle = title.length > 50 ? title.substring(0, 50) + '...' : title;
-    
+
     if (taskType === 'extract') {
       return `Extraction completed for "${truncatedTitle}"${commentsCount ? ` (${commentsCount} comments)` : ''}`;
     } else {

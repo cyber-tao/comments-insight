@@ -11,37 +11,37 @@ export enum ErrorCode {
   NETWORK_ERROR = 'NETWORK_ERROR',
   API_ERROR = 'API_ERROR',
   TIMEOUT_ERROR = 'TIMEOUT_ERROR',
-  
+
   // AI related errors
   AI_TIMEOUT = 'AI_TIMEOUT',
   AI_RATE_LIMIT = 'AI_RATE_LIMIT',
   AI_INVALID_RESPONSE = 'AI_INVALID_RESPONSE',
   AI_QUOTA_EXCEEDED = 'AI_QUOTA_EXCEEDED',
   AI_MODEL_NOT_FOUND = 'AI_MODEL_NOT_FOUND',
-  
+
   // Extraction errors
   PLATFORM_NOT_SUPPORTED = 'PLATFORM_NOT_SUPPORTED',
   EXTRACTION_FAILED = 'EXTRACTION_FAILED',
   NO_COMMENTS_FOUND = 'NO_COMMENTS_FOUND',
   DOM_ANALYSIS_FAILED = 'DOM_ANALYSIS_FAILED',
-  
+
   // Storage errors
   STORAGE_QUOTA_EXCEEDED = 'STORAGE_QUOTA_EXCEEDED',
   STORAGE_ERROR = 'STORAGE_ERROR',
   STORAGE_READ_ERROR = 'STORAGE_READ_ERROR',
   STORAGE_WRITE_ERROR = 'STORAGE_WRITE_ERROR',
-  
+
   // Configuration errors
   INVALID_CONFIG = 'INVALID_CONFIG',
   MISSING_API_KEY = 'MISSING_API_KEY',
   INVALID_API_URL = 'INVALID_API_URL',
   INVALID_MODEL = 'INVALID_MODEL',
-  
+
   // Task errors
   TASK_NOT_FOUND = 'TASK_NOT_FOUND',
   TASK_ALREADY_RUNNING = 'TASK_ALREADY_RUNNING',
   TASK_CANCELLED = 'TASK_CANCELLED',
-  
+
   // General errors
   UNKNOWN_ERROR = 'UNKNOWN_ERROR',
   VALIDATION_ERROR = 'VALIDATION_ERROR',
@@ -57,12 +57,7 @@ export class ExtensionError extends Error {
   public readonly timestamp: number;
   public readonly retryable: boolean;
 
-  constructor(
-    code: ErrorCode,
-    message: string,
-    details?: any,
-    retryable: boolean = false
-  ) {
+  constructor(code: ErrorCode, message: string, details?: any, retryable: boolean = false) {
     super(message);
     this.name = 'ExtensionError';
     this.code = code;
@@ -135,12 +130,9 @@ export class ErrorHandler {
    * @param error - Error to handle
    * @param context - Context where error occurred
    */
-  static async handleError(
-    error: Error | ExtensionError,
-    context: string
-  ): Promise<void> {
+  static async handleError(error: Error | ExtensionError, context: string): Promise<void> {
     const extensionError = this.normalizeError(error);
-    
+
     // Log error - use dynamic import to avoid circular dependency
     try {
       const { Logger } = await import('./logger.js');
@@ -151,7 +143,10 @@ export class ErrorHandler {
       });
     } catch (importError) {
       // Fallback to console if logger import fails
-      console.error(`[${context}] ${extensionError.code}: ${extensionError.message}`, extensionError);
+      console.error(
+        `[${context}] ${extensionError.code}: ${extensionError.message}`,
+        extensionError,
+      );
     }
 
     // Show user notification for critical errors
@@ -170,7 +165,7 @@ export class ErrorHandler {
   static async withRetry<T>(
     fn: () => Promise<T>,
     context: string,
-    config: Partial<RetryConfig> = {}
+    config: Partial<RetryConfig> = {},
   ): Promise<T> {
     const retryConfig = { ...DEFAULT_RETRY_CONFIG, ...config };
     let lastError: ExtensionError | null = null;
@@ -183,11 +178,11 @@ export class ErrorHandler {
           const { Logger } = await import('./logger.js');
           Logger.debug(`[${context}] Attempt ${attempt}/${retryConfig.maxAttempts}`);
         } catch {}
-        
+
         return await fn();
       } catch (error) {
         lastError = this.normalizeError(error as Error);
-        
+
         // Use dynamic import to avoid circular dependency
         try {
           const { Logger } = await import('./logger.js');
@@ -218,12 +213,12 @@ export class ErrorHandler {
         } catch (importError) {
           // Fallback to console if logger import fails
           console.warn(`[${context}] Attempt ${attempt} failed:`, lastError);
-          
+
           if (!this.isRetryable(lastError, retryConfig) || attempt === retryConfig.maxAttempts) {
             throw lastError;
           }
         }
-        
+
         await this.sleep(delay);
         delay = Math.min(delay * retryConfig.backoffMultiplier, retryConfig.maxDelay);
       }
@@ -251,7 +246,7 @@ export class ErrorHandler {
       code,
       error.message || 'Unknown error occurred',
       { originalError: error.name, stack: error.stack },
-      retryable
+      retryable,
     );
   }
 
@@ -362,11 +357,11 @@ export class ErrorHandler {
   private static async showUserNotification(error: ExtensionError): Promise<void> {
     try {
       const message = error.getUserMessage();
-      
+
       await chrome.notifications.create({
         type: 'basic',
-        iconUrl: chrome.runtime.getURL('icons/icon-128.png'),
-        title: 'Comments Insight Error',
+        iconUrl: chrome.runtime.getURL(ICONS.ICON_128),
+        title: TEXT.ERROR_TITLE,
         message: message,
         priority: 2,
       });
@@ -381,7 +376,7 @@ export class ErrorHandler {
    * @param ms - Milliseconds to sleep
    */
   private static sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
 
@@ -393,35 +388,41 @@ export class ErrorHandler {
  */
 export function getUserFriendlyMessage(code: ErrorCode, technicalMessage: string): string {
   const messages: Record<ErrorCode, string> = {
-    [ErrorCode.NETWORK_ERROR]: 'Network connection failed. Please check your internet connection and try again.',
+    [ErrorCode.NETWORK_ERROR]:
+      'Network connection failed. Please check your internet connection and try again.',
     [ErrorCode.API_ERROR]: 'API request failed. Please check your API configuration.',
     [ErrorCode.TIMEOUT_ERROR]: 'Request timed out. Please try again.',
-    
+
     [ErrorCode.AI_TIMEOUT]: 'AI request timed out. The model may be overloaded. Please try again.',
     [ErrorCode.AI_RATE_LIMIT]: 'Rate limit exceeded. Please wait a moment before trying again.',
-    [ErrorCode.AI_INVALID_RESPONSE]: 'AI returned an invalid response. Please try again or use a different model.',
-    [ErrorCode.AI_QUOTA_EXCEEDED]: 'API quota exceeded. Please check your API account or try again later.',
-    [ErrorCode.AI_MODEL_NOT_FOUND]: 'The selected AI model was not found. Please check your model configuration.',
-    
+    [ErrorCode.AI_INVALID_RESPONSE]:
+      'AI returned an invalid response. Please try again or use a different model.',
+    [ErrorCode.AI_QUOTA_EXCEEDED]:
+      'API quota exceeded. Please check your API account or try again later.',
+    [ErrorCode.AI_MODEL_NOT_FOUND]:
+      'The selected AI model was not found. Please check your model configuration.',
+
     [ErrorCode.PLATFORM_NOT_SUPPORTED]: 'This platform is not supported yet.',
-    [ErrorCode.EXTRACTION_FAILED]: 'Failed to extract comments. The page structure may have changed.',
+    [ErrorCode.EXTRACTION_FAILED]:
+      'Failed to extract comments. The page structure may have changed.',
     [ErrorCode.NO_COMMENTS_FOUND]: 'No comments found on this page.',
     [ErrorCode.DOM_ANALYSIS_FAILED]: 'Failed to analyze page structure. Please try again.',
-    
-    [ErrorCode.STORAGE_QUOTA_EXCEEDED]: 'Storage quota exceeded. Please delete some history items to free up space.',
+
+    [ErrorCode.STORAGE_QUOTA_EXCEEDED]:
+      'Storage quota exceeded. Please delete some history items to free up space.',
     [ErrorCode.STORAGE_ERROR]: 'Storage operation failed. Please try again.',
     [ErrorCode.STORAGE_READ_ERROR]: 'Failed to read from storage. Please try again.',
     [ErrorCode.STORAGE_WRITE_ERROR]: 'Failed to write to storage. Please try again.',
-    
+
     [ErrorCode.INVALID_CONFIG]: 'Invalid configuration. Please check your settings.',
     [ErrorCode.MISSING_API_KEY]: 'API key is missing. Please configure your API key in settings.',
     [ErrorCode.INVALID_API_URL]: 'Invalid API URL. Please check your API configuration.',
     [ErrorCode.INVALID_MODEL]: 'Invalid model configuration. Please check your model settings.',
-    
+
     [ErrorCode.TASK_NOT_FOUND]: 'Task not found. It may have been cancelled or completed.',
     [ErrorCode.TASK_ALREADY_RUNNING]: 'A task is already running. Please wait for it to complete.',
     [ErrorCode.TASK_CANCELLED]: 'Task was cancelled.',
-    
+
     [ErrorCode.UNKNOWN_ERROR]: technicalMessage || 'An unknown error occurred. Please try again.',
     [ErrorCode.VALIDATION_ERROR]: 'Validation failed. Please check your input.',
     [ErrorCode.PERMISSION_DENIED]: 'Permission denied. Please check extension permissions.',
@@ -462,6 +463,11 @@ export function createConfigError(code: ErrorCode, message: string, details?: an
 /**
  * Create an extraction error
  */
-export function createExtractionError(code: ErrorCode, message: string, details?: any): ExtensionError {
+export function createExtractionError(
+  code: ErrorCode,
+  message: string,
+  details?: any,
+): ExtensionError {
   return new ExtensionError(code, message, details, false);
 }
+import { ICONS, TEXT } from '@/config/constants';

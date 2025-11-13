@@ -5,10 +5,12 @@ import { StorageManager } from './StorageManager';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
 import { ScraperConfigManager } from '../utils/ScraperConfigManager';
-import { 
-  generateScraperConfigPrompt, 
-  SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT 
+import {
+  generateScraperConfigPrompt,
+  SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT,
 } from '../utils/prompts-scraper';
+import { REGEX, HOST, MESSAGES } from '@/config/constants';
+import i18n from '../utils/i18n';
 
 /**
  * MessageRouter handles all incoming messages and routes them
@@ -18,7 +20,7 @@ export class MessageRouter {
   constructor(
     private taskManager: TaskManager,
     private aiService: AIService,
-    private storageManager: StorageManager
+    private storageManager: StorageManager,
   ) {}
 
   /**
@@ -27,100 +29,97 @@ export class MessageRouter {
    * @param sender - Message sender
    * @returns Response data
    */
-  async handleMessage(
-    message: Message,
-    sender: chrome.runtime.MessageSender
-  ): Promise<any> {
-    Logger.debug('[MessageRouter] Handling message', { 
-      type: message.type, 
-      hasPayload: !!message.payload 
+  async handleMessage(message: Message, sender: chrome.runtime.MessageSender): Promise<any> {
+    Logger.debug('[MessageRouter] Handling message', {
+      type: message.type,
+      hasPayload: !!message.payload,
     });
 
     try {
       switch (message.type) {
-        case 'PING':
+        case MESSAGES.PING:
           return this.handlePing();
 
-        case 'START_EXTRACTION':
+        case MESSAGES.START_EXTRACTION:
           return await this.handleStartExtraction(message, sender);
 
-        case 'AI_EXTRACT_COMMENTS':
+        case MESSAGES.AI_EXTRACT_COMMENTS:
           return await this.handleAIExtractComments(message);
 
-        case 'AI_EXTRACT_PROGRESSIVE':
+        case MESSAGES.AI_EXTRACT_PROGRESSIVE:
           return await this.handleAIExtractProgressive(message);
 
-        case 'AI_ANALYZE_STRUCTURE':
+        case MESSAGES.AI_ANALYZE_STRUCTURE:
           return await this.handleAIAnalyzeStructure(message);
 
-        case 'EXTRACTION_PROGRESS':
+        case MESSAGES.EXTRACTION_PROGRESS:
           return this.handleExtractionProgress(message);
 
-        case 'START_ANALYSIS':
+        case MESSAGES.START_ANALYSIS:
           return await this.handleStartAnalysis(message);
 
-        case 'GET_TASK_STATUS':
+        case MESSAGES.GET_TASK_STATUS:
           return this.handleGetTaskStatus(message);
 
-        case 'CANCEL_TASK':
+        case MESSAGES.CANCEL_TASK:
           return this.handleCancelTask(message);
 
-        case 'GET_SETTINGS':
+        case MESSAGES.GET_SETTINGS:
           return await this.handleGetSettings();
 
-        case 'SAVE_SETTINGS':
+        case MESSAGES.SAVE_SETTINGS:
           return await this.handleSaveSettings(message);
 
-        case 'GET_HISTORY':
+        case MESSAGES.GET_HISTORY:
           return await this.handleGetHistory(message);
 
-        case 'GET_HISTORY_BY_URL':
+        case MESSAGES.GET_HISTORY_BY_URL:
           return await this.handleGetHistoryByUrl(message);
 
-        case 'EXPORT_DATA':
+        case MESSAGES.EXPORT_DATA:
           return await this.handleExportData(message);
 
-        case 'DELETE_HISTORY':
+        case MESSAGES.DELETE_HISTORY:
           return await this.handleDeleteHistory(message);
 
-        case 'CLEAR_ALL_HISTORY':
+        case MESSAGES.CLEAR_ALL_HISTORY:
           return await this.handleClearAllHistory();
 
-        case 'GET_AVAILABLE_MODELS':
+        case MESSAGES.GET_AVAILABLE_MODELS:
           return await this.handleGetAvailableModels(message);
 
-        case 'TEST_MODEL':
+        case MESSAGES.TEST_MODEL:
           return await this.handleTestModel(message);
 
-        case 'CHECK_SCRAPER_CONFIG':
+        case MESSAGES.CHECK_SCRAPER_CONFIG:
           return await this.handleCheckScraperConfig(message);
 
-        case 'GENERATE_SCRAPER_CONFIG':
+        case MESSAGES.GENERATE_SCRAPER_CONFIG:
           return await this.handleGenerateScraperConfig(message, sender);
 
-        case 'GET_SCRAPER_CONFIGS':
+        case MESSAGES.GET_SCRAPER_CONFIGS:
           return await this.handleGetScraperConfigs();
 
-        case 'SAVE_SCRAPER_CONFIG':
+        case MESSAGES.SAVE_SCRAPER_CONFIG:
           return await this.handleSaveScraperConfig(message);
 
-        case 'DELETE_SCRAPER_CONFIG':
+        case MESSAGES.DELETE_SCRAPER_CONFIG:
           return await this.handleDeleteScraperConfig(message);
 
-        case 'UPDATE_SELECTOR_VALIDATION':
+        case MESSAGES.UPDATE_SELECTOR_VALIDATION:
           return await this.handleUpdateSelectorValidation(message);
 
         default:
           throw new ExtensionError(
             ErrorCode.VALIDATION_ERROR,
             `Unknown message type: ${message.type}`,
-            { type: message.type }
+            { type: message.type },
           );
       }
     } catch (error) {
       await ErrorHandler.handleError(
         error as Error,
-        `MessageRouter.handleMessage(${message.type})`
+        `MessageRouter.handleMessage(${message.type})`,
       );
       throw error;
     }
@@ -138,7 +137,7 @@ export class MessageRouter {
    */
   private async handleStartExtraction(
     message: Message,
-    sender: chrome.runtime.MessageSender
+    sender: chrome.runtime.MessageSender,
   ): Promise<any> {
     const { url, maxComments } = message.payload || {};
 
@@ -156,10 +155,10 @@ export class MessageRouter {
     }
 
     const taskId = this.taskManager.createTask('extract', url, domain);
-    
+
     // Get tab ID - either from sender or current active tab
     let tabId = sender.tab?.id;
-    
+
     // If no tab ID (e.g., message from popup), get the active tab
     if (!tabId) {
       try {
@@ -169,18 +168,18 @@ export class MessageRouter {
         console.error('[MessageRouter] Failed to get active tab:', error);
       }
     }
-    
+
     // Get maxComments from settings if not provided
     let finalMaxComments = maxComments;
     if (!finalMaxComments) {
       const settings = await this.storageManager.getSettings();
       finalMaxComments = settings.maxComments || 100;
     }
-    
+
     console.log('[MessageRouter] Starting extraction with maxComments:', finalMaxComments);
-    
+
     // Start the extraction task asynchronously
-    this.startExtractionTask(taskId, tabId, finalMaxComments).catch(error => {
+    this.startExtractionTask(taskId, tabId, finalMaxComments).catch((error) => {
       console.error('[MessageRouter] Extraction task failed:', error);
       this.taskManager.failTask(taskId, error.message);
     });
@@ -192,38 +191,18 @@ export class MessageRouter {
    * Handle AI extract comments message (from content script)
    */
   private async handleAIExtractComments(message: Message): Promise<any> {
-    // Content script sends 'data' instead of 'payload'
     const payload = (message as any).data || message.payload || {};
-    const { prompt } = payload;
+    const { domStructure } = payload;
 
-    if (!prompt) {
-      throw new Error('Prompt is required');
+    if (!domStructure) {
+      throw new Error('DOM structure is required');
     }
 
     try {
       // Get settings for AI configuration
       const settings = await this.storageManager.getSettings();
-      
-      // Call AI service to extract comments
-      const response = await this.aiService.callAI({
-        prompt,
-        config: settings.extractorModel
-      });
 
-      // Parse JSON response
-      let comments = [];
-      try {
-        // Remove markdown code blocks if present
-        let jsonText = response.content.trim();
-        if (jsonText.startsWith('```')) {
-          jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
-        }
-        comments = JSON.parse(jsonText);
-      } catch (parseError) {
-        console.error('[MessageRouter] Failed to parse AI response:', parseError);
-        throw new Error('AI returned invalid JSON');
-      }
-
+      const comments = await this.aiService.extractComments(domStructure, settings.extractorModel);
       return { comments };
     } catch (error) {
       console.error('[MessageRouter] AI extraction failed:', error);
@@ -245,11 +224,11 @@ export class MessageRouter {
     try {
       // Get settings for AI configuration
       const settings = await this.storageManager.getSettings();
-      
+
       // Call AI service
       const response = await this.aiService.callAI({
         prompt,
-        config: settings.extractorModel
+        config: settings.extractorModel,
       });
 
       // Parse JSON response
@@ -258,18 +237,21 @@ export class MessageRouter {
         // Remove markdown code blocks if present
         let jsonText = response.content.trim();
         if (jsonText.startsWith('```')) {
-          jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          jsonText = jsonText
+            .replace(REGEX.MD_CODE_JSON_START, '')
+            .replace(REGEX.MD_CODE_ANY_END, '')
+            .trim();
         }
-        
+
         // Remove any leading/trailing text that's not JSON
         const jsonStart = jsonText.indexOf('{');
         const jsonEnd = jsonText.lastIndexOf('}');
         if (jsonStart !== -1 && jsonEnd !== -1) {
           jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
         }
-        
+
         data = JSON.parse(jsonText);
-        
+
         // Validate response structure
         if (!data.comments || !Array.isArray(data.comments)) {
           data.comments = [];
@@ -286,33 +268,32 @@ export class MessageRouter {
         if (!data.analysis) {
           data.analysis = '';
         }
-        
       } catch (parseError) {
         console.error('[MessageRouter] Failed to parse AI progressive response:', parseError);
         console.error('[MessageRouter] Raw response:', response.content);
-        
+
         // Return empty response instead of failing
         data = {
           comments: [],
           nodesToExpand: [],
           needsScroll: false,
           completed: true,
-          analysis: 'Failed to parse AI response'
+          analysis: 'Failed to parse AI response',
         };
       }
 
       return { data };
     } catch (error) {
       console.error('[MessageRouter] AI progressive extraction failed:', error);
-      return { 
+      return {
         error: error instanceof Error ? error.message : 'Unknown error',
         data: {
           comments: [],
           nodesToExpand: [],
           needsScroll: false,
           completed: true,
-          analysis: 'Error occurred'
-        }
+          analysis: 'Error occurred',
+        },
       };
     }
   }
@@ -329,53 +310,52 @@ export class MessageRouter {
     }
 
     try {
-      // Get settings for AI configuration
       const settings = await this.storageManager.getSettings();
-      
-      // Call AI service with system prompt for JSON output
-      const response = await this.aiService.callAI({
-        prompt,
-        systemPrompt: 'You are a web scraping expert. You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start your response with { and end with }.',
-        config: settings.extractorModel
-      });
-
-      // Parse JSON response
-      let data;
-      try {
-        // Remove markdown code blocks if present
-        let jsonText = response.content.trim();
-        if (jsonText.startsWith('```')) {
-          jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const chunks = this.chunkDomText(prompt, settings.extractorModel.maxTokens ?? 4000);
+      const aggregated: any = {
+        selectors: {},
+        structure: { hasReplies: false, repliesNested: true, needsExpand: false },
+        confidence: 0,
+      };
+      for (let i = 0; i < chunks.length; i++) {
+        const response = await this.aiService.callAI({
+          prompt: chunks[i],
+          systemPrompt:
+            'You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start with { and end with }.',
+          config: settings.extractorModel,
+        });
+        try {
+          let jsonText = response.content.trim();
+          if (jsonText.startsWith('```')) {
+            jsonText = jsonText
+              .replace(REGEX.MD_CODE_JSON_START, '')
+              .replace(REGEX.MD_CODE_ANY_END, '')
+              .trim();
+          }
+          const jsonStart = jsonText.indexOf('{');
+          const jsonEnd = jsonText.lastIndexOf('}');
+          if (jsonStart !== -1 && jsonEnd !== -1) {
+            jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+          }
+          const data = JSON.parse(jsonText);
+          if (data.selectors && typeof data.selectors === 'object') {
+            aggregated.selectors = { ...aggregated.selectors, ...data.selectors };
+          }
+          if (data.structure) aggregated.structure = data.structure;
+          if (typeof data.confidence === 'number')
+            aggregated.confidence = Math.max(aggregated.confidence, data.confidence);
+        } catch (e) {
+          console.warn('[MessageRouter] Failed to parse AI structure part', {
+            part: i + 1,
+            error: e,
+          });
         }
-        
-        // Remove any leading/trailing text that's not JSON
-        const jsonStart = jsonText.indexOf('{');
-        const jsonEnd = jsonText.lastIndexOf('}');
-        if (jsonStart !== -1 && jsonEnd !== -1) {
-          jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
-        }
-        
-        data = JSON.parse(jsonText);
-        
-        // Validate response structure
-        if (!data.selectors) {
-          throw new Error('Missing selectors in response');
-        }
-        if (typeof data.confidence !== 'number') {
-          data.confidence = 0.5;
-        }
-        
-      } catch (parseError) {
-        console.error('[MessageRouter] Failed to parse AI structure analysis:', parseError);
-        console.error('[MessageRouter] Raw response:', response.content);
-        throw new Error('Failed to parse AI response');
       }
-
-      return { data };
+      return { data: aggregated };
     } catch (error) {
       console.error('[MessageRouter] AI structure analysis failed:', error);
-      return { 
-        error: error instanceof Error ? error.message : 'Unknown error'
+      return {
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -415,9 +395,9 @@ export class MessageRouter {
     }
 
     const taskId = this.taskManager.createTask('analyze', url || 'unknown', domain);
-    
+
     // Start the analysis task asynchronously
-    this.startAnalysisTask(taskId, comments, historyId).catch(error => {
+    this.startAnalysisTask(taskId, comments, historyId).catch((error) => {
       console.error('[MessageRouter] Analysis task failed:', error);
       this.taskManager.failTask(taskId, error.message);
     });
@@ -510,8 +490,8 @@ export class MessageRouter {
     }
 
     const history = await this.storageManager.getHistory();
-    const item = history.find(h => h.url === url);
-    
+    const item = history.find((h) => h.url === url);
+
     return { item: item || null };
   }
 
@@ -548,12 +528,12 @@ export class MessageRouter {
    */
   private async handleClearAllHistory(): Promise<any> {
     const history = await this.storageManager.getHistory();
-    
+
     // Delete all history items
     for (const item of history) {
       await this.storageManager.deleteHistoryItem(item.id);
     }
-    
+
     return { success: true, count: history.length };
   }
 
@@ -590,23 +570,23 @@ export class MessageRouter {
       // Send a simple test prompt to the model
       const response = await this.aiService.callAI({
         prompt: 'Hello! Please respond with "OK" if you can read this message.',
-        config: config
+        config: config,
       });
 
       if (response && response.content) {
-        return { 
-          success: true, 
+        return {
+          success: true,
           message: 'Model is working correctly',
-          response: response.content.substring(0, 100) // Return first 100 chars of response
+          response: response.content.substring(0, 100), // Return first 100 chars of response
         };
       } else {
         throw new Error('No response from model');
       }
     } catch (error) {
       console.error('[MessageRouter] Model test failed:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }
@@ -617,7 +597,7 @@ export class MessageRouter {
   private async startExtractionTask(
     taskId: string,
     tabId: number | undefined,
-    maxComments: number
+    maxComments: number,
   ): Promise<void> {
     await this.taskManager.startTask(taskId);
 
@@ -629,7 +609,7 @@ export class MessageRouter {
       // Send message to content script to start extraction
       const response = await chrome.tabs.sendMessage(tabId, {
         type: 'START_EXTRACTION',
-        data: { taskId, maxComments }
+        data: { taskId, maxComments },
       });
 
       if (!response.success) {
@@ -656,7 +636,10 @@ export class MessageRouter {
         await this.storageManager.saveHistory(historyItem);
       }
 
-      this.taskManager.completeTask(taskId, { tokensUsed: 0, commentsCount: comments?.length || 0 });
+      this.taskManager.completeTask(taskId, {
+        tokensUsed: 0,
+        commentsCount: comments?.length || 0,
+      });
     } catch (error) {
       throw error;
     }
@@ -668,14 +651,14 @@ export class MessageRouter {
   private async startAnalysisTask(
     taskId: string,
     comments: any[],
-    historyId?: string
+    historyId?: string,
   ): Promise<void> {
     await this.taskManager.startTask(taskId);
 
     try {
       // Get settings for AI configuration
       const settings = await this.storageManager.getSettings();
-      
+
       this.taskManager.updateTaskProgress(taskId, 25);
 
       // Get history item to extract metadata
@@ -683,7 +666,7 @@ export class MessageRouter {
       let url = 'N/A';
       let title = 'Untitled';
       let videoTime = 'N/A';
-      
+
       if (historyId) {
         const historyItem = await this.storageManager.getHistoryItem(historyId);
         if (historyItem) {
@@ -712,7 +695,7 @@ export class MessageRouter {
           url,
           title,
           videoTime,
-        }
+        },
       );
 
       this.taskManager.updateTaskProgress(taskId, 75);
@@ -743,7 +726,10 @@ export class MessageRouter {
         }
       }
 
-      this.taskManager.completeTask(taskId, { tokensUsed: result.tokensUsed, commentsCount: comments.length });
+      this.taskManager.completeTask(taskId, {
+        tokensUsed: result.tokensUsed,
+        commentsCount: comments.length,
+      });
     } catch (error) {
       throw error;
     }
@@ -766,11 +752,14 @@ export class MessageRouter {
       console.log('[MessageRouter] Calling findMatchingConfig...');
       const config = await ScraperConfigManager.findMatchingConfig(url);
       console.log('[MessageRouter] findMatchingConfig result:', config ? 'Found' : 'Not found');
-      
+
       return { hasConfig: !!config, config };
     } catch (error) {
       console.error('[MessageRouter] Failed to check scraper config:', error);
-      console.error('[MessageRouter] Error stack:', error instanceof Error ? error.stack : 'No stack');
+      console.error(
+        '[MessageRouter] Error stack:',
+        error instanceof Error ? error.stack : 'No stack',
+      );
       return { hasConfig: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
@@ -780,7 +769,7 @@ export class MessageRouter {
    */
   private async handleGenerateScraperConfig(
     message: Message,
-    sender: chrome.runtime.MessageSender
+    sender: chrome.runtime.MessageSender,
   ): Promise<any> {
     const { url, title } = message.payload || {};
 
@@ -802,71 +791,89 @@ export class MessageRouter {
 
       // Request DOM structure from content script
       const domResponse = await chrome.tabs.sendMessage(tabId, {
-        type: 'GET_DOM_STRUCTURE',
+        type: MESSAGES.GET_DOM_STRUCTURE,
       });
 
       if (!domResponse?.domStructure) {
         throw new Error('Failed to get DOM structure');
       }
 
-      // Generate prompt for AI
-      const prompt = generateScraperConfigPrompt(
-        domResponse.domStructure,
-        url,
-        title || 'Untitled'
-      );
-
-      // Get settings for AI configuration
       const settings = await this.storageManager.getSettings();
-
-      // Call AI to generate config
-      const response = await this.aiService.callAI({
-        prompt,
-        systemPrompt: SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT,
-        config: settings.extractorModel,
-      });
-
-      // Parse AI response
-      let configData;
-      try {
-        let jsonText = response.content.trim();
-        if (jsonText.startsWith('```')) {
-          jsonText = jsonText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      const chunks = this.chunkDomText(
+        domResponse.domStructure,
+        settings.extractorModel.maxTokens ?? 4000,
+      );
+      let configData: any = {
+        name: '',
+        domains: [],
+        urlPatterns: [],
+        selectors: {},
+        scrollConfig: undefined,
+      };
+      for (let i = 0; i < chunks.length; i++) {
+        const prompt = generateScraperConfigPrompt(
+          chunks[i],
+          url,
+          title || i18n.t('common.untitled'),
+        );
+        const response = await this.aiService.callAI({
+          prompt,
+          systemPrompt: SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT,
+          config: settings.extractorModel,
+        });
+        try {
+          let jsonText = response.content.trim();
+          if (jsonText.startsWith('```')) {
+            jsonText = jsonText
+              .replace(REGEX.MD_CODE_JSON_START, '')
+              .replace(REGEX.MD_CODE_ANY_END, '')
+              .trim();
+          }
+          const jsonStart = jsonText.indexOf('{');
+          const jsonEnd = jsonText.lastIndexOf('}');
+          if (jsonStart !== -1 && jsonEnd !== -1) {
+            jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+          }
+          const part = JSON.parse(jsonText);
+          if (part.domains)
+            configData.domains = Array.from(
+              new Set([...(configData.domains || []), ...part.domains]),
+            );
+          if (part.urlPatterns)
+            configData.urlPatterns = Array.from(
+              new Set([...(configData.urlPatterns || []), ...part.urlPatterns]),
+            );
+          if (part.selectors)
+            configData.selectors = { ...(configData.selectors || {}), ...part.selectors };
+          if (part.scrollConfig) configData.scrollConfig = part.scrollConfig;
+          if (part.name && !configData.name) configData.name = part.name;
+        } catch (e) {
+          console.warn('[MessageRouter] Failed to parse config part', { part: i + 1, error: e });
         }
-        
-        const jsonStart = jsonText.indexOf('{');
-        const jsonEnd = jsonText.lastIndexOf('}');
-        if (jsonStart !== -1 && jsonEnd !== -1) {
-          jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
-        }
-        
-        configData = JSON.parse(jsonText);
-      } catch (parseError) {
-        console.error('[MessageRouter] Failed to parse AI config response:', parseError);
-        throw new Error('AI returned invalid configuration format');
       }
 
       // Extract domain from URL as fallback
       let domain: string;
       try {
         const urlObj = new URL(url);
-        domain = urlObj.hostname.replace('www.', '');
+        domain = urlObj.hostname.replace(HOST.WWW_PREFIX, '');
       } catch (e) {
         // Fallback: extract domain manually
-        const match = url.match(/^(?:https?:\/\/)?(?:www\.)?([^\/\?#]+)/i);
+        const match = url.match(REGEX.DOMAIN_EXTRACT);
         domain = match ? match[1] : 'unknown';
       }
 
       // Use AI-generated domains and urlPatterns if available, otherwise use fallback
-      const domains = configData.domains && configData.domains.length > 0 
-        ? configData.domains 
-        : [domain, `www.${domain}`];
-      
+      const domains =
+        configData.domains && configData.domains.length > 0
+          ? configData.domains
+          : [domain, `www.${domain}`];
+
       const urlPatterns = configData.urlPatterns || [];
 
       // Create scraper config
       const config = await ScraperConfigManager.create({
-        name: `${domain} - Auto-generated`,
+        name: configData.name || `${domain} - Auto-generated`,
         domains,
         urlPatterns,
         selectors: configData.selectors,
@@ -876,11 +883,40 @@ export class MessageRouter {
       return { success: true, config };
     } catch (error) {
       console.error('[MessageRouter] Failed to generate scraper config:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
+  }
+
+  private chunkDomText(structure: string, maxTokens: number): string[] {
+    const reserveRatio = 0.4;
+    const limit = Math.max(200, Math.floor(maxTokens * (1 - reserveRatio)));
+    const estimate = (text: string): number => {
+      const cleaned = text.replace(/\s+/g, ' ').trim();
+      const words = cleaned ? cleaned.split(/\s+/).length : 0;
+      const punct = (cleaned.match(/[,.!?;:]/g) || []).length;
+      const chars = cleaned.length;
+      const approx = Math.ceil(words * 0.75 + punct * 0.25 + chars / 10);
+      return Math.max(1, approx);
+    };
+    const parts: string[] = [];
+    let current: string[] = [];
+    let tokens = 0;
+    for (const line of structure.split('\n')) {
+      const t = estimate(line) + 1;
+      if (tokens + t > limit && current.length > 0) {
+        parts.push(current.join('\n'));
+        current = [line];
+        tokens = t;
+      } else {
+        current.push(line);
+        tokens += t;
+      }
+    }
+    if (current.length > 0) parts.push(current.join('\n'));
+    return parts.length > 0 ? parts : [structure];
   }
 
   /**
@@ -918,9 +954,9 @@ export class MessageRouter {
       }
     } catch (error) {
       console.error('[MessageRouter] Failed to save scraper config:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
   }

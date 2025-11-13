@@ -143,22 +143,23 @@ export function buildAnalysisPrompt(
     title?: string;
     totalComments?: number;
     language?: string;
-  }
+  },
 ): string {
   // Add language instruction
-  const languageInstruction = metadata?.language === 'zh-CN' 
-    ? '\n\n## Language Requirement:\nYou MUST write the entire analysis in Chinese (简体中文). All sections, insights, and summaries must be in Chinese.'
-    : '\n\n## Language Requirement:\nYou MUST write the entire analysis in English.';
-  
-  let prompt = template
-    .replace('{comments_json}', commentsJson)
-    .replace(/{datetime}/g, metadata?.datetime || new Date().toISOString())
-    .replace(/{video_time}/g, metadata?.videoTime || 'N/A')
-    .replace(/{platform}/g, metadata?.platform || 'Unknown Platform')
-    .replace(/{url}/g, metadata?.url || 'N/A')
-    .replace(/{title}/g, metadata?.title || 'Untitled')
-    .replace('{total_comments}', String(metadata?.totalComments || 0))
-    + languageInstruction;
+  const languageInstruction =
+    metadata?.language === 'zh-CN'
+      ? '\n\n## Language Requirement:\nYou MUST write the entire analysis in Chinese (简体中文). All sections, insights, and summaries must be in Chinese.'
+      : '\n\n## Language Requirement:\nYou MUST write the entire analysis in English.';
+
+  let prompt =
+    template
+      .replace('{comments_json}', commentsJson)
+      .replace(/{datetime}/g, metadata?.datetime || new Date().toISOString())
+      .replace(/{video_time}/g, metadata?.videoTime || 'N/A')
+      .replace(/{platform}/g, metadata?.platform || 'Unknown Platform')
+      .replace(/{url}/g, metadata?.url || 'N/A')
+      .replace(/{title}/g, metadata?.title || 'Untitled')
+      .replace('{total_comments}', String(metadata?.totalComments || 0)) + languageInstruction;
 
   return prompt;
 }
@@ -187,42 +188,53 @@ export function validatePromptTemplate(template: string): boolean {
  * Get available placeholders for prompt templates
  * @returns List of available placeholders with descriptions
  */
-export function getAvailablePlaceholders(): Array<{ key: string; description: string; detailedDescription: string }> {
+export function getAvailablePlaceholders(): Array<{
+  key: string;
+  description: string;
+  detailedDescription: string;
+}> {
   return [
-    { 
-      key: '{comments_json}', 
+    {
+      key: '{comments_json}',
       description: 'Comments data in JSON format (required)',
-      detailedDescription: 'The complete comments data structure in JSON format, including all comment fields like username, content, timestamp, likes, and nested replies. This is the main data source for analysis.'
+      detailedDescription:
+        'The complete comments data structure in JSON format, including all comment fields like username, content, timestamp, likes, and nested replies. This is the main data source for analysis.',
     },
-    { 
-      key: '{datetime}', 
+    {
+      key: '{datetime}',
       description: 'Current analysis date and time',
-      detailedDescription: 'The current date and time when the analysis is being performed. Format: ISO 8601 (e.g., 2024-01-15T10:30:00Z)'
+      detailedDescription:
+        'The current date and time when the analysis is being performed. Format: ISO 8601 (e.g., 2024-01-15T10:30:00Z)',
     },
-    { 
-      key: '{video_time}', 
+    {
+      key: '{video_time}',
       description: 'Video/post publication date and time',
-      detailedDescription: 'The date and time when the video or post was originally published. This is extracted from the page using the videoTime selector in scraper config. Helps provide temporal context for understanding comment trends over time.'
+      detailedDescription:
+        'The date and time when the video or post was originally published. This is extracted from the page using the videoTime selector in scraper config. Helps provide temporal context for understanding comment trends over time.',
     },
-    { 
-      key: '{platform}', 
+    {
+      key: '{platform}',
       description: 'Platform/domain name',
-      detailedDescription: 'The platform or domain where the comments were extracted from (e.g., youtube.com, twitter.com, reddit.com). This helps the AI understand platform-specific comment patterns and culture.'
+      detailedDescription:
+        'The platform or domain where the comments were extracted from (e.g., youtube.com, twitter.com, reddit.com). This helps the AI understand platform-specific comment patterns and culture.',
     },
-    { 
-      key: '{url}', 
+    {
+      key: '{url}',
       description: 'Post/video URL',
-      detailedDescription: 'The complete URL of the post or video being analyzed. This provides context about the source and can be used for reference in the analysis report.'
+      detailedDescription:
+        'The complete URL of the post or video being analyzed. This provides context about the source and can be used for reference in the analysis report.',
     },
-    { 
-      key: '{title}', 
+    {
+      key: '{title}',
       description: 'Post/video title',
-      detailedDescription: 'The title or headline of the post/video. This is crucial context for understanding what the comments are discussing and helps the AI provide more relevant analysis.'
+      detailedDescription:
+        'The title or headline of the post/video. This is crucial context for understanding what the comments are discussing and helps the AI provide more relevant analysis.',
     },
-    { 
-      key: '{total_comments}', 
+    {
+      key: '{total_comments}',
       description: 'Total number of comments',
-      detailedDescription: 'The total count of comments being analyzed (including all nested replies). This helps the AI understand the scale of engagement and adjust its analysis accordingly.'
+      detailedDescription:
+        'The total count of comments being analyzed (including all nested replies). This helps the AI understand the scale of engagement and adjust its analysis accordingly.',
     },
   ];
 }

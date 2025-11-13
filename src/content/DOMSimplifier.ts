@@ -16,15 +16,13 @@ export class DOMSimplifier {
   simplifyElement(
     element: Element,
     maxDepth: number = 2,
-    currentDepth: number = 0
+    currentDepth: number = 0,
   ): SimplifiedNode {
     const shouldExpand = currentDepth < maxDepth;
-    
+
     // Check for Shadow DOM
     const shadowRoot = (element as any).shadowRoot;
-    const children = shadowRoot 
-      ? Array.from(shadowRoot.children)
-      : Array.from(element.children);
+    const children = shadowRoot ? Array.from(shadowRoot.children) : Array.from(element.children);
 
     const node: SimplifiedNode = {
       tag: element.tagName.toLowerCase(),
@@ -34,9 +32,12 @@ export class DOMSimplifier {
       text: this.getTextPreview(element),
       childCount: children.length,
       expanded: shouldExpand && children.length > 0,
-      children: shouldExpand && children.length > 0
-        ? children.map(child => this.simplifyElement(child as Element, maxDepth, currentDepth + 1))
-        : undefined,
+      children:
+        shouldExpand && children.length > 0
+          ? children.map((child) =>
+              this.simplifyElement(child as Element, maxDepth, currentDepth + 1),
+            )
+          : undefined,
       selector: this.generateSelector(element),
       depth: currentDepth,
     };
@@ -58,13 +59,13 @@ export class DOMSimplifier {
       if (element.classList && element.classList.length > 0) {
         return Array.from(element.classList);
       }
-      
+
       // Fallback to className if it's a string
       const className = element.className;
       if (typeof className === 'string' && className.trim()) {
         return className.split(/\s+/).filter(Boolean);
       }
-      
+
       return undefined;
     } catch (error) {
       console.warn('[DOMSimplifier] Failed to get classes:', error);
@@ -76,7 +77,14 @@ export class DOMSimplifier {
    * Get key attributes that might help identify comment elements
    */
   private getKeyAttributes(element: Element): Record<string, string> | undefined {
-    const keyAttrs = ['data-id', 'data-comment-id', 'data-cid', 'data-testid', 'role', 'aria-label'];
+    const keyAttrs = [
+      'data-id',
+      'data-comment-id',
+      'data-cid',
+      'data-testid',
+      'role',
+      'aria-label',
+    ];
     const attrs: Record<string, string> = {};
     let hasAttrs = false;
 
@@ -185,7 +193,10 @@ export class DOMSimplifier {
    * @param selector - CSS selector
    * @returns Found element or null
    */
-  private querySelectorDeep(root: Document | Element | ShadowRoot, selector: string): Element | null {
+  private querySelectorDeep(
+    root: Document | Element | ShadowRoot,
+    selector: string,
+  ): Element | null {
     // Try to find in current root
     const element = root.querySelector(selector);
     if (element) {
@@ -271,7 +282,7 @@ export class DOMSimplifier {
     if (tree.children) {
       return {
         ...tree,
-        children: tree.children.map(child => this.updateTreeWithExpanded(child, expanded)),
+        children: tree.children.map((child) => this.updateTreeWithExpanded(child, expanded)),
       };
     }
 
@@ -283,7 +294,7 @@ export class DOMSimplifier {
    */
   expandMultipleNodes(selectors: string[], depth: number = 2): Map<string, SimplifiedNode | null> {
     const results = new Map<string, SimplifiedNode | null>();
-    
+
     for (const selector of selectors) {
       results.set(selector, this.expandNode(selector, depth));
     }
@@ -303,7 +314,7 @@ export class DOMSimplifier {
       maxDepth?: number;
       maxNodes?: number;
       includeText?: boolean;
-    } = {}
+    } = {},
   ): SimplifiedNode {
     const { maxDepth = 10 } = options;
     const simplifier = new DOMSimplifier();

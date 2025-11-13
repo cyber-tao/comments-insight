@@ -16,12 +16,12 @@ if (!fs.existsSync(iconsDir)) {
 // This is a base64 encoded 1x1 transparent PNG
 const transparentPNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-  'base64'
+  'base64',
 );
 
 const sizes = [16, 48, 128];
 
-sizes.forEach(size => {
+sizes.forEach((size) => {
   const filename = `icon-${size}.png`;
   const filepath = path.join(iconsDir, filename);
   fs.writeFileSync(filepath, transparentPNG);

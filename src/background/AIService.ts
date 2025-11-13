@@ -1,13 +1,14 @@
 import { AIConfig, AIRequest, AIResponse, Comment, AnalysisResult } from '../types';
 import { buildExtractionPrompt, buildAnalysisPrompt } from '../utils/prompts';
 import { Logger } from '../utils/logger';
-import { 
-  ErrorHandler, 
-  ExtensionError, 
-  ErrorCode, 
-  createAIError, 
-  createNetworkError 
+import {
+  ErrorHandler,
+  ExtensionError,
+  ErrorCode,
+  createAIError,
+  createNetworkError,
 } from '../utils/errors';
+import { AI as AI_CONST, REGEX, LOG_PREFIX } from '@/config/constants';
 
 /**
  * AIService handles all AI-related operations including
@@ -15,8 +16,11 @@ import {
  */
 export class AIService {
   private currentLanguage: string = 'en-US';
-  
-  private logToFile(type: 'extraction' | 'analysis', data: { prompt: string; response: string; timestamp: number}) {
+
+  private logToFile(
+    type: 'extraction' | 'analysis',
+    data: { prompt: string; response: string; timestamp: number },
+  ) {
     // Log to console with a special format that can be easily identified
     Logger.debug(`[AI_LOG_${type.toUpperCase()}]`, {
       timestamp: data.timestamp,
@@ -26,17 +30,19 @@ export class AIService {
       promptLength: data.prompt.length,
       responseLength: data.response.length,
     });
-    
+
     // Save full log to chrome.storage.local
-    const logKey = `ai_log_${type}_${data.timestamp}`;
-    chrome.storage.local.set({
-      [logKey]: {
-        type,
-        timestamp: data.timestamp,
-        prompt: data.prompt,
-        response: data.response,
-      }
-    }).catch(err => Logger.error('[AIService] Failed to save log:', err));
+    const logKey = `${LOG_PREFIX.AI}${type}_${data.timestamp}`;
+    chrome.storage.local
+      .set({
+        [logKey]: {
+          type,
+          timestamp: data.timestamp,
+          prompt: data.prompt,
+          response: data.response,
+        },
+      })
+      .catch((err) => Logger.error('[AIService] Failed to save log:', err));
   }
   /**
    * Call AI API with the given request
@@ -46,124 +52,127 @@ export class AIService {
   async callAI(request: AIRequest): Promise<AIResponse> {
     const { prompt, systemPrompt, config } = request;
 
-    return await ErrorHandler.withRetry(async () => {
-      try {
-        // Validate configuration
-        if (!config.apiUrl || !config.apiKey) {
-          throw createAIError(
-            ErrorCode.MISSING_API_KEY,
-            'API URL and API Key are required',
-            { hasUrl: !!config.apiUrl, hasKey: !!config.apiKey }
-          );
-        }
-
-        // Ensure API URL ends with /chat/completions
-        let apiUrl = config.apiUrl.trim();
-        if (!apiUrl.endsWith('/chat/completions')) {
-          apiUrl = apiUrl.replace(/\/$/, '') + '/chat/completions';
-        }
-        
-        Logger.info('[AIService] Calling AI API', { 
-          url: apiUrl, 
-          model: config.model,
-          promptLength: prompt.length 
-        });
-
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${config.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: config.model,
-            messages: [
-              ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-              { role: 'user', content: prompt },
-            ],
-            max_tokens: config.maxTokens,
-            temperature: config.temperature,
-            top_p: config.topP,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          
-          // Determine specific error type
-          if (response.status === 429) {
-            throw createAIError(
-              ErrorCode.AI_RATE_LIMIT,
-              'Rate limit exceeded',
-              { status: response.status, response: errorText }
-            );
-          } else if (response.status === 404) {
-            throw createAIError(
-              ErrorCode.AI_MODEL_NOT_FOUND,
-              `Model not found: ${config.model}`,
-              { status: response.status, model: config.model }
-            );
-          } else if (response.status === 401 || response.status === 403) {
-            throw createAIError(
-              ErrorCode.MISSING_API_KEY,
-              'Invalid API key or unauthorized',
-              { status: response.status }
-            );
-          } else {
-            throw createAIError(
-              ErrorCode.API_ERROR,
-              `AI API error: ${response.status} - ${errorText}`,
-              { status: response.status, response: errorText }
-            );
+    return await ErrorHandler.withRetry(
+      async () => {
+        try {
+          // Validate configuration
+          if (!config.apiUrl || !config.apiKey) {
+            throw createAIError(ErrorCode.MISSING_API_KEY, 'API URL and API Key are required', {
+              hasUrl: !!config.apiUrl,
+              hasKey: !!config.apiKey,
+            });
           }
-        }
 
-        const data = await response.json();
+          // Ensure API URL ends with /chat/completions
+          let apiUrl = config.apiUrl.trim();
+          if (!apiUrl.endsWith('/chat/completions')) {
+            apiUrl = apiUrl.replace(/\/$/, '') + '/chat/completions';
+          }
 
-        // Extract response content and token usage
-        let content = data.choices?.[0]?.message?.content || '';
-        const tokensUsed = data.usage?.total_tokens || 0;
-        const finishReason = data.choices?.[0]?.finish_reason || 'unknown';
+          Logger.info('[AIService] Calling AI API', {
+            url: apiUrl,
+            model: config.model,
+            promptLength: prompt.length,
+          });
 
-        // Remove <think> tags if present (for thinking models)
-        content = this.removeThinkTags(content);
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${config.apiKey}`,
+            },
+            body: JSON.stringify({
+              model: config.model,
+              messages: [
+                ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+                { role: 'user', content: prompt },
+              ],
+              max_tokens: config.maxTokens,
+              temperature: config.temperature,
+              top_p: config.topP,
+            }),
+          });
 
-        Logger.info('[AIService] AI response received', {
-          tokensUsed,
-          finishReason,
-          contentLength: content.length,
-        });
+          if (!response.ok) {
+            const errorText = await response.text();
 
-        // Log the interaction for debugging
-        const logType = prompt.includes('extract comments') || prompt.includes('DOM Structure') ? 'extraction' : 'analysis';
-        this.logToFile(logType, {
-          prompt,
-          response: content,
-          timestamp: Date.now(),
-        });
+            // Determine specific error type
+            if (response.status === 429) {
+              throw createAIError(ErrorCode.AI_RATE_LIMIT, 'Rate limit exceeded', {
+                status: response.status,
+                response: errorText,
+              });
+            } else if (response.status === 404) {
+              throw createAIError(
+                ErrorCode.AI_MODEL_NOT_FOUND,
+                `Model not found: ${config.model}`,
+                { status: response.status, model: config.model },
+              );
+            } else if (response.status === 401 || response.status === 403) {
+              throw createAIError(ErrorCode.MISSING_API_KEY, 'Invalid API key or unauthorized', {
+                status: response.status,
+              });
+            } else {
+              throw createAIError(
+                ErrorCode.API_ERROR,
+                `AI API error: ${response.status} - ${errorText}`,
+                { status: response.status, response: errorText },
+              );
+            }
+          }
 
-        return {
-          content,
-          tokensUsed,
-          finishReason,
-        };
-      } catch (error) {
-        if (error instanceof ExtensionError) {
+          const data = await response.json();
+
+          // Extract response content and token usage
+          let content = data.choices?.[0]?.message?.content || '';
+          const tokensUsed = data.usage?.total_tokens || 0;
+          const finishReason = data.choices?.[0]?.finish_reason || 'unknown';
+
+          // Remove <think> tags if present (for thinking models)
+          content = this.removeThinkTags(content);
+
+          Logger.info('[AIService] AI response received', {
+            tokensUsed,
+            finishReason,
+            contentLength: content.length,
+          });
+
+          // Log the interaction for debugging
+          const logType =
+            prompt.includes('extract comments') || prompt.includes('DOM Structure')
+              ? 'extraction'
+              : 'analysis';
+          this.logToFile(logType, {
+            prompt,
+            response: content,
+            timestamp: Date.now(),
+          });
+
+          return {
+            content,
+            tokensUsed,
+            finishReason,
+          };
+        } catch (error) {
+          if (error instanceof ExtensionError) {
+            throw error;
+          }
+
+          // Handle network errors
+          if (error instanceof TypeError && error.message.includes('fetch')) {
+            throw createNetworkError('Network request failed', { originalError: error.message });
+          }
+
+          Logger.error('[AIService] AI call failed', { error });
           throw error;
         }
-        
-        // Handle network errors
-        if (error instanceof TypeError && error.message.includes('fetch')) {
-          throw createNetworkError('Network request failed', { originalError: error.message });
-        }
-        
-        Logger.error('[AIService] AI call failed', { error });
-        throw error;
-      }
-    }, 'AIService.callAI', {
-      maxAttempts: 3,
-      initialDelay: 1000,
-    });
+      },
+      'AIService.callAI',
+      {
+        maxAttempts: 3,
+        initialDelay: 1000,
+      },
+    );
   }
 
   /**
@@ -179,19 +188,19 @@ export class AIService {
       // Remove /chat/completions if present
       baseUrl = baseUrl.replace(/\/chat\/completions$/, '');
       const modelsUrl = baseUrl + '/models';
-      
+
       Logger.info('[AIService] Fetching available models', { url: modelsUrl });
 
       const response = await fetch(modelsUrl, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          Authorization: `Bearer ${apiKey}`,
         },
       });
 
       if (!response.ok) {
-        Logger.warn('[AIService] Failed to fetch models, using defaults', { 
-          status: response.status 
+        Logger.warn('[AIService] Failed to fetch models, using defaults', {
+          status: response.status,
         });
         return this.getDefaultModels();
       }
@@ -214,39 +223,31 @@ export class AIService {
    * @returns Extracted comments
    */
   async extractComments(domContent: string, config: AIConfig): Promise<Comment[]> {
-    const prompt = this.buildExtractionPromptWrapper(domContent);
-    
-    const response = await this.callAI({
-      prompt,
-      config,
-    });
+    const maxModelTokens = config.maxTokens ?? 4000;
+    const chunks = this.chunkDomContent(domContent, maxModelTokens);
+    const allComments: Comment[] = [];
 
-    // Parse JSON response
-    try {
-      const comments = JSON.parse(response.content);
-      
-      if (!Array.isArray(comments)) {
-        throw createAIError(
-          ErrorCode.AI_INVALID_RESPONSE,
-          'AI response is not an array',
-          { responseType: typeof comments }
-        );
+    for (let i = 0; i < chunks.length; i++) {
+      const partPrompt = this.buildExtractionPromptWrapper(chunks[i]);
+      const response = await this.callAI({ prompt: partPrompt, config });
+      try {
+        const comments = JSON.parse(response.content);
+        if (Array.isArray(comments)) {
+          allComments.push(...comments);
+        } else {
+          Logger.warn('[AIService] Non-array comments in part', { part: i + 1 });
+        }
+      } catch (error) {
+        Logger.error('[AIService] Failed to parse AI response part', { part: i + 1, error });
+        // Continue with next part
       }
-
-      Logger.info('[AIService] Extracted comments', { count: comments.length });
-      return comments;
-    } catch (error) {
-      if (error instanceof ExtensionError) {
-        throw error;
-      }
-      
-      Logger.error('[AIService] Failed to parse AI response', { error });
-      throw createAIError(
-        ErrorCode.AI_INVALID_RESPONSE,
-        'Failed to parse comment data from AI response',
-        { originalError: error instanceof Error ? error.message : 'Unknown error' }
-      );
     }
+
+    Logger.info('[AIService] Extracted comments (aggregated)', {
+      count: allComments.length,
+      parts: chunks.length,
+    });
+    return allComments;
   }
 
   /**
@@ -269,12 +270,12 @@ export class AIService {
       title?: string;
       datetime?: string;
       videoTime?: string;
-    }
+    },
   ): Promise<AnalysisResult> {
     this.currentLanguage = language || 'en-US';
     // Split comments if they exceed token limit
     const commentBatches = this.splitCommentsForAnalysis(comments, config.maxTokens);
-    
+
     console.log('[AIService] Analyzing comments in', commentBatches.length, 'batches');
 
     if (commentBatches.length === 1) {
@@ -283,7 +284,9 @@ export class AIService {
     } else {
       // Multiple batches - analyze separately and merge
       const results = await Promise.all(
-        commentBatches.map(batch => this.analyzeSingleBatch(batch, config, promptTemplate, metadata))
+        commentBatches.map((batch) =>
+          this.analyzeSingleBatch(batch, config, promptTemplate, metadata),
+        ),
       );
       return this.mergeAnalysisResults(results);
     }
@@ -307,7 +310,7 @@ export class AIService {
       title?: string;
       datetime?: string;
       videoTime?: string;
-    }
+    },
   ): Promise<AnalysisResult> {
     const commentsJson = JSON.stringify(comments, null, 2);
     const prompt = this.buildAnalysisPromptWrapper(commentsJson, promptTemplate, metadata);
@@ -342,14 +345,24 @@ export class AIService {
     let currentBatch: Comment[] = [];
     let currentTokens = 0;
 
-    // Rough estimation: 1 token ≈ 4 characters
-    const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
+    const estimateTokens = (text: string): number => {
+      const cleaned = text.replace(/\s+/g, ' ').trim();
+      const words = cleaned.length ? cleaned.split(/\s+/).length : 0;
+      const punct = (cleaned.match(/[,.!?;:]/g) || []).length;
+      const chars = cleaned.length;
+      const approx = Math.ceil(
+        words * AI_CONST.ESTIMATE_WORD_WEIGHT +
+          punct * AI_CONST.ESTIMATE_PUNCT_WEIGHT +
+          chars / AI_CONST.ESTIMATE_CHAR_DIVISOR,
+      );
+      return Math.max(1, approx);
+    };
 
     for (const comment of comments) {
       const commentTokens = estimateTokens(JSON.stringify(comment));
-      
-      // Reserve 50% of tokens for prompt and response
-      if (currentTokens + commentTokens > maxTokens * 0.5) {
+
+      // Reserve ratio for prompt and model response
+      if (currentTokens + commentTokens > maxTokens * (1 - AI_CONST.TOKEN_RESERVE_RATIO)) {
         if (currentBatch.length > 0) {
           batches.push(currentBatch);
           currentBatch = [];
@@ -374,9 +387,9 @@ export class AIService {
    * @returns Merged analysis result
    */
   private mergeAnalysisResults(results: AnalysisResult[]): AnalysisResult {
-    const mergedMarkdown = results.map((r, i) => 
-      `## Batch ${i + 1}\n\n${r.markdown}`
-    ).join('\n\n---\n\n');
+    const mergedMarkdown = results
+      .map((r, i) => `## Batch ${i + 1}\n\n${r.markdown}`)
+      .join('\n\n---\n\n');
 
     const totalComments = results.reduce((sum, r) => sum + r.summary.totalComments, 0);
     const totalTokens = results.reduce((sum, r) => sum + r.tokensUsed, 0);
@@ -388,26 +401,30 @@ export class AIService {
       neutral: 0,
     };
 
-    results.forEach(r => {
+    results.forEach((r) => {
       sentimentDistribution.positive += r.summary.sentimentDistribution.positive;
       sentimentDistribution.negative += r.summary.sentimentDistribution.negative;
       sentimentDistribution.neutral += r.summary.sentimentDistribution.neutral;
     });
 
     // Normalize percentages
-    const total = sentimentDistribution.positive + sentimentDistribution.negative + sentimentDistribution.neutral;
+    const total =
+      sentimentDistribution.positive +
+      sentimentDistribution.negative +
+      sentimentDistribution.neutral;
     if (total > 0) {
       sentimentDistribution.positive = Math.round((sentimentDistribution.positive / total) * 100);
       sentimentDistribution.negative = Math.round((sentimentDistribution.negative / total) * 100);
-      sentimentDistribution.neutral = 100 - sentimentDistribution.positive - sentimentDistribution.negative;
+      sentimentDistribution.neutral =
+        100 - sentimentDistribution.positive - sentimentDistribution.negative;
     }
 
     // Merge hot comments
-    const allHotComments = results.flatMap(r => r.summary.hotComments);
-    const hotComments = allHotComments.slice(0, 10); // Keep top 10
+    const allHotComments = results.flatMap((r) => r.summary.hotComments);
+    const hotComments = allHotComments.slice(0, AI_CONST.HOT_COMMENTS_LIMIT);
 
     // Merge key insights
-    const keyInsights = results.flatMap(r => r.summary.keyInsights);
+    const keyInsights = results.flatMap((r) => r.summary.keyInsights);
 
     return {
       markdown: mergedMarkdown,
@@ -439,7 +456,7 @@ export class AIService {
    * @returns Formatted prompt
    */
   private buildAnalysisPromptWrapper(
-    commentsJson: string, 
+    commentsJson: string,
     template: string,
     metadata?: {
       platform?: string;
@@ -447,7 +464,7 @@ export class AIService {
       title?: string;
       datetime?: string;
       videoTime?: string;
-    }
+    },
   ): string {
     return buildAnalysisPrompt(commentsJson, template, {
       datetime: new Date().toISOString(),
@@ -466,7 +483,10 @@ export class AIService {
    * @param comments - Original comments
    * @returns Summary object
    */
-  private extractSummaryFromMarkdown(markdown: string, comments: Comment[]): AnalysisResult['summary'] {
+  private extractSummaryFromMarkdown(
+    markdown: string,
+    comments: Comment[],
+  ): AnalysisResult['summary'] {
     // Simple extraction - in production, this could be more sophisticated
     const positiveMatch = markdown.match(/Positive:\s*(\d+)%/i);
     const negativeMatch = markdown.match(/Negative:\s*(\d+)%/i);
@@ -491,7 +511,7 @@ export class AIService {
    */
   private removeThinkTags(content: string): string {
     // Remove <think>...</think> blocks (including multiline)
-    return content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+    return content.replace(REGEX.THINK_TAGS, '').trim();
   }
 
   /**
@@ -507,6 +527,38 @@ export class AIService {
       'claude-3-sonnet',
       'claude-3-haiku',
     ];
+  }
+  private chunkDomContent(structure: string, maxTokens: number): string[] {
+    const reserveRatio = AI_CONST.TOKEN_RESERVE_RATIO;
+    const limit = Math.max(200, Math.floor(maxTokens * (1 - reserveRatio)));
+    const estimate = (text: string): number => {
+      const cleaned = text.replace(/\s+/g, ' ').trim();
+      const words = cleaned ? cleaned.split(/\s+/).length : 0;
+      const punct = (cleaned.match(/[,.!?;:]/g) || []).length;
+      const chars = cleaned.length;
+      const approx = Math.ceil(
+        words * AI_CONST.ESTIMATE_WORD_WEIGHT +
+          punct * AI_CONST.ESTIMATE_PUNCT_WEIGHT +
+          chars / AI_CONST.ESTIMATE_CHAR_DIVISOR,
+      );
+      return Math.max(1, approx);
+    };
+    const parts: string[] = [];
+    let current: string[] = [];
+    let tokens = 0;
+    for (const line of structure.split('\n')) {
+      const t = estimate(line) + 1;
+      if (tokens + t > limit && current.length > 0) {
+        parts.push(current.join('\n'));
+        current = [line];
+        tokens = t;
+      } else {
+        current.push(line);
+        tokens += t;
+      }
+    }
+    if (current.length > 0) parts.push(current.join('\n'));
+    return parts.length > 0 ? parts : [structure];
   }
 }
 

@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { SCROLL, TIMING } from '@/config/constants';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ScraperConfig, ScraperSelectors, ScrollConfig } from '../types/scraper';
@@ -27,28 +28,28 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
       content: '',
       timestamp: '',
       likes: '',
-    }
+    },
   );
   const [scrollConfig, setScrollConfig] = useState<ScrollConfig>(
     config?.scrollConfig || {
       enabled: false,
-      maxScrolls: 10,
-      scrollDelay: 1000,
-    }
+      maxScrolls: SCROLL.DEFAULT_MAX_SCROLLS,
+      scrollDelay: TIMING.XL,
+    },
   );
   const [errors, setErrors] = useState<string[]>([]);
 
   const handleSave = async () => {
     const configData = {
       name,
-      domains: domains.filter(d => d.trim() !== ''),
-      urlPatterns: urlPatterns.filter(p => p.trim() !== ''),
+      domains: domains.filter((d) => d.trim() !== ''),
+      urlPatterns: urlPatterns.filter((p) => p.trim() !== ''),
       selectors,
       scrollConfig: scrollConfig.enabled ? scrollConfig : undefined,
     };
 
     const validation = ScraperConfigManager.validateConfig(configData);
-    
+
     if (!validation.valid) {
       setErrors(validation.errors);
       return;
@@ -56,15 +57,15 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
 
     try {
       let savedConfig: ScraperConfig;
-      
+
       if (config?.id) {
         // Update existing
-        savedConfig = await ScraperConfigManager.update(config.id, configData) as ScraperConfig;
+        savedConfig = (await ScraperConfigManager.update(config.id, configData)) as ScraperConfig;
       } else {
         // Create new
         savedConfig = await ScraperConfigManager.create(configData);
       }
-      
+
       onSave(savedConfig);
     } catch (error) {
       setErrors(['Failed to save configuration']);
@@ -111,11 +112,19 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
   // Render validation indicator
   const renderValidationIndicator = (key: string) => {
     const status = getValidationStatus(key);
-    
+
     if (status === 'success') {
-      return <span className="text-green-600 text-lg" title="Selector validated successfully">✓</span>;
+      return (
+        <span className="text-green-600 text-lg" title="Selector validated successfully">
+          ✓
+        </span>
+      );
     } else if (status === 'failed') {
-      return <span className="text-red-600 text-lg" title="Selector validation failed">✗</span>;
+      return (
+        <span className="text-red-600 text-lg" title="Selector validation failed">
+          ✗
+        </span>
+      );
     }
     return null;
   };
@@ -152,9 +161,7 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
       {/* Domains */}
       <div className="mb-6">
         <label className="block text-sm font-medium mb-2">{t('scraper.domains')} *</label>
-        <p className="text-xs text-gray-500 mb-2">
-          {t('scraper.domainsHint')}
-        </p>
+        <p className="text-xs text-gray-500 mb-2">{t('scraper.domainsHint')}</p>
         {domains.map((domain, index) => (
           <div key={index} className="flex gap-2 mb-2">
             <input
@@ -183,9 +190,7 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
       {/* URL Patterns */}
       <div className="mb-6">
         <label className="block text-sm font-medium mb-2">{t('scraper.urlPatterns')}</label>
-        <p className="text-xs text-gray-500 mb-2">
-          {t('scraper.urlPatternsHint')}
-        </p>
+        <p className="text-xs text-gray-500 mb-2">{t('scraper.urlPatternsHint')}</p>
         {urlPatterns.map((pattern, index) => (
           <div key={index} className="flex gap-2 mb-2">
             <input
@@ -214,7 +219,7 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
       {/* Selectors */}
       <div className="mb-6">
         <h3 className="text-lg font-semibold mb-3">{t('scraper.selectors')}</h3>
-        
+
         <div className="space-y-3">
           {/* Required selectors */}
           {[
@@ -227,7 +232,9 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
           ].map(({ key, label, required }) => (
             <div key={key}>
               <label className="block text-sm font-medium mb-1 flex items-center gap-2">
-                <span>{label} {required && '*'}</span>
+                <span>
+                  {label} {required && '*'}
+                </span>
                 {renderValidationIndicator(key)}
               </label>
               <input
@@ -269,7 +276,7 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
       {/* Scroll Configuration */}
       <div className="mb-6">
         <h3 className="text-lg font-semibold mb-3">{t('scraper.scrollConfig')}</h3>
-        
+
         <div className="mb-3">
           <label className="flex items-center gap-2">
             <input
@@ -280,9 +287,7 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
             />
             <span className="text-sm font-medium">{t('scraper.enableScroll')}</span>
           </label>
-          <p className="text-xs text-gray-500 ml-6">
-            {t('scraper.enableScrollHint')}
-          </p>
+          <p className="text-xs text-gray-500 ml-6">{t('scraper.enableScrollHint')}</p>
         </div>
 
         {scrollConfig.enabled && (
@@ -292,7 +297,9 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
               <input
                 type="number"
                 value={scrollConfig.maxScrolls}
-                onChange={(e) => setScrollConfig({ ...scrollConfig, maxScrolls: parseInt(e.target.value) })}
+                onChange={(e) =>
+                  setScrollConfig({ ...scrollConfig, maxScrolls: parseInt(e.target.value) })
+                }
                 className="w-full px-3 py-2 border rounded"
                 min="1"
                 max="100"
@@ -303,7 +310,9 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
               <input
                 type="number"
                 value={scrollConfig.scrollDelay}
-                onChange={(e) => setScrollConfig({ ...scrollConfig, scrollDelay: parseInt(e.target.value) })}
+                onChange={(e) =>
+                  setScrollConfig({ ...scrollConfig, scrollDelay: parseInt(e.target.value) })
+                }
                 className="w-full px-3 py-2 border rounded"
                 min="100"
                 step="100"
