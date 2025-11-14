@@ -60,7 +60,20 @@
     "analysisConfigStarted": "Scraper analysis started",
     "analyzingConfig": "Analyzing scraper...",
     "viewComments": "View Comments",
-    "viewAnalysis": "View Analysis"
+    "viewAnalysis": "View Analysis",
+    "selectorTestSuccess": "Selector matched {{count}} elements",
+    "selectorTestFailed": "Selector test failed",
+    "enterSelector": "Enter selector",
+    "search": "Search",
+    "noResults": "No matched elements",
+    "tag": "Tag",
+    "id": "ID",
+    "class": "Class",
+    "text": "Text",
+    "total": "Total",
+    "prev": "Prev",
+    "next": "Next",
+    "page": "Page"
   },
   "options": {
     "title": "Settings",

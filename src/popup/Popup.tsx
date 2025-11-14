@@ -41,6 +41,31 @@ const Popup: React.FC = () => {
     message?: string;
   } | null>(null);
   const [generatingConfig, setGeneratingConfig] = useState(false);
+  const [testSelector, setTestSelector] = useState('');
+  const [testItems, setTestItems] = useState<any[]>([]);
+  const [testPage, setTestPage] = useState(1);
+  const [testPageSize, setTestPageSize] = useState(20);
+
+  const handleTestSelectorQuery = async () => {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      const tabId = tabs[0]?.id;
+      if (!tabId) return;
+      const resp = await chrome.tabs.sendMessage(tabId, {
+        type: MESSAGES.TEST_SELECTOR_QUERY,
+        payload: { selector: testSelector },
+      });
+      if (resp?.success) {
+        setTestItems(resp.items || []);
+        setTestPage(1);
+        toast.success(t('popup.selectorTestSuccess', { count: resp.total }));
+      } else {
+        toast.error(resp?.error || t('popup.selectorTestFailed'));
+      }
+    } catch (e) {
+      toast.error(t('popup.selectorTestFailed'));
+    }
+  };
 
   useEffect(() => {
     loadLanguage();
@@ -668,6 +693,88 @@ const Popup: React.FC = () => {
           </svg>
           {t('popup.viewHistory')}
         </button>
+
+        <div className="px-4 py-3">
+          <div className="flex gap-2 items-center">
+            <input
+              value={testSelector}
+              onChange={(e) => setTestSelector(e.target.value)}
+              placeholder={t('popup.enterSelector')}
+              className="flex-1 px-3 py-2 border rounded"
+            />
+            <select
+              value={testPageSize}
+              onChange={(e) => setTestPageSize(Number(e.target.value))}
+              className="px-2 py-2 border rounded"
+            >
+              {[10, 20, 50, 100].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+            <button
+              onClick={handleTestSelectorQuery}
+              className="px-4 py-2 bg-blue-600 text-white rounded"
+            >
+              {t('popup.search')}
+            </button>
+          </div>
+          <div className="mt-2">
+            {testItems.length === 0 ? (
+              <div className="text-sm text-gray-500">{t('popup.noResults')}</div>
+            ) : (
+              <div className="border rounded">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="p-2 text-left">#</th>
+                      <th className="p-2 text-left">{t('popup.tag')}</th>
+                      <th className="p-2 text-left">{t('popup.id')}</th>
+                      <th className="p-2 text-left">{t('popup.class')}</th>
+                      <th className="p-2 text-left">{t('popup.text')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {testItems
+                      .slice((testPage - 1) * testPageSize, (testPage - 1) * testPageSize + testPageSize)
+                      .map((it) => (
+                        <tr key={`${it.tag}-${it.index}`} className="border-t">
+                          <td className="p-2">{it.index + 1}</td>
+                          <td className="p-2">{it.tag}</td>
+                          <td className="p-2">{it.id}</td>
+                          <td className="p-2">{it.className}</td>
+                          <td className="p-2">{it.text}</td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+                <div className="flex items-center justify-between p-2">
+                  <div className="text-xs text-gray-600">
+                    {t('popup.total')}: {testItems.length}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="px-2 py-1 border rounded"
+                      onClick={() => setTestPage(Math.max(1, testPage - 1))}
+                      disabled={testPage === 1}
+                    >
+                      {t('popup.prev')}
+                    </button>
+                    <span className="text-xs">
+                      {t('popup.page')}: {testPage} / {Math.max(1, Math.ceil(testItems.length / testPageSize))}
+                    </span>
+                    <button
+                      className="px-2 py-1 border rounded"
+                      onClick={() => setTestPage(Math.min(Math.ceil(testItems.length / testPageSize), testPage + 1))}
+                      disabled={testPage >= Math.ceil(testItems.length / testPageSize)}
+                    >
+                      {t('popup.next')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

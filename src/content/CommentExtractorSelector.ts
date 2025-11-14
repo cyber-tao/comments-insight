@@ -542,7 +542,15 @@ Identify the comment section and provide CSS selectors for each field.
     for (const [key, selector] of Object.entries(selectors)) {
       if (selector) {
         try {
-          const elements = document.querySelectorAll(selector);
+        const elements: Element[] = [];
+        elements.push(...Array.from(document.querySelectorAll(selector)));
+        const all = Array.from(document.querySelectorAll('*'));
+        for (const el of all) {
+          const sr = (el as any).shadowRoot as ShadowRoot | undefined;
+          if (sr) {
+            elements.push(...Array.from(sr.querySelectorAll(selector)));
+          }
+        }
           results[key] = elements.length;
         } catch (error) {
           results[key] = -1; // Invalid selector
@@ -644,7 +652,12 @@ Identify the comment section and provide CSS selectors for each field.
       // Step 1: Click "Reply" buttons to show reply sections
       if (selectors.replyButton) {
         onProgress?.('💬 Opening reply sections...', 0);
-        const replyButtons = document.querySelectorAll(selectors.replyButton);
+        const replyButtons: Element[] = [];
+        replyButtons.push(...Array.from(document.querySelectorAll(selectors.replyButton)));
+        for (const el of Array.from(document.querySelectorAll('*'))) {
+          const sr = (el as any).shadowRoot as ShadowRoot | undefined;
+          if (sr) replyButtons.push(...Array.from(sr.querySelectorAll(selectors.replyButton)));
+        }
         console.log(`[CommentExtractorSelector] Found ${replyButtons.length} reply buttons`);
 
         let clickedReplyButtons = 0;
@@ -681,7 +694,12 @@ Identify the comment section and provide CSS selectors for each field.
         onProgress?.('🔽 Expanding replies...', 0);
 
         // Re-query for reply toggle buttons (they might have appeared after clicking reply buttons)
-        const replyToggleButtons = document.querySelectorAll(selectors.replyToggle);
+        const replyToggleButtons: Element[] = [];
+        replyToggleButtons.push(...Array.from(document.querySelectorAll(selectors.replyToggle)));
+        for (const el of Array.from(document.querySelectorAll('*'))) {
+          const sr = (el as any).shadowRoot as ShadowRoot | undefined;
+          if (sr) replyToggleButtons.push(...Array.from(sr.querySelectorAll(selectors.replyToggle)));
+        }
         console.log(
           `[CommentExtractorSelector] Found ${replyToggleButtons.length} reply toggle buttons`,
         );
@@ -803,6 +821,60 @@ Identify the comment section and provide CSS selectors for each field.
     return allComments.slice(0, maxComments);
   }
 
+  async extractWithConfig(
+    selectors: SelectorMap,
+    scrollCfg: ScrollConfig | undefined,
+    maxComments: number,
+    platform: Platform,
+    onProgress?: (message: string, count: number) => void,
+  ): Promise<Comment[]> {
+    // 按配置提取一次，不进行 AI 重试
+    const comments = await this.extractWithScrolling(selectors, {}, maxComments, platform, onProgress, scrollCfg);
+
+    // 根据实际提取结果标注 selector 成功/失败
+    const metrics: Record<string, number> = {
+      commentItem: comments.length,
+      username: comments.filter((c) => c.username && c.username.trim().length > 0).length,
+      content: comments.filter((c) => c.content && c.content.trim().length > 0).length,
+      timestamp: comments.filter((c) => !!c.timestamp).length,
+      likes: comments.filter((c) => (c.likes || 0) > 0).length,
+      avatar: comments.filter((c) => !!c.avatar).length,
+      replyItem: comments.reduce((acc, c) => acc + (c.replies ? c.replies.length : 0), 0),
+    };
+
+    const configId = await this.getActiveConfigIdSafe();
+    const allKeys = Object.keys(selectors);
+    for (const key of allKeys) {
+      const isValid = (metrics[key] || 0) > 0;
+      await new Promise<void>((resolve) => {
+        chrome.runtime.sendMessage(
+          {
+            type: MESSAGES.UPDATE_SELECTOR_VALIDATION,
+            payload: { configId, selectorKey: key, status: isValid ? 'valid' : 'invalid' },
+          },
+          () => resolve(),
+        );
+      });
+    }
+
+    return comments;
+  }
+
+  private async getActiveConfigIdSafe(): Promise<string | undefined> {
+    try {
+      const url = window.location.href;
+      const resp = await new Promise<any>((resolve) => {
+        chrome.runtime.sendMessage(
+          { type: MESSAGES.CHECK_SCRAPER_CONFIG, payload: { url } },
+          resolve,
+        );
+      });
+      return resp?.config?.id;
+    } catch {
+      return undefined;
+    }
+  }
+
   /**
    * Extract comments by selector
    */
@@ -810,7 +882,12 @@ Identify the comment section and provide CSS selectors for each field.
     const comments: Comment[] = [];
 
     try {
-      const items = document.querySelectorAll(selectors.commentItem);
+      const items: Element[] = [];
+      items.push(...Array.from(document.querySelectorAll(selectors.commentItem)));
+      for (const el of Array.from(document.querySelectorAll('*'))) {
+        const sr = (el as any).shadowRoot as ShadowRoot | undefined;
+        if (sr) items.push(...Array.from(sr.querySelectorAll(selectors.commentItem)));
+      }
       console.log(
         `[CommentExtractorSelector] Found ${items.length} comment items with selector: ${selectors.commentItem}`,
       );
@@ -903,7 +980,13 @@ Identify the comment section and provide CSS selectors for each field.
     const replies: Comment[] = [];
 
     try {
-      const replyItems = commentItem.querySelectorAll(selectors.replyItem);
+      const replyItems: Element[] = [];
+      replyItems.push(...Array.from(commentItem.querySelectorAll(selectors.replyItem)));
+      const allChildren = Array.from(commentItem.querySelectorAll('*'));
+      for (const el of allChildren) {
+        const sr = (el as any).shadowRoot as ShadowRoot | undefined;
+        if (sr) replyItems.push(...Array.from(sr.querySelectorAll(selectors.replyItem)));
+      }
 
       replyItems.forEach((replyItem, index) => {
         const reply = this.extractSingleComment(replyItem, selectors, platform, index);

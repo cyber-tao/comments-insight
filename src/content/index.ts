@@ -44,6 +44,43 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       handleGetDOMStructure(sendResponse);
       return true; // Keep channel open for async response
 
+    case MESSAGES.TEST_SELECTOR_QUERY: {
+      try {
+        const selector = (message as any)?.payload?.selector as string;
+        if (!selector) {
+          sendResponse({ success: false, error: 'Missing selector' });
+          return true;
+        }
+        const nodes: Element[] = [];
+        const pushMatches = (root: Document | Element) => {
+          nodes.push(...Array.from(root.querySelectorAll(selector)));
+          const all = root instanceof Document ? Array.from(root.querySelectorAll('*')) : Array.from((root as Element).querySelectorAll('*'));
+          for (const el of all) {
+            const sr = (el as any).shadowRoot as ShadowRoot | undefined;
+            if (sr) {
+              nodes.push(...Array.from(sr.querySelectorAll(selector)));
+            }
+          }
+          if ((root as any).shadowRoot) {
+            nodes.push(...Array.from(((root as any).shadowRoot as ShadowRoot).querySelectorAll(selector)));
+          }
+        };
+        pushMatches(document);
+        const items = nodes.map((el: Element, i: number) => ({
+          index: i,
+          tag: el.tagName.toLowerCase(),
+          id: (el as HTMLElement).id || '',
+          className: (el as HTMLElement).className || '',
+          text: (el.textContent || '').trim().slice(0, 200),
+          html: el.outerHTML.slice(0, 200),
+        }));
+        sendResponse({ success: true, total: nodes.length, items });
+      } catch (e) {
+        sendResponse({ success: false, error: e instanceof Error ? e.message : 'Query failed' });
+      }
+      return true;
+    }
+
     default:
       sendResponse({ status: 'received' });
   }
@@ -68,12 +105,27 @@ async function handleStartExtraction(
   currentTaskId = taskId;
 
   try {
-    // Extract comments with selector-based approach
-    const comments = await selectorExtractor.extractWithAI(
+    // Fetch scraper config for current URL
+    const cfgResponse = await new Promise<any>((resolve) => {
+      chrome.runtime.sendMessage(
+        { type: MESSAGES.CHECK_SCRAPER_CONFIG, payload: { url: window.location.href } },
+        resolve,
+      );
+    });
+
+    if (!cfgResponse?.config || !cfgResponse.config.selectors) {
+      console.log('[Content] No scraper config found for current page');
+      sendResponse({ success: false, error: 'No scraper config' });
+      return;
+    }
+
+    // Extract comments using config only (no AI retries)
+    const comments = await selectorExtractor.extractWithConfig(
+      cfgResponse.config.selectors,
+      cfgResponse.config.scrollConfig,
       maxComments,
-      'unknown', // Platform is now determined by scraper config
+      'unknown',
       (message: string, count: number) => {
-        // Send progress update to background
         chrome.runtime.sendMessage({
           type: MESSAGES.EXTRACTION_PROGRESS,
           data: { taskId, progress: 50, message: `${message} (${count} comments)` },

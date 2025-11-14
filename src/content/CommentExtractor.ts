@@ -25,79 +25,34 @@ export class CommentExtractor {
     platform: Platform,
     onProgress?: (progress: number, message: string) => void,
   ): Promise<Comment[]> {
-    console.log('[CommentExtractor] Starting AI-driven extraction');
-
-    try {
-      // Step 1: Analyze selectors first
-      onProgress?.(10, 'Analyzing page structure with AI...');
-      const selectorExtractor = new CommentExtractorSelector(this.pageController);
-      const comments = await selectorExtractor.extractWithAI(
-        maxComments,
-        platform,
-        (message: string, count: number) => onProgress?.(60, `${message} (${count})`),
-      );
-
-      // Step 3: Validate and finish
-      onProgress?.(80, 'Validating extracted data...');
-      const validComments = this.validateComments(comments, platform);
-      const limitedComments = validComments.slice(0, maxComments);
-      onProgress?.(100, 'Extraction complete!');
-      console.log(
-        '[CommentExtractor] Selector-based extraction complete:',
-        limitedComments.length,
-        'comments',
-      );
-      return limitedComments;
-    } catch (error) {
-      console.error(
-        '[CommentExtractor] Selector-based extraction failed, trying DOM extraction:',
-        error,
-      );
-      try {
-        const domContent = this.domAnalyzer.analyzePage();
-        onProgress?.(60, 'Extracting comments with AI (fallback)...');
-        const comments = await this.callAIExtraction(domContent, platform);
-        const validComments = this.validateComments(comments, platform);
-        const limitedComments = validComments.slice(0, maxComments);
-        onProgress?.(100, 'Extraction complete!');
-        return limitedComments;
-      } catch (err) {
-        console.error('[CommentExtractor] Fallback AI extraction failed, using basic method:', err);
-        onProgress?.(50, 'AI extraction failed, using fallback method...');
-        return this.extract(maxComments);
-      }
-    }
-  }
-
-  /**
-   * Call AI extraction via background service
-   * @param prompt - Extraction prompt
-   * @param platform - Platform name
-   * @returns Extracted comments
-   */
-  private async callAIExtraction(domStructure: string, platform: Platform): Promise<Comment[]> {
-    return new Promise((resolve, reject) => {
+    console.log('[CommentExtractor] Starting config-driven extraction');
+    const selectorExtractor = new CommentExtractorSelector(this.pageController);
+    const cfgResponse = await new Promise<any>((resolve) => {
       chrome.runtime.sendMessage(
-        {
-          type: MESSAGES.AI_EXTRACT_COMMENTS,
-          data: { domStructure, platform },
-        },
-        (response) => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-            return;
-          }
-
-          if (response.error) {
-            reject(new Error(response.error));
-            return;
-          }
-
-          resolve(response.comments || []);
-        },
+        { type: MESSAGES.CHECK_SCRAPER_CONFIG, payload: { url: window.location.href } },
+        resolve,
       );
     });
+    const config = cfgResponse?.config;
+    if (!config || !config.selectors) {
+      throw new Error('No scraper config for current page');
+    }
+    onProgress?.(20, 'Using scraper config');
+    const comments = await selectorExtractor.extractWithConfig(
+      config.selectors,
+      config.scrollConfig,
+      maxComments,
+      platform,
+      (message: string, count: number) => onProgress?.(60, `${message} (${count})`),
+    );
+    onProgress?.(80, 'Validating extracted data...');
+    const validComments = this.validateComments(comments, platform);
+    const limitedComments = validComments.slice(0, maxComments);
+    onProgress?.(100, 'Extraction complete!');
+    return limitedComments;
   }
+
+  // AI 提取已移除，改为配置驱动
 
   /**
    * Validate and clean extracted comments
