@@ -500,32 +500,46 @@ Identify the comment section and provide CSS selectors for each field.
 
     html += '>\n';
 
-    // Add children
-    if (hasChildren) {
-      const children = Array.from(element.children) as Element[];
+    const appendChildren = (nodes: Element[], indentDepth: number) => {
+      if (nodes.length === 0) {
+        return;
+      }
 
-      // Smart sampling: if many children, sample from beginning, middle, and end
-      let childrenToShow: Element[];
-      if (children.length <= 30) {
-        childrenToShow = children;
+      let nodesToShow: Element[];
+      if (nodes.length <= 30) {
+        nodesToShow = nodes;
       } else {
-        // Sample: first 10, middle 10, last 10
-        const first10 = children.slice(0, 10);
-        const middle10 = children.slice(
-          Math.floor(children.length / 2) - 5,
-          Math.floor(children.length / 2) + 5,
+        const first10 = nodes.slice(0, 10);
+        const middle10 = nodes.slice(
+          Math.floor(nodes.length / 2) - 5,
+          Math.floor(nodes.length / 2) + 5,
         );
-        const last10 = children.slice(-10);
-        childrenToShow = [...first10, ...middle10, ...last10];
+        const last10 = nodes.slice(-10);
+        nodesToShow = [...first10, ...middle10, ...last10];
 
         html +=
-          '  '.repeat(depth + 1) +
-          `<!-- Showing 30 of ${children.length} children (sampled from start, middle, end) -->\n`;
+          '  '.repeat(indentDepth) +
+          `<!-- Showing 30 of ${nodes.length} nodes (sampled from start, middle, end) -->\n`;
       }
 
-      for (const child of childrenToShow) {
-        html += this.extractDOMStructure(child, depth + 1, maxDepth);
+      for (const child of nodesToShow) {
+        html += this.extractDOMStructure(child, indentDepth, maxDepth);
       }
+    };
+
+    // Add light DOM children
+    if (hasChildren) {
+      const children = Array.from(element.children) as Element[];
+      appendChildren(children, depth + 1);
+    }
+
+    // Add shadow DOM children if present
+    const shadowRoot = (element as any).shadowRoot as ShadowRoot | null;
+    if (shadowRoot && shadowRoot.children.length > 0) {
+      const shadowChildren = Array.from(shadowRoot.children) as Element[];
+      html += '  '.repeat(depth + 1) + '<shadow-root>\n';
+      appendChildren(shadowChildren, depth + 2);
+      html += '  '.repeat(depth + 1) + '</shadow-root>\n';
     }
 
     html += '  '.repeat(depth) + `</${tag}>\n`;
@@ -542,15 +556,7 @@ Identify the comment section and provide CSS selectors for each field.
     for (const [key, selector] of Object.entries(selectors)) {
       if (selector) {
         try {
-        const elements: Element[] = [];
-        elements.push(...Array.from(document.querySelectorAll(selector)));
-        const all = Array.from(document.querySelectorAll('*'));
-        for (const el of all) {
-          const sr = (el as any).shadowRoot as ShadowRoot | undefined;
-          if (sr) {
-            elements.push(...Array.from(sr.querySelectorAll(selector)));
-          }
-        }
+          const elements = this.querySelectorAllDeep(document, selector);
           results[key] = elements.length;
         } catch (error) {
           results[key] = -1; // Invalid selector
@@ -652,12 +658,7 @@ Identify the comment section and provide CSS selectors for each field.
       // Step 1: Click "Reply" buttons to show reply sections
       if (selectors.replyButton) {
         onProgress?.('💬 Opening reply sections...', 0);
-        const replyButtons: Element[] = [];
-        replyButtons.push(...Array.from(document.querySelectorAll(selectors.replyButton)));
-        for (const el of Array.from(document.querySelectorAll('*'))) {
-          const sr = (el as any).shadowRoot as ShadowRoot | undefined;
-          if (sr) replyButtons.push(...Array.from(sr.querySelectorAll(selectors.replyButton)));
-        }
+        const replyButtons = this.querySelectorAllDeep(document, selectors.replyButton);
         console.log(`[CommentExtractorSelector] Found ${replyButtons.length} reply buttons`);
 
         let clickedReplyButtons = 0;
@@ -694,12 +695,7 @@ Identify the comment section and provide CSS selectors for each field.
         onProgress?.('🔽 Expanding replies...', 0);
 
         // Re-query for reply toggle buttons (they might have appeared after clicking reply buttons)
-        const replyToggleButtons: Element[] = [];
-        replyToggleButtons.push(...Array.from(document.querySelectorAll(selectors.replyToggle)));
-        for (const el of Array.from(document.querySelectorAll('*'))) {
-          const sr = (el as any).shadowRoot as ShadowRoot | undefined;
-          if (sr) replyToggleButtons.push(...Array.from(sr.querySelectorAll(selectors.replyToggle)));
-        }
+        const replyToggleButtons = this.querySelectorAllDeep(document, selectors.replyToggle);
         console.log(
           `[CommentExtractorSelector] Found ${replyToggleButtons.length} reply toggle buttons`,
         );
@@ -828,6 +824,9 @@ Identify the comment section and provide CSS selectors for each field.
     platform: Platform,
     onProgress?: (message: string, count: number) => void,
   ): Promise<Comment[]> {
+    const selectorTestResults = this.testSelectors(selectors);
+    this.logSelectorMatches('Pre-extraction selector test', selectors, selectorTestResults);
+
     // 按配置提取一次，不进行 AI 重试
     const comments = await this.extractWithScrolling(selectors, {}, maxComments, platform, onProgress, scrollCfg);
 
@@ -843,6 +842,8 @@ Identify the comment section and provide CSS selectors for each field.
     };
 
     const configId = await this.getActiveConfigIdSafe();
+    this.logExtractionMetrics(metrics, configId);
+
     const allKeys = Object.keys(selectors);
     for (const key of allKeys) {
       const isValid = (metrics[key] || 0) > 0;
@@ -882,12 +883,11 @@ Identify the comment section and provide CSS selectors for each field.
     const comments: Comment[] = [];
 
     try {
-      const items: Element[] = [];
-      items.push(...Array.from(document.querySelectorAll(selectors.commentItem)));
-      for (const el of Array.from(document.querySelectorAll('*'))) {
-        const sr = (el as any).shadowRoot as ShadowRoot | undefined;
-        if (sr) items.push(...Array.from(sr.querySelectorAll(selectors.commentItem)));
+      if (!selectors.commentItem) {
+        return comments;
       }
+
+      const items = this.querySelectorAllDeep(document, selectors.commentItem);
       console.log(
         `[CommentExtractorSelector] Found ${items.length} comment items with selector: ${selectors.commentItem}`,
       );
@@ -919,11 +919,13 @@ Identify the comment section and provide CSS selectors for each field.
     index: number,
   ): Comment | null {
     // Extract username
-    const usernameEl = item.querySelector(selectors.username);
+    const usernameEl = selectors.username
+      ? this.querySelectorDeep(item, selectors.username)
+      : null;
     const username = usernameEl?.textContent?.trim() || '';
 
     // Extract content
-    const contentEl = item.querySelector(selectors.content);
+    const contentEl = selectors.content ? this.querySelectorDeep(item, selectors.content) : null;
     const content = contentEl?.textContent?.trim() || '';
 
     // Must have content
@@ -932,17 +934,19 @@ Identify the comment section and provide CSS selectors for each field.
     }
 
     // Extract timestamp
-    const timestampEl = item.querySelector(selectors.timestamp);
+    const timestampEl = selectors.timestamp
+      ? this.querySelectorDeep(item, selectors.timestamp)
+      : null;
     const timestamp = timestampEl?.textContent?.trim() || '';
 
     // Extract likes
-    const likesEl = item.querySelector(selectors.likes);
+    const likesEl = selectors.likes ? this.querySelectorDeep(item, selectors.likes) : null;
     const likes = this.parseLikes(likesEl?.textContent?.trim() || '0');
 
     // Extract avatar
     let avatar: string | undefined;
     if (selectors.avatar) {
-      const avatarEl = item.querySelector(selectors.avatar);
+      const avatarEl = this.querySelectorDeep(item, selectors.avatar);
       if (avatarEl) {
         avatar = avatarEl.getAttribute('src') || avatarEl.getAttribute('data-src') || undefined;
       }
@@ -980,13 +984,7 @@ Identify the comment section and provide CSS selectors for each field.
     const replies: Comment[] = [];
 
     try {
-      const replyItems: Element[] = [];
-      replyItems.push(...Array.from(commentItem.querySelectorAll(selectors.replyItem)));
-      const allChildren = Array.from(commentItem.querySelectorAll('*'));
-      for (const el of allChildren) {
-        const sr = (el as any).shadowRoot as ShadowRoot | undefined;
-        if (sr) replyItems.push(...Array.from(sr.querySelectorAll(selectors.replyItem)));
-      }
+      const replyItems = this.querySelectorAllDeep(commentItem, selectors.replyItem);
 
       replyItems.forEach((replyItem, index) => {
         const reply = this.extractSingleComment(replyItem, selectors, platform, index);
@@ -1121,7 +1119,7 @@ Identify the comment section and provide CSS selectors for each field.
 
       console.log('[CommentExtractorSelector] Updated selector validation for config:', configId);
     } catch (error) {
-      console.error('[CommentExtractorSelector] Failed to update selector validation:', error);
+      console.warn('[CommentExtractorSelector] Failed to update selector validation:', error);
     }
   }
 
@@ -1157,5 +1155,179 @@ Identify the comment section and provide CSS selectors for each field.
    */
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private querySelectorAllDeep(
+    root: Document | Element | ShadowRoot,
+    selector: string,
+  ): Element[] {
+    const trimmedSelector = selector.trim();
+    if (!trimmedSelector) {
+      return [];
+    }
+
+    const results: Element[] = [];
+    try {
+      results.push(...Array.from(root.querySelectorAll(trimmedSelector)));
+    } catch {
+      // ignore invalid selectors
+    }
+
+    const split = this.splitSelector(trimmedSelector);
+    if (split.rest) {
+      let candidates: NodeListOf<Element> = [] as any;
+      try {
+        candidates = root.querySelectorAll(split.current);
+      } catch {
+        candidates = [] as any;
+      }
+
+      for (const candidate of Array.from(candidates)) {
+        results.push(...this.querySelectorAllDeep(candidate, split.rest));
+        const shadowRoot = (candidate as any).shadowRoot as ShadowRoot | null;
+        if (shadowRoot) {
+          results.push(...this.querySelectorAllDeep(shadowRoot, split.rest));
+        }
+      }
+    }
+
+    const descendants = root.querySelectorAll('*');
+    for (const el of Array.from(descendants)) {
+      const shadowRoot = (el as any).shadowRoot as ShadowRoot | undefined;
+      if (shadowRoot) {
+        results.push(...this.querySelectorAllDeep(shadowRoot, trimmedSelector));
+      }
+    }
+
+    return Array.from(new Set(results));
+  }
+
+  private querySelectorDeep(
+    root: Document | Element | ShadowRoot,
+    selector: string,
+  ): Element | null {
+    const trimmedSelector = selector.trim();
+    if (!trimmedSelector) {
+      return null;
+    }
+
+    let directHit: Element | null = null;
+    try {
+      directHit = root.querySelector(trimmedSelector);
+    } catch {
+      directHit = null;
+    }
+    if (directHit) {
+      return directHit;
+    }
+
+    const split = this.splitSelector(trimmedSelector);
+    if (split.rest) {
+      let candidates: NodeListOf<Element> = [] as any;
+      try {
+        candidates = root.querySelectorAll(split.current);
+      } catch {
+        candidates = [] as any;
+      }
+
+      for (const candidate of Array.from(candidates)) {
+        const fromLightDom = this.querySelectorDeep(candidate, split.rest);
+        if (fromLightDom) {
+          return fromLightDom;
+        }
+
+        const shadowRoot = (candidate as any).shadowRoot as ShadowRoot | null;
+        if (shadowRoot) {
+          const fromShadow = this.querySelectorDeep(shadowRoot, split.rest);
+          if (fromShadow) {
+            return fromShadow;
+          }
+        }
+      }
+    }
+
+    const descendants = root.querySelectorAll('*');
+    for (const el of Array.from(descendants)) {
+      const shadowRoot = (el as any).shadowRoot as ShadowRoot | undefined;
+      if (shadowRoot) {
+        const shadowMatch = this.querySelectorDeep(shadowRoot, trimmedSelector);
+        if (shadowMatch) {
+          return shadowMatch;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private splitSelector(selector: string): { current: string; rest?: string } {
+    const trimmed = selector.trim();
+    let inAttr = false;
+    let parenDepth = 0;
+
+    for (let i = 0; i < trimmed.length; i++) {
+      const char = trimmed[i];
+      if (char === '[') {
+        inAttr = true;
+        continue;
+      }
+      if (char === ']') {
+        inAttr = false;
+        continue;
+      }
+      if (char === '(') {
+        parenDepth++;
+        continue;
+      }
+      if (char === ')') {
+        parenDepth = Math.max(parenDepth - 1, 0);
+        continue;
+      }
+
+      if (inAttr || parenDepth > 0) {
+        continue;
+      }
+
+      if (char === '>' || char === ' ') {
+        let nextIndex = i + 1;
+        while (nextIndex < trimmed.length && trimmed[nextIndex] === ' ') {
+          nextIndex++;
+        }
+
+        const current = trimmed.substring(0, i).trim();
+        const rest = trimmed.substring(nextIndex).trim();
+        if (current && rest) {
+          return { current, rest };
+        }
+      }
+    }
+
+    return { current: trimmed };
+  }
+
+  private logSelectorMatches(
+    title: string,
+    selectors: Partial<SelectorMap>,
+    counts: Record<string, number>,
+  ): void {
+    console.groupCollapsed(`[CommentExtractorSelector] ${title}`);
+    for (const [key, selector] of Object.entries(selectors)) {
+      if (!selector) continue;
+      const count = counts[key] ?? 0;
+      const status = count === -1 ? '❌' : count > 0 ? '✅' : '⚠️';
+      console.log(`${status} ${key}: "${selector}" => ${count}`);
+    }
+    console.groupEnd();
+  }
+
+  private logExtractionMetrics(metrics: Record<string, number>, configId?: string): void {
+    const label = configId
+      ? `[CommentExtractorSelector] Extraction metrics (config ${configId})`
+      : '[CommentExtractorSelector] Extraction metrics';
+    console.groupCollapsed(label);
+    for (const [key, value] of Object.entries(metrics)) {
+      console.log(`- ${key}: ${value}`);
+    }
+    console.groupEnd();
   }
 }

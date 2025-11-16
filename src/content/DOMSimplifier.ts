@@ -17,11 +17,14 @@ export class DOMSimplifier {
     element: Element,
     maxDepth: number = 2,
     currentDepth: number = 0,
+    forceExpandParent: boolean = false,
   ): SimplifiedNode {
-    const shouldExpand = currentDepth < maxDepth;
+    const shadowRoot = (element as any).shadowRoot as ShadowRoot | null;
+    const forceExpandCurrent = shadowRoot !== null || this.shouldForceExpandElement(element);
+    const shouldExpand =
+      forceExpandParent || forceExpandCurrent || currentDepth < maxDepth;
 
     // Check for Shadow DOM
-    const shadowRoot = (element as any).shadowRoot;
     const children = shadowRoot ? Array.from(shadowRoot.children) : Array.from(element.children);
 
     const node: SimplifiedNode = {
@@ -35,7 +38,12 @@ export class DOMSimplifier {
       children:
         shouldExpand && children.length > 0
           ? children.map((child) =>
-              this.simplifyElement(child as Element, maxDepth, currentDepth + 1),
+              this.simplifyElement(
+                child as Element,
+                maxDepth,
+                currentDepth + 1,
+                forceExpandParent || forceExpandCurrent,
+              ),
             )
           : undefined,
       selector: this.generateSelector(element),
@@ -48,6 +56,35 @@ export class DOMSimplifier {
     }
 
     return node;
+  }
+
+  private shouldForceExpandElement(element: Element): boolean {
+    const tag = element.tagName.toLowerCase();
+    if (tag.includes('-')) {
+      return true;
+    }
+
+    const id = element.id?.toLowerCase();
+    if (id && (id.includes('comment') || id.includes('reply') || id.includes('contents'))) {
+      return true;
+    }
+
+    const className = typeof element.className === 'string' ? element.className.toLowerCase() : '';
+    if (
+      className.includes('comment') ||
+      className.includes('reply') ||
+      className.includes('thread') ||
+      className.includes('content')
+    ) {
+      return true;
+    }
+
+    const role = element.getAttribute('role')?.toLowerCase();
+    if (role && (role.includes('comment') || role.includes('article'))) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -197,18 +234,40 @@ export class DOMSimplifier {
     root: Document | Element | ShadowRoot,
     selector: string,
   ): Element | null {
-    // Try to find in current root
-    const element = root.querySelector(selector);
-    if (element) {
-      return element;
+    const trimmedSelector = selector.trim();
+    if (!trimmedSelector) {
+      return null;
     }
 
-    // Search in Shadow DOM
+    const directHit = root.querySelector(trimmedSelector);
+    if (directHit) {
+      return directHit;
+    }
+
+    const split = this.splitSelector(trimmedSelector);
+    if (split.rest) {
+      const candidates = Array.from(root.querySelectorAll(split.current));
+      for (const candidate of candidates) {
+        const shadowRoot = (candidate as any).shadowRoot as ShadowRoot | null;
+        const withinLightDom = this.querySelectorDeep(candidate, split.rest);
+        if (withinLightDom) {
+          return withinLightDom;
+        }
+
+        if (shadowRoot) {
+          const withinShadow = this.querySelectorDeep(shadowRoot, split.rest);
+          if (withinShadow) {
+            return withinShadow;
+          }
+        }
+      }
+    }
+
     const elements = root.querySelectorAll('*');
     for (const el of Array.from(elements)) {
-      const shadowRoot = (el as any).shadowRoot;
+      const shadowRoot = (el as any).shadowRoot as ShadowRoot | null;
       if (shadowRoot) {
-        const found = this.querySelectorDeep(shadowRoot, selector);
+        const found = this.querySelectorDeep(shadowRoot, trimmedSelector);
         if (found) {
           return found;
         }
@@ -218,12 +277,60 @@ export class DOMSimplifier {
     return null;
   }
 
+  private splitSelector(selector: string): { current: string; rest?: string } {
+    const trimmed = selector.trim();
+    let inAttr = false;
+    let parenDepth = 0;
+
+    for (let i = 0; i < trimmed.length; i++) {
+      const char = trimmed[i];
+      if (char === '[') {
+        inAttr = true;
+        continue;
+      }
+      if (char === ']') {
+        inAttr = false;
+        continue;
+      }
+      if (char === '(') {
+        parenDepth++;
+        continue;
+      }
+      if (char === ')') {
+        parenDepth = Math.max(parenDepth - 1, 0);
+        continue;
+      }
+
+      if (inAttr || parenDepth > 0) {
+        continue;
+      }
+
+      if (char === '>' || char === ' ') {
+        let nextIndex = i + 1;
+        while (nextIndex < trimmed.length && trimmed[nextIndex] === ' ') {
+          nextIndex++;
+        }
+
+        const current = trimmed.substring(0, i).trim();
+        const rest = trimmed.substring(nextIndex).trim();
+        if (current && rest) {
+          return { current, rest };
+        }
+      }
+    }
+
+    return { current: trimmed };
+  }
+
   /**
-   * Convert simplified node to readable string format for AI
+   * Convert simplified node to string format for AI
+   * @param node - Simplified node
+   * @param indent - Indent level
+   * @returns String representation
    */
-  nodeToString(node: SimplifiedNode, indent: number = 0): string {
+  public nodeToString(node: SimplifiedNode, indent: number = 0): string {
     const spaces = '  '.repeat(indent);
-    let result = spaces + `<${node.tag}`;
+    let result = `${spaces}<${node.tag}`;
 
     // Add ID
     if (node.id) {
@@ -235,24 +342,12 @@ export class DOMSimplifier {
       result += ` class="${node.classes.join(' ')}"`;
     }
 
-    // Add key attributes
-    if (node.attributes) {
-      for (const [key, value] of Object.entries(node.attributes)) {
-        result += ` ${key}="${value}"`;
-      }
-    }
-
     // Add child count if not expanded
     if (!node.expanded && node.childCount > 0) {
       result += ` childCount="${node.childCount}"`;
     }
 
     result += '>';
-
-    // Add text preview
-    if (node.text) {
-      result += `\n${spaces}  ${node.text}`;
-    }
 
     // Add children if expanded
     if (node.expanded && node.children && node.children.length > 0) {

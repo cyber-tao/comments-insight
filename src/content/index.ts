@@ -51,21 +51,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           sendResponse({ success: false, error: 'Missing selector' });
           return true;
         }
-        const nodes: Element[] = [];
-        const pushMatches = (root: Document | Element) => {
-          nodes.push(...Array.from(root.querySelectorAll(selector)));
-          const all = root instanceof Document ? Array.from(root.querySelectorAll('*')) : Array.from((root as Element).querySelectorAll('*'));
-          for (const el of all) {
-            const sr = (el as any).shadowRoot as ShadowRoot | undefined;
-            if (sr) {
-              nodes.push(...Array.from(sr.querySelectorAll(selector)));
-            }
-          }
-          if ((root as any).shadowRoot) {
-            nodes.push(...Array.from(((root as any).shadowRoot as ShadowRoot).querySelectorAll(selector)));
-          }
-        };
-        pushMatches(document);
+        const nodes = domAnalyzer.querySelectorAllDeep(document, selector);
         const items = nodes.map((el: Element, i: number) => ({
           index: i,
           tag: el.tagName.toLowerCase(),

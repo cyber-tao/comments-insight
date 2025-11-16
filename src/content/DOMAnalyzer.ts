@@ -55,18 +55,51 @@ export class DOMAnalyzer {
     root: Document | Element | ShadowRoot,
     selector: string,
   ): Element | null {
-    // Try to find in current root
-    const element = root.querySelector(selector);
-    if (element) {
-      return element;
+    const trimmedSelector = selector.trim();
+    if (!trimmedSelector) {
+      return null;
     }
 
-    // Search in Shadow DOM
+    let directHit: Element | null = null;
+    try {
+      directHit = root.querySelector(trimmedSelector);
+    } catch {
+      directHit = null;
+    }
+    if (directHit) {
+      return directHit;
+    }
+
+    const split = this.splitSelector(trimmedSelector);
+    if (split.rest) {
+      let candidates: NodeListOf<Element> = [] as any;
+      try {
+        candidates = root.querySelectorAll(split.current);
+      } catch {
+        candidates = [] as any;
+      }
+
+      for (const candidate of Array.from(candidates)) {
+        const fromLightDom = this.querySelectorDeep(candidate, split.rest);
+        if (fromLightDom) {
+          return fromLightDom;
+        }
+
+        const shadowRoot = (candidate as any).shadowRoot as ShadowRoot | null;
+        if (shadowRoot) {
+          const fromShadow = this.querySelectorDeep(shadowRoot, split.rest);
+          if (fromShadow) {
+            return fromShadow;
+          }
+        }
+      }
+    }
+
     const elements = root.querySelectorAll('*');
     for (const el of Array.from(elements)) {
-      const shadowRoot = (el as any).shadowRoot;
+      const shadowRoot = (el as any).shadowRoot as ShadowRoot | null;
       if (shadowRoot) {
-        const found = this.querySelectorDeep(shadowRoot, selector);
+        const found = this.querySelectorDeep(shadowRoot, trimmedSelector);
         if (found) {
           return found;
         }
@@ -83,23 +116,90 @@ export class DOMAnalyzer {
    * @returns Array of found elements
    */
   querySelectorAllDeep(root: Document | Element | ShadowRoot, selector: string): Element[] {
+    const trimmedSelector = selector.trim();
+    if (!trimmedSelector) {
+      return [];
+    }
+
     const results: Element[] = [];
+    try {
+      results.push(...Array.from(root.querySelectorAll(trimmedSelector)));
+    } catch {
+      // ignore
+    }
 
-    // Find in current root
-    const elements = root.querySelectorAll(selector);
-    results.push(...Array.from(elements));
+    const split = this.splitSelector(trimmedSelector);
+    if (split.rest) {
+      let candidates: NodeListOf<Element> = [] as any;
+      try {
+        candidates = root.querySelectorAll(split.current);
+      } catch {
+        candidates = [] as any;
+      }
 
-    // Search in Shadow DOM
-    const allElements = root.querySelectorAll('*');
-    for (const el of Array.from(allElements)) {
-      const shadowRoot = (el as any).shadowRoot;
-      if (shadowRoot) {
-        const found = this.querySelectorAllDeep(shadowRoot, selector);
-        results.push(...found);
+      for (const candidate of Array.from(candidates)) {
+        results.push(...this.querySelectorAllDeep(candidate, split.rest));
+        const shadowRoot = (candidate as any).shadowRoot as ShadowRoot | null;
+        if (shadowRoot) {
+          results.push(...this.querySelectorAllDeep(shadowRoot, split.rest));
+        }
       }
     }
 
-    return results;
+    const descendants = root.querySelectorAll('*');
+    for (const el of Array.from(descendants)) {
+      const shadowRoot = (el as any).shadowRoot as ShadowRoot | null;
+      if (shadowRoot) {
+        results.push(...this.querySelectorAllDeep(shadowRoot, trimmedSelector));
+      }
+    }
+
+    return Array.from(new Set(results));
+  }
+
+  private splitSelector(selector: string): { current: string; rest?: string } {
+    const trimmed = selector.trim();
+    let inAttr = false;
+    let parenDepth = 0;
+
+    for (let i = 0; i < trimmed.length; i++) {
+      const char = trimmed[i];
+      if (char === '[') {
+        inAttr = true;
+        continue;
+      }
+      if (char === ']') {
+        inAttr = false;
+        continue;
+      }
+      if (char === '(') {
+        parenDepth++;
+        continue;
+      }
+      if (char === ')') {
+        parenDepth = Math.max(parenDepth - 1, 0);
+        continue;
+      }
+
+      if (inAttr || parenDepth > 0) {
+        continue;
+      }
+
+      if (char === '>' || char === ' ') {
+        let nextIndex = i + 1;
+        while (nextIndex < trimmed.length && trimmed[nextIndex] === ' ') {
+          nextIndex++;
+        }
+
+        const current = trimmed.substring(0, i).trim();
+        const rest = trimmed.substring(nextIndex).trim();
+        if (current && rest) {
+          return { current, rest };
+        }
+      }
+    }
+
+    return { current: trimmed };
   }
 
   /**
