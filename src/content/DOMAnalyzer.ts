@@ -95,6 +95,13 @@ export class DOMAnalyzer {
       }
     }
 
+    if (root instanceof Element && root.shadowRoot) {
+      const withinShadow = this.querySelectorDeep(root.shadowRoot, trimmedSelector);
+      if (withinShadow) {
+        return withinShadow;
+      }
+    }
+
     const elements = root.querySelectorAll('*');
     for (const el of Array.from(elements)) {
       const shadowRoot = (el as any).shadowRoot as ShadowRoot | null;
@@ -126,6 +133,10 @@ export class DOMAnalyzer {
       results.push(...Array.from(root.querySelectorAll(trimmedSelector)));
     } catch {
       // ignore
+    }
+
+    if (root instanceof Element && root.shadowRoot) {
+      results.push(...this.querySelectorAllDeep(root.shadowRoot, trimmedSelector));
     }
 
     const split = this.splitSelector(trimmedSelector);

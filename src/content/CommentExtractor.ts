@@ -25,7 +25,7 @@ export class CommentExtractor {
     platform: Platform,
     onProgress?: (progress: number, message: string) => void,
   ): Promise<Comment[]> {
-    console.log('[CommentExtractor] Starting config-driven extraction');
+    Logger.info('[CommentExtractor] Starting config-driven extraction');
     const selectorExtractor = new CommentExtractorSelector(this.pageController);
     const cfgResponse = await new Promise<any>((resolve) => {
       chrome.runtime.sendMessage(
@@ -89,7 +89,7 @@ export class CommentExtractor {
    * @returns Array of comments
    */
   async extract(maxComments: number): Promise<Comment[]> {
-    console.log('[CommentExtractor] Starting extraction, max:', maxComments);
+    Logger.info('[CommentExtractor] Starting extraction', { maxComments });
 
     // Wait for comments section to load
     await this.pageController.waitForElement(
@@ -106,7 +106,7 @@ export class CommentExtractor {
     // Extract comments from DOM
     const comments = this.extractCommentsFromDOM();
 
-    console.log('[CommentExtractor] Extracted', comments.length, 'comments');
+    Logger.info('[CommentExtractor] Extracted comments', { count: comments.length });
 
     // Limit to maxComments
     return comments.slice(0, maxComments);
@@ -134,7 +134,7 @@ export class CommentExtractor {
           comments.push(comment);
         }
       } catch (error) {
-        console.warn('[CommentExtractor] Failed to parse comment:', error);
+        Logger.warn('[CommentExtractor] Failed to parse comment', { error });
       }
     });
 
@@ -167,3 +167,4 @@ export class CommentExtractor {
     };
   }
 }
+import { Logger } from '@/utils/logger';

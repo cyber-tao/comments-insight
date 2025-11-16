@@ -40,7 +40,7 @@ const History: React.FC = () => {
       const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_HISTORY });
 
       if (chrome.runtime.lastError) {
-        console.error('[History] Failed to load history:', chrome.runtime.lastError);
+        Logger.error('[History] Failed to load history', { error: chrome.runtime.lastError });
         return;
       }
 
@@ -48,7 +48,7 @@ const History: React.FC = () => {
         setHistory(response.history);
       }
     } catch (error) {
-      console.error('[History] Failed to load history:', error);
+      Logger.error('[History] Failed to load history', { error });
     } finally {
       setLoading(false);
     }
@@ -69,7 +69,7 @@ const History: React.FC = () => {
         setHistory(response.items);
       }
     } catch (error) {
-      console.error('Failed to search:', error);
+      Logger.error('[History] Failed to search', { error });
     }
   };
 
@@ -86,7 +86,7 @@ const History: React.FC = () => {
         setSelectedItem(null);
       }
     } catch (error) {
-      console.error('Failed to delete:', error);
+      Logger.error('[History] Failed to delete', { error });
     }
   };
 
@@ -103,7 +103,7 @@ const History: React.FC = () => {
         setSelectedItem(null);
       }
     } catch (error) {
-      console.error('Failed to clear all:', error);
+      Logger.error('[History] Failed to clear all', { error });
     }
   };
 
@@ -561,3 +561,4 @@ const History: React.FC = () => {
 };
 
 export default History;
+import { Logger } from '@/utils/logger';

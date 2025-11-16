@@ -35,7 +35,7 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
       const loaded = await ScraperConfigManager.getAll();
       setConfigs(loaded);
     } catch (error) {
-      console.error('[ScraperConfigList] Failed to load configs:', error);
+      Logger.error('[ScraperConfigList] Failed to load configs', { error });
     } finally {
       setLoading(false);
     }
@@ -51,7 +51,7 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
       await loadConfigs();
       onConfigChange?.();
     } catch (error) {
-      console.error('[ScraperConfigList] Failed to delete config:', error);
+      Logger.error('[ScraperConfigList] Failed to delete config', { error });
       alert(t('scraper.importError'));
     }
   };
@@ -89,7 +89,7 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('[ScraperConfigList] Failed to export:', error);
+      Logger.error('[ScraperConfigList] Failed to export', { error });
       alert('Failed to export configurations');
     }
   };
@@ -116,7 +116,7 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
           onConfigChange?.();
         }
       } catch (error) {
-        console.error('[ScraperConfigList] Failed to import:', error);
+        Logger.error('[ScraperConfigList] Failed to import', { error });
         alert(
           t('scraper.importError') +
             ': ' +
@@ -165,7 +165,7 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
       await loadConfigs();
       onConfigChange?.();
     } catch (error) {
-      console.error('[ScraperConfigList] Failed to resolve conflicts:', error);
+      Logger.error('[ScraperConfigList] Failed to resolve conflicts', { error });
       alert(
         t('scraper.importError') +
           ': ' +
@@ -404,3 +404,4 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
     </div>
   );
 };
+import { Logger } from '@/utils/logger';

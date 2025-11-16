@@ -39,12 +39,15 @@ export const STORAGE = {
   HISTORY_KEY: 'history',
   HISTORY_INDEX_KEY: 'history_index',
   ENCRYPTION_SALT_KEY: 'encryption_salt',
+  LOG_LEVEL_KEY: 'log_min_level',
 };
 
 export const LOG_PREFIX = {
   SYSTEM: 'log_',
   AI: 'ai_log_',
 };
+
+export const LOG_LEVELS = ['DEBUG', 'INFO', 'WARN', 'ERROR'] as const;
 
 export const HOST = {
   WWW_PREFIX: 'www.',
@@ -112,6 +115,10 @@ export const TEXT = {
   UNTITLED: 'Untitled',
   DEFAULT_MODEL_NAME: 'gpt-4',
   API_KEY_PLACEHOLDER: 'sk-...',
+};
+
+export const DEFAULTS = {
+  LOGS_MAX_STORED: 100,
 };
 
 export const TIMING = {

@@ -22,6 +22,7 @@ type LogEntry =
 
 let allLogs: LogEntry[] = [];
 let currentFilter: 'all' | 'ai' | 'system' | 'error' = 'all';
+let currentLevelFilter: 'all' | 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' = 'all';
 
 async function loadLogs() {
   const storage = await chrome.storage.local.get(null);
@@ -58,6 +59,15 @@ function displayLogs() {
     );
   }
 
+  if (currentLevelFilter !== 'all') {
+    filteredLogs = filteredLogs.filter((log) => {
+      if (log.logType !== 'system') {
+        return true;
+      }
+      return (log as SystemLog).level === currentLevelFilter;
+    });
+  }
+
   if (filteredLogs.length === 0) {
     const i18n = (window as any).i18next;
     const text = i18n
@@ -91,13 +101,14 @@ function displayLogs() {
       `;
         } else {
           const sysLog = log as SystemLog & { key: string; logType: 'system' };
-          const levelClass = sysLog.level.toLowerCase();
+          const levelValue = sysLog.level || 'INFO';
+          const levelClass = levelValue.toLowerCase();
           const levelIcon = {
             DEBUG: '🔍',
             INFO: 'ℹ️',
             WARN: '⚠️',
             ERROR: '❌',
-          }[sysLog.level];
+          }[levelValue] || 'ℹ️';
 
           return `
         <div class="log-item-wrapper">
@@ -271,7 +282,7 @@ async function copyToClipboard(type: 'prompt' | 'response', index: number) {
     await navigator.clipboard.writeText(text);
     alert(i18n.t('logs.copySuccess'));
   } catch (error) {
-    console.error('Failed to copy:', error);
+    Logger.error('[Logs] Failed to copy', { error });
     alert(i18n.t('logs.copyFailed'));
   }
 }
@@ -294,7 +305,7 @@ async function copySystemLog(index: number) {
     await navigator.clipboard.writeText(text);
     alert(i18n.t('logs.copySuccess'));
   } catch (error) {
-    console.error('Failed to copy:', error);
+    Logger.error('[Logs] Failed to copy', { error });
     alert(i18n.t('logs.copyFailed'));
   }
 }
@@ -333,6 +344,9 @@ function updateStats() {
   const aiLogs = allLogs.filter((log) => log.logType === 'ai');
   const systemLogs = allLogs.filter((log) => log.logType === 'system');
   const errorLogs = systemLogs.filter((log) => (log as SystemLog).level === 'ERROR');
+  const debugLogs = systemLogs.filter((log) => (log as SystemLog).level === 'DEBUG');
+  const infoLogs = systemLogs.filter((log) => (log as SystemLog).level === 'INFO');
+  const warnLogs = systemLogs.filter((log) => (log as SystemLog).level === 'WARN');
 
   const statsEl = document.getElementById('logStats');
   if (statsEl) {
@@ -341,6 +355,9 @@ function updateStats() {
       <span>AI: ${aiLogs.length}</span>
       <span>System: ${systemLogs.length}</span>
       <span>Errors: ${errorLogs.length}</span>
+      <span>Debug: ${debugLogs.length}</span>
+      <span>Info: ${infoLogs.length}</span>
+      <span>Warn: ${warnLogs.length}</span>
     `;
   }
 }
@@ -357,7 +374,7 @@ async function exportLogs() {
 }
 
 // Initialize on page load
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   // Add event listeners to control buttons
   document.getElementById('refreshBtn')?.addEventListener('click', loadLogs);
   document.getElementById('exportBtn')?.addEventListener('click', exportLogs);
@@ -371,8 +388,33 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  const levelSelect = document.getElementById('levelFilter') as HTMLSelectElement | null;
+  levelSelect?.addEventListener('change', (e) => {
+    const val = (e.target as HTMLSelectElement).value as 'all' | 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+    currentLevelFilter = val;
+    displayLogs();
+    updateStats();
+  });
+
+  const outputLevelSelect = document.getElementById('outputLevelSelect') as HTMLSelectElement | null;
+  outputLevelSelect?.addEventListener('change', async (e) => {
+    const val = (e.target as HTMLSelectElement).value as LogLevel;
+    await Logger.setMinLevel(val);
+  });
+
+  try {
+    const stored = await chrome.storage.local.get(STORAGE.LOG_LEVEL_KEY);
+    const val = stored[STORAGE.LOG_LEVEL_KEY];
+    if (val && (LOG_LEVELS as readonly string[]).includes(val)) {
+      if (outputLevelSelect) {
+        outputLevelSelect.value = val;
+      }
+    }
+  } catch {}
+
   // Load logs
   loadLogs();
 });
-import { LOG_PREFIX } from '@/config/constants';
+import { LOG_PREFIX, STORAGE, LOG_LEVELS } from '@/config/constants';
+import { Logger, LogLevel } from '@/utils/logger';
 import i18n from '../utils/i18n';

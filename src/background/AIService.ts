@@ -276,7 +276,7 @@ export class AIService {
     // Split comments if they exceed token limit
     const commentBatches = this.splitCommentsForAnalysis(comments, config.maxTokens);
 
-    console.log('[AIService] Analyzing comments in', commentBatches.length, 'batches');
+    Logger.info('[AIService] Analyzing comments', { batches: commentBatches.length });
 
     if (commentBatches.length === 1) {
       // Single batch - analyze directly

@@ -105,7 +105,7 @@ export class DOMSimplifier {
 
       return undefined;
     } catch (error) {
-      console.warn('[DOMSimplifier] Failed to get classes:', error);
+      Logger.warn('[DOMSimplifier] Failed to get classes', { error });
       return undefined;
     }
   }
@@ -214,12 +214,12 @@ export class DOMSimplifier {
     try {
       const element = this.querySelectorDeep(document, selector);
       if (!element) {
-        console.warn(`[DOMSimplifier] Element not found: ${selector}`);
+        Logger.warn('[DOMSimplifier] Element not found', { selector });
         return null;
       }
       return this.simplifyElement(element, depth);
     } catch (error) {
-      console.error(`[DOMSimplifier] Failed to expand node: ${selector}`, error);
+      Logger.error('[DOMSimplifier] Failed to expand node', { selector, error });
       return null;
     }
   }
@@ -426,3 +426,4 @@ export class DOMSimplifier {
     return simplifier.nodeToString(node);
   }
 }
+import { Logger } from '@/utils/logger';

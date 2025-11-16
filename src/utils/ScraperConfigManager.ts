@@ -25,13 +25,10 @@ export class ScraperConfigManager {
       if (defaultConfigs.length > 0) {
         await this.saveAll(defaultConfigs);
         await chrome.storage.local.set({ [INITIALIZED_KEY]: true });
-        console.log(
-          '[ScraperConfigManager] Initialized with default configs:',
-          defaultConfigs.length,
-        );
+        Logger.info('[ScraperConfigManager] Initialized with default configs', { count: defaultConfigs.length });
       }
     } catch (error) {
-      console.error('[ScraperConfigManager] Failed to initialize defaults:', error);
+      Logger.error('[ScraperConfigManager] Failed to initialize defaults', { error });
     }
   }
 
@@ -40,22 +37,22 @@ export class ScraperConfigManager {
    */
   private static async loadDefaultConfigs(): Promise<ScraperConfig[]> {
     try {
-      console.log('[ScraperConfigManager] Loading default configs...');
+      Logger.debug('[ScraperConfigManager] Loading default configs');
       const configUrl = chrome.runtime.getURL(PATHS.DEFAULT_SCRAPERS_JSON);
-      console.log('[ScraperConfigManager] Config URL:', configUrl);
+      Logger.debug('[ScraperConfigManager] Config URL', { configUrl });
 
       const response = await fetch(configUrl);
-      console.log('[ScraperConfigManager] Fetch response status:', response.status);
+      Logger.debug('[ScraperConfigManager] Fetch response status', { status: response.status });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch config: ${response.status} ${response.statusText}`);
       }
 
       const data: ScraperConfigList = await response.json();
-      console.log('[ScraperConfigManager] Loaded configs:', data.configs?.length || 0);
+      Logger.debug('[ScraperConfigManager] Loaded configs', { count: data.configs?.length || 0 });
       return data.configs || [];
     } catch (error) {
-      console.error('[ScraperConfigManager] Failed to load default configs:', error);
+      Logger.error('[ScraperConfigManager] Failed to load default configs', { error });
       return [];
     }
   }
@@ -75,7 +72,7 @@ export class ScraperConfigManager {
       };
       return data.configs;
     } catch (error) {
-      console.error('[ScraperConfigManager] Failed to get configs:', error);
+      Logger.error('[ScraperConfigManager] Failed to get configs', { error });
       return [];
     }
   }
@@ -93,13 +90,13 @@ export class ScraperConfigManager {
    */
   static async findMatchingConfig(url: string): Promise<ScraperConfig | null> {
     try {
-      console.log('[ScraperConfigManager] findMatchingConfig called with URL:', url);
+      Logger.debug('[ScraperConfigManager] findMatchingConfig called', { url });
       const configs = await this.getAll();
-      console.log('[ScraperConfigManager] Finding config for URL:', url);
-      console.log('[ScraperConfigManager] Available configs:', configs.length);
+      Logger.debug('[ScraperConfigManager] Finding config for URL', { url });
+      Logger.debug('[ScraperConfigManager] Available configs', { count: configs.length });
 
       if (configs.length === 0) {
-        console.warn('[ScraperConfigManager] No configs available!');
+        Logger.warn('[ScraperConfigManager] No configs available');
         return null;
       }
 
@@ -116,19 +113,14 @@ export class ScraperConfigManager {
       }
 
       if (!hostname) {
-        console.warn('[ScraperConfigManager] Could not extract hostname from URL:', url);
+        Logger.warn('[ScraperConfigManager] Could not extract hostname from URL', { url });
         return null;
       }
 
-      console.log('[ScraperConfigManager] Extracted hostname:', hostname);
+      Logger.debug('[ScraperConfigManager] Extracted hostname', { hostname });
 
       for (const config of configs) {
-        console.log(
-          '[ScraperConfigManager] Checking config:',
-          config.name,
-          'domains:',
-          config.domains,
-        );
+        Logger.debug('[ScraperConfigManager] Checking config', { name: config.name, domains: config.domains });
 
         // Check domain match
         const domainMatch = config.domains.some((domain) => {
@@ -136,53 +128,53 @@ export class ScraperConfigManager {
             hostname === domain ||
             hostname.endsWith('.' + domain) ||
             domain.endsWith('.' + hostname);
-          console.log('[ScraperConfigManager] Domain check:', domain, 'vs', hostname, '=', matches);
+          Logger.debug('[ScraperConfigManager] Domain check', { domain, hostname, matches });
           return matches;
         });
 
         if (!domainMatch) {
-          console.log('[ScraperConfigManager] Domain not matched for config:', config.name);
+          Logger.debug('[ScraperConfigManager] Domain not matched for config', { name: config.name });
           continue;
         }
 
-        console.log('[ScraperConfigManager] Domain matched for config:', config.name);
+        Logger.debug('[ScraperConfigManager] Domain matched for config', { name: config.name });
 
         // Check URL pattern match
         // Filter out empty patterns
         const validPatterns = config.urlPatterns.filter((p) => p && p.trim() !== '');
 
         if (validPatterns.length === 0) {
-          console.log('[ScraperConfigManager] No URL patterns, returning config:', config.name);
+          Logger.debug('[ScraperConfigManager] No URL patterns, returning config', { name: config.name });
           return config; // No pattern means match all URLs for this domain
         }
 
-        console.log('[ScraperConfigManager] Testing URL patterns:', validPatterns);
+        Logger.debug('[ScraperConfigManager] Testing URL patterns', { validPatterns });
 
         const patternMatch = validPatterns.some((pattern) => {
           try {
             const regex = new RegExp(pattern);
             const matches = regex.test(url);
-            console.log('[ScraperConfigManager] Pattern check:', pattern, 'vs', url, '=', matches);
+            Logger.debug('[ScraperConfigManager] Pattern check', { pattern, url, matches });
             return matches;
           } catch (error) {
-            console.error('[ScraperConfigManager] Invalid regex pattern:', pattern, error);
+            Logger.error('[ScraperConfigManager] Invalid regex pattern', { pattern, error });
             return false;
           }
         });
 
         if (patternMatch) {
-          console.log('[ScraperConfigManager] Pattern matched, returning config:', config.name);
+          Logger.debug('[ScraperConfigManager] Pattern matched, returning config', { name: config.name });
           return config;
         } else {
-          console.log('[ScraperConfigManager] Pattern not matched for config:', config.name);
-          console.log('[ScraperConfigManager] Tried patterns:', validPatterns, 'against URL:', url);
+          Logger.debug('[ScraperConfigManager] Pattern not matched for config', { name: config.name });
+          Logger.debug('[ScraperConfigManager] Tried patterns against URL', { validPatterns, url });
         }
       }
 
-      console.log('[ScraperConfigManager] No matching config found');
+      Logger.info('[ScraperConfigManager] No matching config found');
       return null;
     } catch (error) {
-      console.error('[ScraperConfigManager] Error in findMatchingConfig:', error);
+      Logger.error('[ScraperConfigManager] Error in findMatchingConfig', { error });
       return null;
     }
   }
@@ -403,7 +395,7 @@ export class ScraperConfigManager {
         overwritten: overwrittenCount,
       };
     } catch (error) {
-      console.error('[ScraperConfigManager] Failed to import configs:', error);
+      Logger.error('[ScraperConfigManager] Failed to import configs', { error });
       throw error;
     }
   }
@@ -465,7 +457,7 @@ export class ScraperConfigManager {
   ): Promise<void> {
     const config = await this.getById(id);
     if (!config) {
-      console.warn('[ScraperConfigManager] Config not found for validation update:', id);
+      Logger.warn('[ScraperConfigManager] Config not found for validation update', { id });
       return;
     }
 
@@ -473,7 +465,7 @@ export class ScraperConfigManager {
     selectorValidation[selectorKey] = status;
 
     await this.update(id, { selectorValidation });
-    console.log('[ScraperConfigManager] Updated selector validation:', id, selectorKey, status);
+    Logger.info('[ScraperConfigManager] Updated selector validation', { id, selectorKey, status });
   }
 
   /**
@@ -525,3 +517,4 @@ export class ScraperConfigManager {
     };
   }
 }
+import { Logger } from '@/utils/logger';

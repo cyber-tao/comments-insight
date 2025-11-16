@@ -3,6 +3,8 @@
  * Provides different log levels and environment-aware logging
  */
 
+import { LOG_PREFIX, STORAGE, DEFAULTS, LOG_LEVELS } from '@/config/constants';
+
 /**
  * Log levels
  */
@@ -43,7 +45,7 @@ export class Logger {
     minLevel: LogLevel.INFO,
     enableConsole: true,
     enableStorage: false,
-    maxStoredLogs: 100,
+    maxStoredLogs: DEFAULTS.LOGS_MAX_STORED,
   };
 
   private static isDevelopment = false;
@@ -80,7 +82,23 @@ export class Logger {
       this.config.enableConsole = true;
       this.config.enableStorage = true;
     }
-
+    try {
+      const stored = await chrome.storage.local.get(STORAGE.LOG_LEVEL_KEY);
+      const val = stored[STORAGE.LOG_LEVEL_KEY];
+      if (val && (LOG_LEVELS as readonly string[]).includes(val)) {
+        this.config.minLevel = val as LogLevel;
+      }
+    } catch {}
+    try {
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local' && changes[STORAGE.LOG_LEVEL_KEY]) {
+          const nv = changes[STORAGE.LOG_LEVEL_KEY].newValue;
+          if (nv && (LOG_LEVELS as readonly string[]).includes(nv)) {
+            this.config.minLevel = nv as LogLevel;
+          }
+        }
+      });
+    } catch {}
     this.initialized = true;
     this.info('[Logger] Initialized', {
       environment: this.isDevelopment ? 'development' : 'production',
@@ -144,6 +162,13 @@ export class Logger {
    */
   static error(message: string, data?: any): void {
     this.log(LogLevel.ERROR, message, data);
+  }
+
+  static async setMinLevel(level: LogLevel): Promise<void> {
+    this.config.minLevel = level;
+    try {
+      await chrome.storage.local.set({ [STORAGE.LOG_LEVEL_KEY]: level });
+    } catch {}
   }
 
   /**
@@ -235,7 +260,7 @@ export class Logger {
   private static async logToStorage(entry: LogEntry): Promise<void> {
     try {
       // Create storage key
-      const logKey = `log_${entry.level.toLowerCase()}_${entry.timestamp}`;
+      const logKey = `${LOG_PREFIX.SYSTEM}${entry.level.toLowerCase()}_${entry.timestamp}`;
 
       // Save log entry
       await chrome.storage.local.set({

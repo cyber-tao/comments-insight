@@ -151,7 +151,7 @@ export class MessageRouter {
       const urlObj = new URL(url);
       domain = urlObj.hostname.replace('www.', '');
     } catch (e) {
-      console.warn('[MessageRouter] Failed to parse URL:', url);
+      Logger.warn('[MessageRouter] Failed to parse URL', { url });
     }
 
     const taskId = this.taskManager.createTask('extract', url, domain);
@@ -165,7 +165,7 @@ export class MessageRouter {
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
         tabId = activeTab?.id;
       } catch (error) {
-        console.error('[MessageRouter] Failed to get active tab:', error);
+        Logger.error('[MessageRouter] Failed to get active tab', { error });
       }
     }
 
@@ -176,11 +176,11 @@ export class MessageRouter {
       finalMaxComments = settings.maxComments || 100;
     }
 
-    console.log('[MessageRouter] Starting extraction with maxComments:', finalMaxComments);
+    Logger.info('[MessageRouter] Starting extraction with maxComments', { maxComments: finalMaxComments });
 
     // Start the extraction task asynchronously
     this.startExtractionTask(taskId, tabId, finalMaxComments).catch((error) => {
-      console.error('[MessageRouter] Extraction task failed:', error);
+      Logger.error('[MessageRouter] Extraction task failed', { error });
       this.taskManager.failTask(taskId, error.message);
     });
 
@@ -205,7 +205,7 @@ export class MessageRouter {
       const comments = await this.aiService.extractComments(domStructure, settings.extractorModel);
       return { comments };
     } catch (error) {
-      console.error('[MessageRouter] AI extraction failed:', error);
+      Logger.error('[MessageRouter] AI extraction failed', { error });
       return { error: error instanceof Error ? error.message : 'Unknown error', comments: [] };
     }
   }
@@ -269,8 +269,8 @@ export class MessageRouter {
           data.analysis = '';
         }
       } catch (parseError) {
-        console.error('[MessageRouter] Failed to parse AI progressive response:', parseError);
-        console.error('[MessageRouter] Raw response:', response.content);
+        Logger.error('[MessageRouter] Failed to parse AI progressive response', { error: parseError });
+        Logger.error('[MessageRouter] Raw response', { content: response.content });
 
         // Return empty response instead of failing
         data = {
@@ -284,7 +284,7 @@ export class MessageRouter {
 
       return { data };
     } catch (error) {
-      console.error('[MessageRouter] AI progressive extraction failed:', error);
+      Logger.error('[MessageRouter] AI progressive extraction failed', { error });
       return {
         error: error instanceof Error ? error.message : 'Unknown error',
         data: {
@@ -345,15 +345,12 @@ export class MessageRouter {
           if (typeof data.confidence === 'number')
             aggregated.confidence = Math.max(aggregated.confidence, data.confidence);
         } catch (e) {
-          console.warn('[MessageRouter] Failed to parse AI structure part', {
-            part: i + 1,
-            error: e,
-          });
+          Logger.warn('[MessageRouter] Failed to parse AI structure part', { part: i + 1, error: e });
         }
       }
       return { data: aggregated };
     } catch (error) {
-      console.error('[MessageRouter] AI structure analysis failed:', error);
+      Logger.error('[MessageRouter] AI structure analysis failed', { error });
       return {
         error: error instanceof Error ? error.message : 'Unknown error',
       };
@@ -390,7 +387,7 @@ export class MessageRouter {
         const urlObj = new URL(url);
         domain = urlObj.hostname.replace('www.', '');
       } catch (e) {
-        console.warn('[MessageRouter] Failed to parse URL:', url);
+        Logger.warn('[MessageRouter] Failed to parse URL', { url });
       }
     }
 
@@ -398,7 +395,7 @@ export class MessageRouter {
 
     // Start the analysis task asynchronously
     this.startAnalysisTask(taskId, comments, historyId).catch((error) => {
-      console.error('[MessageRouter] Analysis task failed:', error);
+      Logger.error('[MessageRouter] Analysis task failed', { error });
       this.taskManager.failTask(taskId, error.message);
     });
 
@@ -439,9 +436,9 @@ export class MessageRouter {
    * Handle get settings message
    */
   private async handleGetSettings(): Promise<any> {
-    console.log('[MessageRouter] Getting settings...');
+    Logger.debug('[MessageRouter] Getting settings');
     const settings = await this.storageManager.getSettings();
-    console.log('[MessageRouter] Settings retrieved:', settings);
+    Logger.debug('[MessageRouter] Settings retrieved', { settings });
     return { settings };
   }
 
@@ -551,7 +548,7 @@ export class MessageRouter {
       const models = await this.aiService.getAvailableModels(apiUrl, apiKey);
       return { models };
     } catch (error) {
-      console.error('[MessageRouter] Failed to get models:', error);
+      Logger.error('[MessageRouter] Failed to get models', { error });
       return { models: [], error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
@@ -583,7 +580,7 @@ export class MessageRouter {
         throw new Error('No response from model');
       }
     } catch (error) {
-      console.error('[MessageRouter] Model test failed:', error);
+      Logger.error('[MessageRouter] Model test failed', { error });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -741,25 +738,22 @@ export class MessageRouter {
   private async handleCheckScraperConfig(message: Message): Promise<any> {
     const { url } = message.payload || {};
 
-    console.log('[MessageRouter] handleCheckScraperConfig called with URL:', url);
+    Logger.debug('[MessageRouter] handleCheckScraperConfig called', { url });
 
     if (!url) {
-      console.error('[MessageRouter] URL is required but not provided');
+      Logger.error('[MessageRouter] URL is required but not provided');
       throw new Error('URL is required');
     }
 
     try {
-      console.log('[MessageRouter] Calling findMatchingConfig...');
+      Logger.debug('[MessageRouter] Calling findMatchingConfig');
       const config = await ScraperConfigManager.findMatchingConfig(url);
-      console.log('[MessageRouter] findMatchingConfig result:', config ? 'Found' : 'Not found');
+      Logger.debug('[MessageRouter] findMatchingConfig result', { found: !!config });
 
       return { hasConfig: !!config, config };
     } catch (error) {
-      console.error('[MessageRouter] Failed to check scraper config:', error);
-      console.error(
-        '[MessageRouter] Error stack:',
-        error instanceof Error ? error.stack : 'No stack',
-      );
+      Logger.error('[MessageRouter] Failed to check scraper config', { error });
+      Logger.error('[MessageRouter] Error stack', { stack: error instanceof Error ? error.stack : 'No stack' });
       return { hasConfig: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
@@ -848,7 +842,7 @@ export class MessageRouter {
           if (part.scrollConfig) configData.scrollConfig = part.scrollConfig;
           if (part.name && !configData.name) configData.name = part.name;
         } catch (e) {
-          console.warn('[MessageRouter] Failed to parse config part', { part: i + 1, error: e });
+          Logger.warn('[MessageRouter] Failed to parse config part', { part: i + 1, error: e });
         }
       }
 
@@ -882,7 +876,7 @@ export class MessageRouter {
 
       return { success: true, config };
     } catch (error) {
-      console.error('[MessageRouter] Failed to generate scraper config:', error);
+      Logger.error('[MessageRouter] Failed to generate scraper config', { error });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -927,7 +921,7 @@ export class MessageRouter {
       const configs = await ScraperConfigManager.getAll();
       return { configs };
     } catch (error) {
-      console.error('[MessageRouter] Failed to get scraper configs:', error);
+      Logger.error('[MessageRouter] Failed to get scraper configs', { error });
       return { configs: [] };
     }
   }
@@ -953,7 +947,7 @@ export class MessageRouter {
         return { success: true, config: created };
       }
     } catch (error) {
-      console.error('[MessageRouter] Failed to save scraper config:', error);
+      Logger.error('[MessageRouter] Failed to save scraper config', { error });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -975,7 +969,7 @@ export class MessageRouter {
       const success = await ScraperConfigManager.delete(id);
       return { success };
     } catch (error) {
-      console.error('[MessageRouter] Failed to delete scraper config:', error);
+      Logger.error('[MessageRouter] Failed to delete scraper config', { error });
       return { success: false };
     }
   }
@@ -994,7 +988,7 @@ export class MessageRouter {
       await ScraperConfigManager.updateSelectorValidation(configId, selectorKey, status);
       return { success: true };
     } catch (error) {
-      console.error('[MessageRouter] Failed to update selector validation:', error);
+      Logger.error('[MessageRouter] Failed to update selector validation', { error });
       return { success: false };
     }
   }

@@ -33,7 +33,7 @@ export class NotificationService {
         chrome.notifications.clear(notificationId);
       }, TEXT.NOTIFICATION_AUTOCLEAR_MS);
     } catch (error) {
-      console.error('[NotificationService] Failed to show notification:', error);
+      Logger.error('[NotificationService] Failed to show notification', { error });
     }
   }
 
@@ -55,7 +55,7 @@ export class NotificationService {
 
       await chrome.notifications.create(notificationId, options);
     } catch (error) {
-      console.error('[NotificationService] Failed to show error notification:', error);
+      Logger.error('[NotificationService] Failed to show error notification', { error });
     }
   }
 
@@ -101,3 +101,4 @@ export class NotificationService {
     }
   }
 }
+import { Logger } from '@/utils/logger';

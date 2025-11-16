@@ -3,10 +3,10 @@ import { PageController } from './PageController';
 import { MESSAGES, DOM } from '@/config/constants';
 import { CommentExtractorSelector } from './CommentExtractorSelector';
 
-console.log('Comments Insight Content Script loaded');
+Logger.debug('Comments Insight Content Script loaded');
 
 // Get basic page info
-console.log('[Content] Page loaded:', window.location.href);
+Logger.debug('[Content] Page loaded', { href: window.location.href });
 
 // Initialize extractors with Shadow DOM support
 import { DOMAnalyzer } from './DOMAnalyzer';
@@ -20,7 +20,7 @@ let currentTaskId: string | null = null;
 
 // Listen for messages from background
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  console.log('[Content] Received message:', message.type);
+  Logger.debug('[Content] Received message', { type: message.type });
 
   // Handle different message types
   switch (message.type) {
@@ -85,7 +85,7 @@ async function handleStartExtraction(
 ) {
   const { taskId, maxComments } = data;
 
-  console.log('[Content] Starting extraction, taskId:', taskId);
+  Logger.info('[Content] Starting extraction', { taskId });
 
   // Set current task
   currentTaskId = taskId;
@@ -100,7 +100,7 @@ async function handleStartExtraction(
     });
 
     if (!cfgResponse?.config || !cfgResponse.config.selectors) {
-      console.log('[Content] No scraper config found for current page');
+      Logger.info('[Content] No scraper config found for current page');
       sendResponse({ success: false, error: 'No scraper config' });
       return;
     }
@@ -121,7 +121,7 @@ async function handleStartExtraction(
 
     // Check if task was cancelled
     if (currentTaskId !== taskId) {
-      console.log('[Content] Extraction cancelled');
+      Logger.info('[Content] Extraction cancelled');
       sendResponse({
         success: false,
         error: 'Extraction cancelled',
@@ -139,9 +139,9 @@ async function handleStartExtraction(
       postInfo,
     });
 
-    console.log('[Content] Extraction complete:', comments.length, 'comments');
+    Logger.info('[Content] Extraction complete', { count: comments.length });
   } catch (error) {
-    console.error('[Content] Extraction failed:', error);
+    Logger.error('[Content] Extraction failed', { error });
     sendResponse({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -157,7 +157,7 @@ async function handleStartExtraction(
  */
 function handleCancelExtraction(taskId: string) {
   if (currentTaskId === taskId) {
-    console.log('[Content] Cancelling extraction:', taskId);
+    Logger.info('[Content] Cancelling extraction', { taskId });
     currentTaskId = null;
   }
 }
@@ -184,13 +184,13 @@ async function getPostInfo(): Promise<{ url: string; title: string; videoTime?: 
         const videoTime =
           videoTimeElement.textContent?.trim() || videoTimeElement.getAttribute('datetime');
         if (videoTime) {
-          console.log('[Content] Extracted video time:', videoTime);
+          Logger.info('[Content] Extracted video time', { videoTime });
           return { url, title, videoTime };
         }
       }
     }
   } catch (error) {
-    console.warn('[Content] Failed to extract video time:', error);
+    Logger.warn('[Content] Failed to extract video time', { error });
   }
 
   return { url, title };
@@ -202,7 +202,7 @@ async function getPostInfo(): Promise<{ url: string; title: string; videoTime?: 
  */
 async function handleGetDOMStructure(sendResponse: (response: any) => void) {
   try {
-    console.log('[Content] Getting DOM structure for AI analysis');
+    Logger.info('[Content] Getting DOM structure for AI analysis');
 
     // Import DOMSimplifier
     const { DOMSimplifier } = await import('./DOMSimplifier');
@@ -217,17 +217,18 @@ async function handleGetDOMStructure(sendResponse: (response: any) => void) {
     // Convert to string format
     const domString = DOMSimplifier.toStringFormat(domStructure);
 
-    console.log('[Content] DOM structure generated, length:', domString.length);
+    Logger.info('[Content] DOM structure generated', { length: domString.length });
 
     sendResponse({
       success: true,
       domStructure: domString,
     });
   } catch (error) {
-    console.error('[Content] Failed to get DOM structure:', error);
+    Logger.error('[Content] Failed to get DOM structure', { error });
     sendResponse({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 }
+import { Logger } from '@/utils/logger';

@@ -28,10 +28,10 @@ const Options: React.FC = () => {
     const loadSettings = async () => {
       try {
         const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_SETTINGS });
-        console.log('[Options] Settings response:', response);
+        Logger.debug('[Options] Settings response', { response });
 
         if (chrome.runtime.lastError) {
-          console.error('[Options] Runtime error:', chrome.runtime.lastError);
+          Logger.error('[Options] Runtime error', { error: chrome.runtime.lastError });
           toast.error('Failed to load settings: ' + chrome.runtime.lastError.message);
           return;
         }
@@ -40,17 +40,17 @@ const Options: React.FC = () => {
           setSettings(response.settings);
           // Set i18n language from settings
           if (response.settings.language) {
-            console.log('[Options] Setting language to:', response.settings.language);
+            Logger.debug('[Options] Setting language to', { language: response.settings.language });
             i18n.changeLanguage(response.settings.language);
           }
           // Mark initial load as complete after a short delay to ensure language is set
           setTimeout(() => setIsInitialLoad(false), 100);
         } else {
-          console.error('[Options] No settings in response:', response);
+          Logger.error('[Options] No settings in response', { response });
           toast.error('Failed to load settings: Invalid response');
         }
       } catch (error) {
-        console.error('[Options] Failed to load settings:', error);
+        Logger.error('[Options] Failed to load settings', { error });
         toast.error(
           'Failed to load settings: ' + (error instanceof Error ? error.message : 'Unknown error'),
         );
@@ -849,3 +849,4 @@ const Options: React.FC = () => {
 };
 
 export default Options;
+import { Logger } from '@/utils/logger';

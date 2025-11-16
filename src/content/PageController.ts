@@ -33,12 +33,12 @@ export class PageController {
 
       // Stop if no new content loaded
       if (newHeight === previousHeight) {
-        console.log('[PageController] No more content to load');
+        Logger.info('[PageController] No more content to load');
         break;
       }
 
       scrollCount++;
-      console.log(`[PageController] Scrolled ${scrollCount}/${maxScrolls}`);
+      Logger.info('[PageController] Scrolled', { scrollCount, maxScrolls });
     }
   }
 
@@ -52,14 +52,14 @@ export class PageController {
       ? this.domAnalyzer.querySelectorAllDeep(document, selector)
       : Array.from(document.querySelectorAll(selector));
 
-    console.log(`[PageController] Found ${buttons.length} expand buttons`);
+    Logger.info('[PageController] Found expand buttons', { count: buttons.length });
 
     for (const button of buttons) {
       try {
         (button as HTMLElement).click();
         await this.wait(TIMING.LG);
       } catch (error) {
-        console.warn('[PageController] Failed to click button:', error);
+        Logger.warn('[PageController] Failed to click button', { error });
       }
     }
   }
@@ -84,9 +84,9 @@ export class PageController {
         button.click();
         await this.wait(TIMING.XL);
         clickCount++;
-        console.log(`[PageController] Clicked load more ${clickCount}/${maxClicks}`);
+        Logger.info('[PageController] Clicked load more', { clickCount, maxClicks });
       } catch (error) {
-        console.warn('[PageController] Failed to click load more:', error);
+        Logger.warn('[PageController] Failed to click load more', { error });
         break;
       }
     }
@@ -116,7 +116,7 @@ export class PageController {
       await this.wait(TIMING.XS);
     }
 
-    console.warn(`[PageController] Element not found: ${selector}`);
+    Logger.warn('[PageController] Element not found', { selector });
     return null;
   }
 
@@ -128,3 +128,4 @@ export class PageController {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
+import { Logger } from '@/utils/logger';

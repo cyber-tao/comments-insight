@@ -83,7 +83,7 @@ const Popup: React.FC = () => {
         i18nModule.default.changeLanguage(response.settings.language);
       }
     } catch (error) {
-      console.error('[Popup] Failed to load language:', error);
+      Logger.error('[Popup] Failed to load language', { error });
     }
   };
 
@@ -92,7 +92,7 @@ const Popup: React.FC = () => {
       const manifest = chrome.runtime.getManifest();
       setVersion(manifest.version);
     } catch (error) {
-      console.error('[Popup] Failed to load version:', error);
+      Logger.error('[Popup] Failed to load version', { error });
     }
   };
 
@@ -108,7 +108,7 @@ const Popup: React.FC = () => {
         }
       }
     } catch (error) {
-      console.error('[Popup] Failed to load model names:', error);
+      Logger.error('[Popup] Failed to load model names', { error });
     }
   };
 
@@ -129,7 +129,7 @@ const Popup: React.FC = () => {
         );
 
         if (currentUrlTask) {
-          console.log('[Popup] Found current task:', currentUrlTask);
+          Logger.debug('[Popup] Found current task', { task: currentUrlTask });
           setCurrentTask({
             id: currentUrlTask.id,
             type: currentUrlTask.type,
@@ -145,7 +145,7 @@ const Popup: React.FC = () => {
         }
       }
     } catch (error) {
-      console.error('[Popup] Failed to load current task:', error);
+      Logger.error('[Popup] Failed to load current task', { error });
     }
   };
 
@@ -160,15 +160,15 @@ const Popup: React.FC = () => {
       }
 
       // Check if there's a matching scraper config
-      console.log('[Popup] Checking scraper config for URL:', tab.url);
+      Logger.debug('[Popup] Checking scraper config', { url: tab.url });
       const configResponse = await chrome.runtime.sendMessage({
         type: MESSAGES.CHECK_SCRAPER_CONFIG,
         payload: { url: tab.url },
       });
 
-      console.log('[Popup] Config check response:', configResponse);
+      Logger.debug('[Popup] Config check response', { response: configResponse });
       const hasConfig = configResponse?.hasConfig || false;
-      console.log('[Popup] Has config:', hasConfig);
+      Logger.debug('[Popup] Has config', { hasConfig });
 
       // Extract domain from URL
       let domain = 'unknown';
@@ -176,7 +176,7 @@ const Popup: React.FC = () => {
         const urlObj = new URL(tab.url);
         domain = urlObj.hostname.replace(HOST.WWW_PREFIX, '');
       } catch (e) {
-        console.warn('[Popup] Failed to parse URL:', tab.url);
+        Logger.warn('[Popup] Failed to parse URL', { url: tab.url });
       }
 
       setPageInfo({
@@ -189,7 +189,7 @@ const Popup: React.FC = () => {
       // Check if this page has been extracted/analyzed
       await checkPageStatus(tab.url);
     } catch (error) {
-      console.error('[Popup] Failed to load page info:', error);
+      Logger.error('[Popup] Failed to load page info', { error });
     } finally {
       setLoading(false);
     }
@@ -214,7 +214,7 @@ const Popup: React.FC = () => {
         });
       }
     } catch (error) {
-      console.error('[Popup] Failed to check page status:', error);
+      Logger.error('[Popup] Failed to check page status', { error });
     }
   };
 
@@ -243,7 +243,7 @@ const Popup: React.FC = () => {
         );
       }
     } catch (error) {
-      console.error('[Popup] Failed to generate config:', error);
+      Logger.error('[Popup] Failed to generate config', { error });
       toast.error(t('popup.generateConfigFailed'));
     } finally {
       setGeneratingConfig(false);
@@ -281,7 +281,7 @@ const Popup: React.FC = () => {
         monitorTask(response.taskId);
       }
     } catch (error) {
-      console.error('[Popup] Failed to start extraction:', error);
+      Logger.error('[Popup] Failed to start extraction', { error });
       setCurrentTask(null);
       toast.error(t('popup.extractionFailed'));
     }
@@ -328,7 +328,7 @@ const Popup: React.FC = () => {
         }
       }
     } catch (error) {
-      console.error('[Popup] Failed to start analysis:', error);
+      Logger.error('[Popup] Failed to start analysis', { error });
       setCurrentTask(null);
       toast.error(t('popup.analysisFailed'));
     }
@@ -376,7 +376,7 @@ const Popup: React.FC = () => {
           }
         }
       } catch (error) {
-        console.error('[Popup] Failed to check task status:', error);
+        Logger.error('[Popup] Failed to check task status', { error });
       }
     };
 
@@ -781,3 +781,4 @@ const Popup: React.FC = () => {
 };
 
 export default Popup;
+import { Logger } from '@/utils/logger';
