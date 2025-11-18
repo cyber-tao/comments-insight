@@ -219,6 +219,7 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
       {/* Selectors */}
       <div className="mb-6">
         <h3 className="text-lg font-semibold mb-3">{t('scraper.selectors')}</h3>
+        <p className="text-xs text-gray-500 mb-4">{t('scraper.selectorHierarchyHint')}</p>
 
         <div className="space-y-3">
           {/* Required selectors */}
@@ -251,7 +252,6 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
           {[
             { key: 'postTitle', label: t('scraper.postTitle') },
             { key: 'videoTime', label: t('scraper.videoTime') },
-            { key: 'avatar', label: t('scraper.avatar') },
             { key: 'replyToggle', label: t('scraper.replyToggle') },
             { key: 'replyContainer', label: t('scraper.replyContainer') },
             { key: 'replyItem', label: t('scraper.replyItem') },

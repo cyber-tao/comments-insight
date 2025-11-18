@@ -8,7 +8,7 @@ import {
   createAIError,
   createNetworkError,
 } from '../utils/errors';
-import { AI as AI_CONST, REGEX, LOG_PREFIX } from '@/config/constants';
+import { AI as AI_CONST, REGEX, LOG_PREFIX, ANALYSIS_FORMAT } from '@/config/constants';
 
 /**
  * AIService handles all AI-related operations including
@@ -312,8 +312,13 @@ export class AIService {
       videoTime?: string;
     },
   ): Promise<AnalysisResult> {
-    const commentsJson = JSON.stringify(comments, null, 2);
-    const prompt = this.buildAnalysisPromptWrapper(commentsJson, promptTemplate, metadata);
+    const serialized = this.serializeCommentsDense(comments);
+    const prompt = this.buildAnalysisPromptWrapper(
+      serialized.text,
+      promptTemplate,
+      metadata,
+      serialized.total,
+    );
 
     const response = await this.callAI({
       prompt,
@@ -344,25 +349,15 @@ export class AIService {
     const batches: Comment[][] = [];
     let currentBatch: Comment[] = [];
     let currentTokens = 0;
-
-    const estimateTokens = (text: string): number => {
-      const cleaned = text.replace(/\s+/g, ' ').trim();
-      const words = cleaned.length ? cleaned.split(/\s+/).length : 0;
-      const punct = (cleaned.match(/[,.!?;:]/g) || []).length;
-      const chars = cleaned.length;
-      const approx = Math.ceil(
-        words * AI_CONST.ESTIMATE_WORD_WEIGHT +
-          punct * AI_CONST.ESTIMATE_PUNCT_WEIGHT +
-          chars / AI_CONST.ESTIMATE_CHAR_DIVISOR,
-      );
-      return Math.max(1, approx);
-    };
+    const availableTokens = Math.max(
+      1,
+      Math.floor(maxTokens * (1 - AI_CONST.TOKEN_RESERVE_RATIO)),
+    );
 
     for (const comment of comments) {
-      const commentTokens = estimateTokens(JSON.stringify(comment));
+      const commentTokens = this.estimateTokensForComment(comment);
 
-      // Reserve ratio for prompt and model response
-      if (currentTokens + commentTokens > maxTokens * (1 - AI_CONST.TOKEN_RESERVE_RATIO)) {
+      if (currentTokens + commentTokens > availableTokens && currentBatch.length > 0) {
         if (currentBatch.length > 0) {
           batches.push(currentBatch);
           currentBatch = [];
@@ -456,7 +451,7 @@ export class AIService {
    * @returns Formatted prompt
    */
   private buildAnalysisPromptWrapper(
-    commentsJson: string,
+    commentsData: string,
     template: string,
     metadata?: {
       platform?: string;
@@ -465,14 +460,15 @@ export class AIService {
       datetime?: string;
       videoTime?: string;
     },
+    totalComments: number = 0,
   ): string {
-    return buildAnalysisPrompt(commentsJson, template, {
+    return buildAnalysisPrompt(commentsData, template, {
       datetime: new Date().toISOString(),
       videoTime: metadata?.videoTime || 'N/A',
       platform: metadata?.platform || 'Unknown Platform',
       url: metadata?.url || 'N/A',
       title: metadata?.title || 'Untitled',
-      totalComments: JSON.parse(commentsJson).length,
+      totalComments,
       language: this.currentLanguage,
     });
   }
@@ -512,6 +508,78 @@ export class AIService {
   private removeThinkTags(content: string): string {
     // Remove <think>...</think> blocks (including multiline)
     return content.replace(REGEX.THINK_TAGS, '').trim();
+  }
+
+  private serializeCommentsDense(comments: Comment[]): { text: string; total: number } {
+    const lines: string[] = [ANALYSIS_FORMAT.COMMENT_HEADER];
+    let total = 0;
+
+    const traverse = (items: Comment[], depth: number) => {
+      for (const comment of items) {
+        lines.push(this.formatCommentLine(comment, depth));
+        total += 1;
+        if (Array.isArray(comment.replies) && comment.replies.length > 0) {
+          traverse(comment.replies, depth + 1);
+        }
+      }
+    };
+
+    traverse(comments, 0);
+
+    return {
+      text: lines.join('\n'),
+      total,
+    };
+  }
+
+  private formatCommentLine(comment: Comment, depth: number): string {
+    const prefix = depth > 0 ? ANALYSIS_FORMAT.REPLY_PREFIX.repeat(depth) : '';
+    const username = this.normalizeTextValue(comment.username, ANALYSIS_FORMAT.UNKNOWN_USERNAME);
+    const timestamp = this.normalizeTextValue(comment.timestamp, ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP);
+    const likes = this.formatLikesValue(comment.likes);
+    const content = this.normalizeTextValue(comment.content, ANALYSIS_FORMAT.UNKNOWN_CONTENT);
+
+    return [
+      `${prefix}${username}`,
+      timestamp,
+      likes,
+      content,
+    ].join(ANALYSIS_FORMAT.FIELD_SEPARATOR);
+  }
+
+  private normalizeTextValue(value: string | undefined | null, fallback: string): string {
+    const normalized = (value ?? '').toString().replace(/\s+/g, ' ').trim();
+    return normalized || fallback;
+  }
+
+  private formatLikesValue(likes?: number): string {
+    if (typeof likes !== 'number' || Number.isNaN(likes)) {
+      return '0';
+    }
+    return String(Math.max(0, Math.round(likes)));
+  }
+
+  private estimateTokensForComment(comment: Comment, depth: number = 0): number {
+    let tokens = this.estimateTextTokens(this.formatCommentLine(comment, depth));
+    if (Array.isArray(comment.replies)) {
+      for (const reply of comment.replies) {
+        tokens += this.estimateTokensForComment(reply, depth + 1);
+      }
+    }
+    return tokens;
+  }
+
+  private estimateTextTokens(text: string): number {
+    const cleaned = text.replace(/\s+/g, ' ').trim();
+    const words = cleaned.length ? cleaned.split(/\s+/).length : 0;
+    const punct = (cleaned.match(/[,.!?;:]/g) || []).length;
+    const chars = cleaned.length;
+    const approx = Math.ceil(
+      words * AI_CONST.ESTIMATE_WORD_WEIGHT +
+        punct * AI_CONST.ESTIMATE_PUNCT_WEIGHT +
+        chars / AI_CONST.ESTIMATE_CHAR_DIVISOR,
+    );
+    return Math.max(1, approx);
   }
 
   /**

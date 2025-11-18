@@ -3,16 +3,15 @@
 export interface ScraperSelectors {
   postTitle?: string; // Post/video title selector (optional, fallback to document.title)
   videoTime?: string; // Video/post publication time selector (optional)
-  commentContainer: string; // Container holding all comments
-  commentItem: string; // Individual comment element
-  username: string; // Username selector
-  content: string; // Comment content selector
-  timestamp: string; // Timestamp selector
-  likes: string; // Likes count selector
-  avatar?: string; // Avatar image selector (optional)
-  replyToggle?: string; // Button to expand replies (optional)
-  replyContainer?: string; // Container holding replies (optional)
-  replyItem?: string; // Individual reply element (optional)
+  commentContainer: string; // Container wrapping a comment thread (comment + replies)
+  commentItem: string; // Element containing the main comment content (relative to container)
+  replyToggle?: string; // Button inside container to expand replies (optional)
+  replyContainer?: string; // Element holding replies for the current comment (optional)
+  replyItem?: string; // Element for each reply inside replyContainer (optional)
+  username: string; // Selector for username relative to the main comment item
+  content: string; // Selector for comment content relative to the main comment item
+  timestamp: string; // Selector for timestamp relative to the main comment item
+  likes: string; // Selector for likes count relative to the main comment item
 }
 
 export interface SelectorValidation {

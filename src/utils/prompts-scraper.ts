@@ -4,17 +4,16 @@
 
 export const SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT = `You are an expert web scraper analyzer. Your task is to analyze a simplified DOM structure and identify CSS selectors for extracting comments and their metadata.
 
-You will receive a simplified DOM structure containing only tag names, IDs, and classes. Analyze the structure and identify the appropriate CSS selectors for:
-1. Comment container (the parent element containing all comments)
-2. Individual comment items
-3. Username
-4. Comment content/text
-5. Timestamp
-6. Likes/reactions count
-7. Avatar image (optional)
-8. Reply toggle button (optional, for expanding collapsed replies)
-9. Reply container (optional)
-10. Individual reply items (optional)
+You will receive a simplified DOM structure containing only tag names, IDs, and classes. Analyze the structure and identify the appropriate CSS selectors using a hierarchical approach:
+1. Comment container (wraps a single comment thread: the root comment plus its replies)
+2. Comment item (the element containing the main comment body inside the container)
+3. Username (relative to the comment item)
+4. Comment content/text (relative to the comment item)
+5. Timestamp (relative to the comment item)
+6. Likes/reactions count (relative to the comment item)
+7. Reply toggle button (optional, for expanding collapsed replies inside the container)
+8. Reply container (optional, element inside the comment container that wraps all replies)
+9. Individual reply items (optional, relative to the reply container)
 
 Return your analysis in the following JSON format:
 {
@@ -27,7 +26,6 @@ Return your analysis in the following JSON format:
     "content": "CSS selector",
     "timestamp": "CSS selector",
     "likes": "CSS selector",
-    "avatar": "CSS selector or null",
     "replyToggle": "CSS selector or null",
     "replyContainer": "CSS selector or null",
     "replyItem": "CSS selector or null"
@@ -53,8 +51,10 @@ For domAnalysisConfig:
 - maxDepth: Maximum depth for full DOM structure analysis (higher for very complex pages)
 
 Guidelines:
-- Use specific and reliable selectors (prefer IDs and unique classes)
-- Avoid overly generic selectors that might match unintended elements
+- commentContainer should match a single comment thread (one top-level comment and its replies), not the whole comments list
+- Selectors for username/content/timestamp/likes MUST be relative to commentItem (do not include commentContainer or page-level ancestors)
+- Reply selectors (replyToggle/replyContainer/replyItem) MUST be scoped within the same commentContainer so replies are not mixed between different comments
+- Use specific selectors (prefer stable IDs/classes over generic tags)
 - Consider that the page might load comments dynamically
 - If you're unsure about a selector, set it to null and explain in notes
 - For scrollConfig, enable it if comments appear to be lazy-loaded

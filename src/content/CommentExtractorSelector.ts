@@ -123,7 +123,7 @@ export class CommentExtractorSelector {
     const maxRetries = settings?.selectorRetryAttempts || 3;
     const analysisDepth = settings?.domAnalysisConfig?.maxDepth ?? DOM.SIMPLIFY_MAX_DEPTH;
     const domStructure = this.extractDOMStructureForComments(analysisDepth);
-    const maxModelTokens = settings?.analyzerModel?.maxTokens ?? 4000;
+    const maxModelTokens = settings?.aiModel?.maxTokens ?? 4000;
     const chunks = this.chunkDomStructure(domStructure, maxModelTokens);
 
     Logger.debug('[CommentExtractorSelector] DOM Structure length', { length: domStructure.length });
@@ -164,16 +164,15 @@ Identify the comment section and provide CSS selectors for each field.
 ## Response Format (STRICT JSON ONLY, NO MARKDOWN):
 {
   "selectors": {
-    "commentContainer": "css_selector_for_comment_list_container",
-    "commentItem": "css_selector_for_each_comment_item",
-    "username": "css_selector_for_username_relative_to_item",
-    "content": "css_selector_for_content_relative_to_item",
-    "timestamp": "css_selector_for_time_relative_to_item",
-    "likes": "css_selector_for_likes_relative_to_item",
-    "avatar": "css_selector_for_avatar_relative_to_item",
-    "replyToggle": "css_selector_for_show_more_replies_button",
-    "replyContainer": "css_selector_for_reply_container_relative_to_item",
-    "replyItem": "css_selector_for_each_reply_item"
+    "commentContainer": "selector_for_container_holding_one_comment_and_its_replies",
+    "commentItem": "selector_for_comment_body_inside_container",
+    "replyToggle": "selector_for_expand_replies_button_inside_container_or_null",
+    "replyContainer": "selector_for_block_that_holds_replies_inside_container_or_null",
+    "replyItem": "selector_for_each_reply_inside_reply_container_or_null",
+    "username": "selector_for_username_relative_to_comment_item",
+    "content": "selector_for_content_relative_to_comment_item",
+    "timestamp": "selector_for_timestamp_relative_to_comment_item",
+    "likes": "selector_for_likes_relative_to_comment_item"
   },
   "structure": {
     "hasReplies": true,
@@ -647,83 +646,35 @@ Identify the comment section and provide CSS selectors for each field.
     try {
       let totalExpanded = 0;
 
-      // Step 1: Click "Reply" buttons to show reply sections
-      if (selectors.replyButton) {
-        onProgress?.('💬 Opening reply sections...', 0);
-        const replyButtons = this.querySelectorAllDeep(document, selectors.replyButton);
-        Logger.info('[CommentExtractorSelector] Found reply buttons', { count: replyButtons.length });
-
-        let clickedReplyButtons = 0;
-        for (let i = 0; i < replyButtons.length; i++) {
-          const button = replyButtons[i] as HTMLElement;
-
-          // Check if button is visible and clickable
-          if (button.offsetParent !== null && !button.hasAttribute('aria-pressed')) {
-            try {
-              button.click();
-              clickedReplyButtons++;
-
-              // Wait a bit for reply section to appear
-              if (i % 5 === 0) {
-                await this.delay(scrollCfg?.scrollDelay || TIMING.SM);
-                onProgress?.(
-                  `💬 Opening reply sections... (${clickedReplyButtons}/${replyButtons.length})`,
-                  0,
-                );
-              }
-            } catch (error) {
-              Logger.warn('[CommentExtractorSelector] Failed to click reply button', { error });
-            }
-          }
-        }
-
-        // Wait for reply sections to load
-        await this.delay(scrollCfg?.scrollDelay || TIMING.LG);
-        Logger.info('[CommentExtractorSelector] Clicked reply buttons', { count: clickedReplyButtons });
+      if (!selectors.commentContainer || !selectors.replyToggle) {
+        return;
       }
 
-      // Step 2: Click "Show more replies" buttons to expand collapsed replies
-      if (selectors.replyToggle) {
-        onProgress?.('🔽 Expanding replies...', 0);
+      const containers = this.querySelectorAllDeep(document, selectors.commentContainer);
+      onProgress?.('🔽 Expanding replies...', containers.length);
 
-        // Re-query for reply toggle buttons (they might have appeared after clicking reply buttons)
-        const replyToggleButtons = this.querySelectorAllDeep(document, selectors.replyToggle);
-        Logger.info('[CommentExtractorSelector] Found reply toggle buttons', { count: replyToggleButtons.length });
-
-        let expandedCount = 0;
-        for (let i = 0; i < replyToggleButtons.length; i++) {
-          const button = replyToggleButtons[i] as HTMLElement;
-
-          // Check if button is visible and clickable
+      for (const container of containers) {
+        const toggles = this.querySelectorAllDeep(container, selectors.replyToggle);
+        for (let i = 0; i < toggles.length; i++) {
+          const button = toggles[i] as HTMLElement;
           if (button.offsetParent !== null) {
             try {
               button.click();
-              expandedCount++;
               totalExpanded++;
-
-              // Wait a bit for replies to load
-              if (i % 5 === 0) {
+              if (i % 3 === 0) {
                 await this.delay(scrollCfg?.scrollDelay || TIMING.MD);
-                onProgress?.(
-                  `🔽 Expanding replies... (${expandedCount}/${replyToggleButtons.length})`,
-                  0,
-                );
               }
             } catch (error) {
               Logger.warn('[CommentExtractorSelector] Failed to click reply toggle button', { error });
             }
           }
         }
-
-        Logger.info('[CommentExtractorSelector] Expanded reply toggle buttons', { count: expandedCount });
       }
 
-      // Final wait for all replies to load
       if (totalExpanded > 0) {
         await this.delay(scrollCfg?.scrollDelay || TIMING.XL);
+        Logger.info('[CommentExtractorSelector] Total reply expansion completed', { totalExpanded });
       }
-
-      Logger.info('[CommentExtractorSelector] Total reply expansion completed');
     } catch (error) {
       Logger.error('[CommentExtractorSelector] Error expanding replies', { error });
     }
@@ -817,12 +768,14 @@ Identify the comment section and provide CSS selectors for each field.
 
     // 根据实际提取结果标注 selector 成功/失败
     const metrics: Record<string, number> = {
+      commentContainer: selectors.commentContainer
+        ? this.querySelectorAllDeep(document, selectors.commentContainer).length
+        : 0,
       commentItem: comments.length,
       username: comments.filter((c) => c.username && c.username.trim().length > 0).length,
       content: comments.filter((c) => c.content && c.content.trim().length > 0).length,
       timestamp: comments.filter((c) => !!c.timestamp).length,
       likes: comments.filter((c) => (c.likes || 0) > 0).length,
-      avatar: comments.filter((c) => !!c.avatar).length,
       replyItem: comments.reduce((acc, c) => acc + (c.replies ? c.replies.length : 0), 0),
     };
 
@@ -831,8 +784,23 @@ Identify the comment section and provide CSS selectors for each field.
 
     if (configId) {
       const allKeys = Object.keys(selectors);
+      const measuredKeys = new Set(Object.keys(metrics));
+      const optionalKeys = new Set(['replyToggle', 'replyContainer', 'postTitle', 'videoTime', 'replyItem']);
       for (const key of allKeys) {
-        const isValid = (metrics[key] || 0) > 0;
+        const selectorValue = (selectors as any)[key];
+        if (!selectorValue) {
+          continue;
+        }
+        let isValid: boolean;
+        if (optionalKeys.has(key)) {
+          const count = selectorTestResults[key];
+          isValid = typeof count === 'number' ? count >= 0 : true;
+        } else if (measuredKeys.has(key)) {
+          isValid = (metrics[key] || 0) > 0;
+        } else {
+          const count = selectorTestResults[key];
+          isValid = typeof count === 'number' ? count > 0 : false;
+        }
         const status: 'success' | 'failed' = isValid ? 'success' : 'failed';
         await new Promise<void>((resolve) => {
           chrome.runtime.sendMessage(
@@ -872,23 +840,35 @@ Identify the comment section and provide CSS selectors for each field.
   private extractCommentsBySelector(selectors: SelectorMap, platform: Platform): Comment[] {
     const comments: Comment[] = [];
 
+    if (!selectors.commentContainer || !selectors.commentItem) {
+      return comments;
+    }
+
     try {
-      if (!selectors.commentItem) {
-        return comments;
-      }
+      const containers = this.querySelectorAllDeep(document, selectors.commentContainer);
+      Logger.info('[CommentExtractorSelector] Found comment containers', {
+        count: containers.length,
+        selector: selectors.commentContainer,
+      });
 
-      const items = this.querySelectorAllDeep(document, selectors.commentItem);
-      Logger.info('[CommentExtractorSelector] Found comment items', { count: items.length, selector: selectors.commentItem });
-
-      items.forEach((item, index) => {
-        try {
-          const comment = this.extractSingleComment(item, selectors, platform, index);
-          if (comment) {
-            comments.push(comment);
+      containers.forEach((container, containerIndex) => {
+        const items = this.querySelectorAllDeep(container, selectors.commentItem);
+        items.forEach((item, itemIndex) => {
+          try {
+            const comment = this.extractSingleComment(
+              container,
+              item,
+              selectors,
+              platform,
+              containerIndex * 1000 + itemIndex,
+            );
+            if (comment) {
+              comments.push(comment);
+            }
+          } catch (error) {
+            Logger.warn('[CommentExtractorSelector] Failed to extract comment', { error });
           }
-        } catch (error) {
-          Logger.warn('[CommentExtractorSelector] Failed to extract comment', { error });
-        }
+        });
       });
     } catch (error) {
       Logger.error('[CommentExtractorSelector] Failed to query comments', { error });
@@ -901,6 +881,7 @@ Identify the comment section and provide CSS selectors for each field.
    * Extract single comment from element
    */
   private extractSingleComment(
+    container: Element,
     item: Element,
     selectors: SelectorMap,
     platform: Platform,
@@ -931,17 +912,8 @@ Identify the comment section and provide CSS selectors for each field.
     const likesEl = selectors.likes ? this.querySelectorDeep(item, selectors.likes) : null;
     const likes = this.parseLikes(likesEl?.textContent?.trim() || '0');
 
-    // Extract avatar
-    let avatar: string | undefined;
-    if (selectors.avatar) {
-      const avatarEl = this.querySelectorDeep(item, selectors.avatar);
-      if (avatarEl) {
-        avatar = avatarEl.getAttribute('src') || avatarEl.getAttribute('data-src') || undefined;
-      }
-    }
-
     // Extract replies
-    const replies = this.extractReplies(item, selectors, platform);
+    const replies = this.extractReplies(container, selectors, platform);
 
     // Generate ID
     const id = this.generateCommentId(username, content, timestamp, index);
@@ -952,7 +924,6 @@ Identify the comment section and provide CSS selectors for each field.
       content,
       timestamp,
       likes,
-      avatar,
       replies,
     };
   }
@@ -961,24 +932,30 @@ Identify the comment section and provide CSS selectors for each field.
    * Extract replies from comment
    */
   private extractReplies(
-    commentItem: Element,
+    commentContainer: Element,
     selectors: SelectorMap,
     platform: Platform,
   ): Comment[] {
-    if (!selectors.replyItem) {
+    if (!selectors.replyContainer || !selectors.replyItem) {
       return [];
     }
 
     const replies: Comment[] = [];
+    const replyContainerSelector = selectors.replyContainer;
+    const replyItemSelector = selectors.replyItem;
 
     try {
-      const replyItems = this.querySelectorAllDeep(commentItem, selectors.replyItem);
+      const replyContainers = this.querySelectorAllDeep(commentContainer, replyContainerSelector);
 
-      replyItems.forEach((replyItem, index) => {
-        const reply = this.extractSingleComment(replyItem, selectors, platform, index);
-        if (reply) {
-          replies.push(reply);
-        }
+      replyContainers.forEach((container) => {
+        const replyItems = this.querySelectorAllDeep(container, replyItemSelector);
+
+        replyItems.forEach((replyItem, index) => {
+          const reply = this.extractSingleComment(container, replyItem, selectors, platform, index);
+          if (reply) {
+            replies.push(reply);
+          }
+        });
       });
     } catch (error) {
       Logger.warn('[CommentExtractorSelector] Failed to extract replies', { error });
@@ -1066,10 +1043,13 @@ Identify the comment section and provide CSS selectors for each field.
       const testResults = this.testSelectors(selectors);
 
       // Update validation status for each selector based on test results
+      const optionalKeys = new Set(['replyToggle', 'replyContainer', 'postTitle', 'videoTime', 'replyItem']);
       for (const [key, value] of Object.entries(selectors)) {
         if (value) {
-          const count = testResults[key] || 0;
-          const status: 'success' | 'failed' = count > 0 ? 'success' : 'failed';
+          const count = typeof testResults[key] === 'number' ? testResults[key] : 0;
+          const status: 'success' | 'failed' = optionalKeys.has(key)
+            ? (count === -1 ? 'failed' : 'success')
+            : (count > 0 ? 'success' : 'failed');
 
           await new Promise<void>((resolve) => {
             chrome.runtime.sendMessage(

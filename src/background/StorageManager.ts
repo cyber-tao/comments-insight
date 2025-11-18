@@ -9,15 +9,7 @@ import { ErrorHandler } from '../utils/errors';
  */
 const DEFAULT_SETTINGS: Settings = {
   maxComments: 500,
-  extractorModel: {
-    apiUrl: API.DEFAULT_URL,
-    apiKey: '',
-    model: 'gpt-4',
-    maxTokens: 4000,
-    temperature: 0.7,
-    topP: 0.9,
-  },
-  analyzerModel: {
+  aiModel: {
     apiUrl: API.DEFAULT_URL,
     apiKey: '',
     model: 'gpt-4',
@@ -33,8 +25,8 @@ const DEFAULT_SETTINGS: Settings = {
 - **URL**: {url}
 - **Published**: {video_time}
 
-## Comments Data:
-{comments_json}
+## Comments Data (Dense Format):
+{comments_data}
 
 ## Analysis Requirements:
 1. Sentiment Analysis: Categorize comments as positive, negative, or neutral
@@ -163,15 +155,19 @@ export class StorageManager {
       }
 
       // Merge with defaults to ensure all fields exist
-      const merged = { ...DEFAULT_SETTINGS, ...settings };
-      merged.extractorModel = {
-        ...merged.extractorModel,
-        apiKey: await this.decrypt(merged.extractorModel.apiKey || ''),
+      const merged = {
+        ...DEFAULT_SETTINGS,
+        ...settings,
+      } as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig };
+
+      const normalizedModel = this.normalizeAIModel(merged);
+      merged.aiModel = {
+        ...normalizedModel,
+        apiKey: await this.decrypt(normalizedModel.apiKey || ''),
       };
-      merged.analyzerModel = {
-        ...merged.analyzerModel,
-        apiKey: await this.decrypt(merged.analyzerModel.apiKey || ''),
-      };
+
+      delete (merged as any).extractorModel;
+      delete (merged as any).analyzerModel;
       Logger.debug('[StorageManager] Settings retrieved successfully');
       return merged;
     } catch (error) {
@@ -192,25 +188,25 @@ export class StorageManager {
       // Get current settings directly from storage to avoid recursion
       const result = await chrome.storage.local.get(StorageManager.SETTINGS_KEY);
       const currentSettings = result[StorageManager.SETTINGS_KEY] || DEFAULT_SETTINGS;
-      const updatedSettings = { ...currentSettings, ...settings };
+      const updatedSettings = { ...currentSettings, ...settings } as Settings & {
+        extractorModel?: AIConfig;
+        analyzerModel?: AIConfig;
+      };
+
+      updatedSettings.aiModel = this.normalizeAIModel(updatedSettings);
+
       if (
-        updatedSettings.extractorModel &&
-        typeof updatedSettings.extractorModel.apiKey === 'string'
+        typeof updatedSettings.aiModel.apiKey === 'string' &&
+        !updatedSettings.aiModel.apiKey.startsWith('enc:')
       ) {
-        updatedSettings.extractorModel = {
-          ...updatedSettings.extractorModel,
-          apiKey: await this.encrypt(updatedSettings.extractorModel.apiKey),
+        updatedSettings.aiModel = {
+          ...updatedSettings.aiModel,
+          apiKey: await this.encrypt(updatedSettings.aiModel.apiKey),
         } as AIConfig;
       }
-      if (
-        updatedSettings.analyzerModel &&
-        typeof updatedSettings.analyzerModel.apiKey === 'string'
-      ) {
-        updatedSettings.analyzerModel = {
-          ...updatedSettings.analyzerModel,
-          apiKey: await this.encrypt(updatedSettings.analyzerModel.apiKey),
-        } as AIConfig;
-      }
+
+      delete (updatedSettings as any).extractorModel;
+      delete (updatedSettings as any).analyzerModel;
 
       await chrome.storage.local.set({
         [StorageManager.SETTINGS_KEY]: updatedSettings,
@@ -433,8 +429,9 @@ export class StorageManager {
     return (
       typeof settings === 'object' &&
       typeof settings.maxComments === 'number' &&
-      this.validateAIConfig(settings.extractorModel) &&
-      this.validateAIConfig(settings.analyzerModel) &&
+      (this.validateAIConfig(settings.aiModel) ||
+        (this.validateAIConfig(settings.extractorModel) &&
+          this.validateAIConfig(settings.analyzerModel))) &&
       typeof settings.analyzerPromptTemplate === 'string' &&
       (settings.language === 'zh-CN' || settings.language === 'en-US')
     );
@@ -455,6 +452,17 @@ export class StorageManager {
       typeof config.temperature === 'number' &&
       typeof config.topP === 'number'
     );
+  }
+
+  private normalizeAIModel(settings: Partial<Settings> & {
+    extractorModel?: AIConfig;
+    analyzerModel?: AIConfig;
+  }): AIConfig {
+    const baseModel = settings.aiModel || settings.analyzerModel || settings.extractorModel;
+    return {
+      ...DEFAULT_SETTINGS.aiModel,
+      ...(baseModel || {}),
+    };
   }
 }
 

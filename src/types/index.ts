@@ -7,7 +7,6 @@ export interface Comment {
   id: string;
   username: string;
   userId?: string;
-  avatar?: string;
   timestamp: string;
   likes: number;
   content: string;
@@ -79,15 +78,13 @@ export interface AIResponse {
 export interface SelectorMap {
   commentContainer: string;
   commentItem: string;
-  username: string;
-  content: string;
-  timestamp: string;
-  likes: string;
-  avatar?: string;
-  replyButton?: string;
   replyToggle?: string;
   replyContainer?: string;
   replyItem?: string;
+  username: string;
+  timestamp: string;
+  likes: string;
+  content: string;
 }
 
 export interface SelectorValidation {
@@ -110,8 +107,7 @@ export interface DOMAnalysisConfig {
 
 export interface Settings {
   maxComments: number;
-  extractorModel: AIConfig;
-  analyzerModel: AIConfig;
+  aiModel: AIConfig;
   analyzerPromptTemplate: string;
   language: 'zh-CN' | 'en-US';
   selectorRetryAttempts: number;

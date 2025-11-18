@@ -202,7 +202,7 @@ export class MessageRouter {
       // Get settings for AI configuration
       const settings = await this.storageManager.getSettings();
 
-      const comments = await this.aiService.extractComments(domStructure, settings.extractorModel);
+      const comments = await this.aiService.extractComments(domStructure, settings.aiModel);
       return { comments };
     } catch (error) {
       Logger.error('[MessageRouter] AI extraction failed', { error });
@@ -228,7 +228,7 @@ export class MessageRouter {
       // Call AI service
       const response = await this.aiService.callAI({
         prompt,
-        config: settings.extractorModel,
+        config: settings.aiModel,
       });
 
       // Parse JSON response
@@ -311,7 +311,7 @@ export class MessageRouter {
 
     try {
       const settings = await this.storageManager.getSettings();
-      const chunks = this.chunkDomText(prompt, settings.extractorModel.maxTokens ?? 4000);
+      const chunks = this.chunkDomText(prompt, settings.aiModel.maxTokens ?? 4000);
       const aggregated: any = {
         selectors: {},
         structure: { hasReplies: false, repliesNested: true, needsExpand: false },
@@ -322,7 +322,7 @@ export class MessageRouter {
           prompt: chunks[i],
           systemPrompt:
             'You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start with { and end with }.',
-          config: settings.extractorModel,
+          config: settings.aiModel,
         });
         try {
           let jsonText = response.content.trim();
@@ -684,7 +684,7 @@ export class MessageRouter {
       // Analyze comments using AI with metadata
       const result = await this.aiService.analyzeComments(
         comments,
-        settings.analyzerModel,
+        settings.aiModel,
         settings.analyzerPromptTemplate,
         settings.language,
         {
@@ -795,7 +795,7 @@ export class MessageRouter {
       const settings = await this.storageManager.getSettings();
       const chunks = this.chunkDomText(
         domResponse.domStructure,
-        settings.extractorModel.maxTokens ?? 4000,
+        settings.aiModel.maxTokens ?? 4000,
       );
       let configData: any = {
         name: '',
@@ -813,7 +813,7 @@ export class MessageRouter {
         const response = await this.aiService.callAI({
           prompt,
           systemPrompt: SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT,
-          config: settings.extractorModel,
+          config: settings.aiModel,
         });
         try {
           let jsonText = response.content.trim();

@@ -31,8 +31,7 @@ const Popup: React.FC = () => {
   });
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState('');
-  const [extractorModelName, setExtractorModelName] = useState('');
-  const [analyzerModelName, setAnalyzerModelName] = useState('');
+  const [aiModelName, setAIModelName] = useState('');
   const [currentTask, setCurrentTask] = useState<{
     id: string;
     type: 'extract' | 'analyze' | 'generate-config';
@@ -99,13 +98,8 @@ const Popup: React.FC = () => {
   const loadModelName = async () => {
     try {
       const response = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
-      if (response?.settings) {
-        if (response.settings.extractorModel?.model) {
-          setExtractorModelName(response.settings.extractorModel.model);
-        }
-        if (response.settings.analyzerModel?.model) {
-          setAnalyzerModelName(response.settings.analyzerModel.model);
-        }
+      if (response?.settings?.aiModel?.model) {
+        setAIModelName(response.settings.aiModel.model);
       }
     } catch (error) {
       Logger.error('[Popup] Failed to load model names', { error });
@@ -617,8 +611,8 @@ const Popup: React.FC = () => {
                 </>
               )}
             </button>
-            {extractorModelName && (
-              <p className="text-xs text-gray-500 mt-1 text-center">🤖 {extractorModelName}</p>
+            {aiModelName && (
+              <p className="text-xs text-gray-500 mt-1 text-center">🤖 {aiModelName}</p>
             )}
           </div>
         )}
@@ -674,8 +668,8 @@ const Popup: React.FC = () => {
               </>
             )}
           </button>
-          {analyzerModelName && (
-            <p className="text-xs text-gray-500 mt-1 text-center">🤖 {analyzerModelName}</p>
+          {aiModelName && (
+            <p className="text-xs text-gray-500 mt-1 text-center">🤖 {aiModelName}</p>
           )}
         </div>
 

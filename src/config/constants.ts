@@ -13,6 +13,18 @@ export const AI = {
   HOT_COMMENTS_LIMIT: 10,
 };
 
+export const ANALYSIS_FORMAT = {
+  COMMENT_HEADER: 'Username | Timestamp | Likes | Content',
+  FIELD_SEPARATOR: ' | ',
+  REPLY_PREFIX: '↳ ',
+  UNKNOWN_USERNAME: 'Unknown',
+  UNKNOWN_TIMESTAMP: 'N/A',
+  UNKNOWN_PLATFORM: 'Unknown Platform',
+  UNKNOWN_TITLE: 'Untitled',
+  UNKNOWN_URL: 'N/A',
+  UNKNOWN_CONTENT: 'N/A',
+};
+
 export const HISTORY = {
   SORT_DESC: true,
 };

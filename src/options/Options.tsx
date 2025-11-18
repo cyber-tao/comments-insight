@@ -15,11 +15,10 @@ const Options: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const [showExtractorKey, setShowExtractorKey] = useState(false);
-  const [showAnalyzerKey, setShowAnalyzerKey] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const isSavingRef = useRef(false);
-  const [testingModel, setTestingModel] = useState<'extractor' | 'analyzer' | null>(null);
+  const [testingModel, setTestingModel] = useState(false);
   const isUserChangeRef = useRef(false); // Track if change is from user interaction
   const [showPlaceholders, setShowPlaceholders] = useState(false);
 
@@ -133,10 +132,10 @@ const Options: React.FC = () => {
     reader.readAsText(file);
   };
 
-  const handleFetchModels = async (modelType: 'extractor' | 'analyzer') => {
+  const handleFetchModels = async () => {
     if (!settings) return;
 
-    const config = modelType === 'extractor' ? settings.extractorModel : settings.analyzerModel;
+    const config = settings.aiModel;
 
     if (!config.apiUrl || !config.apiKey) {
       toast.warning('Please configure API URL and API Key first');
@@ -167,17 +166,17 @@ const Options: React.FC = () => {
     }
   };
 
-  const handleTestModel = async (modelType: 'extractor' | 'analyzer') => {
+  const handleTestModel = async () => {
     if (!settings) return;
 
-    const config = modelType === 'extractor' ? settings.extractorModel : settings.analyzerModel;
+    const config = settings.aiModel;
 
     if (!config.apiUrl || !config.apiKey || !config.model) {
       toast.warning('Please configure all required fields');
       return;
     }
 
-    setTestingModel(modelType);
+    setTestingModel(true);
 
     try {
       const response = await chrome.runtime.sendMessage({
@@ -197,7 +196,7 @@ const Options: React.FC = () => {
         t('options.testFailed') + ': ' + (error instanceof Error ? error.message : 'Unknown error'),
       );
     } finally {
-      setTestingModel(null);
+      setTestingModel(false);
     }
   };
 
@@ -382,19 +381,19 @@ const Options: React.FC = () => {
               </div>
             </section>
 
-            {/* Extractor Model */}
+            {/* AI Model */}
             <section className="mb-8 bg-white p-6 rounded-lg shadow">
-              <h2 className="text-xl font-semibold mb-4">{t('options.extractorModel')}</h2>
+              <h2 className="text-xl font-semibold mb-4">{t('options.aiModel')}</h2>
 
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-2">{t('options.apiUrl')}</label>
                 <input
                   type="text"
-                  value={settings.extractorModel.apiUrl}
+                  value={settings.aiModel.apiUrl}
                   onChange={(e) =>
                     handleSettingsChange({
                       ...settings,
-                      extractorModel: { ...settings.extractorModel, apiUrl: e.target.value },
+                      aiModel: { ...settings.aiModel, apiUrl: e.target.value },
                     })
                   }
                   className="w-full px-3 py-2 border rounded"
@@ -406,16 +405,12 @@ const Options: React.FC = () => {
                 <label className="block text-sm font-medium mb-2">{t('options.apiKey')}</label>
                 <div className="flex gap-2">
                   <input
-                    type={showExtractorKey ? 'text' : 'password'}
-                    value={
-                      showExtractorKey
-                        ? settings.extractorModel.apiKey
-                        : maskApiKey(settings.extractorModel.apiKey)
-                    }
+                    type={showApiKey ? 'text' : 'password'}
+                    value={showApiKey ? settings.aiModel.apiKey : maskApiKey(settings.aiModel.apiKey)}
                     onChange={(e) =>
                       handleSettingsChange({
                         ...settings,
-                        extractorModel: { ...settings.extractorModel, apiKey: e.target.value },
+                        aiModel: { ...settings.aiModel, apiKey: e.target.value },
                       })
                     }
                     className="flex-1 px-3 py-2 border rounded"
@@ -423,10 +418,10 @@ const Options: React.FC = () => {
                   />
                   <button
                     type="button"
-                    onClick={() => setShowExtractorKey(!showExtractorKey)}
+                    onClick={() => setShowApiKey(!showApiKey)}
                     className="px-3 py-2 border rounded hover:bg-gray-100"
                   >
-                    {showExtractorKey ? '🙈' : '👁️'}
+                    {showApiKey ? '🙈' : '👁️'}
                   </button>
                 </div>
               </div>
@@ -435,11 +430,11 @@ const Options: React.FC = () => {
                 <label className="block text-sm font-medium mb-2">{t('options.model')}</label>
                 {availableModels.length > 0 ? (
                   <select
-                    value={settings.extractorModel.model}
+                    value={settings.aiModel.model}
                     onChange={(e) =>
                       handleSettingsChange({
                         ...settings,
-                        extractorModel: { ...settings.extractorModel, model: e.target.value },
+                        aiModel: { ...settings.aiModel, model: e.target.value },
                       })
                     }
                     className="w-full px-3 py-2 border rounded"
@@ -453,11 +448,11 @@ const Options: React.FC = () => {
                 ) : (
                   <input
                     type="text"
-                    value={settings.extractorModel.model}
+                    value={settings.aiModel.model}
                     onChange={(e) =>
                       handleSettingsChange({
                         ...settings,
-                        extractorModel: { ...settings.extractorModel, model: e.target.value },
+                        aiModel: { ...settings.aiModel, model: e.target.value },
                       })
                     }
                     className="w-full px-3 py-2 border rounded"
@@ -471,12 +466,12 @@ const Options: React.FC = () => {
                   <label className="block text-sm font-medium mb-2">{t('options.maxTokens')}</label>
                   <input
                     type="number"
-                    value={settings.extractorModel.maxTokens}
+                    value={settings.aiModel.maxTokens}
                     onChange={(e) =>
                       handleSettingsChange({
                         ...settings,
-                        extractorModel: {
-                          ...settings.extractorModel,
+                        aiModel: {
+                          ...settings.aiModel,
                           maxTokens: parseInt(e.target.value),
                         },
                       })
@@ -492,12 +487,12 @@ const Options: React.FC = () => {
                   <input
                     type="number"
                     step="0.1"
-                    value={settings.extractorModel.temperature}
+                    value={settings.aiModel.temperature}
                     onChange={(e) =>
                       handleSettingsChange({
                         ...settings,
-                        extractorModel: {
-                          ...settings.extractorModel,
+                        aiModel: {
+                          ...settings.aiModel,
                           temperature: parseFloat(e.target.value),
                         },
                       })
@@ -512,12 +507,12 @@ const Options: React.FC = () => {
                   <input
                     type="number"
                     step="0.1"
-                    value={settings.extractorModel.topP}
+                    value={settings.aiModel.topP}
                     onChange={(e) =>
                       handleSettingsChange({
                         ...settings,
-                        extractorModel: {
-                          ...settings.extractorModel,
+                        aiModel: {
+                          ...settings.aiModel,
                           topP: parseFloat(e.target.value),
                         },
                       })
@@ -532,192 +527,24 @@ const Options: React.FC = () => {
               <div className="mt-4 flex gap-2">
                 <button
                   type="button"
-                  onClick={() => handleFetchModels('extractor')}
-                  disabled={loadingModels || testingModel !== null}
+                  onClick={handleFetchModels}
+                  disabled={loadingModels || testingModel}
                   className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-400"
                 >
                   {loadingModels ? t('common.loading') : '🔄 ' + t('options.fetchModels')}
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleTestModel('extractor')}
-                  disabled={testingModel !== null || loadingModels}
+                  onClick={handleTestModel}
+                  disabled={testingModel || loadingModels}
                   className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400"
                 >
-                  {testingModel === 'extractor'
-                    ? t('options.testing')
-                    : '🧪 ' + t('options.testModel')}
+                  {testingModel ? t('options.testing') : '🧪 ' + t('options.testModel')}
                 </button>
               </div>
             </section>
 
-            {/* Analyzer Model */}
             <section className="mb-8 bg-white p-6 rounded-lg shadow">
-              <h2 className="text-xl font-semibold mb-4">{t('options.analyzerModel')}</h2>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">{t('options.apiUrl')}</label>
-                <input
-                  type="text"
-                  value={settings.analyzerModel.apiUrl}
-                  onChange={(e) =>
-                    handleSettingsChange({
-                      ...settings,
-                      analyzerModel: { ...settings.analyzerModel, apiUrl: e.target.value },
-                    })
-                  }
-                  className="w-full px-3 py-2 border rounded"
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">{t('options.apiKey')}</label>
-                <div className="flex gap-2">
-                  <input
-                    type={showAnalyzerKey ? 'text' : 'password'}
-                    value={
-                      showAnalyzerKey
-                        ? settings.analyzerModel.apiKey
-                        : maskApiKey(settings.analyzerModel.apiKey)
-                    }
-                    onChange={(e) =>
-                      handleSettingsChange({
-                        ...settings,
-                        analyzerModel: { ...settings.analyzerModel, apiKey: e.target.value },
-                      })
-                    }
-                    className="flex-1 px-3 py-2 border rounded"
-                    placeholder="sk-..."
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowAnalyzerKey(!showAnalyzerKey)}
-                    className="px-3 py-2 border rounded hover:bg-gray-100"
-                  >
-                    {showAnalyzerKey ? '🙈' : '👁️'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">{t('options.model')}</label>
-                {availableModels.length > 0 ? (
-                  <select
-                    value={settings.analyzerModel.model}
-                    onChange={(e) =>
-                      handleSettingsChange({
-                        ...settings,
-                        analyzerModel: { ...settings.analyzerModel, model: e.target.value },
-                      })
-                    }
-                    className="w-full px-3 py-2 border rounded"
-                  >
-                    {availableModels.map((model) => (
-                      <option key={model} value={model}>
-                        {model}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <input
-                    type="text"
-                    value={settings.analyzerModel.model}
-                    onChange={(e) =>
-                      handleSettingsChange({
-                        ...settings,
-                        analyzerModel: { ...settings.analyzerModel, model: e.target.value },
-                      })
-                    }
-                    className="w-full px-3 py-2 border rounded"
-                    placeholder="gpt-4"
-                  />
-                )}
-              </div>
-
-              <div className="grid grid-cols-3 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">{t('options.maxTokens')}</label>
-                  <input
-                    type="number"
-                    value={settings.analyzerModel.maxTokens}
-                    onChange={(e) =>
-                      handleSettingsChange({
-                        ...settings,
-                        analyzerModel: {
-                          ...settings.analyzerModel,
-                          maxTokens: parseInt(e.target.value),
-                        },
-                      })
-                    }
-                    className="w-full px-3 py-2 border rounded"
-                    min="1"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    {t('options.temperature')}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={settings.analyzerModel.temperature}
-                    onChange={(e) =>
-                      handleSettingsChange({
-                        ...settings,
-                        analyzerModel: {
-                          ...settings.analyzerModel,
-                          temperature: parseFloat(e.target.value),
-                        },
-                      })
-                    }
-                    className="w-full px-3 py-2 border rounded"
-                    min="0"
-                    max="2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">{t('options.topP')}</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={settings.analyzerModel.topP}
-                    onChange={(e) =>
-                      handleSettingsChange({
-                        ...settings,
-                        analyzerModel: {
-                          ...settings.analyzerModel,
-                          topP: parseFloat(e.target.value),
-                        },
-                      })
-                    }
-                    className="w-full px-3 py-2 border rounded"
-                    min="0"
-                    max="1"
-                  />
-                </div>
-              </div>
-
-              <div className="mb-4 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleFetchModels('analyzer')}
-                  disabled={loadingModels || testingModel !== null}
-                  className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-400"
-                >
-                  {loadingModels ? t('common.loading') : '🔄 ' + t('options.fetchModels')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleTestModel('analyzer')}
-                  disabled={testingModel !== null || loadingModels}
-                  className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400"
-                >
-                  {testingModel === 'analyzer'
-                    ? t('options.testing')
-                    : '🧪 ' + t('options.testModel')}
-                </button>
-              </div>
-
               <div className="mb-4">
                 <label className="block text-sm font-medium mb-2">
                   {t('options.promptTemplate')}
@@ -747,13 +574,13 @@ const Options: React.FC = () => {
                       <div className="space-y-3">
                         <div>
                           <code className="text-sm font-mono bg-blue-100 px-2 py-1 rounded text-blue-800">
-                            {'{comments_json}'}
+                            {'{comments_data}'}
                           </code>
                           <span className="text-red-600 text-xs ml-2">
                             *{t('options.required')}
                           </span>
                           <p className="text-sm text-gray-700 mt-1">
-                            {t('options.placeholder_comments_json')}
+                            {t('options.placeholder_comments_data')}
                           </p>
                         </div>
 

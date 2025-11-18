@@ -52,8 +52,8 @@ export const DEFAULT_ANALYSIS_PROMPT_TEMPLATE = `You are a professional social m
 - **Platform**: {platform}
 - **URL**: {url}
 
-## Comments Data:
-{comments_json}
+## Comments Data (Dense Format):
+{comments_data}
 
 ## Analysis Requirements:
 1. Sentiment Analysis: Categorize comments as positive, negative, or neutral
@@ -133,7 +133,7 @@ export function buildExtractionPrompt(domContent: string): string {
  * @returns Formatted prompt
  */
 export function buildAnalysisPrompt(
-  commentsJson: string,
+  commentsData: string,
   template: string = DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
   metadata?: {
     datetime?: string;
@@ -153,7 +153,8 @@ export function buildAnalysisPrompt(
 
   let prompt =
     template
-      .replace('{comments_json}', commentsJson)
+      .replace(/{comments_data}/g, commentsData)
+      .replace(/{comments_json}/g, commentsData)
       .replace(/{datetime}/g, metadata?.datetime || new Date().toISOString())
       .replace(/{video_time}/g, metadata?.videoTime || 'N/A')
       .replace(/{platform}/g, metadata?.platform || 'Unknown Platform')
