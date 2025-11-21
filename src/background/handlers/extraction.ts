@@ -95,10 +95,9 @@ async function startExtractionTask(
 
   try {
     // Send message to content script to start extraction
-    // We use 'any' here because specific response type isn't exported, but valid logic
     const response: any = await chrome.tabs.sendMessage(tabId, {
       type: 'START_EXTRACTION',
-      data: { taskId, maxComments }, // Note: Content script expects 'data' prop for START_EXTRACTION
+      payload: { taskId, maxComments },
     });
 
     if (!response.success) {

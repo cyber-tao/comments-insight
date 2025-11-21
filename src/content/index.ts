@@ -33,11 +33,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       break;
 
     case MESSAGES.START_EXTRACTION:
-      handleStartExtraction(message.data, sendResponse);
+      handleStartExtraction(message.payload, sendResponse);
       return true; // Keep channel open for async response
 
     case MESSAGES.CANCEL_EXTRACTION:
-      handleCancelExtraction(message.data.taskId);
+      handleCancelExtraction(message.payload.taskId);
       sendResponse({ success: true });
       break;
 

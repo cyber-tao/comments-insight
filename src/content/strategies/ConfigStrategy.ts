@@ -30,8 +30,10 @@ export class ConfigStrategy implements ExtractionStrategy {
       this.config.scrollConfig,
       maxComments,
       platform,
-      (message: string, count: number) =>
-        onProgress?.(60, `${message} (${count})`),
+      (message: string, count: number) => {
+        const progress = Math.min(95, Math.floor((count / maxComments) * 100));
+        onProgress?.(progress, `${message} (${count})`);
+      },
     );
 
     return comments;
