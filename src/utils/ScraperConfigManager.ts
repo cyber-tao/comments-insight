@@ -453,7 +453,8 @@ export class ScraperConfigManager {
   static async updateSelectorValidation(
     id: string,
     selectorKey: string,
-    status: 'success' | 'failed',
+    status: 'success' | 'failed' | 'untested',
+    count?: number,
   ): Promise<void> {
     const config = await this.getById(id);
     if (!config) {
@@ -464,8 +465,21 @@ export class ScraperConfigManager {
     const selectorValidation = config.selectorValidation || {};
     selectorValidation[selectorKey] = status;
 
-    await this.update(id, { selectorValidation });
-    Logger.info('[ScraperConfigManager] Updated selector validation', { id, selectorKey, status });
+    const updates: any = { selectorValidation };
+
+    if (typeof count === 'number') {
+      const selectorCounts = config.selectorCounts || {};
+      selectorCounts[selectorKey] = count;
+      updates.selectorCounts = selectorCounts;
+    }
+
+    await this.update(id, updates);
+    Logger.info('[ScraperConfigManager] Updated selector validation', {
+      id,
+      selectorKey,
+      status,
+      count,
+    });
   }
 
   /**

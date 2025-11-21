@@ -383,7 +383,14 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
                     return (
                       <div key={key} className="flex items-center">
                         <span className="text-gray-600 w-40">{key}:</span>
-                        <span className="text-gray-800 flex-1">{value}</span>
+                        <span className="text-gray-800 flex-1 truncate" title={value}>
+                          {value}
+                        </span>
+                        <span className="text-xs text-gray-500 mr-2">
+                          {config.selectorCounts?.[key] !== undefined
+                            ? `(${config.selectorCounts[key]})`
+                            : ''}
+                        </span>
                         {statusIcon}
                       </div>
                     );

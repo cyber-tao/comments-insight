@@ -119,15 +119,19 @@ Generate a comprehensive analysis report in Markdown format with the following s
 /**
  * Build extraction prompt with DOM content
  * @param domContent - Serialized DOM content
+ * @param template - Custom template (optional)
  * @returns Formatted prompt
  */
-export function buildExtractionPrompt(domContent: string): string {
-  return EXTRACTION_PROMPT_TEMPLATE.replace('{dom_content}', domContent);
+export function buildExtractionPrompt(
+  domContent: string,
+  template: string = EXTRACTION_PROMPT_TEMPLATE,
+): string {
+  return template.replace('{dom_content}', domContent);
 }
 
 /**
  * Build analysis prompt with comments data
- * @param commentsJson - Comments in JSON format
+ * @param commentsData - Comments in dense text format
  * @param template - Custom template (optional)
  * @param metadata - Additional metadata
  * @returns Formatted prompt
@@ -154,7 +158,6 @@ export function buildAnalysisPrompt(
   let prompt =
     template
       .replace(/{comments_data}/g, commentsData)
-      .replace(/{comments_json}/g, commentsData)
       .replace(/{datetime}/g, metadata?.datetime || new Date().toISOString())
       .replace(/{video_time}/g, metadata?.videoTime || 'N/A')
       .replace(/{platform}/g, metadata?.platform || 'Unknown Platform')
@@ -172,8 +175,8 @@ export function buildAnalysisPrompt(
  * @returns True if valid
  */
 export function validatePromptTemplate(template: string): boolean {
-  // Must contain comments_json placeholder
-  if (!template.includes('{comments_json}')) {
+  // Must contain comments_data placeholder
+  if (!template.includes('{comments_data}')) {
     return false;
   }
 
@@ -196,10 +199,10 @@ export function getAvailablePlaceholders(): Array<{
 }> {
   return [
     {
-      key: '{comments_json}',
-      description: 'Comments data in JSON format (required)',
+      key: '{comments_data}',
+      description: 'Comments data in dense text format (required)',
       detailedDescription:
-        'The complete comments data structure in JSON format, including all comment fields like username, content, timestamp, likes, and nested replies. This is the main data source for analysis.',
+        'The complete comments data structure in a dense text format (table-like), including all comment fields like username, content, timestamp, likes, and nested replies. This format is optimized for token efficiency.',
     },
     {
       key: '{datetime}',

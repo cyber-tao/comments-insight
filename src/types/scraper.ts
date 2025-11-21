@@ -32,6 +32,7 @@ export interface ScraperConfig {
   selectors: ScraperSelectors; // CSS selectors for extraction
   scrollConfig?: ScrollConfig; // Scroll configuration (optional)
   selectorValidation?: SelectorValidation; // Validation status for each selector
+  selectorCounts?: Record<string, number>; // Last matching count for each selector
   createdAt: number; // Creation timestamp
   updatedAt: number; // Last update timestamp
 }

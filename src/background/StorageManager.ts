@@ -36,6 +36,40 @@ const DEFAULT_SETTINGS: Settings = {
 
 ## Output Format:
 Generate a comprehensive analysis report in Markdown format.`,
+  extractionPromptTemplate: `You are a web scraping expert. Your task is to analyze the DOM structure and extract comment data.
+
+## DOM Structure:
+{dom_content}
+
+## Task:
+1. Identify the comment section in the DOM
+2. Extract all comments with the following information:
+   - id (generate unique ID if not available)
+   - username
+   - timestamp
+   - likes count
+   - comment content
+   - replies (nested structure)
+
+## Output Format:
+Return ONLY a valid JSON array with no additional text:
+[
+  {
+    "id": "unique_id",
+    "username": "user_name",
+    "timestamp": "time_string",
+    "likes": 0,
+    "content": "comment_text",
+    "replies": []
+  }
+]
+
+## Important:
+- Return ONLY valid JSON, no markdown code blocks
+- If no comments found, return empty array []
+- Preserve the nested structure for replies
+- Generate unique IDs for each comment
+- Extract actual data from the DOM, don't make up content`,
   language: 'zh-CN',
   selectorRetryAttempts: 3,
   selectorCache: [],
@@ -44,6 +78,7 @@ Generate a comprehensive analysis report in Markdown format.`,
     expandDepth: 2,
     maxDepth: 10,
   },
+  developerMode: false,
 };
 
 /**
@@ -55,6 +90,7 @@ export class StorageManager {
   private static readonly HISTORY_KEY = STORAGE.HISTORY_KEY;
   private static readonly HISTORY_INDEX_KEY = STORAGE.HISTORY_INDEX_KEY;
   private static readonly ENCRYPTION_SALT_KEY = STORAGE.ENCRYPTION_SALT_KEY;
+  private static readonly TOKEN_STATS_KEY = 'token_stats';
   private encryptionKey?: CryptoKey;
   private encryptionEnabled = false;
 
@@ -68,6 +104,37 @@ export class StorageManager {
   disableEncryption(): void {
     this.encryptionKey = undefined;
     this.encryptionEnabled = false;
+  }
+
+  async recordTokenUsage(tokens: number): Promise<void> {
+    try {
+      const stats = await this.getTokenStats();
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+      if (stats.lastReset < todayStart) {
+        stats.today = 0;
+        stats.lastReset = todayStart;
+      }
+
+      stats.today += tokens;
+      stats.total += tokens;
+
+      await chrome.storage.local.set({ [StorageManager.TOKEN_STATS_KEY]: stats });
+      Logger.debug('[StorageManager] Token usage recorded', { tokens, stats });
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to record token usage', { error });
+    }
+  }
+
+  async getTokenStats(): Promise<{ today: number; total: number; lastReset: number }> {
+    try {
+      const result = await chrome.storage.local.get(StorageManager.TOKEN_STATS_KEY);
+      return result[StorageManager.TOKEN_STATS_KEY] || { today: 0, total: 0, lastReset: 0 };
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to get token stats', { error });
+      return { today: 0, total: 0, lastReset: 0 };
+    }
   }
 
   private async getOrCreateSalt(): Promise<ArrayBuffer> {
@@ -433,6 +500,7 @@ export class StorageManager {
         (this.validateAIConfig(settings.extractorModel) &&
           this.validateAIConfig(settings.analyzerModel))) &&
       typeof settings.analyzerPromptTemplate === 'string' &&
+      typeof settings.extractionPromptTemplate === 'string' &&
       (settings.language === 'zh-CN' || settings.language === 'en-US')
     );
   }

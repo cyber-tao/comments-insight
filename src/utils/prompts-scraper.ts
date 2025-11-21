@@ -54,7 +54,8 @@ Guidelines:
 - commentContainer should match a single comment thread (one top-level comment and its replies), not the whole comments list
 - Selectors for username/content/timestamp/likes MUST be relative to commentItem (do not include commentContainer or page-level ancestors)
 - Reply selectors (replyToggle/replyContainer/replyItem) MUST be scoped within the same commentContainer so replies are not mixed between different comments
-- Use specific selectors (prefer stable IDs/classes over generic tags)
+- Use specific selectors (prefer stable IDs/classes over generic tags), BUT AVOID overly specific selectors for list items (e.g., do NOT use #comment-123 for commentItem, use class names like .comment-item instead)
+- If a selector includes an ID that looks generated or unique per item, DO NOT use it. Use classes or attribute selectors.
 - Consider that the page might load comments dynamically
 - If you're unsure about a selector, set it to null and explain in notes
 - For scrollConfig, enable it if comments appear to be lazy-loaded

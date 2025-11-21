@@ -34,6 +34,25 @@ const History: React.FC = () => {
     loadHistory();
   }, []);
 
+  // Handle URL parameters for deep linking
+  useEffect(() => {
+    if (history.length === 0) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    const tab = params.get('tab');
+
+    if (id) {
+      const item = history.find((h) => h.id === id);
+      if (item) {
+        setSelectedItem(item);
+        if (tab === 'analysis' || tab === 'comments') {
+          setViewMode(tab);
+        }
+      }
+    }
+  }, [history]);
+
   const loadHistory = async () => {
     setLoading(true);
     try {
@@ -235,7 +254,7 @@ const History: React.FC = () => {
                     </button>
                   )}
                 </div>
-                <p className="text-gray-700">{comment.content}</p>
+                <p className="text-gray-700 whitespace-pre-wrap">{comment.content}</p>
               </div>
               {hasReplies && isExpanded && (
                 <div className="mt-2">{renderCommentTree(comment.replies, depth + 1)}</div>

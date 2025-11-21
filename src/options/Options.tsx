@@ -90,7 +90,8 @@ const Options: React.FC = () => {
     // Debounce auto-save by 500ms
     const timeoutId = setTimeout(saveSettings, TIMING.DEBOUNCE_SAVE_MS);
     return () => clearTimeout(timeoutId);
-  }, [settings, isInitialLoad, t]); // 保留 t 依赖用于消息显示
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings, isInitialLoad]); // Exclude toast/t to avoid infinite loops
 
   const handleExport = async () => {
     try {
@@ -287,6 +288,24 @@ const Options: React.FC = () => {
                   <option value="en-US">English</option>
                 </select>
               </div>
+
+              <div className="mb-4 flex items-center">
+                <input
+                  type="checkbox"
+                  id="developerMode"
+                  checked={settings.developerMode || false}
+                  onChange={(e) =>
+                    handleSettingsChange({ ...settings, developerMode: e.target.checked })
+                  }
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="developerMode" className="ml-2 block text-sm text-gray-900">
+                  {t('options.developerMode')}
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 ml-6">
+                {t('options.developerModeHint')}
+              </p>
             </section>
 
             {/* DOM Analysis Configuration */}

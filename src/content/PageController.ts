@@ -7,9 +7,38 @@ import { TIMING, SCROLL, CLICK, TIMEOUT } from '@/config/constants';
 export class PageController {
   constructor(private domAnalyzer?: DOMAnalyzer) {}
   /**
-   * Scroll to bottom once
+   * Scroll to bottom smoothly to trigger lazy loading
    */
   async scrollToBottom(): Promise<void> {
+    let totalHeight = document.documentElement.scrollHeight;
+    const viewportHeight = window.innerHeight;
+    let currentScroll = window.scrollY;
+    
+    // Scroll in steps to trigger lazy loading
+    // We scroll slightly less than a viewport to ensure overlap
+    const step = Math.floor(viewportHeight * 0.8);
+
+    while (currentScroll < totalHeight) {
+      // Calculate next position
+      const nextScroll = Math.min(currentScroll + step, totalHeight);
+      
+      if (nextScroll === currentScroll) break; // Already at bottom
+
+      window.scrollTo(0, nextScroll);
+      currentScroll = nextScroll;
+      
+      // Small pause to allow browser to register scroll event and trigger IO observers
+      await this.wait(150);
+      
+      // Update total height in case content expanded
+      const newTotalHeight = document.documentElement.scrollHeight;
+      if (newTotalHeight > totalHeight) {
+          // Content grew, we update totalHeight to continue scrolling
+          totalHeight = newTotalHeight;
+      }
+    }
+    
+    // Ensure we are really at the bottom
     window.scrollTo(0, document.documentElement.scrollHeight);
   }
 

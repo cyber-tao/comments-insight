@@ -24,8 +24,9 @@ export class DOMSimplifier {
     const shouldExpand =
       forceExpandParent || forceExpandCurrent || currentDepth < maxDepth;
 
-    // Check for Shadow DOM
-    const children = shadowRoot ? Array.from(shadowRoot.children) : Array.from(element.children);
+    // Check for Shadow DOM and filter children
+    const rawChildren = shadowRoot ? Array.from(shadowRoot.children) : Array.from(element.children);
+    const children = rawChildren.filter((child) => !this.shouldIgnoreElement(child as Element));
 
     const node: SimplifiedNode = {
       tag: element.tagName.toLowerCase(),
@@ -56,6 +57,21 @@ export class DOMSimplifier {
     }
 
     return node;
+  }
+
+  private shouldIgnoreElement(element: Element): boolean {
+    const tag = element.tagName.toLowerCase();
+    // Ignore technical tags
+    if (['script', 'style', 'svg', 'path', 'noscript', 'meta', 'link', 'iframe', 'head', 'hr'].includes(tag)) {
+      return true;
+    }
+    
+    // Ignore obviously hidden elements
+    if (element.getAttribute('hidden') !== null || element.getAttribute('aria-hidden') === 'true') {
+      return true;
+    }
+
+    return false;
   }
 
   private shouldForceExpandElement(element: Element): boolean {

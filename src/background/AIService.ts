@@ -9,6 +9,8 @@ import {
   createNetworkError,
 } from '../utils/errors';
 import { AI as AI_CONST, REGEX, LOG_PREFIX, ANALYSIS_FORMAT } from '@/config/constants';
+import { storageManager } from './StorageManager';
+import { Tokenizer } from '../utils/tokenizer';
 
 /**
  * AIService handles all AI-related operations including
@@ -31,18 +33,25 @@ export class AIService {
       responseLength: data.response.length,
     });
 
-    // Save full log to chrome.storage.local
-    const logKey = `${LOG_PREFIX.AI}${type}_${data.timestamp}`;
-    chrome.storage.local
-      .set({
-        [logKey]: {
-          type,
-          timestamp: data.timestamp,
-          prompt: data.prompt,
-          response: data.response,
-        },
-      })
-      .catch((err) => Logger.error('[AIService] Failed to save log:', err));
+    // Check developer mode before saving to storage
+    storageManager.getSettings().then((settings) => {
+      if (!settings.developerMode) {
+        return;
+      }
+
+      // Save full log to chrome.storage.local
+      const logKey = `${LOG_PREFIX.AI}${type}_${data.timestamp}`;
+      chrome.storage.local
+        .set({
+          [logKey]: {
+            type,
+            timestamp: data.timestamp,
+            prompt: data.prompt,
+            response: data.response,
+          },
+        })
+        .catch((err) => Logger.error('[AIService] Failed to save log:', err));
+    });
   }
   /**
    * Call AI API with the given request
@@ -137,6 +146,11 @@ export class AIService {
             contentLength: content.length,
           });
 
+          // Record token usage
+          storageManager.recordTokenUsage(tokensUsed).catch((err) => {
+            Logger.warn('[AIService] Failed to record tokens', { err });
+          });
+
           // Log the interaction for debugging
           const logType =
             prompt.includes('extract comments') || prompt.includes('DOM Structure')
@@ -222,13 +236,17 @@ export class AIService {
    * @param config - AI configuration
    * @returns Extracted comments
    */
-  async extractComments(domContent: string, config: AIConfig): Promise<Comment[]> {
+  async extractComments(
+    domContent: string,
+    config: AIConfig,
+    promptTemplate: string,
+  ): Promise<Comment[]> {
     const maxModelTokens = config.maxTokens ?? 4000;
     const chunks = this.chunkDomContent(domContent, maxModelTokens);
     const allComments: Comment[] = [];
 
     for (let i = 0; i < chunks.length; i++) {
-      const partPrompt = this.buildExtractionPromptWrapper(chunks[i]);
+      const partPrompt = this.buildExtractionPromptWrapper(chunks[i], promptTemplate);
       const response = await this.callAI({ prompt: partPrompt, config });
       try {
         const comments = JSON.parse(response.content);
@@ -439,8 +457,8 @@ export class AIService {
    * @param domContent - DOM content
    * @returns Formatted prompt
    */
-  private buildExtractionPromptWrapper(domContent: string): string {
-    return buildExtractionPrompt(domContent);
+  private buildExtractionPromptWrapper(domContent: string, template: string): string {
+    return buildExtractionPrompt(domContent, template);
   }
 
   /**
@@ -570,16 +588,7 @@ export class AIService {
   }
 
   private estimateTextTokens(text: string): number {
-    const cleaned = text.replace(/\s+/g, ' ').trim();
-    const words = cleaned.length ? cleaned.split(/\s+/).length : 0;
-    const punct = (cleaned.match(/[,.!?;:]/g) || []).length;
-    const chars = cleaned.length;
-    const approx = Math.ceil(
-      words * AI_CONST.ESTIMATE_WORD_WEIGHT +
-        punct * AI_CONST.ESTIMATE_PUNCT_WEIGHT +
-        chars / AI_CONST.ESTIMATE_CHAR_DIVISOR,
-    );
-    return Math.max(1, approx);
+    return Tokenizer.estimateTokens(text);
   }
 
   /**
@@ -596,26 +605,21 @@ export class AIService {
       'claude-3-haiku',
     ];
   }
+
   private chunkDomContent(structure: string, maxTokens: number): string[] {
     const reserveRatio = AI_CONST.TOKEN_RESERVE_RATIO;
     const limit = Math.max(200, Math.floor(maxTokens * (1 - reserveRatio)));
-    const estimate = (text: string): number => {
-      const cleaned = text.replace(/\s+/g, ' ').trim();
-      const words = cleaned ? cleaned.split(/\s+/).length : 0;
-      const punct = (cleaned.match(/[,.!?;:]/g) || []).length;
-      const chars = cleaned.length;
-      const approx = Math.ceil(
-        words * AI_CONST.ESTIMATE_WORD_WEIGHT +
-          punct * AI_CONST.ESTIMATE_PUNCT_WEIGHT +
-          chars / AI_CONST.ESTIMATE_CHAR_DIVISOR,
-      );
-      return Math.max(1, approx);
-    };
+
     const parts: string[] = [];
     let current: string[] = [];
     let tokens = 0;
-    for (const line of structure.split('\n')) {
-      const t = estimate(line) + 1;
+
+    // Split by closing tags to preserve structure better than just newlines
+    // This regex splits after > followed by newline, keeping the delimiter
+    const lines = structure.split(/(?<=>)\n/);
+
+    for (const line of lines) {
+      const t = Tokenizer.estimateTokens(line) + 1; // +1 for newline
       if (tokens + t > limit && current.length > 0) {
         parts.push(current.join('\n'));
         current = [line];

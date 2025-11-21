@@ -1,7 +1,7 @@
 // Content Script for Comments Insight Extension
 import { PageController } from './PageController';
 import { MESSAGES, DOM } from '@/config/constants';
-import { CommentExtractorSelector } from './CommentExtractorSelector';
+import { CommentExtractor } from './CommentExtractor';
 
 Logger.debug('Comments Insight Content Script loaded');
 
@@ -13,7 +13,8 @@ import { DOMAnalyzer } from './DOMAnalyzer';
 
 const domAnalyzer = new DOMAnalyzer();
 const pageController = new PageController(domAnalyzer);
-const selectorExtractor = new CommentExtractorSelector(pageController);
+// Use the high-level CommentExtractor which handles fallback logic
+const commentExtractor = new CommentExtractor(pageController);
 
 // Track current extraction task
 let currentTaskId: string | null = null;
@@ -91,30 +92,15 @@ async function handleStartExtraction(
   currentTaskId = taskId;
 
   try {
-    // Fetch scraper config for current URL
-    const cfgResponse = await new Promise<any>((resolve) => {
-      chrome.runtime.sendMessage(
-        { type: MESSAGES.CHECK_SCRAPER_CONFIG, payload: { url: window.location.href } },
-        resolve,
-      );
-    });
-
-    if (!cfgResponse?.config || !cfgResponse.config.selectors) {
-      Logger.info('[Content] No scraper config found for current page');
-      sendResponse({ success: false, error: 'No scraper config' });
-      return;
-    }
-
-    // Extract comments using config only (no AI retries)
-    const comments = await selectorExtractor.extractWithConfig(
-      cfgResponse.config.selectors,
-      cfgResponse.config.scrollConfig,
+    // Use the unified extractor interface
+    // It will try to use config first, then fallback to AI discovery
+    const comments = await commentExtractor.extractWithAI(
       maxComments,
-      'unknown',
-      (message: string, count: number) => {
+      window.location.hostname, // Use hostname as platform identifier
+      (progress: number, message: string) => {
         chrome.runtime.sendMessage({
           type: MESSAGES.EXTRACTION_PROGRESS,
-          data: { taskId, progress: 50, message: `${message} (${count} comments)` },
+          payload: { taskId, progress, message: `${message} (unknown count)` },
         });
       },
     );

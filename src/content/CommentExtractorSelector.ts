@@ -1,9 +1,9 @@
 import { Comment, Platform, SelectorMap } from '../types';
 import { DOM } from '@/config/constants';
-import { REGEX } from '@/config/constants';
 import { MESSAGES, TIMING, SCROLL } from '@/config/constants';
 import { PageController } from './PageController';
 import { ScrollConfig } from '../types/scraper';
+import { Logger } from '@/utils/logger';
 
 /**
  * AI response structure
@@ -28,7 +28,7 @@ export class CommentExtractorSelector {
   /**
    * Extract comments using selector-based approach
    */
-  async extractWithAI(
+  async extractWithDiscovery(
     maxComments: number,
     platform: Platform,
     onProgress?: (message: string, count: number) => void,
@@ -642,12 +642,12 @@ Identify the comment section and provide CSS selectors for each field.
     selectors: SelectorMap,
     onProgress?: (message: string, count: number) => void,
     scrollCfg?: ScrollConfig,
-  ): Promise<void> {
+  ): Promise<number> {
     try {
       let totalExpanded = 0;
 
       if (!selectors.commentContainer || !selectors.replyToggle) {
-        return;
+        return 0;
       }
 
       const containers = this.querySelectorAllDeep(document, selectors.commentContainer);
@@ -675,8 +675,11 @@ Identify the comment section and provide CSS selectors for each field.
         await this.delay(scrollCfg?.scrollDelay || TIMING.XL);
         Logger.info('[CommentExtractorSelector] Total reply expansion completed', { totalExpanded });
       }
+
+      return totalExpanded;
     } catch (error) {
       Logger.error('[CommentExtractorSelector] Error expanding replies', { error });
+      return 0;
     }
   }
 
@@ -702,7 +705,15 @@ Identify the comment section and provide CSS selectors for each field.
     while (allComments.length < maxComments && scrollAttempts < maxScrollAttempts) {
       // Expand replies before extracting
       if (scrollAttempts === 0 || scrollAttempts % 5 === 0) {
-        await this.expandReplies(selectors, onProgress, scrollCfg);
+        const expandedCount = await this.expandReplies(selectors, onProgress, scrollCfg);
+        
+        // If replies were expanded, scroll to bottom to ensure lazy-loaded content renders
+        if (expandedCount > 0) {
+          onProgress?.('📜 Loading expanded replies...', allComments.length);
+          await this.pageController.scrollToBottom();
+          // Wait a bit for content to render after scroll
+          await this.delay(scrollCfg?.scrollDelay || TIMING.XL);
+        }
       }
 
       // Extract current visible comments
@@ -891,11 +902,11 @@ Identify the comment section and provide CSS selectors for each field.
     const usernameEl = selectors.username
       ? this.querySelectorDeep(item, selectors.username)
       : null;
-    const username = usernameEl?.textContent?.trim() || '';
+    const username = (usernameEl as HTMLElement)?.innerText?.trim() || '';
 
     // Extract content
     const contentEl = selectors.content ? this.querySelectorDeep(item, selectors.content) : null;
-    const content = contentEl?.textContent?.trim() || '';
+    const content = (contentEl as HTMLElement)?.innerText?.trim() || '';
 
     // Must have content
     if (!content) {
@@ -906,11 +917,11 @@ Identify the comment section and provide CSS selectors for each field.
     const timestampEl = selectors.timestamp
       ? this.querySelectorDeep(item, selectors.timestamp)
       : null;
-    const timestamp = timestampEl?.textContent?.trim() || '';
+    const timestamp = (timestampEl as HTMLElement)?.innerText?.trim() || '';
 
     // Extract likes
     const likesEl = selectors.likes ? this.querySelectorDeep(item, selectors.likes) : null;
-    const likes = this.parseLikes(likesEl?.textContent?.trim() || '0');
+    const likes = this.parseLikes((likesEl as HTMLElement)?.innerText?.trim() || '0');
 
     // Extract replies
     const replies = this.extractReplies(container, selectors, platform);
@@ -970,8 +981,16 @@ Identify the comment section and provide CSS selectors for each field.
   private parseLikes(text: string): number {
     if (!text) return 0;
 
-    // Remove non-numeric characters except K, M, k, m
-    const cleaned = text.replace(REGEX.LIKES_SANITIZE, '');
+    // Remove non-numeric characters except K, M, k, m, 万, 亿
+    const cleaned = text.replace(/[^0-9KMkm万亿.]/g, '');
+
+    // Handle Chinese units
+    if (cleaned.includes('亿')) {
+      return Math.floor(parseFloat(cleaned) * 100000000);
+    }
+    if (cleaned.includes('万')) {
+      return Math.floor(parseFloat(cleaned) * 10000);
+    }
 
     // Handle K (thousands)
     if (cleaned.includes('K') || cleaned.includes('k')) {
@@ -995,11 +1014,10 @@ Identify the comment section and provide CSS selectors for each field.
     username: string,
     content: string,
     timestamp: string,
-    _index: number,
+    index: number,
   ): string {
-    // Use content hash as primary ID to avoid duplicates
-    // Don't use Date.now() as it changes every time
-    const hash = this.simpleHash(username + content + timestamp);
+    // Use content hash + index as primary ID to avoid duplicates and collisions
+    const hash = this.simpleHash(username + content + timestamp + index);
     return `comment_${hash}`;
   }
 
@@ -1055,7 +1073,7 @@ Identify the comment section and provide CSS selectors for each field.
             chrome.runtime.sendMessage(
               {
                 type: MESSAGES.UPDATE_SELECTOR_VALIDATION,
-                payload: { configId, selectorKey: key, status },
+                payload: { configId, selectorKey: key, status, count },
               },
               () => resolve(),
             );
@@ -1286,4 +1304,3 @@ Identify the comment section and provide CSS selectors for each field.
     }
   }
 }
-import { Logger } from '@/utils/logger';
