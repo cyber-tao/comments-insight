@@ -100,7 +100,7 @@ async function handleStartExtraction(
       (progress: number, message: string) => {
         chrome.runtime.sendMessage({
           type: MESSAGES.EXTRACTION_PROGRESS,
-          payload: { taskId, progress, message: `${message} (unknown count)` },
+          payload: { taskId, progress, message },
         });
       },
     );

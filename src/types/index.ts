@@ -54,6 +54,7 @@ export interface Task {
   endTime?: number;
   tokensUsed: number;
   error?: string;
+  message?: string;
 }
 
 export interface AIConfig {

@@ -32,6 +32,7 @@ const Popup: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState('');
   const [aiModelName, setAIModelName] = useState('');
+  const [developerMode, setDeveloperMode] = useState(false);
   const [currentTask, setCurrentTask] = useState<{
     id: string;
     type: 'extract' | 'analyze' | 'generate-config';
@@ -66,13 +67,30 @@ const Popup: React.FC = () => {
     }
   };
 
+  const [settings, setSettings] = useState<{ maxComments: number } | null>(null);
+
   useEffect(() => {
     loadLanguage();
     loadPageInfo();
     loadVersion();
-    loadModelName();
+    loadSettings();
     loadCurrentTask();
   }, []);
+
+  const loadSettings = async () => {
+    try {
+      const response = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
+      if (response?.settings) {
+        setSettings(response.settings);
+        if (response.settings.aiModel?.model) {
+          setAIModelName(response.settings.aiModel.model);
+        }
+        setDeveloperMode(!!response.settings.developerMode);
+      }
+    } catch (error) {
+      Logger.error('[Popup] Failed to load settings', { error });
+    }
+  };
 
   const loadLanguage = async () => {
     try {
@@ -92,17 +110,6 @@ const Popup: React.FC = () => {
       setVersion(manifest.version);
     } catch (error) {
       Logger.error('[Popup] Failed to load version', { error });
-    }
-  };
-
-  const loadModelName = async () => {
-    try {
-      const response = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
-      if (response?.settings?.aiModel?.model) {
-        setAIModelName(response.settings.aiModel.model);
-      }
-    } catch (error) {
-      Logger.error('[Popup] Failed to load model names', { error });
     }
   };
 
@@ -129,7 +136,7 @@ const Popup: React.FC = () => {
             type: currentUrlTask.type,
             status: currentUrlTask.status,
             progress: currentUrlTask.progress,
-            message: currentUrlTask.error,
+            message: currentUrlTask.message || currentUrlTask.error,
           });
 
           // Start monitoring if task is running
@@ -343,7 +350,7 @@ const Popup: React.FC = () => {
             type: task.type,
             status: task.status,
             progress: task.progress,
-            message: task.error,
+            message: task.message || task.error,
           });
 
           // If task is still running, check again
@@ -422,25 +429,35 @@ const Popup: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold">{t('popup.title')}</h1>
-            <p className="text-xs opacity-90">
-              {t('popup.version')} {version}
-            </p>
+            <div className="flex flex-col gap-1">
+              <p className="text-xs opacity-90">
+                {t('popup.version')} {version}
+              </p>
+              {aiModelName && (
+                <div className="flex items-center text-xs opacity-90 bg-white/20 px-2 py-0.5 rounded w-fit mt-1">
+                  <span className="mr-1">🤖</span>
+                  <span>{t('options.model')}: {aiModelName}</span>
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={handleOpenLogs}
-              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-              title={t('popup.viewAILogs')}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                />
-              </svg>
-            </button>
+            {developerMode && (
+              <button
+                onClick={handleOpenLogs}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                title={t('popup.viewAILogs')}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+              </button>
+            )}
             <button
               onClick={handleOpenSettings}
               className="p-2 hover:bg-white/20 rounded-lg transition-colors"
@@ -467,7 +484,9 @@ const Popup: React.FC = () => {
 
       {/* Page Status */}
       <div className="p-4 bg-white border-b">
-        <h2 className="text-sm font-semibold text-gray-700 mb-2">{t('popup.currentPage')}</h2>
+        <div className="flex justify-between items-start mb-2">
+            <h2 className="text-sm font-semibold text-gray-700">{t('popup.currentPage')}</h2>
+        </div>
         {pageInfo ? (
           <div className="space-y-2">
             <div className="text-sm mb-2">
@@ -567,7 +586,7 @@ const Popup: React.FC = () => {
               onClick={() => {
                 if (pageStatus.extracted) {
                   chrome.tabs.create({
-                    url: chrome.runtime.getURL(`${PATHS.HISTORY_PAGE}?id=${pageStatus.historyId}`),
+                    url: chrome.runtime.getURL(`${PATHS.HISTORY_PAGE}?id=${pageStatus.historyId}&tab=comments`),
                   });
                   window.close();
                 } else {
@@ -584,6 +603,21 @@ const Popup: React.FC = () => {
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
                   {t('popup.extracting')}
+                  {currentTask.message && (
+                    <span className="ml-1 text-xs opacity-80">
+                      {(() => {
+                        // Try to match (X/Y) which we set in background
+                        const matchFull = currentTask.message?.match(/\(\d+\/\d+\)/);
+                        if (matchFull) return matchFull[0];
+
+                        // Fallback for backward compatibility or other states
+                        const matchNum = currentTask.message?.match(/\((\d+)\)/);
+                        if (matchNum) return `${matchNum[1]}/${settings?.maxComments || '?'}`;
+                        
+                        return '';
+                      })()}
+                    </span>
+                  )}
                 </>
               ) : pageStatus.extracted ? (
                 <>
@@ -611,9 +645,6 @@ const Popup: React.FC = () => {
                 </>
               )}
             </button>
-            {aiModelName && (
-              <p className="text-xs text-gray-500 mt-1 text-center">🤖 {aiModelName}</p>
-            )}
           </div>
         )}
 
@@ -668,9 +699,6 @@ const Popup: React.FC = () => {
               </>
             )}
           </button>
-          {aiModelName && (
-            <p className="text-xs text-gray-500 mt-1 text-center">🤖 {aiModelName}</p>
-          )}
         </div>
 
         <button
@@ -688,87 +716,89 @@ const Popup: React.FC = () => {
           {t('popup.viewHistory')}
         </button>
 
-        <div className="px-4 py-3">
-          <div className="flex gap-2 items-center">
-            <input
-              value={testSelector}
-              onChange={(e) => setTestSelector(e.target.value)}
-              placeholder={t('popup.enterSelector')}
-              className="flex-1 px-3 py-2 border rounded"
-            />
-            <select
-              value={testPageSize}
-              onChange={(e) => setTestPageSize(Number(e.target.value))}
-              className="px-2 py-2 border rounded"
-            >
-              {[10, 20, 50, 100].map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-            <button
-              onClick={handleTestSelectorQuery}
-              className="px-4 py-2 bg-blue-600 text-white rounded"
-            >
-              {t('popup.search')}
-            </button>
-          </div>
-          <div className="mt-2">
-            {testItems.length === 0 ? (
-              <div className="text-sm text-gray-500">{t('popup.noResults')}</div>
-            ) : (
-              <div className="border rounded">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="p-2 text-left">#</th>
-                      <th className="p-2 text-left">{t('popup.tag')}</th>
-                      <th className="p-2 text-left">{t('popup.id')}</th>
-                      <th className="p-2 text-left">{t('popup.class')}</th>
-                      <th className="p-2 text-left">{t('popup.text')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {testItems
-                      .slice((testPage - 1) * testPageSize, (testPage - 1) * testPageSize + testPageSize)
-                      .map((it) => (
-                        <tr key={`${it.tag}-${it.index}`} className="border-t">
-                          <td className="p-2">{it.index + 1}</td>
-                          <td className="p-2">{it.tag}</td>
-                          <td className="p-2">{it.id}</td>
-                          <td className="p-2">{it.className}</td>
-                          <td className="p-2">{it.text}</td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-                <div className="flex items-center justify-between p-2">
-                  <div className="text-xs text-gray-600">
-                    {t('popup.total')}: {testItems.length}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="px-2 py-1 border rounded"
-                      onClick={() => setTestPage(Math.max(1, testPage - 1))}
-                      disabled={testPage === 1}
-                    >
-                      {t('popup.prev')}
-                    </button>
-                    <span className="text-xs">
-                      {t('popup.page')}: {testPage} / {Math.max(1, Math.ceil(testItems.length / testPageSize))}
-                    </span>
-                    <button
-                      className="px-2 py-1 border rounded"
-                      onClick={() => setTestPage(Math.min(Math.ceil(testItems.length / testPageSize), testPage + 1))}
-                      disabled={testPage >= Math.ceil(testItems.length / testPageSize)}
-                    >
-                      {t('popup.next')}
-                    </button>
+        {developerMode && (
+          <div className="px-4 py-3">
+            <div className="flex gap-2 items-center">
+              <input
+                value={testSelector}
+                onChange={(e) => setTestSelector(e.target.value)}
+                placeholder={t('popup.enterSelector')}
+                className="flex-1 px-3 py-2 border rounded"
+              />
+              <select
+                value={testPageSize}
+                onChange={(e) => setTestPageSize(Number(e.target.value))}
+                className="px-2 py-2 border rounded"
+              >
+                {[10, 20, 50, 100].map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+              <button
+                onClick={handleTestSelectorQuery}
+                className="px-4 py-2 bg-blue-600 text-white rounded"
+              >
+                {t('popup.search')}
+              </button>
+            </div>
+            <div className="mt-2">
+              {testItems.length === 0 ? (
+                <div className="text-sm text-gray-500">{t('popup.noResults')}</div>
+              ) : (
+                <div className="border rounded">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="p-2 text-left">#</th>
+                        <th className="p-2 text-left">{t('popup.tag')}</th>
+                        <th className="p-2 text-left">{t('popup.id')}</th>
+                        <th className="p-2 text-left">{t('popup.class')}</th>
+                        <th className="p-2 text-left">{t('popup.text')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {testItems
+                        .slice((testPage - 1) * testPageSize, (testPage - 1) * testPageSize + testPageSize)
+                        .map((it) => (
+                          <tr key={`${it.tag}-${it.index}`} className="border-t">
+                            <td className="p-2">{it.index + 1}</td>
+                            <td className="p-2">{it.tag}</td>
+                            <td className="p-2">{it.id}</td>
+                            <td className="p-2">{it.className}</td>
+                            <td className="p-2">{it.text}</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                  <div className="flex items-center justify-between p-2">
+                    <div className="text-xs text-gray-600">
+                      {t('popup.total')}: {testItems.length}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="px-2 py-1 border rounded"
+                        onClick={() => setTestPage(Math.max(1, testPage - 1))}
+                        disabled={testPage === 1}
+                      >
+                        {t('popup.prev')}
+                      </button>
+                      <span className="text-xs">
+                        {t('popup.page')}: {testPage} / {Math.max(1, Math.ceil(testItems.length / testPageSize))}
+                      </span>
+                      <button
+                        className="px-2 py-1 border rounded"
+                        onClick={() => setTestPage(Math.min(Math.ceil(testItems.length / testPageSize), testPage + 1))}
+                        disabled={testPage >= Math.ceil(testItems.length / testPageSize)}
+                      >
+                        {t('popup.next')}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

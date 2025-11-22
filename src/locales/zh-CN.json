@@ -86,6 +86,7 @@
     "temperature": "温度",
     "topP": "Top P",
     "promptTemplate": "提示词模板",
+    "resetTemplate": "恢复默认",
     "placeholdersHint": "可用占位符：{comments_data}, {timestamp}, {platform}, {title}, {url}",
     "developerMode": "开发者模式",
     "developerModeHint": "启用高级调试功能，如详细的 AI 日志记录（可能会占用大量存储空间）。仅供开发人员使用。",

@@ -58,7 +58,18 @@ export class TaskManager {
     // If task is completed or failed, don't restart
     if (task.status === 'completed' || task.status === 'failed') {
       Logger.warn(`[TaskManager] Task ${taskId} is in ${task.status} state, cannot restart`);
+      // Ensure it's removed from queue if it somehow got there
+      const queueIndex = this.queue.indexOf(taskId);
+      if (queueIndex !== -1) {
+        this.queue.splice(queueIndex, 1);
+      }
       return;
+    }
+
+    // Remove from queue to prevent double execution
+    const queueIndex = this.queue.indexOf(taskId);
+    if (queueIndex !== -1) {
+      this.queue.splice(queueIndex, 1);
     }
 
     task.status = 'running';
@@ -83,6 +94,9 @@ export class TaskManager {
     }
 
     task.progress = Math.min(100, Math.max(0, progress));
+    if (message) {
+      task.message = message;
+    }
     Logger.debug(`[TaskManager] Task progress updated: ${taskId}`, {
       progress: task.progress,
       message,

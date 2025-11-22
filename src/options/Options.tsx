@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API, MESSAGES, TIMING } from '@/config/constants';
+import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
 import { Settings } from '../types';
 import i18n from '../utils/i18n';
 import { useToast } from '../hooks/useToast';
@@ -565,9 +566,23 @@ const Options: React.FC = () => {
 
             <section className="mb-8 bg-white p-6 rounded-lg shadow">
               <div className="mb-4">
-                <label className="block text-sm font-medium mb-2">
-                  {t('options.promptTemplate')}
-                </label>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium">
+                    {t('options.promptTemplate')}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleSettingsChange({
+                        ...settings,
+                        analyzerPromptTemplate: DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
+                      })
+                    }
+                    className="text-xs text-blue-600 hover:text-blue-800 underline"
+                  >
+                    {t('options.resetTemplate')}
+                  </button>
+                </div>
                 <textarea
                   value={settings.analyzerPromptTemplate}
                   onChange={(e) =>

@@ -651,28 +651,73 @@ Identify the comment section and provide CSS selectors for each field.
       }
 
       const containers = this.querySelectorAllDeep(document, selectors.commentContainer);
-      onProgress?.('🔽 Expanding replies...', containers.length);
-
+      
+      // Collect all valid toggle buttons first
+      const buttonsToClick: HTMLElement[] = [];
       for (const container of containers) {
         const toggles = this.querySelectorAllDeep(container, selectors.replyToggle);
-        for (let i = 0; i < toggles.length; i++) {
-          const button = toggles[i] as HTMLElement;
-          if (button.offsetParent !== null) {
-            try {
-              button.click();
-              totalExpanded++;
-              if (i % 3 === 0) {
-                await this.delay(scrollCfg?.scrollDelay || TIMING.MD);
-              }
-            } catch (error) {
-              Logger.warn('[CommentExtractorSelector] Failed to click reply toggle button', { error });
-            }
+        for (const toggle of toggles) {
+          const button = toggle as HTMLElement;
+          // Check visibility more loosely - if it has dimensions, it's likely visible
+          // Also check if it's not hidden/none
+          const style = window.getComputedStyle(button);
+          const isVisible = 
+            style.display !== 'none' && 
+            style.visibility !== 'hidden' && 
+            (button.offsetParent !== null || button.getBoundingClientRect().height > 0);
+
+          if (isVisible) {
+             buttonsToClick.push(button);
           }
         }
       }
 
+      if (buttonsToClick.length === 0) {
+        return 0;
+      }
+
+      onProgress?.(`🔽 Found ${buttonsToClick.length} replies to expand...`, containers.length);
+      Logger.info('[CommentExtractorSelector] Found reply toggles', { count: buttonsToClick.length });
+      
+      // Process buttons sequentially with scrolling
+      const baseDelay = scrollCfg?.scrollDelay ? Math.min(scrollCfg.scrollDelay, TIMING.EXPAND_REPLY_MAX) : TIMING.LG;
+
+      for (let i = 0; i < buttonsToClick.length; i++) {
+        const button = buttonsToClick[i];
+        
+        // Skip if button is no longer in document
+        if (!document.contains(button)) continue;
+
+        try {
+          // Scroll button into view to trigger lazy loading and ensure visibility
+          button.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          
+          // Wait for scroll
+          await this.delay(TIMING.MD);
+
+          // Simulate full click sequence
+          const clickOpts = { bubbles: true, cancelable: true, view: window };
+          button.dispatchEvent(new MouseEvent('mousedown', clickOpts));
+          button.dispatchEvent(new MouseEvent('mouseup', clickOpts));
+          button.click();
+          
+          totalExpanded++;
+          
+          // Report progress
+          if (i > 0 && i % SCROLL.REPLY_EXPAND_REPORT_INTERVAL === 0) {
+             onProgress?.(`🔽 Expanding replies... ${i}/${buttonsToClick.length}`, totalExpanded);
+          }
+
+          // Wait for content expansion
+          await this.delay(baseDelay);
+        } catch (error) {
+          Logger.warn('[CommentExtractorSelector] Failed to click reply toggle button', { error });
+        }
+      }
+
       if (totalExpanded > 0) {
-        await this.delay(scrollCfg?.scrollDelay || TIMING.XL);
+        // Final wait to ensure last expansions render
+        await this.delay(TIMING.XL);
         Logger.info('[CommentExtractorSelector] Total reply expansion completed', { totalExpanded });
       }
 
@@ -704,15 +749,15 @@ Identify the comment section and provide CSS selectors for each field.
 
     while (allComments.length < maxComments && scrollAttempts < maxScrollAttempts) {
       // Expand replies before extracting
-      if (scrollAttempts === 0 || scrollAttempts % 5 === 0) {
+      // Expand more frequently: every time we scroll (attempt 0) or every 3rd scroll
+      if (scrollAttempts === 0 || scrollAttempts % SCROLL.REPLY_EXPAND_SCROLL_FREQUENCY === 0) {
         const expandedCount = await this.expandReplies(selectors, onProgress, scrollCfg);
         
-        // If replies were expanded, scroll to bottom to ensure lazy-loaded content renders
+        // If replies were expanded, wait a bit for content to render
         if (expandedCount > 0) {
-          onProgress?.('📜 Loading expanded replies...', allComments.length);
-          await this.pageController.scrollToBottom();
-          // Wait a bit for content to render after scroll
-          await this.delay(scrollCfg?.scrollDelay || TIMING.XL);
+           // No need to scroll to bottom here as expandReplies already scrolled us around
+           // Just wait for any final rendering
+           await this.delay(TIMING.LG);
         }
       }
 

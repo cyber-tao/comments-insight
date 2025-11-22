@@ -309,14 +309,43 @@ export async function handleAIAnalyzeStructure(
   }
 }
 
-export function handleExtractionProgress(
+export async function handleExtractionProgress(
   message: Extract<Message, { type: 'EXTRACTION_PROGRESS' } >,
   context: HandlerContext,
-): any {
+): Promise<any> {
   const { taskId, progress, message: progressMessage } = message.payload || {};
 
   if (taskId) {
-    context.taskManager.updateTaskProgress(taskId, progress, progressMessage);
+    // Get maxComments from task or settings
+    const task = context.taskManager.getTask(taskId);
+    let maxComments = 100; // Default
+    
+    if (task) {
+       // We don't store maxComments in task currently, but we can fetch from settings as fallback
+       // Ideally we should store maxComments in task metadata
+       const settings = await context.storageManager.getSettings();
+       maxComments = settings.maxComments || 100;
+    }
+
+    // Format message to include progress count like (5/100)
+    let finalMessage = progressMessage || '';
+    const countMatch = finalMessage.match(/\((\d+)\)$/);
+    
+    if (countMatch) {
+       // If message already has count (e.g. from content script), append max
+       const count = countMatch[1];
+       finalMessage = finalMessage.replace(/\(\d+\)$/, `(${count}/${maxComments})`);
+    } else {
+       // Fallback to estimation
+       const estimated = Math.min(maxComments, Math.ceil((progress / 100) * maxComments));
+       finalMessage = `${finalMessage} (${estimated}/${maxComments})`;
+    }
+
+    context.taskManager.updateTaskProgress(
+      taskId,
+      progress,
+      finalMessage,
+    );
   }
 
   return { success: true };

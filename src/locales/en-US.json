@@ -88,6 +88,7 @@
     "temperature": "Temperature",
     "topP": "Top P",
     "promptTemplate": "Prompt Template",
+    "resetTemplate": "Reset to Default",
     "placeholdersHint": "Available placeholders: {comments_data}, {timestamp}, {platform}, {title}, {url}",
     "developerMode": "Developer Mode",
     "developerModeHint": "Enable advanced debugging features like detailed AI logging (may consume significant storage). For developers only.",

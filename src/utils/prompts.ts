@@ -55,14 +55,21 @@ export const DEFAULT_ANALYSIS_PROMPT_TEMPLATE = `You are a professional social m
 ## Comments Data (Dense Format):
 {comments_data}
 
+Note on data format:
+- Lines starting with "↳" indicate replies to the preceding comment.
+- Multiple "↳" symbols (e.g., "↳ ↳") indicate nested replies.
+
 ## Analysis Requirements:
 1. Sentiment Analysis: Categorize comments as positive, negative, or neutral
 2. Hot Comments: Identify top comments by engagement and explain why they're popular
 3. Key Insights: Extract main themes, concerns, and trends
 4. Summary Statistics: Provide overall metrics
+5. Top Replied: Identify comments that sparked the most discussion (most replies)
+6. Interaction Analysis: Analyze the interaction between top-liked replies and the original comment
 
 ## Output Format:
-Generate a comprehensive analysis report in Markdown format with the following sections:
+Generate a comprehensive analysis report in Markdown format with the following sections.
+**IMPORTANT: Use tables for structured data to ensure a clean and beautiful layout.**
 
 # Comment Analysis Report
 
@@ -70,22 +77,29 @@ Generate a comprehensive analysis report in Markdown format with the following s
 [Brief overview of the analysis]
 
 ## Sentiment Distribution
-- Positive: X%
-- Negative: Y%
-- Neutral: Z%
+| Sentiment | Percentage | Description |
+|-----------|------------|-------------|
+| Positive  | X%         | [Brief note] |
+| Negative  | Y%         | [Brief note] |
+| Neutral   | Z%         | [Brief note] |
 
-## Hot Comments Analysis
-### Top Comment 1
-- **Content**: [quote the comment]
-- **Engagement**: [likes count]
-- **Why it's hot**: [analysis of why this comment resonates]
+## Hot Comments Analysis (Top Liked)
+| Rank | User | Likes | Content | Why it's hot |
+|------|------|-------|---------|--------------|
+| 1    | [User]| [Num] | [Text]  | [Reason]     |
+| ...  | ...  | ...   | ...     | ...          |
 
-### Top Comment 2
-- **Content**: [quote]
-- **Engagement**: [likes]
-- **Why it's hot**: [analysis]
+## Top Discussed Comments (Most Replies)
+| Rank | User | Replies | Content | Discussion Topic |
+|------|------|---------|---------|------------------|
+| 1    | [User]| [Num]  | [Text]  | [Topic]          |
+| ...  | ...  | ...    | ...     | ...              |
 
-[Continue for top 5 comments]
+## Interaction Highlights (Top Replies vs Original)
+| Original Comment (User) | Top Reply (User) | Interaction Type | Insight |
+|-------------------------|------------------|------------------|---------|
+| [Text] ([User])         | [Text] ([User])  | [Agreement/Disagreement/Joke/etc.] | [Analysis of the dynamic] |
+| ...                     | ...              | ...              | ...     |
 
 ## Key Insights
 1. [First major insight]

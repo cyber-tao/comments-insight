@@ -16,7 +16,7 @@ const History: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'comments' | 'analysis'>('analysis');
-  const [sortBy, setSortBy] = useState<'time' | 'likes' | 'replies'>('time');
+  const [sortBy, setSortBy] = useState<'time' | 'likes' | 'replies'>('likes');
 
   // Comment view search and pagination
   const [commentSearchTerm, setCommentSearchTerm] = useState('');

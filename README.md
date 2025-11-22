@@ -1,243 +1,134 @@
-# Comments Insight (评论洞察)
-
 <div align="center">
 
-🤖 AI-powered comment extraction and analysis Chrome extension for social media platforms
+# Comments Insight
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-18.3-61dafb)](https://reactjs.org/)
-[![Vite](https://img.shields.io/badge/Vite-5.4-646cff)](https://vitejs.dev/)
+AI-powered Chrome Extension for comment extraction and insight analysis ✨
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-18.3-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-5.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.0-000000)](https://crxjs.dev/vite-plugin/)
 
 </div>
+
+> Extract comments from the web, analyze them with AI, and generate actionable, structured insights.
+
+## 📚 Table of Contents
+- [Overview](#-overview)
+- [Features](#-features)
+- [Permissions](#-permissions)
+- [Architecture](#-architecture)
+- [Project Structure](#-project-structure)
+- [Quick Start](#-quick-start)
+- [Usage](#-usage)
+- [Configuration](#-configuration)
+- [Tech Stack](#-tech-stack)
+- [Commands](#-commands)
+- [FAQ](#-faq)
+- [Contributing](#-contributing)
+- [License](#-license)
+
+## 🔎 Overview
+- Manifest V3 Chrome extension with multi-page UI: Popup, Options, History, Logs.
+- Built with Vite, React, TypeScript, and `@crxjs/vite-plugin`.
+- Combines selectors and AI to robustly extract comments (including nested replies) and produce comprehensive Markdown reports with tables and structured data.
 
 ## ✨ Features
+- 🧲 **Smart Extraction**:
+  - Hybrid approach using Config + AI Discovery for robust selector detection.
+  - Auto-scroll handling and recursive reply expansion (with visibility checks and interaction simulation).
+  - Real-time progress tracking (e.g., "Extracting (55/100)").
+- 🧠 **AI Analysis**:
+  - Comprehensive reports including Sentiment Distribution, Hot Comments, Top Discussed, and Interaction Analysis.
+  - Beautifully formatted output using Markdown tables.
+  - Customizable prompt templates with "Reset to Default" capability.
+- 🧩 **Scraper Config**:
+  - Generate/edit/import/export per-site configs.
+  - Visual selector validation and caching for performance.
+- 🗂️ **History & Logs**:
+  - Compressed storage (`lz-string`) for efficient local saving.
+  - Searchable history with filtering and sorting (by Time, Likes, Replies).
+  - Export data to CSV (comments) or Markdown (analysis).
+- 🔔 **Tasks & Notifications**:
+  - Robust task queue system to prevent conflicts.
+  - Completion and failure notifications.
+- 🌐 **i18n**: Complete Chinese and English UI support.
+- 🛠️ **Developer Mode**: Toggle advanced features like AI Logs and Selector Testing tools.
 
-- 🤖 **AI-Driven Extraction** - Intelligent comment extraction using AI models
-- 📊 **Professional Analysis** - Sentiment analysis and hot comment identification
-- 🌳 **Tree View** - Hierarchical comment and reply visualization
-- 📁 **Data Export** - Export to CSV and Markdown formats
-- 🌍 **Multi-Language** - Support for Chinese and English
-- 📜 **History Tracking** - Save and review past analyses
-- ⚡ **Background Tasks** - Non-blocking task execution
-- 🔒 **Privacy First** - All data stored locally
+## 🔐 Permissions
+- `storage`: Saving history, settings, and configs.
+- `activeTab`, `scripting`: Injecting content scripts for extraction.
+- `notifications`: Alerting on task completion.
+- Host permissions: `<all_urls>` to support extraction on any website.
 
-## 🎯 Supported Platforms
+## 🧱 Architecture
+- **Background**: Service Worker orchestrates the Task Queue, AI Service (API calls), and Storage management.
+- **Content Scripts**: Handles DOM traversal, interaction simulation (clicking "View Replies"), and data extraction.
+- **Popup**: Main control center for triggering tasks, viewing page status, and monitoring progress.
+- **Options**: Configuration for AI models (OpenAI, Ollama, etc.), Prompts, and Scraper Management.
+- **History**: Rich interface for browsing extracted data and analysis reports.
 
-| Platform  | Status | Notes        |
-| --------- | ------ | ------------ |
-| YouTube   | ✅     | Full support |
-| Bilibili  | ✅     | Full support |
-| Weibo     | ✅     | Full support |
-| Douyin    | ✅     | Full support |
-| Twitter/X | ✅     | Full support |
-| TikTok    | ✅     | Full support |
-| Reddit    | ✅     | Full support |
+## 📦 Project Structure
+```
+src/
+  background/            # Service Worker: TaskManager, AIService, etc.
+  content/               # Content Scripts: PageController, Extractor strategies
+  popup/                 # Extension Popup UI
+  options/               # Options Page: Settings & Config Management
+  history/               # History Page: Data visualization
+  logs/                  # Debug Logs Viewer
+  config/                # Constants, default scrapers
+  components/            # Shared UI components
+  utils/                 # Helpers: Prompts, Logger, Export, etc.
+  types/                 # TypeScript definitions
+vite.config.ts          # Build config
+```
 
 ## 🚀 Quick Start
+1. **Prerequisites**: Node.js 18+, Chrome.
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+3. **Development build**:
+   ```bash
+   npm run dev
+   ```
+4. **Load into Chrome**:
+   - Open `chrome://extensions`
+   - Enable **Developer mode** (top right)
+   - Click **Load unpacked** and select the `dist` folder
+5. **Production build**:
+   ```bash
+   npm run build
+   ```
 
-### Prerequisites
+## 🧭 Usage
+1. **Configure AI**: Open Extension Options, enter your API Key/URL (supports standard OpenAI-compatible endpoints).
+2. **Navigate**: Go to a post or video page with comments (e.g., YouTube, Reddit, Bilibili).
+3. **Extract**: Click the extension icon. If a config exists, click "Extract Comments". If not, click "Generate Config" to let AI find selectors.
+4. **Monitor**: Watch the progress bar in the popup.
+5. **Analyze**: Once extracted, click "Analyze Comments" to generate a report.
+6. **View**: Click "View History" to see detailed comments (sort by Likes to see top content) and the analysis report.
 
-- Node.js 18+
-- npm or yarn
-- Chrome Browser
+## ⚙️ Configuration
+- **AI Model**: Supports custom models. Ensure your model handles long context if analyzing many comments.
+- **Prompts**: Customize the extraction or analysis prompts in Settings. Use placeholders like `{comments_data}`.
+- **Developer Mode**: Enable in Settings to see "View AI Logs" and selector testing tools in the Popup.
 
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/comments-insight.git
-cd comments-insight
-
-# Install dependencies
-npm install
-
-# Start development server
-npm run dev
-```
-
-### Load Extension in Chrome
-
-1. Open Chrome and navigate to `chrome://extensions/`
-2. Enable **"Developer mode"** (top right)
-3. Click **"Load unpacked"**
-4. Select the `dist` folder from the project
-
-### Configuration
-
-1. Click the extension icon
-2. Go to Settings
-3. Configure your AI API:
-   - API URL (e.g., `https://api.openai.com/v1/chat/completions`)
-   - API Key
-   - Model selection
-   - Parameters (max tokens, temperature, etc.)
-
-## 📖 Usage
-
-1. **Navigate** to a supported platform (e.g., YouTube video)
-2. **Click** the extension icon
-3. **Start** comment extraction
-4. **View** analysis results
-5. **Export** data if needed
-
-## 🏗️ Project Structure
-
-```
-comments-insight/
-├── src/
-│   ├── background/          # Service Worker
-│   │   ├── index.ts        # Main entry
-│   │   ├── TaskManager.ts  # Task management
-│   │   ├── StorageManager.ts # Data storage
-│   │   ├── AIService.ts    # AI integration
-│   │   └── MessageRouter.ts # Message routing
-│   ├── content/             # Content Scripts
-│   │   ├── index.ts        # Main entry
-│   │   ├── PlatformDetector.ts # Platform detection
-│   │   ├── DOMAnalyzer.ts  # DOM analysis
-│   │   ├── PageController.ts # Page interaction
-│   │   └── CommentExtractor.ts # Comment extraction
-│   ├── popup/               # Popup UI
-│   ├── options/             # Settings page
-│   ├── history/             # History page
-│   ├── types/               # TypeScript types
-│   └── styles/              # Global styles
-├── public/
-│   └── icons/               # Extension icons
-├── scripts/                 # Build scripts
-├── package.json
-├── tsconfig.json
-├── vite.config.ts
-└── README.md
-```
-
-## 🛠️ Development
-
-### Available Scripts
-
-```bash
-# Development mode with hot reload
-npm run dev
-
-# Build for production
-npm run build
-
-# Package extension as ZIP
-npm run package
-
-# Preview production build
-npm run preview
-```
-
-### Tech Stack
-
-- **Framework**: React 18.3
+## 🧰 Tech Stack
+- **Framework**: React 18, Vite 5
 - **Language**: TypeScript 5.6
-- **Build Tool**: Vite 5.4
-- **Extension Tool**: CRXJS 2.0
-- **Styling**: Tailwind CSS 3.4
-- **State Management**: Zustand 5.0
-- **i18n**: i18next 23.15
-- **Markdown**: react-markdown 9.0
-- **Compression**: LZ-String 1.5
+- **Styling**: TailwindCSS
+- **Extension**: Manifest V3, CRXJS
+- **Utils**: `i18next`, `react-markdown`, `lz-string`, `crypto-js`
 
-### Code Style
-
-- Use TypeScript strict mode
-- Follow ESLint rules
-- Add JSDoc comments for public APIs
-- Use English for all comments and logs
-- Follow naming conventions:
-  - Classes: `PascalCase`
-  - Functions: `camelCase`
-  - Constants: `UPPER_SNAKE_CASE`
-
-## 📚 Documentation
-
-- [Development Guide](DEVELOPMENT_GUIDE.md) - Detailed development instructions
-- [Implementation Summary](IMPLEMENTATION_SUMMARY.md) - Technical implementation details
-- [Progress](PROGRESS.md) - Current development status
-
-## 🔧 Configuration
-
-### AI Settings
-
-Configure in the Options page:
-
-```typescript
-{
-  "apiUrl": "https://api.openai.com/v1/chat/completions",
-  "apiKey": "your-api-key",
-  "model": "gpt-4",
-  "maxTokens": 4000,
-  "temperature": 0.7,
-  "topP": 0.9
-}
-```
-
-### Extraction Settings
-
-- **Max Comments**: Maximum number of comments to extract
-- **Extractor Model**: AI model for comment extraction
-- **Analyzer Model**: AI model for comment analysis
-- **Prompt Template**: Custom analysis prompt template
+## 🛠️ Commands
+- `npm run dev`: Start dev server
+- `npm run build`: Production build
+- `npm run typecheck`: Run TypeScript checks
+- `npm run lint`: Run ESLint
+- `npm run format`: Format code with Prettier
 
 ## 🤝 Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Issues and PRs are welcome! Please ensure you run `npm run typecheck` and `npm run lint` before submitting.
 
 ## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [Chrome Extensions Documentation](https://developer.chrome.com/docs/extensions/)
-- [CRXJS Vite Plugin](https://crxjs.dev/vite-plugin/)
-- [React](https://reactjs.org/)
-- [Tailwind CSS](https://tailwindcss.com/)
-
-## 📧 Contact
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/comments-insight/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/comments-insight/discussions)
-
-## 🗺️ Roadmap
-
-- [x] Project setup and architecture
-- [x] Service Worker implementation
-- [x] Content Scripts implementation
-- [x] Platform detection
-- [x] UI components (Popup, Options, History)
-- [x] AI prompt templates
-- [x] Data storage and compression
-- [x] Task management system
-- [x] History and search
-- [x] CSV export
-- [x] Settings import/export
-- [x] Internationalization files (needs UI integration)
-- [ ] Complete UI i18n integration
-- [ ] Markdown export
-- [ ] Background notifications
-- [ ] Performance optimization
-- [ ] Testing and debugging
-- [ ] Chrome Web Store publication
-
-**Current Status**: ✅ Core features complete (~85%), ready for testing
-
----
-
-<div align="center">
-
-Made with ❤️ by the Comments Insight Team
-
-[Report Bug](https://github.com/yourusername/comments-insight/issues) · [Request Feature](https://github.com/yourusername/comments-insight/issues)
-
-</div>
+MIT License
