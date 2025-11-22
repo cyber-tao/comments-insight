@@ -127,7 +127,7 @@ export class CommentExtractorSelector {
     const chunks = this.chunkDomStructure(domStructure, maxModelTokens);
 
     Logger.debug('[CommentExtractorSelector] DOM Structure length', { length: domStructure.length });
-    Logger.debug('[CommentExtractorSelector] DOM Structure preview', { preview: domStructure.substring(0, 500) });
+    // Logger.debug('[CommentExtractorSelector] DOM Structure preview', { preview: domStructure.substring(0, 500) });
 
     let successfulSelectors: Partial<SelectorMap> = {};
     let lastError = '';
@@ -1332,20 +1332,20 @@ Identify the comment section and provide CSS selectors for each field.
     selectors: Partial<SelectorMap>,
     counts: Record<string, number>,
   ): void {
-    Logger.info('[CommentExtractorSelector] Selector test', { title });
-    for (const [key, selector] of Object.entries(selectors)) {
-      if (!selector) continue;
-      const count = counts[key] ?? 0;
-      const status = count === -1 ? 'invalid' : count > 0 ? 'success' : 'failed';
-      Logger.info('[CommentExtractorSelector] Selector test item', { key, selector, count, status });
-    }
+    const summary = Object.entries(selectors)
+      .filter(([_, s]) => !!s)
+      .map(([key, selector]) => ({
+        key,
+        selector,
+        count: counts[key] ?? 0,
+        status: (counts[key] ?? 0) === -1 ? 'invalid' : (counts[key] ?? 0) > 0 ? 'success' : 'failed',
+      }));
+
+    Logger.info(`[CommentExtractorSelector] Selector test: ${title}`, { summary });
   }
 
   private logExtractionMetrics(metrics: Record<string, number>, configId?: string): void {
-    const label = configId ? `config ${configId}` : undefined;
-    Logger.info('[CommentExtractorSelector] Extraction metrics', { label });
-    for (const [key, value] of Object.entries(metrics)) {
-      Logger.info('[CommentExtractorSelector] Metric', { key, value });
-    }
+    const label = configId ? `config ${configId}` : 'unknown config';
+    Logger.info('[CommentExtractorSelector] Extraction metrics', { label, metrics });
   }
 }

@@ -159,8 +159,6 @@ export async function handleAIExtractComments(
   }
 }
 
-// AI_EXTRACT_PROGRESSIVE handler removed
-
 export async function handleAIAnalyzeStructure(
   message: Extract<Message, { type: 'AI_ANALYZE_STRUCTURE' } >,
   context: HandlerContext,

@@ -90,10 +90,10 @@ export class ScraperConfigManager {
    */
   static async findMatchingConfig(url: string): Promise<ScraperConfig | null> {
     try {
-      Logger.debug('[ScraperConfigManager] findMatchingConfig called', { url });
+      // Logger.debug('[ScraperConfigManager] findMatchingConfig called', { url });
       const configs = await this.getAll();
-      Logger.debug('[ScraperConfigManager] Finding config for URL', { url });
-      Logger.debug('[ScraperConfigManager] Available configs', { count: configs.length });
+      // Logger.debug('[ScraperConfigManager] Finding config for URL', { url });
+      // Logger.debug('[ScraperConfigManager] Available configs', { count: configs.length });
 
       if (configs.length === 0) {
         Logger.warn('[ScraperConfigManager] No configs available');
@@ -120,7 +120,7 @@ export class ScraperConfigManager {
       Logger.debug('[ScraperConfigManager] Extracted hostname', { hostname });
 
       for (const config of configs) {
-        Logger.debug('[ScraperConfigManager] Checking config', { name: config.name, domains: config.domains });
+        // Logger.debug('[ScraperConfigManager] Checking config', { name: config.name, domains: config.domains });
 
         // Check domain match
         const domainMatch = config.domains.some((domain) => {
@@ -128,33 +128,33 @@ export class ScraperConfigManager {
             hostname === domain ||
             hostname.endsWith('.' + domain) ||
             domain.endsWith('.' + hostname);
-          Logger.debug('[ScraperConfigManager] Domain check', { domain, hostname, matches });
+          // Logger.debug('[ScraperConfigManager] Domain check', { domain, hostname, matches });
           return matches;
         });
 
         if (!domainMatch) {
-          Logger.debug('[ScraperConfigManager] Domain not matched for config', { name: config.name });
+          // Logger.debug('[ScraperConfigManager] Domain not matched for config', { name: config.name });
           continue;
         }
 
-        Logger.debug('[ScraperConfigManager] Domain matched for config', { name: config.name });
+        // Logger.debug('[ScraperConfigManager] Domain matched for config', { name: config.name });
 
         // Check URL pattern match
         // Filter out empty patterns
         const validPatterns = config.urlPatterns.filter((p) => p && p.trim() !== '');
 
         if (validPatterns.length === 0) {
-          Logger.debug('[ScraperConfigManager] No URL patterns, returning config', { name: config.name });
+          // Logger.debug('[ScraperConfigManager] No URL patterns, returning config', { name: config.name });
           return config; // No pattern means match all URLs for this domain
         }
 
-        Logger.debug('[ScraperConfigManager] Testing URL patterns', { validPatterns });
+        // Logger.debug('[ScraperConfigManager] Testing URL patterns', { validPatterns });
 
         const patternMatch = validPatterns.some((pattern) => {
           try {
             const regex = new RegExp(pattern);
             const matches = regex.test(url);
-            Logger.debug('[ScraperConfigManager] Pattern check', { pattern, url, matches });
+            // Logger.debug('[ScraperConfigManager] Pattern check', { pattern, url, matches });
             return matches;
           } catch (error) {
             Logger.error('[ScraperConfigManager] Invalid regex pattern', { pattern, error });
@@ -163,11 +163,11 @@ export class ScraperConfigManager {
         });
 
         if (patternMatch) {
-          Logger.debug('[ScraperConfigManager] Pattern matched, returning config', { name: config.name });
+          // Logger.debug('[ScraperConfigManager] Pattern matched, returning config', { name: config.name });
           return config;
         } else {
-          Logger.debug('[ScraperConfigManager] Pattern not matched for config', { name: config.name });
-          Logger.debug('[ScraperConfigManager] Tried patterns against URL', { validPatterns, url });
+          // Logger.debug('[ScraperConfigManager] Pattern not matched for config', { name: config.name });
+          // Logger.debug('[ScraperConfigManager] Tried patterns against URL', { validPatterns, url });
         }
       }
 

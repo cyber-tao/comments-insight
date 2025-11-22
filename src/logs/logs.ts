@@ -1,3 +1,7 @@
+import { LOG_PREFIX, STORAGE, LOG_LEVELS } from '@/config/constants';
+import { Logger, LogLevel } from '@/utils/logger';
+import i18n from '../utils/i18n';
+
 // AI Logs and System Logs Viewer
 
 interface AILog {
@@ -415,6 +419,3 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load logs
   loadLogs();
 });
-import { LOG_PREFIX, STORAGE, LOG_LEVELS } from '@/config/constants';
-import { Logger, LogLevel } from '@/utils/logger';
-import i18n from '../utils/i18n';

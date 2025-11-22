@@ -277,9 +277,8 @@ export class TaskManager {
         type: 'TASK_UPDATE',
         payload: task,
       })
-      .catch((error) => {
+      .catch(() => {
         // Ignore errors if no listeners are active
-        Logger.debug('[TaskManager] No listeners for task update', { error });
       });
   }
 }

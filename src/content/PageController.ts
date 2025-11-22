@@ -67,7 +67,10 @@ export class PageController {
       }
 
       scrollCount++;
-      Logger.info('[PageController] Scrolled', { scrollCount, maxScrolls });
+      // Logger.debug('[PageController] Scrolled', { scrollCount, maxScrolls });
+    }
+    if (scrollCount > 0) {
+      Logger.info('[PageController] Finished scrolling', { scrollCount });
     }
   }
 
@@ -88,7 +91,7 @@ export class PageController {
         (button as HTMLElement).click();
         await this.wait(TIMING.LG);
       } catch (error) {
-        Logger.warn('[PageController] Failed to click button', { error });
+        // Logger.warn('[PageController] Failed to click button', { error });
       }
     }
   }
@@ -113,11 +116,14 @@ export class PageController {
         button.click();
         await this.wait(TIMING.XL);
         clickCount++;
-        Logger.info('[PageController] Clicked load more', { clickCount, maxClicks });
+        // Logger.debug('[PageController] Clicked load more', { clickCount, maxClicks });
       } catch (error) {
         Logger.warn('[PageController] Failed to click load more', { error });
         break;
       }
+    }
+    if (clickCount > 0) {
+      Logger.info('[PageController] Clicked load more buttons', { count: clickCount });
     }
   }
 

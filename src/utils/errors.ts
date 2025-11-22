@@ -143,6 +143,7 @@ export class ErrorHandler {
       });
     } catch (importError) {
       // Fallback to console if logger import fails
+      // Should be rare, but safe to leave console here as last resort
       console.error(
         `[${context}] ${extensionError.code}: ${extensionError.message}`,
         extensionError,
@@ -367,7 +368,13 @@ export class ErrorHandler {
       });
     } catch (notificationError) {
       // Silently fail if notifications are not available
-      console.error('[ErrorHandler] Failed to show notification:', notificationError);
+      // Try to log via Logger if possible
+       try {
+        const { Logger } = await import('./logger.js');
+        Logger.error('[ErrorHandler] Failed to show notification:', notificationError);
+      } catch {
+        console.error('[ErrorHandler] Failed to show notification:', notificationError);
+      }
     }
   }
 
