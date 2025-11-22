@@ -53,8 +53,7 @@ export class MessageRouter {
         case 'AI_EXTRACT_COMMENTS':
           return await extractionHandlers.handleAIExtractComments(message, context);
 
-        case 'AI_EXTRACT_PROGRESSIVE':
-          return await extractionHandlers.handleAIExtractProgressive(message, context);
+        // AI_EXTRACT_PROGRESSIVE removed
 
         case 'AI_ANALYZE_STRUCTURE':
           return await extractionHandlers.handleAIAnalyzeStructure(message, context);

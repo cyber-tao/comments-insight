@@ -30,18 +30,7 @@ export interface SimplifiedNode {
   depth: number;
 }
 
-// AI extraction response for progressive extraction
-export interface AIExtractionResponse {
-  comments: Comment[];
-  nodesToExpand: {
-    selector: string;
-    reason: string;
-    priority: number;
-  }[];
-  needsScroll: boolean;
-  completed: boolean;
-  analysis: string;
-}
+// AI extraction response for progressive extraction removed
 
 export interface Task {
   id: string;
@@ -155,10 +144,7 @@ export type Message =
     }
   | { type: 'CHECK_SCRAPER_CONFIG'; payload: { url: string } }
   | { type: 'AI_EXTRACT_COMMENTS'; payload: { domStructure: string } }
-  | {
-      type: 'AI_EXTRACT_PROGRESSIVE';
-      payload: { prompt: string };
-    }
+  // AI_EXTRACT_PROGRESSIVE removed
   | { type: 'GET_SETTINGS'; payload?: never }
   | { type: 'SAVE_SETTINGS'; payload: { settings: Settings } }
   | {
