@@ -1,53 +1,85 @@
 {
-  "version": "1.0.0",
   "configs": [
     {
-      "id": "youtube_default",
-      "name": "YouTube 评论",
-      "domains": ["youtube.com", "www.youtube.com"],
-      "urlPatterns": ["/watch\\?v="],
-      "selectors": {
-        "commentContainer": "ytd-comment-thread-renderer",
-        "commentItem": "#comment",
-        "username": "#author-text span",
-        "content": "#content-text",
-        "timestamp": "#published-time-text a",
-        "likes": "#vote-count-middle",
-        "replyToggle": "ytd-comment-replies-renderer #more-replies button",
-        "replyContainer": "ytd-comment-replies-renderer #expander-contents #contents",
-        "replyItem": "ytd-comment-view-model[is-reply]"
-      },
+      "createdAt": 1763821112977,
+      "domains": [
+        "youtube.com",
+        "www.youtube.com"
+      ],
+      "id": "scraper_1763821112977_feiu38ci6",
+      "name": "YouTube",
       "scrollConfig": {
         "enabled": true,
         "maxScrolls": 20,
-        "scrollDelay": 1500
+        "scrollDelay": 3500
       },
-      "createdAt": 1731283200000,
-      "updatedAt": 1731283200000
+      "selectorValidation": {
+        "commentContainer": "success",
+        "commentItem": "success",
+        "content": "success",
+        "likes": "success",
+        "replyContainer": "success",
+        "replyItem": "success",
+        "replyToggle": "success",
+        "timestamp": "success",
+        "username": "success"
+      },
+      "selectors": {
+        "commentContainer": "ytd-comment-thread-renderer",
+        "commentItem": "#comment",
+        "content": "#content-text",
+        "likes": "#vote-count-middle",
+        "replyContainer": "#expander-contents",
+        "replyItem": "ytd-comment-view-model",
+        "replyToggle": "#more-replies button",
+        "timestamp": "#published-time-text a",
+        "username": "#author-text span"
+      },
+      "updatedAt": 1763907550553,
+      "urlPatterns": [
+        "/watch\\?v="
+      ]
     },
     {
-      "id": "bilibili_default",
-      "name": "Bilibili 评论",
-      "domains": ["bilibili.com", "www.bilibili.com"],
-      "urlPatterns": ["/video/"],
-      "selectors": {
-        "commentContainer": "bili-comment-thread-renderer",
-        "commentItem": "#comment",
-        "username": "#user-name a",
-        "content": "#content",
-        "timestamp": "#pubdate",
-        "likes": "#like #count",
-        "replyToggle": "bili-comment-replies-renderer #view-more button",
-        "replyContainer": "bili-comment-replies-renderer",
-        "replyItem": "bili-comment-reply-renderer"
-      },
+      "createdAt": 1763822023504,
+      "domains": [
+        "bilibili.com",
+        "www.bilibili.com"
+      ],
+      "id": "scraper_1763822023504_s9sb989r0",
+      "name": "Bilibili",
       "scrollConfig": {
         "enabled": true,
         "maxScrolls": 15,
-        "scrollDelay": 1200
+        "scrollDelay": 3200
       },
-      "createdAt": 1731283200000,
-      "updatedAt": 1731283200000
+      "selectorValidation": {
+        "commentContainer": "success",
+        "commentItem": "success",
+        "content": "success",
+        "likes": "success",
+        "replyContainer": "success",
+        "replyItem": "success",
+        "replyToggle": "success",
+        "timestamp": "success",
+        "username": "success"
+      },
+      "selectors": {
+        "commentContainer": "bili-comment-thread-renderer",
+        "commentItem": "#comment",
+        "content": "#contents",
+        "likes": "#like #count",
+        "replyContainer": "bili-comment-replies-renderer",
+        "replyItem": "bili-comment-reply-renderer",
+        "replyToggle": "#view-more button",
+        "timestamp": "#pubdate",
+        "username": "#user-name a"
+      },
+      "updatedAt": 1763907556190,
+      "urlPatterns": [
+        "/video/"
+      ]
     }
-  ]
+  ],
+  "version": "1.0.0"
 }
