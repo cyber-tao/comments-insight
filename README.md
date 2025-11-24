@@ -1,4 +1,8 @@
 <div align="center">
+  <img src="public/banners/banner-1400x560.jpg" alt="Comments Insight Banner" width="100%" />
+</div>
+
+<div align="center">
 
 # Comments Insight
 
@@ -12,6 +16,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
 ## 📚 Table of Contents
 - [Overview](#-overview)
+- [Screenshots](#-screenshots)
 - [Features](#-features)
 - [Permissions](#-permissions)
 - [Architecture](#-architecture)
@@ -29,6 +34,18 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 - Manifest V3 Chrome extension with multi-page UI: Popup, Options, History, Logs.
 - Built with Vite, React, TypeScript, and `@crxjs/vite-plugin`.
 - Combines selectors and AI to robustly extract comments (including nested replies) and produce comprehensive Markdown reports with tables and structured data.
+
+## 📸 Screenshots
+
+<div align="center">
+  <img src="public/screenshots/popup.jpg" alt="Extension Popup" width="200" />
+  <img src="public/screenshots/analysis.jpg" alt="AI Analysis Report" width="600" />
+</div>
+
+<div align="center">
+  <img src="public/screenshots/options-1.jpg" alt="Options Settings" width="400" />
+  <img src="public/screenshots/options-2.jpg" alt="Scraper Configuration" width="400" />
+</div>
 
 ## ✨ Features
 - 🧲 **Smart Extraction**:
