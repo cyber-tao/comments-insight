@@ -1,15 +1,27 @@
 import { Message } from '../../types';
-import { HandlerContext } from './types';
+import { HandlerContext, PingResponse } from './types';
 import { Logger } from '../../utils/logger';
 
-export function handlePing(_message: Extract<Message, { type: 'PING' }>, _context: HandlerContext): any {
+export interface ModelsResponse {
+  models: string[];
+  error?: string;
+}
+
+export interface TestModelResponse {
+  success: boolean;
+  message?: string;
+  response?: string;
+  error?: string;
+}
+
+export function handlePing(_message: Extract<Message, { type: 'PING' }>, _context: HandlerContext): PingResponse {
   return { status: 'ok', timestamp: Date.now() };
 }
 
 export async function handleGetAvailableModels(
   message: Extract<Message, { type: 'GET_AVAILABLE_MODELS' }>,
   context: HandlerContext,
-): Promise<any> {
+): Promise<ModelsResponse> {
   const { apiUrl, apiKey } = message.payload || {};
 
   if (!apiUrl || !apiKey) {
@@ -28,7 +40,7 @@ export async function handleGetAvailableModels(
 export async function handleTestModel(
   message: Extract<Message, { type: 'TEST_MODEL' }>,
   context: HandlerContext,
-): Promise<any> {
+): Promise<TestModelResponse> {
   const { config } = message.payload || {};
 
   if (!config || !config.apiUrl || !config.apiKey || !config.model) {
@@ -36,7 +48,6 @@ export async function handleTestModel(
   }
 
   try {
-    // Send a simple test prompt to the model
     const response = await context.aiService.callAI({
       prompt: 'Hello! Please respond with "OK" if you can read this message.',
       config: config,
@@ -46,7 +57,7 @@ export async function handleTestModel(
       return {
         success: true,
         message: 'Model is working correctly',
-        response: response.content.substring(0, 100), // Return first 100 chars of response
+        response: response.content.substring(0, 100),
       };
     } else {
       throw new Error('No response from model');

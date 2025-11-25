@@ -10,6 +10,14 @@ export interface DOMNode {
   attributes?: Record<string, string>;
 }
 
+interface ShadowRootHost {
+  shadowRoot?: ShadowRoot | null;
+}
+
+function getShadowRoot(element: Element): ShadowRoot | null {
+  return (element as unknown as ShadowRootHost).shadowRoot || null;
+}
+
 /**
  * DOMAnalyzer analyzes and serializes DOM structures
  */
@@ -72,20 +80,20 @@ export class DOMAnalyzer {
 
     const split = this.splitSelector(trimmedSelector);
     if (split.rest) {
-      let candidates: NodeListOf<Element> = [] as any;
+      let candidates: Element[] = [];
       try {
-        candidates = root.querySelectorAll(split.current);
+        candidates = Array.from(root.querySelectorAll(split.current));
       } catch {
-        candidates = [] as any;
+        candidates = [];
       }
 
-      for (const candidate of Array.from(candidates)) {
+      for (const candidate of candidates) {
         const fromLightDom = this.querySelectorDeep(candidate, split.rest);
         if (fromLightDom) {
           return fromLightDom;
         }
 
-        const shadowRoot = (candidate as any).shadowRoot as ShadowRoot | null;
+        const shadowRoot = getShadowRoot(candidate);
         if (shadowRoot) {
           const fromShadow = this.querySelectorDeep(shadowRoot, split.rest);
           if (fromShadow) {
@@ -104,7 +112,7 @@ export class DOMAnalyzer {
 
     const elements = root.querySelectorAll('*');
     for (const el of Array.from(elements)) {
-      const shadowRoot = (el as any).shadowRoot as ShadowRoot | null;
+      const shadowRoot = getShadowRoot(el);
       if (shadowRoot) {
         const found = this.querySelectorDeep(shadowRoot, trimmedSelector);
         if (found) {
@@ -141,16 +149,16 @@ export class DOMAnalyzer {
 
     const split = this.splitSelector(trimmedSelector);
     if (split.rest) {
-      let candidates: NodeListOf<Element> = [] as any;
+      let candidates: Element[] = [];
       try {
-        candidates = root.querySelectorAll(split.current);
+        candidates = Array.from(root.querySelectorAll(split.current));
       } catch {
-        candidates = [] as any;
+        candidates = [];
       }
 
-      for (const candidate of Array.from(candidates)) {
+      for (const candidate of candidates) {
         results.push(...this.querySelectorAllDeep(candidate, split.rest));
-        const shadowRoot = (candidate as any).shadowRoot as ShadowRoot | null;
+        const shadowRoot = getShadowRoot(candidate);
         if (shadowRoot) {
           results.push(...this.querySelectorAllDeep(shadowRoot, split.rest));
         }
@@ -159,7 +167,7 @@ export class DOMAnalyzer {
 
     const descendants = root.querySelectorAll('*');
     for (const el of Array.from(descendants)) {
-      const shadowRoot = (el as any).shadowRoot as ShadowRoot | null;
+      const shadowRoot = getShadowRoot(el);
       if (shadowRoot) {
         results.push(...this.querySelectorAllDeep(shadowRoot, trimmedSelector));
       }
@@ -273,7 +281,7 @@ export class DOMAnalyzer {
     }
 
     // Check for Shadow DOM
-    const shadowRoot = (element as any).shadowRoot;
+    const shadowRoot = getShadowRoot(element);
     if (shadowRoot) {
       // Add a marker to indicate this element has Shadow DOM
       node.attributes = { ...node.attributes, 'has-shadow-root': 'true' };

@@ -2,6 +2,28 @@
 import { PageController } from './PageController';
 import { MESSAGES, DOM } from '@/config/constants';
 import { CommentExtractor } from './CommentExtractor';
+import { Comment } from '@/types';
+
+interface ExtractionResponse {
+  success: boolean;
+  error?: string;
+  comments?: Comment[];
+  postInfo?: {
+    url?: string;
+    title?: string;
+    videoTime?: string;
+  };
+}
+
+interface DomStructureResponse {
+  success: boolean;
+  domStructure?: string;
+  error?: string;
+}
+
+interface TestSelectorPayload {
+  selector?: string;
+}
 
 Logger.debug('Comments Insight Content Script loaded');
 
@@ -47,7 +69,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     case MESSAGES.TEST_SELECTOR_QUERY: {
       try {
-        const selector = (message as any)?.payload?.selector as string;
+        const payload = message.payload as TestSelectorPayload;
+        const selector = payload?.selector;
         if (!selector) {
           sendResponse({ success: false, error: 'Missing selector' });
           return true;
@@ -82,7 +105,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
  */
 async function handleStartExtraction(
   data: { taskId: string; maxComments: number },
-  sendResponse: (response: any) => void,
+  sendResponse: (response: ExtractionResponse) => void,
 ) {
   const { taskId, maxComments } = data;
 
@@ -186,7 +209,7 @@ async function getPostInfo(): Promise<{ url: string; title: string; videoTime?: 
  * Handle GET_DOM_STRUCTURE message
  * Get simplified DOM structure for AI analysis
  */
-async function handleGetDOMStructure(sendResponse: (response: any) => void) {
+async function handleGetDOMStructure(sendResponse: (response: DomStructureResponse) => void) {
   try {
     Logger.info('[Content] Getting DOM structure for AI analysis');
 

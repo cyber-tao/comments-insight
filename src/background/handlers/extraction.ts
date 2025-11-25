@@ -1,8 +1,65 @@
-import { Message } from '../../types';
+import { Message, Comment } from '../../types';
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
 import { REGEX } from '@/config/constants';
 import { Tokenizer } from '../../utils/tokenizer';
+
+interface ExtractionContentResponse {
+  success: boolean;
+  error?: string;
+  comments?: Comment[];
+  postInfo?: {
+    url?: string;
+    title?: string;
+    videoTime?: string;
+  };
+}
+
+interface ScraperAnalysisResult {
+  selectors: Record<string, string>;
+  structure: {
+    hasReplies: boolean;
+    repliesNested: boolean;
+    needsExpand: boolean;
+  };
+  confidence: number;
+}
+
+interface HistoryItemWithVideoTime {
+  platform?: string;
+  url?: string;
+  title?: string;
+  videoTime?: string;
+}
+
+interface StartExtractionResponse {
+  taskId: string;
+}
+
+interface AIExtractCommentsResponse {
+  comments: Comment[];
+  error?: string;
+}
+
+interface AIAnalyzeStructureResponse {
+  selectors?: Record<string, string>;
+  structure?: {
+    hasReplies: boolean;
+    repliesNested: boolean;
+    needsExpand: boolean;
+  };
+  confidence?: number;
+  data?: ScraperAnalysisResult;
+  error?: string;
+}
+
+interface ProgressResponse {
+  success: boolean;
+}
+
+interface StartAnalysisResponse {
+  taskId: string;
+}
 
 // Helper for chunking DOM text
 export function chunkDomText(structure: string, maxTokens: number): string[] {
@@ -30,7 +87,7 @@ export function chunkDomText(structure: string, maxTokens: number): string[] {
 export async function handleStartExtraction(
   message: Extract<Message, { type: 'START_EXTRACTION' }>,
   context: HandlerContext,
-): Promise<any> {
+): Promise<StartExtractionResponse> {
   const { url, maxComments } = message.payload || {};
 
   if (!url) {
@@ -95,7 +152,7 @@ async function startExtractionTask(
 
   try {
     // Send message to content script to start extraction
-    const response: any = await chrome.tabs.sendMessage(tabId, {
+    const response: ExtractionContentResponse = await chrome.tabs.sendMessage(tabId, {
       type: 'START_EXTRACTION',
       payload: { taskId, maxComments },
     });
@@ -136,7 +193,7 @@ async function startExtractionTask(
 export async function handleAIExtractComments(
   message: Extract<Message, { type: 'AI_EXTRACT_COMMENTS' } >,
   context: HandlerContext,
-): Promise<any> {
+): Promise<AIExtractCommentsResponse> {
   const { domStructure } = message.payload || {};
 
   if (!domStructure) {
@@ -162,7 +219,7 @@ export async function handleAIExtractComments(
 export async function handleAIAnalyzeStructure(
   message: Extract<Message, { type: 'AI_ANALYZE_STRUCTURE' } >,
   context: HandlerContext,
-): Promise<any> {
+): Promise<AIAnalyzeStructureResponse> {
   const { prompt } = message.payload || {};
 
   if (!prompt) {
@@ -172,7 +229,7 @@ export async function handleAIAnalyzeStructure(
   try {
     const settings = await context.storageManager.getSettings();
     const chunks = chunkDomText(prompt, settings.aiModel.maxTokens ?? 4000);
-    const aggregated: any = {
+    const aggregated: ScraperAnalysisResult = {
       selectors: {},
       structure: { hasReplies: false, repliesNested: true, needsExpand: false },
       confidence: 0,
@@ -223,7 +280,7 @@ export async function handleAIAnalyzeStructure(
 export async function handleExtractionProgress(
   message: Extract<Message, { type: 'EXTRACTION_PROGRESS' } >,
   context: HandlerContext,
-): Promise<any> {
+): Promise<ProgressResponse> {
   const { taskId, progress, message: progressMessage } = message.payload || {};
 
   if (taskId) {
@@ -268,25 +325,9 @@ export async function handleStartAnalysis(
 
   context: HandlerContext,
 
-): Promise<any> {
+): Promise<StartAnalysisResponse> {
 
-  const { comments, metadata } = message.payload || {};
-  // NOTE: The original message payload had `historyId`.
-  // My new type has `metadata`. I should check if `historyId` was essential.
-  // The original `handleStartAnalysis` used `historyId` to update the history item directly.
-  // If `historyId` is not in the payload, I cannot update the history item correctly if it's a re-analysis.
-  // I missed `historyId` in the new type definition for `START_ANALYSIS`.
-  // I will treat `metadata` as containing `historyId` if possible, or just accept I missed it.
-  // Actually, looking at the type definition I made:
-  // payload: { comments: Comment[]; ... metadata?: { ... } }
-  // It doesn't have `historyId`. This is a regression.
-  // I should probably fix the type definition again to include `historyId`.
-  // But for now, I will proceed. If `historyId` is needed, I'll add it.
-  
-  // Wait, I can assume `metadata` might contain `historyId` if I cast it, but that's unsafe.
-  // I'll add a TODO to fix the type. 
-  
-  const historyId = ((message.payload || {}) as any).historyId; // Temporary workaround
+  const { comments, metadata, historyId } = message.payload || {};
 
   if (!comments || !Array.isArray(comments)) {
     throw new Error('Comments array is required');
@@ -317,7 +358,7 @@ export async function handleStartAnalysis(
 
 async function startAnalysisTask(
   taskId: string,
-  comments: any[],
+  comments: Comment[],
   historyId: string | undefined,
   context: HandlerContext,
 ): Promise<void> {
@@ -342,7 +383,7 @@ async function startAnalysisTask(
         url = historyItem.url || 'N/A';
         title = historyItem.title || 'Untitled';
         // Try to get video time from history item metadata if available
-        videoTime = (historyItem as any).videoTime || 'N/A';
+        videoTime = (historyItem as HistoryItemWithVideoTime).videoTime || 'N/A';
       }
     } else {
       const task = context.taskManager.getTask(taskId);

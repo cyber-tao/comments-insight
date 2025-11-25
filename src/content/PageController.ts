@@ -1,5 +1,6 @@
 import { DOMAnalyzer } from './DOMAnalyzer';
 import { TIMING, SCROLL, CLICK, TIMEOUT } from '@/config/constants';
+import { Logger } from '@/utils/logger';
 
 /**
  * PageController handles page interactions like scrolling and clicking
@@ -163,4 +164,3 @@ export class PageController {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
-import { Logger } from '@/utils/logger';

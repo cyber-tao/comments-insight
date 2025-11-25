@@ -3,6 +3,11 @@ import { NotificationService } from './NotificationService';
 import { Logger } from '../utils/logger';
 import { ExtensionError, ErrorCode } from '../utils/errors';
 
+export interface TaskResult {
+  tokensUsed?: number;
+  commentsCount?: number;
+}
+
 /**
  * TaskManager handles the creation, execution, and lifecycle of tasks
  * in the Comments Insight extension.
@@ -109,7 +114,7 @@ export class TaskManager {
    * @param taskId - ID of the task
    * @param result - Task result data
    */
-  completeTask(taskId: string, result: any): void {
+  completeTask(taskId: string, result: TaskResult): void {
     const task = this.tasks.get(taskId);
     if (!task) {
       Logger.warn(`[TaskManager] Task not found: ${taskId}`);

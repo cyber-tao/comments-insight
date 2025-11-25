@@ -198,10 +198,12 @@ const History: React.FC = () => {
 
   // Pagination
   const paginatedComments = React.useMemo(() => {
-    const processed = getProcessedComments();
+    const filtered = filterComments(selectedItem?.comments || [], commentSearchTerm);
+    const sorted = sortComments(filtered);
     const startIndex = (currentPage - 1) * commentsPerPage;
     const endIndex = startIndex + commentsPerPage;
-    return processed.slice(startIndex, endIndex);
+    return sorted.slice(startIndex, endIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem, commentSearchTerm, sortBy, currentPage, commentsPerPage]);
 
   const totalComments = getProcessedComments().length;

@@ -2,6 +2,8 @@
  * Prompt templates for AI-driven comment extraction and analysis
  */
 
+import { TEMPLATE } from '@/config/constants';
+
 /**
  * Extraction prompt template
  * Instructs AI to extract comments from DOM structure
@@ -195,7 +197,7 @@ export function validatePromptTemplate(template: string): boolean {
   }
 
   // Should be reasonable length
-  if (template.length < 50 || template.length > 10000) {
+  if (template.length < TEMPLATE.MIN_LENGTH || template.length > TEMPLATE.MAX_LENGTH) {
     return false;
   }
 

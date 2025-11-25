@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HistoryItem } from '../types';
 import { useToast } from '../hooks/useToast';
+import { Logger } from '@/utils/logger';
 
 interface PageInfo {
   url: string;
@@ -75,6 +76,7 @@ const Popup: React.FC = () => {
     loadVersion();
     loadSettings();
     loadCurrentTask();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadSettings = async () => {
@@ -805,4 +807,3 @@ const Popup: React.FC = () => {
 };
 
 export default Popup;
-import { Logger } from '@/utils/logger';

@@ -8,7 +8,7 @@ import {
   createAIError,
   createNetworkError,
 } from '../utils/errors';
-import { AI as AI_CONST, REGEX, LOG_PREFIX, ANALYSIS_FORMAT } from '@/config/constants';
+import { AI as AI_CONST, REGEX, LOG_PREFIX, ANALYSIS_FORMAT, RETRY } from '@/config/constants';
 import { storageManager } from './StorageManager';
 import { Tokenizer } from '../utils/tokenizer';
 
@@ -184,7 +184,7 @@ export class AIService {
       'AIService.callAI',
       {
         maxAttempts: 3,
-        initialDelay: 1000,
+        initialDelay: RETRY.INITIAL_DELAY_MS,
       },
     );
   }

@@ -1,10 +1,18 @@
 import { SimplifiedNode } from '../types';
 
+interface ShadowRootHost {
+  shadowRoot?: ShadowRoot | null;
+}
+
 /**
  * DOMSimplifier - Converts complex DOM to simplified structure for AI analysis
  */
 export class DOMSimplifier {
   private selectorCache = new WeakMap<Element, string>();
+
+  private getShadowRoot(element: Element): ShadowRoot | null {
+    return (element as unknown as ShadowRootHost).shadowRoot || null;
+  }
 
   /**
    * Simplify a DOM element to a lightweight structure
@@ -19,7 +27,7 @@ export class DOMSimplifier {
     currentDepth: number = 0,
     forceExpandParent: boolean = false,
   ): SimplifiedNode {
-    const shadowRoot = (element as any).shadowRoot as ShadowRoot | null;
+    const shadowRoot = this.getShadowRoot(element);
     const forceExpandCurrent = shadowRoot !== null || this.shouldForceExpandElement(element);
     const shouldExpand =
       forceExpandParent || forceExpandCurrent || currentDepth < maxDepth;
@@ -264,7 +272,7 @@ export class DOMSimplifier {
     if (split.rest) {
       const candidates = Array.from(root.querySelectorAll(split.current));
       for (const candidate of candidates) {
-        const shadowRoot = (candidate as any).shadowRoot as ShadowRoot | null;
+        const shadowRoot = this.getShadowRoot(candidate);
         const withinLightDom = this.querySelectorDeep(candidate, split.rest);
         if (withinLightDom) {
           return withinLightDom;
@@ -281,7 +289,7 @@ export class DOMSimplifier {
 
     const elements = root.querySelectorAll('*');
     for (const el of Array.from(elements)) {
-      const shadowRoot = (el as any).shadowRoot as ShadowRoot | null;
+      const shadowRoot = this.getShadowRoot(el);
       if (shadowRoot) {
         const found = this.querySelectorDeep(shadowRoot, trimmedSelector);
         if (found) {

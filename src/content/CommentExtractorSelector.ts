@@ -1,9 +1,24 @@
 import { Comment, Platform, SelectorMap } from '../types';
 import { DOM } from '@/config/constants';
-import { MESSAGES, TIMING, SCROLL } from '@/config/constants';
+import { MESSAGES, TIMING, SCROLL, LIKES } from '@/config/constants';
 import { PageController } from './PageController';
 import { ScrollConfig } from '../types/scraper';
 import { Logger } from '@/utils/logger';
+
+interface ShadowRootHost {
+  shadowRoot?: ShadowRoot | null;
+}
+
+function getShadowRoot(element: Element): ShadowRoot | null {
+  return (element as unknown as ShadowRootHost).shadowRoot || null;
+}
+
+interface SelectorCache {
+  domain: string;
+  platform: string;
+  selectors: SelectorMap;
+  timestamp: number;
+}
 
 /**
  * AI response structure
@@ -222,7 +237,7 @@ Identify the comment section and provide CSS selectors for each field.
           `⚠️ Retrying analysis for ${failed.length} failed selectors (${attempt}/${maxRetries})...`,
           0,
         );
-        await this.delay(1000);
+        await this.delay(TIMING.XL);
       }
     }
 
@@ -273,7 +288,7 @@ Identify the comment section and provide CSS selectors for each field.
     }
 
     const cached = settings.selectorCache.find(
-      (cache: any) => cache.domain === domain && cache.platform === platform,
+      (cache: SelectorCache) => cache.domain === domain && cache.platform === platform,
     );
 
     return cached ? cached.selectors : null;
@@ -294,7 +309,7 @@ Identify the comment section and provide CSS selectors for each field.
 
     // Check if cache already exists for this domain
     const existingIndex = selectorCache.findIndex(
-      (cache: any) => cache.domain === domain && cache.platform === platform,
+      (cache: SelectorCache) => cache.domain === domain && cache.platform === platform,
     );
 
     if (existingIndex >= 0) {
@@ -340,7 +355,7 @@ Identify the comment section and provide CSS selectors for each field.
 
     const selectorCache = settings.selectorCache;
     const existingIndex = selectorCache.findIndex(
-      (cache: any) => cache.domain === domain && cache.platform === platform,
+      (cache: SelectorCache) => cache.domain === domain && cache.platform === platform,
     );
 
     if (existingIndex >= 0) {
@@ -450,14 +465,14 @@ Identify the comment section and provide CSS selectors for each field.
   /**
    * Extract simplified DOM structure (only tags, ids, classes)
    */
-  private extractDOMStructure(element: any, depth: number = 0, maxDepth: number = 20): string {
+  private extractDOMStructure(element: Element | DocumentFragment, depth: number = 0, maxDepth: number = 20): string {
     // Limit depth to avoid huge output
     if (depth > maxDepth) {
       return '';
     }
 
     // Handle DocumentFragment (Shadow DOM root) - it doesn't have tagName
-    if (!element.tagName) {
+    if (!(element instanceof Element)) {
       let html = '';
       if (element.children) {
         const children = Array.from(element.children) as Element[];
@@ -525,7 +540,7 @@ Identify the comment section and provide CSS selectors for each field.
     }
 
     // Add shadow DOM children if present
-    const shadowRoot = (element as any).shadowRoot as ShadowRoot | null;
+    const shadowRoot = getShadowRoot(element as Element);
     if (shadowRoot && shadowRoot.children.length > 0) {
       const shadowChildren = Array.from(shadowRoot.children) as Element[];
       html += '  '.repeat(depth + 1) + '<shadow-root>\n';
@@ -733,7 +748,7 @@ Identify the comment section and provide CSS selectors for each field.
    */
   private async extractWithScrolling(
     selectors: SelectorMap,
-    _structure: any,
+    _structure: Record<string, unknown>,
     maxComments: number,
     platform: Platform,
     onProgress?: (message: string, count: number) => void,
@@ -839,11 +854,11 @@ Identify the comment section and provide CSS selectors for each field.
     this.logExtractionMetrics(metrics, configId);
 
     if (configId) {
-      const allKeys = Object.keys(selectors);
+      const allKeys = Object.keys(selectors) as (keyof SelectorMap)[];
       const measuredKeys = new Set(Object.keys(metrics));
       const optionalKeys = new Set(['replyToggle', 'replyContainer', 'postTitle', 'videoTime', 'replyItem']);
       for (const key of allKeys) {
-        const selectorValue = (selectors as any)[key];
+        const selectorValue = selectors[key];
         if (!selectorValue) {
           continue;
         }
@@ -1034,12 +1049,12 @@ Identify the comment section and provide CSS selectors for each field.
       return Math.floor(parseFloat(cleaned) * 100000000);
     }
     if (cleaned.includes('万')) {
-      return Math.floor(parseFloat(cleaned) * 10000);
+      return Math.floor(parseFloat(cleaned) * LIKES.W_MULTIPLIER);
     }
 
     // Handle K (thousands)
     if (cleaned.includes('K') || cleaned.includes('k')) {
-      return Math.floor(parseFloat(cleaned) * 1000);
+      return Math.floor(parseFloat(cleaned) * LIKES.K_MULTIPLIER);
     }
 
     // Handle M (millions)
@@ -1190,16 +1205,16 @@ Identify the comment section and provide CSS selectors for each field.
 
     const split = this.splitSelector(trimmedSelector);
     if (split.rest) {
-      let candidates: NodeListOf<Element> = [] as any;
+      let candidates: Element[] = [];
       try {
-        candidates = root.querySelectorAll(split.current);
+        candidates = Array.from(root.querySelectorAll(split.current));
       } catch {
-        candidates = [] as any;
+        candidates = [];
       }
 
-      for (const candidate of Array.from(candidates)) {
+      for (const candidate of candidates) {
         results.push(...this.querySelectorAllDeep(candidate, split.rest));
-        const shadowRoot = (candidate as any).shadowRoot as ShadowRoot | null;
+        const shadowRoot = getShadowRoot(candidate);
         if (shadowRoot) {
           results.push(...this.querySelectorAllDeep(shadowRoot, split.rest));
         }
@@ -1208,7 +1223,7 @@ Identify the comment section and provide CSS selectors for each field.
 
     const descendants = root.querySelectorAll('*');
     for (const el of Array.from(descendants)) {
-      const shadowRoot = (el as any).shadowRoot as ShadowRoot | undefined;
+      const shadowRoot = getShadowRoot(el);
       if (shadowRoot) {
         results.push(...this.querySelectorAllDeep(shadowRoot, trimmedSelector));
       }
@@ -1238,20 +1253,20 @@ Identify the comment section and provide CSS selectors for each field.
 
     const split = this.splitSelector(trimmedSelector);
     if (split.rest) {
-      let candidates: NodeListOf<Element> = [] as any;
+      let candidates: Element[] = [];
       try {
-        candidates = root.querySelectorAll(split.current);
+        candidates = Array.from(root.querySelectorAll(split.current));
       } catch {
-        candidates = [] as any;
+        candidates = [];
       }
 
-      for (const candidate of Array.from(candidates)) {
+      for (const candidate of candidates) {
         const fromLightDom = this.querySelectorDeep(candidate, split.rest);
         if (fromLightDom) {
           return fromLightDom;
         }
 
-        const shadowRoot = (candidate as any).shadowRoot as ShadowRoot | null;
+        const shadowRoot = getShadowRoot(candidate);
         if (shadowRoot) {
           const fromShadow = this.querySelectorDeep(shadowRoot, split.rest);
           if (fromShadow) {
@@ -1270,7 +1285,7 @@ Identify the comment section and provide CSS selectors for each field.
 
     const descendants = root.querySelectorAll('*');
     for (const el of Array.from(descendants)) {
-      const shadowRoot = (el as any).shadowRoot as ShadowRoot | undefined;
+      const shadowRoot = getShadowRoot(el);
       if (shadowRoot) {
         const shadowMatch = this.querySelectorDeep(shadowRoot, trimmedSelector);
         if (shadowMatch) {

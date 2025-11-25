@@ -1,3 +1,18 @@
+export const RETRY = {
+  INITIAL_DELAY_MS: 1000,
+  MAX_DELAY_MS: 10000,
+};
+
+export const TEMPLATE = {
+  MIN_LENGTH: 50,
+  MAX_LENGTH: 10000,
+};
+
+export const LIKES = {
+  K_MULTIPLIER: 1000,
+  W_MULTIPLIER: 10000,
+};
+
 export const SECURITY = {
   SALT_LENGTH: 16,
   IV_LENGTH: 12,

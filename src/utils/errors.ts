@@ -1,3 +1,5 @@
+import { ICONS, TEXT } from '@/config/constants';
+
 /**
  * Error handling utilities for Comments Insight Extension
  * Provides unified error types, error handling, and retry mechanisms
@@ -105,13 +107,15 @@ export interface RetryConfig {
   retryableErrors: ErrorCode[];
 }
 
+import { RETRY } from '@/config/constants';
+
 /**
  * Default retry configuration
  */
 export const DEFAULT_RETRY_CONFIG: RetryConfig = {
   maxAttempts: 3,
-  initialDelay: 1000, // 1 second
-  maxDelay: 10000, // 10 seconds
+  initialDelay: RETRY.INITIAL_DELAY_MS,
+  maxDelay: RETRY.MAX_DELAY_MS,
   backoffMultiplier: 2,
   retryableErrors: [
     ErrorCode.NETWORK_ERROR,
@@ -477,4 +481,3 @@ export function createExtractionError(
 ): ExtensionError {
   return new ExtensionError(code, message, details, false);
 }
-import { ICONS, TEXT } from '@/config/constants';

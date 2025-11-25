@@ -1,4 +1,5 @@
 import { Message } from '../../types';
+import { ScraperConfig, ScraperSelectors, ScrollConfig } from '../../types/scraper';
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
 import { ScraperConfigManager } from '../../utils/ScraperConfigManager';
@@ -10,10 +11,52 @@ import {
 import i18n from '../../utils/i18n';
 import { chunkDomText } from './extraction';
 
+interface CheckScraperConfigResponse {
+  hasConfig: boolean;
+  config?: ScraperConfig | null;
+  error?: string;
+}
+
+interface GenerateScraperConfigResponse {
+  success: boolean;
+  config?: ScraperConfig;
+  error?: string;
+}
+
+interface GetScraperConfigsResponse {
+  configs: ScraperConfig[];
+}
+
+interface SaveScraperConfigResponse {
+  success: boolean;
+  config?: ScraperConfig | null;
+  error?: string;
+}
+
+interface DeleteScraperConfigResponse {
+  success: boolean;
+}
+
+interface UpdateSelectorValidationResponse {
+  success: boolean;
+}
+
+interface DomStructureResponse {
+  domStructure?: string;
+}
+
+interface GeneratedConfigData {
+  name: string;
+  domains: string[];
+  urlPatterns: string[];
+  selectors: Partial<ScraperSelectors>;
+  scrollConfig?: ScrollConfig;
+}
+
 export async function handleCheckScraperConfig(
   message: Extract<Message, { type: 'CHECK_SCRAPER_CONFIG' }>,
   _context: HandlerContext,
-): Promise<any> {
+): Promise<CheckScraperConfigResponse> {
   const { url } = message.payload || {};
 
   Logger.debug('[ScraperHandler] handleCheckScraperConfig called', { url });
@@ -41,7 +84,7 @@ export async function handleCheckScraperConfig(
 export async function handleGenerateScraperConfig(
   message: Extract<Message, { type: 'GENERATE_SCRAPER_CONFIG' }>,
   context: HandlerContext,
-): Promise<any> {
+): Promise<GenerateScraperConfigResponse> {
   const { url, domStructure, platform: _platform, title: payloadTitle } = message.payload || {};
   const title = payloadTitle || 'Untitled'; 
 
@@ -83,7 +126,7 @@ export async function handleGenerateScraperConfig(
        }
        
        if (tabId) {
-         const domResponse: any = await chrome.tabs.sendMessage(tabId, {
+         const domResponse: DomStructureResponse = await chrome.tabs.sendMessage(tabId, {
             type: MESSAGES.GET_DOM_STRUCTURE,
           });
           structure = domResponse?.domStructure;
@@ -96,7 +139,7 @@ export async function handleGenerateScraperConfig(
 
     const settings = await context.storageManager.getSettings();
     const chunks = chunkDomText(structure, settings.aiModel.maxTokens ?? 4000);
-    let configData: any = {
+    let configData: GeneratedConfigData = {
       name: '',
       domains: [],
       urlPatterns: [],
@@ -169,7 +212,7 @@ export async function handleGenerateScraperConfig(
       name: configData.name || `${domain} - Auto-generated`,
       domains,
       urlPatterns,
-      selectors: configData.selectors,
+      selectors: configData.selectors as ScraperSelectors,
       scrollConfig: configData.scrollConfig,
     });
 
@@ -186,7 +229,7 @@ export async function handleGenerateScraperConfig(
 export async function handleGetScraperConfigs(
   _message: Extract<Message, { type: 'GET_SCRAPER_CONFIGS' }>,
   _context: HandlerContext,
-): Promise<any> {
+): Promise<GetScraperConfigsResponse> {
   try {
     const configs = await ScraperConfigManager.getAll();
     return { configs };
@@ -199,7 +242,7 @@ export async function handleGetScraperConfigs(
 export async function handleSaveScraperConfig(
   message: Extract<Message, { type: 'SAVE_SCRAPER_CONFIG' }>,
   _context: HandlerContext,
-): Promise<any> {
+): Promise<SaveScraperConfigResponse> {
   const { config } = message.payload || {};
 
   if (!config) {
@@ -228,7 +271,7 @@ export async function handleSaveScraperConfig(
 export async function handleDeleteScraperConfig(
   message: Extract<Message, { type: 'DELETE_SCRAPER_CONFIG' }>,
   _context: HandlerContext,
-): Promise<any> {
+): Promise<DeleteScraperConfigResponse> {
   const { id } = message.payload || {};
 
   if (!id) {
@@ -247,7 +290,7 @@ export async function handleDeleteScraperConfig(
 export async function handleUpdateSelectorValidation(
   message: Extract<Message, { type: 'UPDATE_SELECTOR_VALIDATION' }>,
   _context: HandlerContext,
-): Promise<any> {
+): Promise<UpdateSelectorValidationResponse> {
   const { configId, selectorKey, status, count } = message.payload || {};
 
   if (!configId || !selectorKey || !status) {

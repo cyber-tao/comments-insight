@@ -7,6 +7,7 @@ import { Settings } from '../types';
 import i18n from '../utils/i18n';
 import { useToast } from '../hooks/useToast';
 import { ScraperConfigList } from '../components/ScraperConfigList';
+import { Logger } from '@/utils/logger';
 
 const Options: React.FC = () => {
   const { t } = useTranslation();
@@ -710,4 +711,3 @@ const Options: React.FC = () => {
 };
 
 export default Options;
-import { Logger } from '@/utils/logger';
