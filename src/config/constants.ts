@@ -17,6 +17,9 @@ export const LANGUAGES = {
   SUPPORTED: [
     { code: 'zh-CN', name: '中文' },
     { code: 'en-US', name: 'English' },
+    { code: 'ja-JP', name: '日本語' },
+    { code: 'fr-FR', name: 'Français' },
+    { code: 'es-ES', name: 'Español' },
   ] as const,
   /** Default language code */
   DEFAULT: 'en-US' as const,

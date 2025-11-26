@@ -3,6 +3,9 @@ import { initReactI18next } from 'react-i18next';
 import { LANGUAGES } from '@/config/constants';
 import zhCN from '../locales/zh-CN.json';
 import enUS from '../locales/en-US.json';
+import jaJP from '../locales/ja-JP.json';
+import frFR from '../locales/fr-FR.json';
+import esES from '../locales/es-ES.json';
 
 /**
  * Map of language codes to their translation resources
@@ -10,11 +13,14 @@ import enUS from '../locales/en-US.json';
  * 1. Create the locale file in src/locales/
  * 2. Import it here
  * 3. Add it to this map
- * 4. Add the language code to LANGUAGES.SUPPORTED in constants.ts
+ * 4. Add entry to LANGUAGES.SUPPORTED in constants.ts
  */
 const resources: Record<string, { translation: Record<string, unknown> }> = {
   'zh-CN': { translation: zhCN },
   'en-US': { translation: enUS },
+  'ja-JP': { translation: jaJP },
+  'fr-FR': { translation: frFR },
+  'es-ES': { translation: esES },
 };
 
 /** Get list of supported language codes */
