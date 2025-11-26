@@ -1,5 +1,5 @@
 import { AIConfig, AIRequest, AIResponse, Comment, AnalysisResult } from '../types';
-import { buildExtractionPrompt, buildAnalysisPrompt } from '../utils/prompts';
+import { buildAnalysisPrompt } from '../utils/prompts';
 import { Logger } from '../utils/logger';
 import {
   ErrorHandler,
@@ -8,16 +8,40 @@ import {
   createAIError,
   createNetworkError,
 } from '../utils/errors';
-import { AI as AI_CONST, REGEX, LOG_PREFIX, ANALYSIS_FORMAT, RETRY } from '@/config/constants';
+import { AI as AI_CONST, REGEX, LOG_PREFIX, ANALYSIS_FORMAT, RETRY, DEFAULTS, LANGUAGES } from '@/config/constants';
 import { storageManager } from './StorageManager';
 import { Tokenizer } from '../utils/tokenizer';
+
+async function runWithConcurrencyLimit<T>(
+  tasks: (() => Promise<T>)[],
+  limit: number,
+): Promise<T[]> {
+  const results: T[] = [];
+  const executing: Promise<void>[] = [];
+
+  for (const task of tasks) {
+    const p = Promise.resolve().then(() => task()).then((result) => {
+      results.push(result);
+    });
+
+    executing.push(p as unknown as Promise<void>);
+
+    if (executing.length >= limit) {
+      await Promise.race(executing);
+      executing.splice(0, executing.findIndex((e) => e === p) + 1);
+    }
+  }
+
+  await Promise.all(executing);
+  return results;
+}
 
 /**
  * AIService handles all AI-related operations including
  * comment extraction and analysis
  */
 export class AIService {
-  private currentLanguage: string = 'en-US';
+  private currentLanguage: string = LANGUAGES.DEFAULT;
 
   private logToFile(
     type: 'extraction' | 'analysis',
@@ -59,11 +83,15 @@ export class AIService {
    * @returns AI response
    */
   async callAI(request: AIRequest): Promise<AIResponse> {
-    const { prompt, systemPrompt, config } = request;
+    const { prompt, systemPrompt, config, signal } = request;
 
     return await ErrorHandler.withRetry(
       async () => {
         try {
+          if (signal?.aborted) {
+            throw createAIError(ErrorCode.TASK_CANCELLED, 'Request aborted', {});
+          }
+
           // Validate configuration
           if (!config.apiUrl || !config.apiKey) {
             throw createAIError(ErrorCode.MISSING_API_KEY, 'API URL and API Key are required', {
@@ -100,6 +128,7 @@ export class AIService {
               temperature: config.temperature,
               top_p: config.topP,
             }),
+            signal,
           });
 
           if (!response.ok) {
@@ -183,7 +212,7 @@ export class AIService {
       },
       'AIService.callAI',
       {
-        maxAttempts: 3,
+        maxAttempts: RETRY.MAX_ATTEMPTS,
         initialDelay: RETRY.INITIAL_DELAY_MS,
       },
     );
@@ -219,8 +248,8 @@ export class AIService {
         return this.getDefaultModels();
       }
 
-      const data = await response.json();
-      const models = data.data?.map((model: any) => model.id) || [];
+      const data = await response.json() as { data?: Array<{ id: string }> };
+      const models = data.data?.map((model) => model.id) || [];
 
       Logger.info('[AIService] Available models fetched', { count: models.length });
       return models.length > 0 ? models : this.getDefaultModels();
@@ -228,44 +257,6 @@ export class AIService {
       Logger.error('[AIService] Failed to get models', { error });
       return this.getDefaultModels();
     }
-  }
-
-  /**
-   * Extract comments from DOM content using AI
-   * @param domContent - Serialized DOM content
-   * @param config - AI configuration
-   * @returns Extracted comments
-   */
-  async extractComments(
-    domContent: string,
-    config: AIConfig,
-    promptTemplate: string,
-  ): Promise<Comment[]> {
-    const maxModelTokens = config.maxTokens ?? 4000;
-    const chunks = this.chunkDomContent(domContent, maxModelTokens);
-    const allComments: Comment[] = [];
-
-    for (let i = 0; i < chunks.length; i++) {
-      const partPrompt = this.buildExtractionPromptWrapper(chunks[i], promptTemplate);
-      const response = await this.callAI({ prompt: partPrompt, config });
-      try {
-        const comments = JSON.parse(response.content);
-        if (Array.isArray(comments)) {
-          allComments.push(...comments);
-        } else {
-          Logger.warn('[AIService] Non-array comments in part', { part: i + 1 });
-        }
-      } catch (error) {
-        Logger.error('[AIService] Failed to parse AI response part', { part: i + 1, error });
-        // Continue with next part
-      }
-    }
-
-    Logger.info('[AIService] Extracted comments (aggregated)', {
-      count: allComments.length,
-      parts: chunks.length,
-    });
-    return allComments;
   }
 
   /**
@@ -290,7 +281,7 @@ export class AIService {
       videoTime?: string;
     },
   ): Promise<AnalysisResult> {
-    this.currentLanguage = language || 'en-US';
+    this.currentLanguage = language || LANGUAGES.DEFAULT;
     // Split comments if they exceed token limit
     const commentBatches = this.splitCommentsForAnalysis(comments, config.maxTokens);
 
@@ -300,12 +291,11 @@ export class AIService {
       // Single batch - analyze directly
       return await this.analyzeSingleBatch(commentBatches[0], config, promptTemplate, metadata);
     } else {
-      // Multiple batches - analyze separately and merge
-      const results = await Promise.all(
-        commentBatches.map((batch) =>
-          this.analyzeSingleBatch(batch, config, promptTemplate, metadata),
-        ),
+      // Multiple batches - analyze with concurrency limit
+      const tasks = commentBatches.map(
+        (batch) => () => this.analyzeSingleBatch(batch, config, promptTemplate, metadata),
       );
+      const results = await runWithConcurrencyLimit(tasks, AI_CONST.MAX_CONCURRENT_REQUESTS);
       return this.mergeAnalysisResults(results);
     }
   }
@@ -453,15 +443,6 @@ export class AIService {
   }
 
   /**
-   * Build extraction prompt for AI (wrapper)
-   * @param domContent - DOM content
-   * @returns Formatted prompt
-   */
-  private buildExtractionPromptWrapper(domContent: string, template: string): string {
-    return buildExtractionPrompt(domContent, template);
-  }
-
-  /**
    * Build analysis prompt for AI (wrapper)
    * @param commentsJson - Comments in JSON format
    * @param template - Prompt template
@@ -509,11 +490,11 @@ export class AIService {
     return {
       totalComments: comments.length,
       sentimentDistribution: {
-        positive: positiveMatch ? parseInt(positiveMatch[1]) : 33,
-        negative: negativeMatch ? parseInt(negativeMatch[1]) : 33,
-        neutral: neutralMatch ? parseInt(neutralMatch[1]) : 34,
+        positive: positiveMatch ? parseInt(positiveMatch[1]) : DEFAULTS.SENTIMENT_POSITIVE,
+        negative: negativeMatch ? parseInt(negativeMatch[1]) : DEFAULTS.SENTIMENT_NEGATIVE,
+        neutral: neutralMatch ? parseInt(neutralMatch[1]) : DEFAULTS.SENTIMENT_NEUTRAL,
       },
-      hotComments: comments.slice(0, 5), // Top 5 by default
+      hotComments: comments.slice(0, DEFAULTS.HOT_COMMENTS_PREVIEW),
       keyInsights: [],
     };
   }
@@ -596,43 +577,11 @@ export class AIService {
    * @returns Default model names
    */
   private getDefaultModels(): string[] {
-    return [
-      'gpt-4',
-      'gpt-4-turbo',
-      'gpt-3.5-turbo',
-      'claude-3-opus',
-      'claude-3-sonnet',
-      'claude-3-haiku',
-    ];
-  }
-
-  private chunkDomContent(structure: string, maxTokens: number): string[] {
-    const reserveRatio = AI_CONST.TOKEN_RESERVE_RATIO;
-    const limit = Math.max(200, Math.floor(maxTokens * (1 - reserveRatio)));
-
-    const parts: string[] = [];
-    let current: string[] = [];
-    let tokens = 0;
-
-    // Split by closing tags to preserve structure better than just newlines
-    // This regex splits after > followed by newline, keeping the delimiter
-    const lines = structure.split(/(?<=>)\n/);
-
-    for (const line of lines) {
-      const t = Tokenizer.estimateTokens(line) + 1; // +1 for newline
-      if (tokens + t > limit && current.length > 0) {
-        parts.push(current.join('\n'));
-        current = [line];
-        tokens = t;
-      } else {
-        current.push(line);
-        tokens += t;
-      }
-    }
-    if (current.length > 0) parts.push(current.join('\n'));
-    return parts.length > 0 ? parts : [structure];
+    return [...AI_CONST.DEFAULT_MODELS];
   }
 }
 
-// Export singleton instance
+/**
+ * @deprecated Use getAIService() from ServiceContainer instead
+ */
 export const aiService = new AIService();

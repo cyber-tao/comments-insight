@@ -1,9 +1,10 @@
-import { ScraperConfig } from './scraper';
-
 // Core type definitions for Comments Insight Extension
 
 // Platform is now determined by scraper config domain, not hardcoded
 export type Platform = string;
+
+// Progress stage for extraction task
+export type ProgressStage = 'analyzing' | 'extracting' | 'expanding' | 'scrolling' | 'validating' | 'complete';
 
 export interface Comment {
   id: string;
@@ -37,11 +38,12 @@ export interface Task {
   type: 'extract' | 'analyze';
   status: 'pending' | 'running' | 'completed' | 'failed';
   url: string;
-  platform?: string; // Optional: domain or platform identifier
+  platform?: string;
   progress: number;
   startTime: number;
   endTime?: number;
   tokensUsed: number;
+  maxComments?: number;
   error?: string;
   message?: string;
 }
@@ -59,6 +61,7 @@ export interface AIRequest {
   prompt: string;
   systemPrompt?: string;
   config: AIConfig;
+  signal?: AbortSignal;
 }
 
 export interface AIResponse {
@@ -97,8 +100,7 @@ export interface Settings {
   maxComments: number;
   aiModel: AIConfig;
   analyzerPromptTemplate: string;
-  extractionPromptTemplate: string; // Template for AI comment extraction
-  language: 'zh-CN' | 'en-US';
+  language: string; // Language code (e.g., 'zh-CN', 'en-US')
   selectorRetryAttempts: number;
   selectorCache: SelectorCache[];
   domAnalysisConfig: DOMAnalysisConfig; // DOM analysis configuration for structure analysis
@@ -134,82 +136,16 @@ export interface HistoryItem {
   analyzedAt?: number; // When analysis was performed
 }
 
-// Discriminated Union for Messages
-export type Message =
-  | { type: 'PING'; payload?: never }
-  | { type: 'GET_PLATFORM_INFO'; payload?: never }
-  | {
-      type: 'EXTRACTION_PROGRESS';
-      payload: { taskId: string; progress: number; message: string; data?: any };
-    }
-  | { type: 'CHECK_SCRAPER_CONFIG'; payload: { url: string } }
-  | { type: 'AI_EXTRACT_COMMENTS'; payload: { domStructure: string } }
-  // AI_EXTRACT_PROGRESSIVE removed
-  | { type: 'GET_SETTINGS'; payload?: never }
-  | { type: 'SAVE_SETTINGS'; payload: { settings: Settings } }
-  | {
-      type: 'UPDATE_SELECTOR_VALIDATION';
-      payload: {
-        configId: string;
-        selectorKey: string;
-        status: 'success' | 'failed' | 'untested';
-        count?: number;
-      };
-    }
-  | { type: 'AI_ANALYZE_STRUCTURE'; payload: { prompt: string } }
-  | { type: 'TASK_UPDATE'; payload: Task }
-  | { type: 'START_EXTRACTION'; payload: { url: string; maxComments?: number } }
-  | { type: 'CANCEL_EXTRACTION'; payload: { taskId: string } }
-  | { type: 'GET_DOM_STRUCTURE'; payload?: never }
-  | { type: 'GET_TASK_STATUS'; payload?: { taskId?: string } }
-  | { type: 'GET_HISTORY_BY_URL'; payload: { url: string } }
-  | {
-      type: 'GENERATE_SCRAPER_CONFIG';
-      payload: {
-        url: string;
-        domStructure?: string;
-        platform?: string;
-        title?: string;
-      };
-    }
-  | {
-      type: 'GET_HISTORY';
-      payload?: { page?: number; limit?: number; query?: string; id?: string };
-    }
-  | {
-      type: 'START_ANALYSIS';
-      payload: {
-        comments: Comment[];
-        historyId?: string;
-        promptTemplate?: string;
-        language?: string;
-        metadata?: {
-          platform?: string;
-          url?: string;
-          title?: string;
-          datetime?: string;
-          videoTime?: string;
-        };
-      };
-    }
-  | {
-      type: 'EXPORT_DATA';
-      payload:
-        | { type: 'settings' }
-        | { format: 'csv' | 'md' | 'json'; taskId: string }
-        | { format: 'csv' | 'md' | 'json'; historyId: string };
-    }
-  | {
-      type: 'GET_AVAILABLE_MODELS';
-      payload: { apiUrl: string; apiKey: string };
-    }
-  | { type: 'TEST_MODEL'; payload: { config: AIConfig } }
-  | { type: 'DELETE_HISTORY'; payload: { id: string } }
-  | { type: 'CLEAR_ALL_HISTORY'; payload?: never }
-  | { type: 'CANCEL_TASK'; payload: { taskId: string } }
-  | { type: 'GET_SCRAPER_CONFIGS'; payload?: never }
-  | { type: 'SAVE_SCRAPER_CONFIG'; payload: { config: ScraperConfig } }
-  | { type: 'DELETE_SCRAPER_CONFIG'; payload: { id: string } }
-  | { type: 'TEST_SELECTOR_QUERY'; payload: { selector: string } };
-
-export type MessageType = Message['type'];
+export {
+  type Message,
+  type MessageType,
+  type SystemMessage,
+  type SettingsMessage,
+  type ExtractionMessage,
+  type AnalysisMessage,
+  type TaskMessage,
+  type HistoryMessage,
+  type ScraperConfigMessage,
+  type AIModelMessage,
+  type ExportMessage,
+} from './messages';

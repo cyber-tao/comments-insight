@@ -6,6 +6,8 @@ import { Logger } from '@/utils/logger';
 import { ExtractionStrategy } from './strategies/ExtractionStrategy';
 import { ConfigStrategy } from './strategies/ConfigStrategy';
 import { AIStrategy } from './strategies/AIStrategy';
+import { sendMessage } from '@/utils/chrome-message';
+import { ScraperConfig } from '../types/scraper';
 
 /**
  * CommentExtractor extracts comments from web pages
@@ -31,14 +33,11 @@ export class CommentExtractor {
     // Initialize the extraction engine
     const selectorExtractor = new CommentExtractorSelector(this.pageController);
     
-    // Check for existing config to decide strategy
-    const cfgResponse = await new Promise<any>((resolve) => {
-      chrome.runtime.sendMessage(
-        { type: MESSAGES.CHECK_SCRAPER_CONFIG, payload: { url: window.location.href } },
-        resolve,
-      );
+    const cfgResponse = await sendMessage<{ config?: ScraperConfig }>({
+      type: MESSAGES.CHECK_SCRAPER_CONFIG,
+      payload: { url: window.location.href },
     });
-    
+
     const config = cfgResponse?.config;
     let strategy: ExtractionStrategy;
 
@@ -57,10 +56,10 @@ export class CommentExtractor {
       onProgress
     );
       
-    onProgress?.(80, 'Validating extracted data...');
+    onProgress?.(80, 'validating');
     const validComments = this.validateComments(comments, platform);
     const limitedComments = validComments.slice(0, maxComments);
-    onProgress?.(100, 'Extraction complete!');
+    onProgress?.(100, 'complete');
     
     return limitedComments;
   }

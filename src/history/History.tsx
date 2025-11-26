@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PAGINATION } from '@/config/constants';
 import { MESSAGES } from '@/config/constants';
@@ -130,64 +130,62 @@ const History: React.FC = () => {
     return new Date(timestamp).toLocaleString();
   };
 
-  const sortComments = (comments: Comment[]): Comment[] => {
+  const sortComments = useCallback((comments: Comment[]): Comment[] => {
     const sorted = [...comments];
 
     sorted.sort((a, b) => {
       switch (sortBy) {
         case 'time':
-          // Sort by timestamp (newest first)
           return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
         case 'likes':
-          // Sort by likes (highest first)
           return b.likes - a.likes;
         case 'replies':
-          // Sort by reply count (most replies first)
           return b.replies.length - a.replies.length;
         default:
           return 0;
       }
     });
 
-    // Recursively sort replies
-    return sorted.map((comment) => ({
-      ...comment,
-      replies: comment.replies.length > 0 ? sortComments(comment.replies) : comment.replies,
-    }));
-  };
+    const sortReplies = (c: Comment[]): Comment[] =>
+      c.map((comment) => ({
+        ...comment,
+        replies: comment.replies.length > 0 ? sortReplies(comment.replies) : comment.replies,
+      }));
 
-  // Filter comments by search term (including replies)
-  const filterComments = (comments: Comment[], searchTerm: string): Comment[] => {
+    return sortReplies(sorted);
+  }, [sortBy]);
+
+  const filterComments = useCallback((comments: Comment[], searchTerm: string): Comment[] => {
     if (!searchTerm) return comments;
 
     const searchLower = searchTerm.toLowerCase();
 
-    return comments
-      .filter((comment) => {
-        // Check if comment matches
-        const commentMatches =
-          comment.username.toLowerCase().includes(searchLower) ||
-          comment.content.toLowerCase().includes(searchLower) ||
-          (comment.timestamp && comment.timestamp.toLowerCase().includes(searchLower));
+    const filterRecursive = (items: Comment[]): Comment[] =>
+      items
+        .filter((comment) => {
+          const commentMatches =
+            comment.username.toLowerCase().includes(searchLower) ||
+            comment.content.toLowerCase().includes(searchLower) ||
+            (comment.timestamp && comment.timestamp.toLowerCase().includes(searchLower));
 
-        // Check if any reply matches
-        const replyMatches =
-          comment.replies &&
-          comment.replies.some(
-            (reply) =>
-              reply.username.toLowerCase().includes(searchLower) ||
-              reply.content.toLowerCase().includes(searchLower) ||
-              (reply.timestamp && reply.timestamp.toLowerCase().includes(searchLower)),
-          );
+          const replyMatches =
+            comment.replies &&
+            comment.replies.some(
+              (reply) =>
+                reply.username.toLowerCase().includes(searchLower) ||
+                reply.content.toLowerCase().includes(searchLower) ||
+                (reply.timestamp && reply.timestamp.toLowerCase().includes(searchLower)),
+            );
 
-        return commentMatches || replyMatches;
-      })
-      .map((comment) => ({
-        ...comment,
-        // Also filter replies recursively
-        replies: comment.replies ? filterComments(comment.replies, searchTerm) : [],
-      }));
-  };
+          return commentMatches || replyMatches;
+        })
+        .map((comment) => ({
+          ...comment,
+          replies: comment.replies ? filterRecursive(comment.replies) : [],
+        }));
+
+    return filterRecursive(comments);
+  }, []);
 
   // Get filtered and sorted comments
   const getProcessedComments = (): Comment[] => {
@@ -196,15 +194,13 @@ const History: React.FC = () => {
     return sortComments(filtered);
   };
 
-  // Pagination
   const paginatedComments = React.useMemo(() => {
     const filtered = filterComments(selectedItem?.comments || [], commentSearchTerm);
     const sorted = sortComments(filtered);
     const startIndex = (currentPage - 1) * commentsPerPage;
     const endIndex = startIndex + commentsPerPage;
     return sorted.slice(startIndex, endIndex);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedItem, commentSearchTerm, sortBy, currentPage, commentsPerPage]);
+  }, [selectedItem, commentSearchTerm, sortComments, filterComments, currentPage, commentsPerPage]);
 
   const totalComments = getProcessedComments().length;
   const totalPages = Math.ceil(totalComments / commentsPerPage);

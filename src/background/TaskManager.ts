@@ -24,7 +24,7 @@ export class TaskManager {
    * @param platform - Platform type
    * @returns Task ID
    */
-  createTask(type: Task['type'], url: string, platform: Platform): string {
+  createTask(type: Task['type'], url: string, platform: Platform, maxComments?: number): string {
     const id = this.generateTaskId();
     const task: Task = {
       id,
@@ -35,6 +35,7 @@ export class TaskManager {
       progress: 0,
       startTime: Date.now(),
       tokensUsed: 0,
+      maxComments,
     };
 
     this.tasks.set(id, task);
@@ -276,17 +277,18 @@ export class TaskManager {
    * @param task - Updated task
    */
   private notifyTaskUpdate(task: Task): void {
-    // Send message to all extension contexts (popup, options, etc.)
     chrome.runtime
       .sendMessage({
         type: 'TASK_UPDATE',
         payload: task,
       })
       .catch(() => {
-        // Ignore errors if no listeners are active
+        // Expected: no listeners active (popup closed)
       });
   }
 }
 
-// Export singleton instance
+/**
+ * @deprecated Use getTaskManager() from ServiceContainer instead
+ */
 export const taskManager = new TaskManager();

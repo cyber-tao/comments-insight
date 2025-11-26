@@ -1,5 +1,5 @@
 import { Settings, HistoryItem, AIConfig } from '../types';
-import { SECURITY, API, STORAGE } from '@/config/constants';
+import { SECURITY, API, STORAGE, AI, LANGUAGES } from '@/config/constants';
 import LZString from 'lz-string';
 import { Logger } from '../utils/logger';
 import { ErrorHandler } from '../utils/errors';
@@ -13,9 +13,9 @@ const DEFAULT_SETTINGS: Settings = {
     apiUrl: API.DEFAULT_URL,
     apiKey: '',
     model: 'gpt-4',
-    maxTokens: 4000,
-    temperature: 0.7,
-    topP: 0.9,
+    maxTokens: AI.DEFAULT_MAX_TOKENS,
+    temperature: AI.DEFAULT_TEMPERATURE,
+    topP: AI.DEFAULT_TOP_P,
   },
   analyzerPromptTemplate: `You are a professional social media analyst. Analyze the following comments and provide insights.
 
@@ -36,41 +36,7 @@ const DEFAULT_SETTINGS: Settings = {
 
 ## Output Format:
 Generate a comprehensive analysis report in Markdown format.`,
-  extractionPromptTemplate: `You are a web scraping expert. Your task is to analyze the DOM structure and extract comment data.
-
-## DOM Structure:
-{dom_content}
-
-## Task:
-1. Identify the comment section in the DOM
-2. Extract all comments with the following information:
-   - id (generate unique ID if not available)
-   - username
-   - timestamp
-   - likes count
-   - comment content
-   - replies (nested structure)
-
-## Output Format:
-Return ONLY a valid JSON array with no additional text:
-[
-  {
-    "id": "unique_id",
-    "username": "user_name",
-    "timestamp": "time_string",
-    "likes": 0,
-    "content": "comment_text",
-    "replies": []
-  }
-]
-
-## Important:
-- Return ONLY valid JSON, no markdown code blocks
-- If no comments found, return empty array []
-- Preserve the nested structure for replies
-- Generate unique IDs for each comment
-- Extract actual data from the DOM, don't make up content`,
-  language: 'zh-CN',
+  language: LANGUAGES.DEFAULT,
   selectorRetryAttempts: 3,
   selectorCache: [],
   domAnalysisConfig: {
@@ -233,8 +199,8 @@ export class StorageManager {
         apiKey: await this.decrypt(normalizedModel.apiKey || ''),
       };
 
-      delete (merged as any).extractorModel;
-      delete (merged as any).analyzerModel;
+      delete (merged as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig }).extractorModel;
+      delete (merged as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig }).analyzerModel;
       Logger.debug('[StorageManager] Settings retrieved successfully');
       return merged;
     } catch (error) {
@@ -272,8 +238,8 @@ export class StorageManager {
         } as AIConfig;
       }
 
-      delete (updatedSettings as any).extractorModel;
-      delete (updatedSettings as any).analyzerModel;
+      delete (updatedSettings as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig }).extractorModel;
+      delete (updatedSettings as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig }).analyzerModel;
 
       await chrome.storage.local.set({
         [StorageManager.SETTINGS_KEY]: updatedSettings,
@@ -492,16 +458,18 @@ export class StorageManager {
    * @param settings - Settings to validate
    * @returns True if valid
    */
-  private validateSettings(settings: any): settings is Settings {
+  private validateSettings(settings: unknown): settings is Settings {
+    if (typeof settings !== 'object' || settings === null) {
+      return false;
+    }
+    const s = settings as Record<string, unknown>;
     return (
-      typeof settings === 'object' &&
-      typeof settings.maxComments === 'number' &&
-      (this.validateAIConfig(settings.aiModel) ||
-        (this.validateAIConfig(settings.extractorModel) &&
-          this.validateAIConfig(settings.analyzerModel))) &&
-      typeof settings.analyzerPromptTemplate === 'string' &&
-      typeof settings.extractionPromptTemplate === 'string' &&
-      (settings.language === 'zh-CN' || settings.language === 'en-US')
+      typeof s.maxComments === 'number' &&
+      (this.validateAIConfig(s.aiModel) ||
+        (this.validateAIConfig(s.extractorModel) &&
+          this.validateAIConfig(s.analyzerModel))) &&
+      typeof s.analyzerPromptTemplate === 'string' &&
+      typeof s.language === 'string'
     );
   }
 
@@ -510,15 +478,18 @@ export class StorageManager {
    * @param config - AI config to validate
    * @returns True if valid
    */
-  private validateAIConfig(config: any): config is AIConfig {
+  private validateAIConfig(config: unknown): config is AIConfig {
+    if (typeof config !== 'object' || config === null) {
+      return false;
+    }
+    const c = config as Record<string, unknown>;
     return (
-      typeof config === 'object' &&
-      typeof config.apiUrl === 'string' &&
-      typeof config.apiKey === 'string' &&
-      typeof config.model === 'string' &&
-      typeof config.maxTokens === 'number' &&
-      typeof config.temperature === 'number' &&
-      typeof config.topP === 'number'
+      typeof c.apiUrl === 'string' &&
+      typeof c.apiKey === 'string' &&
+      typeof c.model === 'string' &&
+      typeof c.maxTokens === 'number' &&
+      typeof c.temperature === 'number' &&
+      typeof c.topP === 'number'
     );
   }
 
@@ -534,5 +505,7 @@ export class StorageManager {
   }
 }
 
-// Export singleton instance
+/**
+ * @deprecated Use getStorageManager() from ServiceContainer instead
+ */
 export const storageManager = new StorageManager();

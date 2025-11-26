@@ -5,9 +5,6 @@
 
 import { LOG_PREFIX, STORAGE, DEFAULTS, LOG_LEVELS } from '@/config/constants';
 
-/**
- * Log levels
- */
 export enum LogLevel {
   DEBUG = 'DEBUG',
   INFO = 'INFO',
@@ -15,21 +12,15 @@ export enum LogLevel {
   ERROR = 'ERROR',
 }
 
-/**
- * Log entry structure
- */
 export interface LogEntry {
   level: LogLevel;
   timestamp: number;
   message: string;
   context?: string;
-  data?: any;
+  data?: Record<string, unknown>;
   stack?: string;
 }
 
-/**
- * Logger configuration
- */
 export interface LoggerConfig {
   minLevel: LogLevel;
   enableConsole: boolean;
@@ -37,9 +28,18 @@ export interface LoggerConfig {
   maxStoredLogs: number;
 }
 
-/**
- * Logger class for structured logging
- */
+export interface LogFilter {
+  level?: LogLevel;
+  levels?: LogLevel[];
+  startTime?: number;
+  endTime?: number;
+  context?: string;
+  search?: string;
+  limit?: number;
+}
+
+export type ExportFormat = 'json' | 'csv' | 'text';
+
 export class Logger {
   private static config: LoggerConfig = {
     minLevel: LogLevel.INFO,
@@ -50,29 +50,23 @@ export class Logger {
 
   private static isDevelopment = false;
   private static initialized = false;
+  private static storageConfigLoaded = false;
 
-  /**
-   * Initialize logger with environment detection
-   */
-  static async initialize(): Promise<void> {
+  private static initializeSync(): void {
     if (this.initialized) {
       return;
     }
 
-    // Detect environment - in development, manifest will have a specific version pattern
     try {
       const manifest = chrome.runtime.getManifest();
-      // Development builds typically have version like "0.0.0" or include "dev"
       this.isDevelopment =
         manifest.version === '0.0.0' ||
         manifest.version.includes('dev') ||
-        !('update_url' in manifest); // No update_url means not from store
-    } catch (error) {
-      // If we can't detect, assume production for safety
+        !('update_url' in manifest);
+    } catch {
       this.isDevelopment = false;
     }
 
-    // Configure based on environment
     if (this.isDevelopment) {
       this.config.minLevel = LogLevel.DEBUG;
       this.config.enableConsole = true;
@@ -82,13 +76,7 @@ export class Logger {
       this.config.enableConsole = true;
       this.config.enableStorage = true;
     }
-    try {
-      const stored = await chrome.storage.local.get(STORAGE.LOG_LEVEL_KEY);
-      const val = stored[STORAGE.LOG_LEVEL_KEY];
-      if (val && (LOG_LEVELS as readonly string[]).includes(val)) {
-        this.config.minLevel = val as LogLevel;
-      }
-    } catch {}
+
     try {
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area === 'local' && changes[STORAGE.LOG_LEVEL_KEY]) {
@@ -98,69 +86,64 @@ export class Logger {
           }
         }
       });
-    } catch {}
+    } catch {
+      // Storage API not available
+    }
+
     this.initialized = true;
+  }
+
+  private static async loadStorageConfig(): Promise<void> {
+    if (this.storageConfigLoaded) {
+      return;
+    }
+
+    try {
+      const stored = await chrome.storage.local.get(STORAGE.LOG_LEVEL_KEY);
+      const val = stored[STORAGE.LOG_LEVEL_KEY];
+      if (val && (LOG_LEVELS as readonly string[]).includes(val)) {
+        this.config.minLevel = val as LogLevel;
+      }
+      this.storageConfigLoaded = true;
+    } catch {
+      // Storage not available
+    }
+  }
+
+  static async initialize(): Promise<void> {
+    this.initializeSync();
+    await this.loadStorageConfig();
     this.info('[Logger] Initialized', {
       environment: this.isDevelopment ? 'development' : 'production',
       config: this.config,
     });
   }
 
-  /**
-   * Configure logger
-   * @param config - Partial configuration to merge
-   */
   static configure(config: Partial<LoggerConfig>): void {
     this.config = { ...this.config, ...config };
   }
 
-  /**
-   * Get current configuration
-   */
   static getConfig(): LoggerConfig {
     return { ...this.config };
   }
 
-  /**
-   * Check if development mode
-   */
   static isDev(): boolean {
     return this.isDevelopment;
   }
 
-  /**
-   * Log debug message
-   * @param message - Log message
-   * @param data - Additional data
-   */
-  static debug(message: string, data?: any): void {
+  static debug(message: string, data?: Record<string, unknown>): void {
     this.log(LogLevel.DEBUG, message, data);
   }
 
-  /**
-   * Log info message
-   * @param message - Log message
-   * @param data - Additional data
-   */
-  static info(message: string, data?: any): void {
+  static info(message: string, data?: Record<string, unknown>): void {
     this.log(LogLevel.INFO, message, data);
   }
 
-  /**
-   * Log warning message
-   * @param message - Log message
-   * @param data - Additional data
-   */
-  static warn(message: string, data?: any): void {
+  static warn(message: string, data?: Record<string, unknown>): void {
     this.log(LogLevel.WARN, message, data);
   }
 
-  /**
-   * Log error message
-   * @param message - Log message
-   * @param data - Additional data (can include error object)
-   */
-  static error(message: string, data?: any): void {
+  static error(message: string, data?: Record<string, unknown>): void {
     this.log(LogLevel.ERROR, message, data);
   }
 
@@ -168,19 +151,17 @@ export class Logger {
     this.config.minLevel = level;
     try {
       await chrome.storage.local.set({ [STORAGE.LOG_LEVEL_KEY]: level });
-    } catch {}
+    } catch {
+      // Storage not available
+    }
   }
 
-  /**
-   * Core logging function
-   * @param level - Log level
-   * @param message - Log message
-   * @param data - Additional data
-   */
-  private static log(level: LogLevel, message: string, data?: any): void {
-    // Ensure initialized
+  private static log(level: LogLevel, message: string, data?: Record<string, unknown>): void {
     if (!this.initialized) {
-      this.initialize().catch(console.error);
+      this.initializeSync();
+      this.loadStorageConfig().catch((error) => {
+        console.warn('[Logger] Failed to load storage config during log call:', error);
+      });
     }
 
     // Check if this log level should be recorded
@@ -196,7 +177,7 @@ export class Logger {
     };
 
     // Add stack trace for errors
-    if (level === LogLevel.ERROR && data?.stack) {
+    if (level === LogLevel.ERROR && data?.stack && typeof data.stack === 'string') {
       entry.stack = data.stack;
     }
 
@@ -213,11 +194,6 @@ export class Logger {
     }
   }
 
-  /**
-   * Check if log level should be recorded
-   * @param level - Log level to check
-   * @returns True if should log
-   */
   private static shouldLog(level: LogLevel): boolean {
     const levels = [LogLevel.DEBUG, LogLevel.INFO, LogLevel.WARN, LogLevel.ERROR];
     const currentLevelIndex = levels.indexOf(this.config.minLevel);
@@ -225,10 +201,6 @@ export class Logger {
     return logLevelIndex >= currentLevelIndex;
   }
 
-  /**
-   * Log to console with appropriate styling
-   * @param entry - Log entry
-   */
   private static logToConsole(entry: LogEntry): void {
     const timestamp = new Date(entry.timestamp).toISOString();
     const prefix = `[${timestamp}] [${entry.level}]`;
@@ -253,41 +225,25 @@ export class Logger {
     }
   }
 
-  /**
-   * Save log to chrome.storage.local
-   * @param entry - Log entry
-   */
   private static async logToStorage(entry: LogEntry): Promise<void> {
     try {
-      // Create storage key
       const logKey = `${LOG_PREFIX.SYSTEM}${entry.level.toLowerCase()}_${entry.timestamp}`;
-
-      // Save log entry
       await chrome.storage.local.set({
         [logKey]: entry,
       });
-
-      // Clean up old logs if needed
       await this.cleanupOldLogs();
     } catch (error) {
-      // Don't log storage errors to avoid infinite loop
       console.error('[Logger] Storage error:', error);
     }
   }
 
-  /**
-   * Clean up old logs to maintain storage limit
-   */
   private static async cleanupOldLogs(): Promise<void> {
     try {
       const storage = await chrome.storage.local.get(null);
       const logKeys = Object.keys(storage).filter((key) => key.startsWith('log_'));
 
       if (logKeys.length > this.config.maxStoredLogs) {
-        // Sort by timestamp (embedded in key)
         logKeys.sort();
-
-        // Remove oldest logs
         const toRemove = logKeys.slice(0, logKeys.length - this.config.maxStoredLogs);
         await chrome.storage.local.remove(toRemove);
       }
@@ -296,28 +252,49 @@ export class Logger {
     }
   }
 
-  /**
-   * Get all stored logs
-   * @param level - Optional filter by level
-   * @param limit - Maximum number of logs to return
-   * @returns Array of log entries
-   */
   static async getLogs(level?: LogLevel, limit?: number): Promise<LogEntry[]> {
+    return this.getLogsFiltered({ level, limit });
+  }
+
+  static async getLogsFiltered(filter: LogFilter = {}): Promise<LogEntry[]> {
     try {
       const storage = await chrome.storage.local.get(null);
       let logs = Object.entries(storage)
         .filter(([key]) => key.startsWith('log_'))
-        .map(([_, value]) => value as LogEntry)
-        .sort((a, b) => b.timestamp - a.timestamp); // Newest first
+        .map(([, value]) => value as LogEntry)
+        .sort((a, b) => b.timestamp - a.timestamp);
 
-      // Filter by level if specified
-      if (level) {
-        logs = logs.filter((log) => log.level === level);
+      if (filter.level) {
+        logs = logs.filter((log) => log.level === filter.level);
       }
 
-      // Limit results if specified
-      if (limit) {
-        logs = logs.slice(0, limit);
+      if (filter.levels && filter.levels.length > 0) {
+        logs = logs.filter((log) => filter.levels!.includes(log.level));
+      }
+
+      if (filter.startTime) {
+        logs = logs.filter((log) => log.timestamp >= filter.startTime!);
+      }
+
+      if (filter.endTime) {
+        logs = logs.filter((log) => log.timestamp <= filter.endTime!);
+      }
+
+      if (filter.context) {
+        logs = logs.filter((log) => log.context?.includes(filter.context!));
+      }
+
+      if (filter.search) {
+        const searchLower = filter.search.toLowerCase();
+        logs = logs.filter(
+          (log) =>
+            log.message.toLowerCase().includes(searchLower) ||
+            JSON.stringify(log.data || {}).toLowerCase().includes(searchLower),
+        );
+      }
+
+      if (filter.limit) {
+        logs = logs.slice(0, filter.limit);
       }
 
       return logs;
@@ -327,9 +304,6 @@ export class Logger {
     }
   }
 
-  /**
-   * Clear all stored logs
-   */
   static async clearLogs(): Promise<void> {
     try {
       const storage = await chrome.storage.local.get(null);
@@ -342,20 +316,43 @@ export class Logger {
     }
   }
 
-  /**
-   * Export logs as JSON
-   * @param level - Optional filter by level
-   * @returns JSON string of logs
-   */
-  static async exportLogs(level?: LogLevel): Promise<string> {
-    const logs = await this.getLogs(level);
-    return JSON.stringify(logs, null, 2);
+  static async exportLogs(filter?: LogFilter, format: ExportFormat = 'json'): Promise<string> {
+    const logs = await this.getLogsFiltered(filter || {});
+
+    switch (format) {
+      case 'csv':
+        return this.formatLogsAsCsv(logs);
+      case 'text':
+        return this.formatLogsAsText(logs);
+      case 'json':
+      default:
+        return JSON.stringify(logs, null, 2);
+    }
   }
 
-  /**
-   * Get log statistics
-   * @returns Statistics about stored logs
-   */
+  private static formatLogsAsCsv(logs: LogEntry[]): string {
+    const headers = ['timestamp', 'level', 'context', 'message', 'data'];
+    const rows = logs.map((log) => [
+      new Date(log.timestamp).toISOString(),
+      log.level,
+      log.context || '',
+      `"${(log.message || '').replace(/"/g, '""')}"`,
+      `"${JSON.stringify(log.data || {}).replace(/"/g, '""')}"`,
+    ]);
+    return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+  }
+
+  private static formatLogsAsText(logs: LogEntry[]): string {
+    return logs
+      .map((log) => {
+        const time = new Date(log.timestamp).toISOString();
+        const ctx = log.context ? `[${log.context}] ` : '';
+        const data = log.data ? ` | ${JSON.stringify(log.data)}` : '';
+        return `[${time}] [${log.level}] ${ctx}${log.message}${data}`;
+      })
+      .join('\n');
+  }
+
   static async getLogStats(): Promise<{
     total: number;
     byLevel: Record<LogLevel, number>;
@@ -384,5 +381,6 @@ export class Logger {
   }
 }
 
-// Auto-initialize logger
-Logger.initialize().catch(console.error);
+Logger.initialize().catch((error) => {
+  console.warn('[Logger] Failed to initialize logger:', error);
+});

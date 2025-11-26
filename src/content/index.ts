@@ -3,6 +3,8 @@ import { PageController } from './PageController';
 import { MESSAGES, DOM } from '@/config/constants';
 import { CommentExtractor } from './CommentExtractor';
 import { Comment } from '@/types';
+import { Logger } from '@/utils/logger';
+import { getCurrentHostname } from '@/utils/url';
 
 interface ExtractionResponse {
   success: boolean;
@@ -81,8 +83,8 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           tag: el.tagName.toLowerCase(),
           id: (el as HTMLElement).id || '',
           className: (el as HTMLElement).className || '',
-          text: (el.textContent || '').trim().slice(0, 200),
-          html: el.outerHTML.slice(0, 200),
+          text: (el.textContent || '').trim().slice(0, DOM.HTML_PREVIEW_LENGTH),
+          html: el.outerHTML.slice(0, DOM.HTML_PREVIEW_LENGTH),
         }));
         sendResponse({ success: true, total: nodes.length, items });
       } catch (e) {
@@ -119,7 +121,7 @@ async function handleStartExtraction(
     // It will try to use config first, then fallback to AI discovery
     const comments = await commentExtractor.extractWithAI(
       maxComments,
-      window.location.hostname, // Use hostname as platform identifier
+      getCurrentHostname(),
       (progress: number, message: string) => {
         chrome.runtime.sendMessage({
           type: MESSAGES.EXTRACTION_PROGRESS,
@@ -240,4 +242,3 @@ async function handleGetDOMStructure(sendResponse: (response: DomStructureRespon
     });
   }
 }
-import { Logger } from '@/utils/logger';

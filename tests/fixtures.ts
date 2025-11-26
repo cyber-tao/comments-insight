@@ -1,4 +1,5 @@
 import { Comment, HistoryItem, Task, Settings, AIConfig } from '../src/types';
+import { LANGUAGES } from '../src/config/constants';
 
 export const mockComment = (overrides: Partial<Comment> = {}): Comment => ({
   id: `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -56,10 +57,9 @@ export const mockAIConfig = (overrides: Partial<AIConfig> = {}): AIConfig => ({
 
 export const mockSettings = (overrides: Partial<Settings> = {}): Settings => ({
   maxComments: 100,
-  language: 'en-US',
+  language: LANGUAGES.DEFAULT,
   aiModel: mockAIConfig(),
   analyzerPromptTemplate: '',
-  extractionPromptTemplate: '',
   selectorRetryAttempts: 3,
   selectorCache: [],
   domAnalysisConfig: {

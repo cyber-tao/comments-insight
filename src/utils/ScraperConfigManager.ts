@@ -1,5 +1,7 @@
 import { ScraperConfig, ScraperConfigList } from '../types/scraper';
-import { PATHS, REGEX } from '@/config/constants';
+import { PATHS } from '@/config/constants';
+import { Logger } from '@/utils/logger';
+import { getHostname, matchesDomain } from '@/utils/url';
 
 const STORAGE_KEY = 'scraperConfigs';
 const CONFIG_VERSION = '1.0.0';
@@ -100,17 +102,7 @@ export class ScraperConfigManager {
         return null;
       }
 
-      // Parse hostname from URL safely
-      let hostname: string;
-      try {
-        // Try using URL constructor (works in most contexts)
-        const urlObj = new URL(url);
-        hostname = urlObj.hostname;
-      } catch (e) {
-        // Fallback: extract hostname manually
-        const match = url.match(REGEX.DOMAIN_EXTRACT);
-        hostname = match ? match[1] : '';
-      }
+      const hostname = getHostname(url);
 
       if (!hostname) {
         Logger.warn('[ScraperConfigManager] Could not extract hostname from URL', { url });
@@ -120,17 +112,7 @@ export class ScraperConfigManager {
       Logger.debug('[ScraperConfigManager] Extracted hostname', { hostname });
 
       for (const config of configs) {
-        // Logger.debug('[ScraperConfigManager] Checking config', { name: config.name, domains: config.domains });
-
-        // Check domain match
-        const domainMatch = config.domains.some((domain) => {
-          const matches =
-            hostname === domain ||
-            hostname.endsWith('.' + domain) ||
-            domain.endsWith('.' + hostname);
-          // Logger.debug('[ScraperConfigManager] Domain check', { domain, hostname, matches });
-          return matches;
-        });
+        const domainMatch = config.domains.some((domain) => matchesDomain(hostname, domain));
 
         if (!domainMatch) {
           // Logger.debug('[ScraperConfigManager] Domain not matched for config', { name: config.name });
@@ -465,7 +447,7 @@ export class ScraperConfigManager {
     const selectorValidation = config.selectorValidation || {};
     selectorValidation[selectorKey] = status;
 
-    const updates: any = { selectorValidation };
+    const updates: Partial<ScraperConfig> = { selectorValidation };
 
     if (typeof count === 'number') {
       const selectorCounts = config.selectorCounts || {};
@@ -531,4 +513,3 @@ export class ScraperConfigManager {
     };
   }
 }
-import { Logger } from '@/utils/logger';

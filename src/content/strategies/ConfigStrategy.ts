@@ -23,16 +23,16 @@ export class ConfigStrategy implements ExtractionStrategy {
         throw new Error('Config missing selectors');
     }
 
-    onProgress?.(20, 'Using scraper config');
+    onProgress?.(15, 'analyzing');
 
     const comments = await this.selectorExtractor.extractWithConfig(
       this.config.selectors,
       this.config.scrollConfig,
       maxComments,
       platform,
-      (message: string, count: number) => {
-        const progress = Math.min(95, Math.floor((count / maxComments) * 100));
-        onProgress?.(progress, `${message} (${count})`);
+      (stage: string, count: number) => {
+        const progress = count < 0 ? 15 : Math.min(95, 20 + Math.floor((count / maxComments) * 75));
+        onProgress?.(progress, `${stage}:${count}:${maxComments}`);
       },
     );
 

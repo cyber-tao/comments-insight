@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { API, MESSAGES, TIMING } from '@/config/constants';
+import { API, MESSAGES, TIMING, LANGUAGES } from '@/config/constants';
 import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
 import { Settings } from '../types';
 import i18n from '../utils/i18n';
@@ -59,8 +59,7 @@ const Options: React.FC = () => {
     };
 
     loadSettings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 只在组件挂载时加载一次
+  }, []);
 
   // Auto-save settings when they change (but not on initial load)
   useEffect(() => {
@@ -76,12 +75,11 @@ const Options: React.FC = () => {
           payload: { settings },
         });
 
-        // Only show success message if it's a user-initiated change
         if (isUserChangeRef.current) {
           toast.success(t('options.savedSuccess'));
           isUserChangeRef.current = false;
         }
-      } catch (error) {
+      } catch {
         toast.error(t('options.savedError'));
       } finally {
         setSaving(false);
@@ -89,11 +87,10 @@ const Options: React.FC = () => {
       }
     };
 
-    // Debounce auto-save by 500ms
     const timeoutId = setTimeout(saveSettings, TIMING.DEBOUNCE_SAVE_MS);
     return () => clearTimeout(timeoutId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings, isInitialLoad]); // Exclude toast/t to avoid infinite loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t and toast are stable, only trigger on settings/isInitialLoad changes
+  }, [settings, isInitialLoad]);
 
   const handleExport = async () => {
     try {
@@ -279,15 +276,17 @@ const Options: React.FC = () => {
                 <select
                   value={settings.language}
                   onChange={(e) => {
-                    const newLang = e.target.value as 'zh-CN' | 'en-US';
+                    const newLang = e.target.value;
                     handleSettingsChange({ ...settings, language: newLang });
-                    // Change i18n language immediately
                     i18n.changeLanguage(newLang);
                   }}
                   className="w-full px-3 py-2 border rounded"
                 >
-                  <option value="zh-CN">中文</option>
-                  <option value="en-US">English</option>
+                  {LANGUAGES.SUPPORTED.map((lang) => (
+                    <option key={lang.code} value={lang.code}>
+                      {lang.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 

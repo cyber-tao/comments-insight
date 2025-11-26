@@ -1,7 +1,29 @@
 export const RETRY = {
   INITIAL_DELAY_MS: 1000,
   MAX_DELAY_MS: 10000,
+  MAX_ATTEMPTS: 3,
+  SELECTOR_ATTEMPTS: 3,
 };
+
+/**
+ * Supported languages configuration
+ * To add a new language:
+ * 1. Add entry to SUPPORTED with code and display name
+ * 2. Create the locale file in src/locales/
+ * 3. Import and register it in src/utils/i18n.ts
+ */
+export const LANGUAGES = {
+  /** Supported languages with display names */
+  SUPPORTED: [
+    { code: 'zh-CN', name: '中文' },
+    { code: 'en-US', name: 'English' },
+  ] as const,
+  /** Default language code */
+  DEFAULT: 'en-US' as const,
+  /** Fallback language when detection fails */
+  FALLBACK: 'en-US' as const,
+};
+
 
 export const TEMPLATE = {
   MIN_LENGTH: 50,
@@ -11,6 +33,8 @@ export const TEMPLATE = {
 export const LIKES = {
   K_MULTIPLIER: 1000,
   W_MULTIPLIER: 10000,
+  M_MULTIPLIER: 1000000,
+  YI_MULTIPLIER: 100000000,
 };
 
 export const SECURITY = {
@@ -26,6 +50,25 @@ export const AI = {
   ESTIMATE_PUNCT_WEIGHT: 0.25,
   ESTIMATE_CHAR_DIVISOR: 10,
   HOT_COMMENTS_LIMIT: 10,
+  CONFIDENCE_THRESHOLD: 0.5,
+  LOW_CONFIDENCE_THRESHOLD: 0.3,
+  HIGH_CONFIDENCE_THRESHOLD: 0.7,
+  DEFAULT_CONFIDENCE: 0.8,
+  DEFAULT_MAX_TOKENS: 4000,
+  DEFAULT_TEMPERATURE: 0.7,
+  DEFAULT_TOP_P: 0.9,
+  MAX_CONCURRENT_REQUESTS: 3,
+  CJK_TOKEN_RATIO: 1.5,
+  WORD_TOKEN_RATIO: 1.33,
+  PUNCT_TOKEN_RATIO: 1.0,
+  DEFAULT_MODELS: [
+    'gpt-4',
+    'gpt-4-turbo',
+    'gpt-3.5-turbo',
+    'claude-3-opus',
+    'claude-3-sonnet',
+    'claude-3-haiku',
+  ] as readonly string[],
 };
 
 export const ANALYSIS_FORMAT = {
@@ -95,8 +138,6 @@ export const MESSAGES = {
   GET_PLATFORM_INFO: 'GET_PLATFORM_INFO',
   EXTRACTION_PROGRESS: 'EXTRACTION_PROGRESS',
   CHECK_SCRAPER_CONFIG: 'CHECK_SCRAPER_CONFIG',
-  AI_EXTRACT_COMMENTS: 'AI_EXTRACT_COMMENTS',
-  // AI_EXTRACT_PROGRESSIVE removed
   GET_SETTINGS: 'GET_SETTINGS',
   SAVE_SETTINGS: 'SAVE_SETTINGS',
   UPDATE_SELECTOR_VALIDATION: 'UPDATE_SELECTOR_VALIDATION',
@@ -120,7 +161,7 @@ export const MESSAGES = {
   SAVE_SCRAPER_CONFIG: 'SAVE_SCRAPER_CONFIG',
   DELETE_SCRAPER_CONFIG: 'DELETE_SCRAPER_CONFIG',
   TEST_SELECTOR_QUERY: 'TEST_SELECTOR_QUERY',
-};
+} as const;
 
 export const TEXT = {
   APP_NAME: 'Comments Insight',
@@ -146,16 +187,31 @@ export const TEXT = {
 
 export const DEFAULTS = {
   LOGS_MAX_STORED: 100,
+  MAX_COMMENTS: 100,
+  FILENAME_MAX_LENGTH: 100,
+  SENTIMENT_POSITIVE: 33,
+  SENTIMENT_NEGATIVE: 33,
+  SENTIMENT_NEUTRAL: 34,
+  HOT_COMMENTS_PREVIEW: 5,
+};
+
+export const TOKENIZER = {
+  CJK_TOKEN_RATIO: 1.5,
+  WORD_TOKEN_RATIO: 1.33,
+  PUNCT_TOKEN_RATIO: 1.0,
+  RESERVE_RATIO: 0.4,
+  MIN_CHUNK_SIZE: 200,
 };
 
 export const TIMING = {
-  XS: 100,
-  SM: 200,
-  MD: 300,
-  LG: 500,
-  XL: 1000,
-  XXL: 1500,
-  XXXL: 2000,
+  MICRO_WAIT_MS: 100,
+  SCROLL_PAUSE_MS: 150,
+  SHORT_WAIT_MS: 200,
+  DOM_SETTLE_MS: 300,
+  SCROLL_BASE_DELAY_MS: 500,
+  AI_RETRY_DELAY_MS: 1000,
+  SCROLL_DELAY_MS: 1500,
+  PAGE_INIT_DELAY_MS: 2000,
   POLL_TASK_RUNNING_MS: 1000,
   CLEAR_TASK_DELAY_MS: 2000,
   CLEAR_TASK_FAILED_MS: 5000,
@@ -166,7 +222,7 @@ export const TIMING = {
 export const SCROLL = {
   DEFAULT_MAX_SCROLLS: 10,
   SELECTOR_MAX_SCROLL_ATTEMPTS: 20,
-  // PROGRESSIVE_SCROLLS_PER_ITERATION removed
+  SCROLL_STEP_RATIO: 0.8,
   REPLY_EXPAND_REPORT_INTERVAL: 5,
   REPLY_EXPAND_SCROLL_FREQUENCY: 2,
 };
@@ -174,6 +230,13 @@ export const SCROLL = {
 export const DOM = {
   SIMPLIFY_MAX_DEPTH: 10,
   SIMPLIFY_MAX_NODES: 1000,
+  TEXT_PREVIEW_LENGTH: 100,
+  HTML_PREVIEW_LENGTH: 200,
+  SERIALIZE_TRUNCATE_LENGTH: 100,
+  SAMPLE_NODES_THRESHOLD: 30,
+  SAMPLE_NODES_COUNT: 10,
+  CHILDREN_LIMIT: 20,
+  CHILDREN_MAX: 50,
 };
 
 export const CLICK = {
@@ -195,4 +258,9 @@ export const SELECTORS = {
 export const PAGINATION = {
   DEFAULT_PER_PAGE: 20,
   OPTIONS: [10, 20, 50, 100],
+};
+
+export const PERFORMANCE = {
+  MAX_METRICS_COUNT: 1000,
+  SLOW_OPERATION_THRESHOLD_MS: 100,
 };

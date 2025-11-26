@@ -2,6 +2,7 @@
  * Export utilities for Comments Insight
  */
 import { HistoryItem, Comment } from '../types';
+import { REGEX, DEFAULTS } from '../config/constants';
 
 /**
  * Flatten comment tree to include all replies
@@ -34,7 +35,7 @@ function sanitizeFilename(filename: string): string {
   return filename
     .replace(REGEX.FILENAME_INVALID, '-')
     .replace(REGEX.WHITESPACE, '_')
-    .substring(0, 100);
+    .substring(0, DEFAULTS.FILENAME_MAX_LENGTH);
 }
 
 /**
@@ -146,4 +147,3 @@ function downloadFile(content: string, filename: string, mimeType: string): void
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-import { REGEX } from '@/config/constants';

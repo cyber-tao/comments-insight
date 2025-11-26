@@ -1,30 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
-  buildExtractionPrompt,
   buildAnalysisPrompt,
   validatePromptTemplate,
   getAvailablePlaceholders,
-  EXTRACTION_PROMPT_TEMPLATE,
   DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
 } from '../src/utils/prompts';
 
 describe('Prompts Utils', () => {
-  describe('buildExtractionPrompt', () => {
-    it('should replace {dom_content} placeholder', () => {
-      const domContent = '<div>Test Content</div>';
-      const result = buildExtractionPrompt(domContent);
-      expect(result).toContain(domContent);
-      expect(result).toContain('You are a web scraping expert');
-    });
-
-    it('should use custom template', () => {
-      const domContent = '<div>Test Content</div>';
-      const template = 'Custom template: {dom_content}';
-      const result = buildExtractionPrompt(domContent, template);
-      expect(result).toBe('Custom template: <div>Test Content</div>');
-    });
-  });
-
   describe('buildAnalysisPrompt', () => {
     const mockComments = 'User1: Hello';
     const mockMetadata = {
@@ -56,12 +38,12 @@ describe('Prompts Utils', () => {
       expect(result).toContain('write the entire analysis in English');
     });
 
-    it('should add Chinese language instruction when language is zh-CN', () => {
+    it('should add language instruction based on language name', () => {
       const result = buildAnalysisPrompt(mockComments, DEFAULT_ANALYSIS_PROMPT_TEMPLATE, {
         ...mockMetadata,
         language: 'zh-CN',
       });
-      expect(result).toContain('write the entire analysis in Chinese');
+      expect(result).toContain('write the entire analysis in 中文');
     });
   });
 

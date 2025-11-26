@@ -34,7 +34,7 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
     config?.scrollConfig || {
       enabled: false,
       maxScrolls: SCROLL.DEFAULT_MAX_SCROLLS,
-      scrollDelay: TIMING.XL,
+      scrollDelay: TIMING.AI_RETRY_DELAY_MS,
     },
   );
   const [errors, setErrors] = useState<string[]>([]);

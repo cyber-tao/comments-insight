@@ -1,9 +1,8 @@
-import { ICONS, TEXT } from '@/config/constants';
+import { ICONS, TEXT, RETRY } from '@/config/constants';
 
-/**
- * Error handling utilities for Comments Insight Extension
- * Provides unified error types, error handling, and retry mechanisms
- */
+interface ErrorConstructorWithCapture extends ErrorConstructor {
+  captureStackTrace?(targetObject: object, constructorOpt?: NewableFunction): void;
+}
 
 /**
  * Error codes for different types of errors
@@ -55,11 +54,11 @@ export enum ErrorCode {
  */
 export class ExtensionError extends Error {
   public readonly code: ErrorCode;
-  public readonly details?: any;
+  public readonly details?: Record<string, unknown>;
   public readonly timestamp: number;
   public readonly retryable: boolean;
 
-  constructor(code: ErrorCode, message: string, details?: any, retryable: boolean = false) {
+  constructor(code: ErrorCode, message: string, details?: Record<string, unknown>, retryable: boolean = false) {
     super(message);
     this.name = 'ExtensionError';
     this.code = code;
@@ -67,9 +66,8 @@ export class ExtensionError extends Error {
     this.timestamp = Date.now();
     this.retryable = retryable;
 
-    // Maintains proper stack trace for where our error was thrown (only available on V8)
-    if (typeof (Error as any).captureStackTrace === 'function') {
-      (Error as any).captureStackTrace(this, ExtensionError);
+    if (typeof (Error as ErrorConstructorWithCapture).captureStackTrace === 'function') {
+      (Error as ErrorConstructorWithCapture).captureStackTrace?.(this, ExtensionError);
     }
   }
 
@@ -105,9 +103,9 @@ export interface RetryConfig {
   maxDelay: number;
   backoffMultiplier: number;
   retryableErrors: ErrorCode[];
+  onRetry?: (attempt: number, error: ExtensionError) => void;
+  fallback?: () => Promise<unknown>;
 }
-
-import { RETRY } from '@/config/constants';
 
 /**
  * Default retry configuration
@@ -178,7 +176,6 @@ export class ErrorHandler {
 
     for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
       try {
-        // Use dynamic import to avoid circular dependency
         try {
           const { Logger } = await import('./logger.js');
           Logger.debug(`[${context}] Attempt ${attempt}/${retryConfig.maxAttempts}`);
@@ -188,7 +185,6 @@ export class ErrorHandler {
       } catch (error) {
         lastError = this.normalizeError(error as Error);
 
-        // Use dynamic import to avoid circular dependency
         try {
           const { Logger } = await import('./logger.js');
           Logger.warn(`[${context}] Attempt ${attempt} failed: ${lastError.message}`, {
@@ -197,31 +193,41 @@ export class ErrorHandler {
             maxAttempts: retryConfig.maxAttempts,
           });
 
-          // Check if error is retryable
           if (!this.isRetryable(lastError, retryConfig)) {
             Logger.error(`[${context}] Error is not retryable, giving up`, {
               code: lastError.code,
             });
+            if (retryConfig.fallback) {
+              Logger.info(`[${context}] Executing fallback`);
+              return (await retryConfig.fallback()) as T;
+            }
             throw lastError;
           }
 
-          // If this was the last attempt, throw the error
           if (attempt === retryConfig.maxAttempts) {
             Logger.error(`[${context}] Max retry attempts reached, giving up`, {
               attempts: attempt,
             });
+            if (retryConfig.fallback) {
+              Logger.info(`[${context}] Executing fallback`);
+              return (await retryConfig.fallback()) as T;
+            }
             throw lastError;
           }
 
-          // Wait before retrying with exponential backoff
+          retryConfig.onRetry?.(attempt, lastError);
+
           Logger.debug(`[${context}] Waiting ${delay}ms before retry...`);
         } catch (importError) {
-          // Fallback to console if logger import fails
           console.warn(`[${context}] Attempt ${attempt} failed:`, lastError);
 
           if (!this.isRetryable(lastError, retryConfig) || attempt === retryConfig.maxAttempts) {
+            if (retryConfig.fallback) {
+              return (await retryConfig.fallback()) as T;
+            }
             throw lastError;
           }
+          retryConfig.onRetry?.(attempt, lastError);
         }
 
         await this.sleep(delay);
@@ -229,7 +235,6 @@ export class ErrorHandler {
       }
     }
 
-    // This should never be reached, but TypeScript needs it
     throw lastError || new ExtensionError(ErrorCode.UNKNOWN_ERROR, 'Retry failed');
   }
 
@@ -262,6 +267,10 @@ export class ErrorHandler {
    */
   private static inferErrorCode(error: Error): ErrorCode {
     const message = error.message.toLowerCase();
+
+    if (error.name === 'AbortError' || message.includes('aborted')) {
+      return ErrorCode.TASK_CANCELLED;
+    }
 
     // Network errors
     if (message.includes('network') || message.includes('fetch')) {
@@ -371,11 +380,9 @@ export class ErrorHandler {
         priority: 2,
       });
     } catch (notificationError) {
-      // Silently fail if notifications are not available
-      // Try to log via Logger if possible
        try {
         const { Logger } = await import('./logger.js');
-        Logger.error('[ErrorHandler] Failed to show notification:', notificationError);
+        Logger.error('[ErrorHandler] Failed to show notification:', { error: notificationError });
       } catch {
         console.error('[ErrorHandler] Failed to show notification:', notificationError);
       }
@@ -445,14 +452,14 @@ export function getUserFriendlyMessage(code: ErrorCode, technicalMessage: string
 /**
  * Create a network error
  */
-export function createNetworkError(message: string, details?: any): ExtensionError {
+export function createNetworkError(message: string, details?: Record<string, unknown>): ExtensionError {
   return new ExtensionError(ErrorCode.NETWORK_ERROR, message, details, true);
 }
 
 /**
  * Create an AI error
  */
-export function createAIError(code: ErrorCode, message: string, details?: any): ExtensionError {
+export function createAIError(code: ErrorCode, message: string, details?: Record<string, unknown>): ExtensionError {
   const retryable = [ErrorCode.AI_TIMEOUT, ErrorCode.AI_RATE_LIMIT].includes(code);
   return new ExtensionError(code, message, details, retryable);
 }
@@ -460,14 +467,14 @@ export function createAIError(code: ErrorCode, message: string, details?: any): 
 /**
  * Create a storage error
  */
-export function createStorageError(message: string, details?: any): ExtensionError {
+export function createStorageError(message: string, details?: Record<string, unknown>): ExtensionError {
   return new ExtensionError(ErrorCode.STORAGE_ERROR, message, details, false);
 }
 
 /**
  * Create a configuration error
  */
-export function createConfigError(code: ErrorCode, message: string, details?: any): ExtensionError {
+export function createConfigError(code: ErrorCode, message: string, details?: Record<string, unknown>): ExtensionError {
   return new ExtensionError(code, message, details, false);
 }
 
@@ -477,7 +484,7 @@ export function createConfigError(code: ErrorCode, message: string, details?: an
 export function createExtractionError(
   code: ErrorCode,
   message: string,
-  details?: any,
+  details?: Record<string, unknown>,
 ): ExtensionError {
   return new ExtensionError(code, message, details, false);
 }

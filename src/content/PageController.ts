@@ -1,6 +1,6 @@
 import { DOMAnalyzer } from './DOMAnalyzer';
 import { TIMING, SCROLL, CLICK, TIMEOUT } from '@/config/constants';
-import { Logger } from '@/utils/logger';
+import { Logger } from '../utils/logger';
 
 /**
  * PageController handles page interactions like scrolling and clicking
@@ -17,7 +17,7 @@ export class PageController {
     
     // Scroll in steps to trigger lazy loading
     // We scroll slightly less than a viewport to ensure overlap
-    const step = Math.floor(viewportHeight * 0.8);
+    const step = Math.floor(viewportHeight * SCROLL.SCROLL_STEP_RATIO);
 
     while (currentScroll < totalHeight) {
       // Calculate next position
@@ -29,7 +29,7 @@ export class PageController {
       currentScroll = nextScroll;
       
       // Small pause to allow browser to register scroll event and trigger IO observers
-      await this.wait(150);
+      await this.wait(TIMING.SCROLL_PAUSE_MS);
       
       // Update total height in case content expanded
       const newTotalHeight = document.documentElement.scrollHeight;
@@ -57,7 +57,7 @@ export class PageController {
       window.scrollTo(0, document.documentElement.scrollHeight);
 
       // Wait for content to load
-      await this.wait(TIMING.XXXL);
+      await this.wait(TIMING.PAGE_INIT_DELAY_MS);
 
       const newHeight = document.documentElement.scrollHeight;
 
@@ -90,7 +90,7 @@ export class PageController {
     for (const button of buttons) {
       try {
         (button as HTMLElement).click();
-        await this.wait(TIMING.LG);
+        await this.wait(TIMING.SCROLL_BASE_DELAY_MS);
       } catch (error) {
         // Logger.warn('[PageController] Failed to click button', { error });
       }
@@ -115,7 +115,7 @@ export class PageController {
 
       try {
         button.click();
-        await this.wait(TIMING.XL);
+        await this.wait(TIMING.AI_RETRY_DELAY_MS);
         clickCount++;
         // Logger.debug('[PageController] Clicked load more', { clickCount, maxClicks });
       } catch (error) {
@@ -149,7 +149,7 @@ export class PageController {
       if (element) {
         return element;
       }
-      await this.wait(TIMING.XS);
+      await this.wait(TIMING.MICRO_WAIT_MS);
     }
 
     Logger.warn('[PageController] Element not found', { selector });

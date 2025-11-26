@@ -1,6 +1,4 @@
-/**
- * AI prompts for scraper configuration generation
- */
+import { ScraperConfig } from '../types/scraper';
 
 export const SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT = `You are an expert web scraper analyzer. Your task is to analyze a simplified DOM structure and identify CSS selectors for extracting comments and their metadata.
 
@@ -92,7 +90,7 @@ Return your analysis in JSON format:
   "estimatedCommentCount": number
 }`;
 
-export function generateScraperTestPrompt(config: any, domStructure: string): string {
+export function generateScraperTestPrompt(config: ScraperConfig, domStructure: string): string {
   return `Test the following scraper configuration against the DOM structure:
 
 **Configuration:**

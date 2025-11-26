@@ -1,10 +1,11 @@
 import * as React from 'react';
-import { PATHS, HOST, MESSAGES, TIMING } from '@/config/constants';
-import { useEffect, useState } from 'react';
+import { PATHS, MESSAGES, TIMING } from '@/config/constants';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { HistoryItem } from '../types';
+import { HistoryItem, Task } from '../types';
 import { useToast } from '../hooks/useToast';
 import { Logger } from '@/utils/logger';
+import { getDomain } from '@/utils/url';
 
 interface PageInfo {
   url: string;
@@ -46,6 +47,8 @@ const Popup: React.FC = () => {
   const [testItems, setTestItems] = useState<any[]>([]);
   const [testPage, setTestPage] = useState(1);
   const [testPageSize, setTestPageSize] = useState(20);
+  const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isUnmountedRef = useRef(false);
 
   const handleTestSelectorQuery = async () => {
     try {
@@ -68,22 +71,33 @@ const Popup: React.FC = () => {
     }
   };
 
-  const [settings, setSettings] = useState<{ maxComments: number } | null>(null);
 
   useEffect(() => {
-    loadLanguage();
-    loadPageInfo();
-    loadVersion();
-    loadSettings();
-    loadCurrentTask();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    isUnmountedRef.current = false;
+
+    const initialize = async () => {
+      await loadLanguage();
+      await loadPageInfo();
+      await loadVersion();
+      await loadSettings();
+      await loadCurrentTask();
+    };
+
+    initialize();
+
+    return () => {
+      isUnmountedRef.current = true;
+      if (monitorTimeoutRef.current) {
+        clearTimeout(monitorTimeoutRef.current);
+        monitorTimeoutRef.current = null;
+      }
+    };
   }, []);
 
   const loadSettings = async () => {
     try {
       const response = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
       if (response?.settings) {
-        setSettings(response.settings);
         if (response.settings.aiModel?.model) {
           setAIModelName(response.settings.aiModel.model);
         }
@@ -125,11 +139,10 @@ const Popup: React.FC = () => {
       const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_TASK_STATUS });
 
       if (response?.tasks) {
-        // Find task for current URL that is running or pending
-        const currentUrlTask = response.tasks.find(
-          (task: any) =>
-            task.url === tab.url && (task.status === 'running' || task.status === 'pending'),
-        );
+      const currentUrlTask = response.tasks.find(
+        (task: Task) =>
+          task.url === tab.url && (task.status === 'running' || task.status === 'pending'),
+      );
 
         if (currentUrlTask) {
           Logger.debug('[Popup] Found current task', { task: currentUrlTask });
@@ -173,19 +186,10 @@ const Popup: React.FC = () => {
       const hasConfig = configResponse?.hasConfig || false;
       Logger.debug('[Popup] Has config', { hasConfig });
 
-      // Extract domain from URL
-      let domain = 'unknown';
-      try {
-        const urlObj = new URL(tab.url);
-        domain = urlObj.hostname.replace(HOST.WWW_PREFIX, '');
-      } catch (e) {
-        Logger.warn('[Popup] Failed to parse URL', { url: tab.url });
-      }
-
       setPageInfo({
         url: tab.url,
         title: tab.title || '',
-        domain,
+        domain: getDomain(tab.url) || 'unknown',
         hasConfig,
       });
 
@@ -311,8 +315,12 @@ const Popup: React.FC = () => {
           type: MESSAGES.START_ANALYSIS,
           payload: {
             comments: response.item.comments,
-            url: pageInfo?.url,
             historyId: pageStatus.historyId,
+            metadata: {
+              url: pageInfo?.url,
+              platform: pageInfo?.domain,
+              title: pageInfo?.title,
+            },
           },
         });
 
@@ -337,13 +345,17 @@ const Popup: React.FC = () => {
     }
   };
 
-  const monitorTask = async (taskId: string) => {
+  const monitorTask = useCallback(async (taskId: string) => {
     const checkStatus = async () => {
+      if (isUnmountedRef.current) return;
+
       try {
         const response = await chrome.runtime.sendMessage({
           type: MESSAGES.GET_TASK_STATUS,
           payload: { taskId },
         });
+
+        if (isUnmountedRef.current) return;
 
         if (response?.task) {
           const task = response.task;
@@ -355,27 +367,38 @@ const Popup: React.FC = () => {
             message: task.message || task.error,
           });
 
-          // If task is still running, check again
           if (task.status === 'running' || task.status === 'pending') {
-            setTimeout(checkStatus, TIMING.POLL_TASK_RUNNING_MS);
+            monitorTimeoutRef.current = setTimeout(checkStatus, TIMING.POLL_TASK_RUNNING_MS);
           } else if (task.status === 'completed') {
-            // Reload page status
-            if (pageInfo) {
-              await checkPageStatus(pageInfo.url);
+            // Get current tab URL directly instead of relying on pageInfo state
+            // This fixes the issue where pageInfo might not be updated yet after popup reopens
+            try {
+              const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+              if (tab?.url) {
+                await checkPageStatus(tab.url);
+              }
+            } catch (e) {
+              Logger.error('[Popup] Failed to get tab URL for status update', { error: e });
             }
             toast.success(
               task.type === 'extract'
                 ? t('popup.extractionCompleted')
                 : t('popup.analysisCompleted'),
             );
-            // Clear task after a delay
-            setTimeout(() => setCurrentTask(null), TIMING.CLEAR_TASK_DELAY_MS);
+            monitorTimeoutRef.current = setTimeout(() => {
+              if (!isUnmountedRef.current) {
+                setCurrentTask(null);
+              }
+            }, TIMING.CLEAR_TASK_DELAY_MS);
           } else if (task.status === 'failed') {
             toast.error(
               task.error ? `${t('popup.taskFailed')}: ${task.error}` : t('popup.taskFailed'),
             );
-            // Clear task after showing error
-            setTimeout(() => setCurrentTask(null), TIMING.CLEAR_TASK_FAILED_MS);
+            monitorTimeoutRef.current = setTimeout(() => {
+              if (!isUnmountedRef.current) {
+                setCurrentTask(null);
+              }
+            }, TIMING.CLEAR_TASK_FAILED_MS);
           }
         }
       } catch (error) {
@@ -384,7 +407,7 @@ const Popup: React.FC = () => {
     };
 
     checkStatus();
-  };
+  }, [t, toast]);
 
   const handleOpenHistory = () => {
     chrome.tabs.create({ url: chrome.runtime.getURL(PATHS.HISTORY_PAGE) });
@@ -604,22 +627,20 @@ const Popup: React.FC = () => {
               {currentTask?.status === 'running' && currentTask?.type === 'extract' ? (
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                  {t('popup.extracting')}
-                  {currentTask.message && (
-                    <span className="ml-1 text-xs opacity-80">
-                      {(() => {
-                        // Try to match (X/Y) which we set in background
-                        const matchFull = currentTask.message?.match(/\(\d+\/\d+\)/);
-                        if (matchFull) return matchFull[0];
-
-                        // Fallback for backward compatibility or other states
-                        const matchNum = currentTask.message?.match(/\((\d+)\)/);
-                        if (matchNum) return `${matchNum[1]}/${settings?.maxComments || '?'}`;
-                        
-                        return '';
-                      })()}
-                    </span>
-                  )}
+                  <span className="truncate max-w-[220px]">
+                    {(() => {
+                      const msg = currentTask.message || '';
+                      const parts = msg.split(':');
+                      if (parts.length >= 3) {
+                        const [stage, count, max] = parts;
+                        const stageKey = `popup.progress${stage.charAt(0).toUpperCase() + stage.slice(1)}`;
+                        const stageText = t(stageKey);
+                        const countNum = parseInt(count, 10);
+                        return countNum >= 0 ? `${stageText} ${count}/${max}` : stageText;
+                      }
+                      return t('popup.extracting');
+                    })()}
+                  </span>
                 </>
               ) : pageStatus.extracted ? (
                 <>

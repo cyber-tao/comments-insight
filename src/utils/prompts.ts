@@ -1,47 +1,8 @@
 /**
- * Prompt templates for AI-driven comment extraction and analysis
+ * Prompt templates for AI-driven comment analysis
  */
 
-import { TEMPLATE } from '@/config/constants';
-
-/**
- * Extraction prompt template
- * Instructs AI to extract comments from DOM structure
- */
-export const EXTRACTION_PROMPT_TEMPLATE = `You are a web scraping expert. Your task is to analyze the DOM structure and extract comment data.
-
-## DOM Structure:
-{dom_content}
-
-## Task:
-1. Identify the comment section in the DOM
-2. Extract all comments with the following information:
-   - id (generate unique ID if not available)
-   - username
-   - timestamp
-   - likes count
-   - comment content
-   - replies (nested structure)
-
-## Output Format:
-Return ONLY a valid JSON array with no additional text:
-[
-  {
-    "id": "unique_id",
-    "username": "user_name",
-    "timestamp": "time_string",
-    "likes": 0,
-    "content": "comment_text",
-    "replies": []
-  }
-]
-
-## Important:
-- Return ONLY valid JSON, no markdown code blocks
-- If no comments found, return empty array []
-- Preserve the nested structure for replies
-- Generate unique IDs for each comment
-- Extract actual data from the DOM, don't make up content`;
+import { TEMPLATE, LANGUAGES } from '@/config/constants';
 
 /**
  * Default analysis prompt template
@@ -60,14 +21,14 @@ export const DEFAULT_ANALYSIS_PROMPT_TEMPLATE = `You are a professional social m
 Note on data format:
 - Lines starting with "↳" indicate replies to the preceding comment.
 - Multiple "↳" symbols (e.g., "↳ ↳") indicate nested replies.
+- Replies shown are top/popular replies only (sorted by likes), not all replies.
 
 ## Analysis Requirements:
 1. Sentiment Analysis: Categorize comments as positive, negative, or neutral
 2. Hot Comments: Identify top comments by engagement and explain why they're popular
 3. Key Insights: Extract main themes, concerns, and trends
 4. Summary Statistics: Provide overall metrics
-5. Top Replied: Identify comments that sparked the most discussion (most replies)
-6. Interaction Analysis: Analyze the interaction between top-liked replies and the original comment
+5. Interaction Analysis: Analyze notable interactions between top replies and their parent comments
 
 ## Output Format:
 Generate a comprehensive analysis report in Markdown format with the following sections.
@@ -90,12 +51,6 @@ Generate a comprehensive analysis report in Markdown format with the following s
 |------|------|-------|---------|--------------|
 | 1    | [User]| [Num] | [Text]  | [Reason]     |
 | ...  | ...  | ...   | ...     | ...          |
-
-## Top Discussed Comments (Most Replies)
-| Rank | User | Replies | Content | Discussion Topic |
-|------|------|---------|---------|------------------|
-| 1    | [User]| [Num]  | [Text]  | [Topic]          |
-| ...  | ...  | ...    | ...     | ...              |
 
 ## Interaction Highlights (Top Replies vs Original)
 | Original Comment (User) | Top Reply (User) | Interaction Type | Insight |
@@ -133,19 +88,6 @@ Generate a comprehensive analysis report in Markdown format with the following s
 *Total comments analyzed: {total_comments}*`;
 
 /**
- * Build extraction prompt with DOM content
- * @param domContent - Serialized DOM content
- * @param template - Custom template (optional)
- * @returns Formatted prompt
- */
-export function buildExtractionPrompt(
-  domContent: string,
-  template: string = EXTRACTION_PROMPT_TEMPLATE,
-): string {
-  return template.replace('{dom_content}', domContent);
-}
-
-/**
  * Build analysis prompt with comments data
  * @param commentsData - Comments in dense text format
  * @param template - Custom template (optional)
@@ -165,13 +107,13 @@ export function buildAnalysisPrompt(
     language?: string;
   },
 ): string {
-  // Add language instruction
-  const languageInstruction =
-    metadata?.language === 'zh-CN'
-      ? '\n\n## Language Requirement:\nYou MUST write the entire analysis in Chinese (简体中文). All sections, insights, and summaries must be in Chinese.'
-      : '\n\n## Language Requirement:\nYou MUST write the entire analysis in English.';
+  // Generate language instruction using language name
+  const langCode = metadata?.language || LANGUAGES.DEFAULT;
+  const langConfig = LANGUAGES.SUPPORTED.find((l) => l.code === langCode);
+  const langName = langConfig?.name || langCode;
+  const languageInstruction = `\n\n## Language Requirement:\nYou MUST write the entire analysis in ${langName}.`;
 
-  let prompt =
+  const prompt =
     template
       .replace(/{comments_data}/g, commentsData)
       .replace(/{datetime}/g, metadata?.datetime || new Date().toISOString())

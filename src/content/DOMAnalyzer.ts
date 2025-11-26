@@ -1,6 +1,6 @@
-/**
- * DOMNode represents a simplified DOM structure
- */
+import { getShadowRoot, querySelectorDeep, querySelectorAllDeep } from '@/utils/dom-query';
+import { DOM } from '@/config/constants';
+
 export interface DOMNode {
   tag: string;
   classes: string[];
@@ -8,14 +8,6 @@ export interface DOMNode {
   text?: string;
   children?: DOMNode[];
   attributes?: Record<string, string>;
-}
-
-interface ShadowRootHost {
-  shadowRoot?: ShadowRoot | null;
-}
-
-function getShadowRoot(element: Element): ShadowRoot | null {
-  return (element as unknown as ShadowRootHost).shadowRoot || null;
 }
 
 /**
@@ -49,176 +41,12 @@ export class DOMAnalyzer {
    * @returns Text content
    */
   getContentBySelector(selector: string): string {
-    const element = this.querySelectorDeep(document, selector);
+    const element = querySelectorDeep(document, selector);
     return element?.textContent?.trim() || '';
   }
 
-  /**
-   * Query selector that traverses Shadow DOM
-   * @param root - Root element or document
-   * @param selector - CSS selector
-   * @returns Found element or null
-   */
-  private querySelectorDeep(
-    root: Document | Element | ShadowRoot,
-    selector: string,
-  ): Element | null {
-    const trimmedSelector = selector.trim();
-    if (!trimmedSelector) {
-      return null;
-    }
-
-    let directHit: Element | null = null;
-    try {
-      directHit = root.querySelector(trimmedSelector);
-    } catch {
-      directHit = null;
-    }
-    if (directHit) {
-      return directHit;
-    }
-
-    const split = this.splitSelector(trimmedSelector);
-    if (split.rest) {
-      let candidates: Element[] = [];
-      try {
-        candidates = Array.from(root.querySelectorAll(split.current));
-      } catch {
-        candidates = [];
-      }
-
-      for (const candidate of candidates) {
-        const fromLightDom = this.querySelectorDeep(candidate, split.rest);
-        if (fromLightDom) {
-          return fromLightDom;
-        }
-
-        const shadowRoot = getShadowRoot(candidate);
-        if (shadowRoot) {
-          const fromShadow = this.querySelectorDeep(shadowRoot, split.rest);
-          if (fromShadow) {
-            return fromShadow;
-          }
-        }
-      }
-    }
-
-    if (root instanceof Element && root.shadowRoot) {
-      const withinShadow = this.querySelectorDeep(root.shadowRoot, trimmedSelector);
-      if (withinShadow) {
-        return withinShadow;
-      }
-    }
-
-    const elements = root.querySelectorAll('*');
-    for (const el of Array.from(elements)) {
-      const shadowRoot = getShadowRoot(el);
-      if (shadowRoot) {
-        const found = this.querySelectorDeep(shadowRoot, trimmedSelector);
-        if (found) {
-          return found;
-        }
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Query all selectors that traverse Shadow DOM
-   * @param root - Root element or document
-   * @param selector - CSS selector
-   * @returns Array of found elements
-   */
   querySelectorAllDeep(root: Document | Element | ShadowRoot, selector: string): Element[] {
-    const trimmedSelector = selector.trim();
-    if (!trimmedSelector) {
-      return [];
-    }
-
-    const results: Element[] = [];
-    try {
-      results.push(...Array.from(root.querySelectorAll(trimmedSelector)));
-    } catch {
-      // ignore
-    }
-
-    if (root instanceof Element && root.shadowRoot) {
-      results.push(...this.querySelectorAllDeep(root.shadowRoot, trimmedSelector));
-    }
-
-    const split = this.splitSelector(trimmedSelector);
-    if (split.rest) {
-      let candidates: Element[] = [];
-      try {
-        candidates = Array.from(root.querySelectorAll(split.current));
-      } catch {
-        candidates = [];
-      }
-
-      for (const candidate of candidates) {
-        results.push(...this.querySelectorAllDeep(candidate, split.rest));
-        const shadowRoot = getShadowRoot(candidate);
-        if (shadowRoot) {
-          results.push(...this.querySelectorAllDeep(shadowRoot, split.rest));
-        }
-      }
-    }
-
-    const descendants = root.querySelectorAll('*');
-    for (const el of Array.from(descendants)) {
-      const shadowRoot = getShadowRoot(el);
-      if (shadowRoot) {
-        results.push(...this.querySelectorAllDeep(shadowRoot, trimmedSelector));
-      }
-    }
-
-    return Array.from(new Set(results));
-  }
-
-  private splitSelector(selector: string): { current: string; rest?: string } {
-    const trimmed = selector.trim();
-    let inAttr = false;
-    let parenDepth = 0;
-
-    for (let i = 0; i < trimmed.length; i++) {
-      const char = trimmed[i];
-      if (char === '[') {
-        inAttr = true;
-        continue;
-      }
-      if (char === ']') {
-        inAttr = false;
-        continue;
-      }
-      if (char === '(') {
-        parenDepth++;
-        continue;
-      }
-      if (char === ')') {
-        parenDepth = Math.max(parenDepth - 1, 0);
-        continue;
-      }
-
-      if (inAttr || parenDepth > 0) {
-        continue;
-      }
-
-      if (char === '>' || char === ' ') {
-        let nextIndex = i + 1;
-        while (nextIndex < trimmed.length && trimmed[nextIndex] === ' ') {
-          nextIndex++;
-        }
-
-        const current = trimmed.substring(0, i).trim();
-        const rest = trimmed.substring(nextIndex).trim();
-        if (current && rest) {
-          return { current, rest };
-        }
-      }
-    }
-
-    return { current: trimmed };
+    return querySelectorAllDeep(root, selector);
   }
 
   /**
@@ -243,7 +71,7 @@ export class DOMAnalyzer {
 
     if (node.text && node.text.length > 0) {
       const truncatedText =
-        node.text.length > 100 ? node.text.substring(0, 100) + '...' : node.text;
+        node.text.length > DOM.TEXT_PREVIEW_LENGTH ? node.text.substring(0, DOM.TEXT_PREVIEW_LENGTH) + '...' : node.text;
       result += `\n${indent}  ${truncatedText}`;
     }
 

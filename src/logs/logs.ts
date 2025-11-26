@@ -16,7 +16,7 @@ interface SystemLog {
   timestamp: number;
   message: string;
   context?: string;
-  data?: any;
+  data?: Record<string, unknown>;
   stack?: string;
 }
 
@@ -73,7 +73,7 @@ function displayLogs() {
   }
 
   if (filteredLogs.length === 0) {
-    const i18n = (window as any).i18next;
+    const i18n = (window as { i18next?: { t: (key: string) => string } }).i18next;
     const text = i18n
       ? i18n.t('logs.empty')
       : 'No logs found. Logs will appear here after operations.';

@@ -13,14 +13,14 @@ export class AIStrategy implements ExtractionStrategy {
   ): Promise<Comment[]> {
     Logger.info('[AIStrategy] Executing AI discovery strategy');
 
-    onProgress?.(20, 'Analyzing page structure...');
+    onProgress?.(10, 'analyzing');
 
     const comments = await this.selectorExtractor.extractWithDiscovery(
       maxComments,
       platform,
-      (message: string, count: number) => {
-        const progress = Math.min(95, Math.floor((count / maxComments) * 100));
-        onProgress?.(progress, `${message} (${count})`);
+      (stage: string, count: number) => {
+        const progress = count < 0 ? 15 : Math.min(95, 20 + Math.floor((count / maxComments) * 75));
+        onProgress?.(progress, `${stage}:${count}:${maxComments}`);
       },
     );
 

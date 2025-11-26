@@ -1,18 +1,10 @@
 import { SimplifiedNode } from '../types';
+import { getShadowRoot, querySelectorDeep } from '@/utils/dom-query';
+import { Logger } from '@/utils/logger';
+import { DOM } from '@/config/constants';
 
-interface ShadowRootHost {
-  shadowRoot?: ShadowRoot | null;
-}
-
-/**
- * DOMSimplifier - Converts complex DOM to simplified structure for AI analysis
- */
 export class DOMSimplifier {
   private selectorCache = new WeakMap<Element, string>();
-
-  private getShadowRoot(element: Element): ShadowRoot | null {
-    return (element as unknown as ShadowRootHost).shadowRoot || null;
-  }
 
   /**
    * Simplify a DOM element to a lightweight structure
@@ -27,7 +19,7 @@ export class DOMSimplifier {
     currentDepth: number = 0,
     forceExpandParent: boolean = false,
   ): SimplifiedNode {
-    const shadowRoot = this.getShadowRoot(element);
+    const shadowRoot = getShadowRoot(element);
     const forceExpandCurrent = shadowRoot !== null || this.shouldForceExpandElement(element);
     const shouldExpand =
       forceExpandParent || forceExpandCurrent || currentDepth < maxDepth;
@@ -178,7 +170,7 @@ export class DOMSimplifier {
     const fullText = textNodes.join(' ').trim();
     if (!fullText) return undefined;
 
-    return fullText.length > 100 ? fullText.substring(0, 100) + '...' : fullText;
+    return fullText.length > DOM.TEXT_PREVIEW_LENGTH ? fullText.substring(0, DOM.TEXT_PREVIEW_LENGTH) + '...' : fullText;
   }
 
   /**
@@ -236,7 +228,7 @@ export class DOMSimplifier {
    */
   expandNode(selector: string, depth: number = 2): SimplifiedNode | null {
     try {
-      const element = this.querySelectorDeep(document, selector);
+      const element = querySelectorDeep(document, selector);
       if (!element) {
         Logger.warn('[DOMSimplifier] Element not found', { selector });
         return null;
@@ -246,104 +238,6 @@ export class DOMSimplifier {
       Logger.error('[DOMSimplifier] Failed to expand node', { selector, error });
       return null;
     }
-  }
-
-  /**
-   * Query selector that traverses Shadow DOM
-   * @param root - Root element or document
-   * @param selector - CSS selector
-   * @returns Found element or null
-   */
-  private querySelectorDeep(
-    root: Document | Element | ShadowRoot,
-    selector: string,
-  ): Element | null {
-    const trimmedSelector = selector.trim();
-    if (!trimmedSelector) {
-      return null;
-    }
-
-    const directHit = root.querySelector(trimmedSelector);
-    if (directHit) {
-      return directHit;
-    }
-
-    const split = this.splitSelector(trimmedSelector);
-    if (split.rest) {
-      const candidates = Array.from(root.querySelectorAll(split.current));
-      for (const candidate of candidates) {
-        const shadowRoot = this.getShadowRoot(candidate);
-        const withinLightDom = this.querySelectorDeep(candidate, split.rest);
-        if (withinLightDom) {
-          return withinLightDom;
-        }
-
-        if (shadowRoot) {
-          const withinShadow = this.querySelectorDeep(shadowRoot, split.rest);
-          if (withinShadow) {
-            return withinShadow;
-          }
-        }
-      }
-    }
-
-    const elements = root.querySelectorAll('*');
-    for (const el of Array.from(elements)) {
-      const shadowRoot = this.getShadowRoot(el);
-      if (shadowRoot) {
-        const found = this.querySelectorDeep(shadowRoot, trimmedSelector);
-        if (found) {
-          return found;
-        }
-      }
-    }
-
-    return null;
-  }
-
-  private splitSelector(selector: string): { current: string; rest?: string } {
-    const trimmed = selector.trim();
-    let inAttr = false;
-    let parenDepth = 0;
-
-    for (let i = 0; i < trimmed.length; i++) {
-      const char = trimmed[i];
-      if (char === '[') {
-        inAttr = true;
-        continue;
-      }
-      if (char === ']') {
-        inAttr = false;
-        continue;
-      }
-      if (char === '(') {
-        parenDepth++;
-        continue;
-      }
-      if (char === ')') {
-        parenDepth = Math.max(parenDepth - 1, 0);
-        continue;
-      }
-
-      if (inAttr || parenDepth > 0) {
-        continue;
-      }
-
-      if (char === '>' || char === ' ') {
-        let nextIndex = i + 1;
-        while (nextIndex < trimmed.length && trimmed[nextIndex] === ' ') {
-          nextIndex++;
-        }
-
-        const current = trimmed.substring(0, i).trim();
-        const rest = trimmed.substring(nextIndex).trim();
-        if (current && rest) {
-          return { current, rest };
-        }
-      }
-    }
-
-    return { current: trimmed };
   }
 
   /**
@@ -450,4 +344,3 @@ export class DOMSimplifier {
     return simplifier.nodeToString(node);
   }
 }
-import { Logger } from '@/utils/logger';

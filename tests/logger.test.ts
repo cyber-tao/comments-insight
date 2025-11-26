@@ -26,18 +26,16 @@ vi.stubGlobal('chrome', mockChrome);
 describe('Logger', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset Logger state as much as possible
-    // Accessing private static properties via any to reset state for testing
-    (Logger as any).initialized = false;
-    (Logger as any).isDevelopment = false;
-    (Logger as any).config = {
+    (Logger as unknown as { initialized: boolean }).initialized = false;
+    (Logger as unknown as { isDevelopment: boolean }).isDevelopment = false;
+    (Logger as unknown as { storageConfigLoaded: boolean }).storageConfigLoaded = false;
+    (Logger as unknown as { config: { minLevel: LogLevel; enableConsole: boolean; enableStorage: boolean; maxStoredLogs: number } }).config = {
       minLevel: LogLevel.INFO,
       enableConsole: true,
       enableStorage: false,
       maxStoredLogs: 100,
     };
     
-    // Mock console methods to keep test output clean
     vi.spyOn(console, 'debug').mockImplementation(() => {});
     vi.spyOn(console, 'info').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});

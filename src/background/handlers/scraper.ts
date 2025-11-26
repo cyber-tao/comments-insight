@@ -3,7 +3,8 @@ import { ScraperConfig, ScraperSelectors, ScrollConfig } from '../../types/scrap
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
 import { ScraperConfigManager } from '../../utils/ScraperConfigManager';
-import { MESSAGES, REGEX, HOST } from '@/config/constants';
+import { MESSAGES, AI, REGEX } from '@/config/constants';
+import { getDomain } from '../../utils/url';
 import {
   generateScraperConfigPrompt,
   SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT,
@@ -138,7 +139,7 @@ export async function handleGenerateScraperConfig(
     }
 
     const settings = await context.storageManager.getSettings();
-    const chunks = chunkDomText(structure, settings.aiModel.maxTokens ?? 4000);
+    const chunks = chunkDomText(structure, settings.aiModel.maxTokens ?? AI.DEFAULT_MAX_TOKENS);
     let configData: GeneratedConfigData = {
       name: '',
       domains: [],
@@ -188,16 +189,7 @@ export async function handleGenerateScraperConfig(
       }
     }
 
-    // Extract domain from URL as fallback
-    let domain: string;
-    try {
-      const urlObj = new URL(url);
-      domain = urlObj.hostname.replace(HOST.WWW_PREFIX, '');
-    } catch (e) {
-      // Fallback: extract domain manually
-      const match = url.match(REGEX.DOMAIN_EXTRACT);
-      domain = match ? match[1] : 'unknown';
-    }
+    const domain = getDomain(url) || 'unknown';
 
     // Use AI-generated domains and urlPatterns if available, otherwise use fallback
     const domains =

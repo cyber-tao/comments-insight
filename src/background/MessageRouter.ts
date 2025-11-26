@@ -50,11 +50,6 @@ export class MessageRouter {
         case 'START_EXTRACTION':
           return await extractionHandlers.handleStartExtraction(message, context);
 
-        case 'AI_EXTRACT_COMMENTS':
-          return await extractionHandlers.handleAIExtractComments(message, context);
-
-        // AI_EXTRACT_PROGRESSIVE removed
-
         case 'AI_ANALYZE_STRUCTURE':
           return await extractionHandlers.handleAIAnalyzeStructure(message, context);
 
@@ -129,12 +124,10 @@ export class MessageRouter {
            return;
 
         default:
-          // If we strictly type check, `message.type` here is `never` (exhaustiveness check).
-          // But at runtime it might be something else.
           throw new ExtensionError(
             ErrorCode.VALIDATION_ERROR,
-            `Unknown message type: ${(message as any).type}`,
-            { type: (message as any).type },
+            `Unknown message type: ${(message as { type: string }).type}`,
+            { type: (message as { type: string }).type },
           );
       }
     } catch (error) {

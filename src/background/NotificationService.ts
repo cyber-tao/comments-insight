@@ -2,6 +2,7 @@
  * NotificationService handles browser notifications
  */
 import { ICONS, PATHS, TEXT } from '@/config/constants';
+import { Logger } from '@/utils/logger';
 
 export class NotificationService {
   /**
@@ -101,4 +102,3 @@ export class NotificationService {
     }
   }
 }
-import { Logger } from '@/utils/logger';
