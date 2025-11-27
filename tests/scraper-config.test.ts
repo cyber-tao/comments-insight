@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ScraperConfigManager } from '../src/utils/ScraperConfigManager';
 
 // Mock Logger to avoid side effects

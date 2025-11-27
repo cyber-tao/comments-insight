@@ -67,7 +67,7 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
       }
 
       onSave(savedConfig);
-    } catch (error) {
+    } catch (_error) {
       setErrors(['Failed to save configuration']);
     }
   };

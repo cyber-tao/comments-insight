@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Logger, LogLevel } from '../src/utils/logger';
 

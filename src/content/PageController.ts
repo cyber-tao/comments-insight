@@ -91,7 +91,7 @@ export class PageController {
       try {
         (button as HTMLElement).click();
         await this.wait(TIMING.SCROLL_BASE_DELAY_MS);
-      } catch (error) {
+      } catch (_error) {
         // Logger.warn('[PageController] Failed to click button', { error });
       }
     }

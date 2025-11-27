@@ -148,7 +148,7 @@ export class ErrorHandler {
         details: extensionError.details,
         stack: extensionError.stack,
       });
-    } catch (importError) {
+    } catch (_importError) {
       // Fallback to console if logger import fails
       // Should be rare, but safe to leave console here as last resort
       console.error(
@@ -223,7 +223,7 @@ export class ErrorHandler {
           retryConfig.onRetry?.(attempt, lastError);
 
           Logger.debug(`[${context}] Waiting ${delay}ms before retry...`);
-        } catch (importError) {
+        } catch (_importError) {
           console.warn(`[${context}] Attempt ${attempt} failed:`, lastError);
 
           if (!this.isRetryable(lastError, retryConfig) || attempt === retryConfig.maxAttempts) {

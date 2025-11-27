@@ -59,6 +59,7 @@ const Options: React.FC = () => {
     };
 
     loadSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-save settings when they change (but not on initial load)
@@ -109,7 +110,7 @@ const Options: React.FC = () => {
         URL.revokeObjectURL(url);
         toast.success(t('options.exportSettings') + ' ' + t('common.save'));
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to export settings');
     }
   };
@@ -125,7 +126,7 @@ const Options: React.FC = () => {
         const imported = JSON.parse(data);
         setSettings(imported);
         toast.success(t('options.importedSuccess'));
-      } catch (error) {
+      } catch (_error) {
         toast.error('Failed to import settings');
       }
     };
@@ -159,7 +160,7 @@ const Options: React.FC = () => {
       } else {
         toast.info('No models found or API does not support model listing');
       }
-    } catch (error) {
+    } catch (_error) {
       toast.error('Failed to fetch models');
     } finally {
       setLoadingModels(false);

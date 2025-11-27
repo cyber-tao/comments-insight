@@ -503,7 +503,7 @@ export class ScraperConfigManager {
       for (const pattern of config.urlPatterns) {
         try {
           new RegExp(pattern);
-        } catch (error) {
+        } catch (_error) {
           errors.push(`Invalid regex pattern: ${pattern}`);
         }
       }

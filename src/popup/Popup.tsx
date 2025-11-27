@@ -66,7 +66,7 @@ const Popup: React.FC = () => {
       } else {
         toast.error(resp?.error || t('popup.selectorTestFailed'));
       }
-    } catch (e) {
+    } catch (_e) {
       toast.error(t('popup.selectorTestFailed'));
     }
   };
@@ -91,6 +91,7 @@ const Popup: React.FC = () => {
         monitorTimeoutRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadSettings = async () => {
