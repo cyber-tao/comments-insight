@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { exportCommentsAsCSV, exportAnalysisAsMarkdown, exportCompleteData } from '../src/utils/export';
+import {
+  exportCommentsAsCSV,
+  exportAnalysisAsMarkdown,
+  exportCompleteData,
+} from '../src/utils/export';
 import { Comment, HistoryItem } from '../src/types';
 
 // Mock DOM APIs
@@ -28,14 +32,17 @@ vi.stubGlobal('URL', {
   revokeObjectURL: mockUrlRevoke,
 });
 
-vi.stubGlobal('Blob', class MockBlob {
-  content: string[];
-  options: any;
-  constructor(content: string[], options: any) {
-    this.content = content;
-    this.options = options;
-  }
-});
+vi.stubGlobal(
+  'Blob',
+  class MockBlob {
+    content: string[];
+    options: any;
+    constructor(content: string[], options: any) {
+      this.content = content;
+      this.options = options;
+    }
+  },
+);
 
 describe('Export Utils', () => {
   const mockComments: Comment[] = [
@@ -104,7 +111,7 @@ describe('Export Utils', () => {
 
     it('should generate Markdown and trigger download', () => {
       exportAnalysisAsMarkdown(mockHistoryItem);
-      
+
       expect(mockCreateElement).toHaveBeenCalledWith('a');
       const link = mockCreateElement.mock.results[0].value;
       expect(link.download).toContain('.md');
@@ -136,4 +143,3 @@ describe('Export Utils', () => {
     });
   });
 });
-

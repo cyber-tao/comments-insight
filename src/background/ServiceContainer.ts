@@ -52,6 +52,5 @@ export const getStorageManager = () => container.get('storageManager');
 
 export const setAIService = (service: AIService) => container.set('aiService', service);
 export const setTaskManager = (service: TaskManager) => container.set('taskManager', service);
-export const setStorageManager = (service: StorageManager) => container.set('storageManager', service);
-
-
+export const setStorageManager = (service: StorageManager) =>
+  container.set('storageManager', service);

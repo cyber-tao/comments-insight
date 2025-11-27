@@ -71,7 +71,9 @@ export class DOMAnalyzer {
 
     if (node.text && node.text.length > 0) {
       const truncatedText =
-        node.text.length > DOM.TEXT_PREVIEW_LENGTH ? node.text.substring(0, DOM.TEXT_PREVIEW_LENGTH) + '...' : node.text;
+        node.text.length > DOM.TEXT_PREVIEW_LENGTH
+          ? node.text.substring(0, DOM.TEXT_PREVIEW_LENGTH) + '...'
+          : node.text;
       result += `\n${indent}  ${truncatedText}`;
     }
 

@@ -154,7 +154,7 @@ async function startExtractionTask(
 }
 
 export async function handleAIAnalyzeStructure(
-  message: Extract<Message, { type: 'AI_ANALYZE_STRUCTURE' } >,
+  message: Extract<Message, { type: 'AI_ANALYZE_STRUCTURE' }>,
   context: HandlerContext,
 ): Promise<AIAnalyzeStructureResponse> {
   const { prompt } = message.payload || {};
@@ -215,7 +215,7 @@ export async function handleAIAnalyzeStructure(
 }
 
 export async function handleExtractionProgress(
-  message: Extract<Message, { type: 'EXTRACTION_PROGRESS' } >,
+  message: Extract<Message, { type: 'EXTRACTION_PROGRESS' }>,
   context: HandlerContext,
 ): Promise<ProgressResponse> {
   const { taskId, progress, message: progressMessage } = message.payload || {};
@@ -228,13 +228,10 @@ export async function handleExtractionProgress(
 }
 
 export async function handleStartAnalysis(
-
   message: Extract<Message, { type: 'START_ANALYSIS' }>,
 
   context: HandlerContext,
-
 ): Promise<StartAnalysisResponse> {
-
   const { comments, metadata, historyId } = message.payload || {};
 
   if (!comments || !Array.isArray(comments)) {

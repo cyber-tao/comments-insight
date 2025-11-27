@@ -4,7 +4,13 @@
 export type Platform = string;
 
 // Progress stage for extraction task
-export type ProgressStage = 'analyzing' | 'extracting' | 'expanding' | 'scrolling' | 'validating' | 'complete';
+export type ProgressStage =
+  | 'analyzing'
+  | 'extracting'
+  | 'expanding'
+  | 'scrolling'
+  | 'validating'
+  | 'complete';
 
 export interface Comment {
   id: string;

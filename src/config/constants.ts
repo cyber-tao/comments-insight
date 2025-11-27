@@ -27,7 +27,6 @@ export const LANGUAGES = {
   FALLBACK: 'en-US' as const,
 };
 
-
 export const TEMPLATE = {
   MIN_LENGTH: 50,
   MAX_LENGTH: 10000,

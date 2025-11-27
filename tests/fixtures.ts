@@ -71,7 +71,8 @@ export const mockSettings = (overrides: Partial<Settings> = {}): Settings => ({
   ...overrides,
 });
 
-export const mockDomStructure = (): string => `
+export const mockDomStructure = (): string =>
+  `
 <div class="comments-container">
   <div class="comment" data-id="1">
     <span class="author">User 1</span>

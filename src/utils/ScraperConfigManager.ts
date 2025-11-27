@@ -27,7 +27,9 @@ export class ScraperConfigManager {
       if (defaultConfigs.length > 0) {
         await this.saveAll(defaultConfigs);
         await chrome.storage.local.set({ [INITIALIZED_KEY]: true });
-        Logger.info('[ScraperConfigManager] Initialized with default configs', { count: defaultConfigs.length });
+        Logger.info('[ScraperConfigManager] Initialized with default configs', {
+          count: defaultConfigs.length,
+        });
       }
     } catch (error) {
       Logger.error('[ScraperConfigManager] Failed to initialize defaults', { error });
@@ -68,7 +70,7 @@ export class ScraperConfigManager {
       await this.initializeDefaults();
 
       const result = await chrome.storage.local.get(STORAGE_KEY);
-      const data: ScraperConfigList = result[STORAGE_KEY] || {
+      const data: ScraperConfigList = (result[STORAGE_KEY] as ScraperConfigList | undefined) || {
         configs: [],
         version: CONFIG_VERSION,
       };

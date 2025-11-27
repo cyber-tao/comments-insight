@@ -115,5 +115,3 @@ export class SelectorValidator {
 }
 
 export const selectorValidator = new SelectorValidator();
-
-

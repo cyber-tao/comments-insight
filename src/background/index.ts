@@ -15,9 +15,11 @@ NotificationService.setupNotificationHandlers();
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener(() => {
   Logger.info('Comments Insight Extension installed');
-  getStorageManager().getSettings().then((settings) => {
-    Logger.debug('Settings initialized', { settings });
-  });
+  getStorageManager()
+    .getSettings()
+    .then((settings) => {
+      Logger.debug('Settings initialized', { settings });
+    });
 });
 
 // Listen for messages from content scripts and popup

@@ -43,7 +43,10 @@ export type TaskMessage =
   | { type: 'CANCEL_TASK'; payload: { taskId: string } };
 
 export type HistoryMessage =
-  | { type: 'GET_HISTORY'; payload?: { page?: number; limit?: number; query?: string; id?: string } }
+  | {
+      type: 'GET_HISTORY';
+      payload?: { page?: number; limit?: number; query?: string; id?: string };
+    }
   | { type: 'GET_HISTORY_BY_URL'; payload: { url: string } }
   | { type: 'DELETE_HISTORY'; payload: { id: string } }
   | { type: 'CLEAR_ALL_HISTORY'; payload?: never };
@@ -97,4 +100,3 @@ export type Message =
   | ExportMessage;
 
 export type MessageType = Message['type'];
-

@@ -23,4 +23,3 @@ export function sendMessageVoid(message: Message): Promise<void> {
     });
   });
 }
-

@@ -11,7 +11,10 @@ describe('chunkDomText', () => {
   });
 
   it('should split large input into multiple chunks', () => {
-    const lines = Array.from({ length: 100 }, (_, i) => `This is line number ${i + 1} with some text content`);
+    const lines = Array.from(
+      { length: 100 },
+      (_, i) => `This is line number ${i + 1} with some text content`,
+    );
     const input = lines.join('\n');
     const chunks = chunkDomText(input, 100);
 

@@ -21,8 +21,7 @@ export class DOMSimplifier {
   ): SimplifiedNode {
     const shadowRoot = getShadowRoot(element);
     const forceExpandCurrent = shadowRoot !== null || this.shouldForceExpandElement(element);
-    const shouldExpand =
-      forceExpandParent || forceExpandCurrent || currentDepth < maxDepth;
+    const shouldExpand = forceExpandParent || forceExpandCurrent || currentDepth < maxDepth;
 
     // Check for Shadow DOM and filter children
     const rawChildren = shadowRoot ? Array.from(shadowRoot.children) : Array.from(element.children);
@@ -62,10 +61,23 @@ export class DOMSimplifier {
   private shouldIgnoreElement(element: Element): boolean {
     const tag = element.tagName.toLowerCase();
     // Ignore technical tags
-    if (['script', 'style', 'svg', 'path', 'noscript', 'meta', 'link', 'iframe', 'head', 'hr'].includes(tag)) {
+    if (
+      [
+        'script',
+        'style',
+        'svg',
+        'path',
+        'noscript',
+        'meta',
+        'link',
+        'iframe',
+        'head',
+        'hr',
+      ].includes(tag)
+    ) {
       return true;
     }
-    
+
     // Ignore obviously hidden elements
     if (element.getAttribute('hidden') !== null || element.getAttribute('aria-hidden') === 'true') {
       return true;
@@ -170,7 +182,9 @@ export class DOMSimplifier {
     const fullText = textNodes.join(' ').trim();
     if (!fullText) return undefined;
 
-    return fullText.length > DOM.TEXT_PREVIEW_LENGTH ? fullText.substring(0, DOM.TEXT_PREVIEW_LENGTH) + '...' : fullText;
+    return fullText.length > DOM.TEXT_PREVIEW_LENGTH
+      ? fullText.substring(0, DOM.TEXT_PREVIEW_LENGTH) + '...'
+      : fullText;
   }
 
   /**

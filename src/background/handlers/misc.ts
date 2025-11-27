@@ -14,7 +14,10 @@ export interface TestModelResponse {
   error?: string;
 }
 
-export function handlePing(_message: Extract<Message, { type: 'PING' }>, _context: HandlerContext): PingResponse {
+export function handlePing(
+  _message: Extract<Message, { type: 'PING' }>,
+  _context: HandlerContext,
+): PingResponse {
   return { status: 'ok', timestamp: Date.now() };
 }
 

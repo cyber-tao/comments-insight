@@ -20,7 +20,7 @@ export class ConfigStrategy implements ExtractionStrategy {
     });
 
     if (!this.config.selectors) {
-        throw new Error('Config missing selectors');
+      throw new Error('Config missing selectors');
     }
 
     onProgress?.(15, 'analyzing');

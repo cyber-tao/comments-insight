@@ -12,9 +12,9 @@ describe('Scraper Prompts Utils', () => {
       const dom = '<div>...</div>';
       const url = 'http://example.com';
       const title = 'Example Page';
-      
+
       const prompt = generateScraperConfigPrompt(dom, url, title);
-      
+
       expect(prompt).toContain(url);
       expect(prompt).toContain(title);
       expect(prompt).toContain(dom);
@@ -26,9 +26,9 @@ describe('Scraper Prompts Utils', () => {
     it('should generate prompt with config and dom structure', () => {
       const config = { selectors: { commentContainer: '.comment' } };
       const dom = '<div>...</div>';
-      
+
       const prompt = generateScraperTestPrompt(config, dom);
-      
+
       expect(prompt).toContain(JSON.stringify(config, null, 2));
       expect(prompt).toContain(dom);
       expect(prompt).toContain('Test the following scraper configuration');
@@ -47,4 +47,3 @@ describe('Scraper Prompts Utils', () => {
     });
   });
 });
-

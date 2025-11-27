@@ -130,30 +130,33 @@ const History: React.FC = () => {
     return new Date(timestamp).toLocaleString();
   };
 
-  const sortComments = useCallback((comments: Comment[]): Comment[] => {
-    const sorted = [...comments];
+  const sortComments = useCallback(
+    (comments: Comment[]): Comment[] => {
+      const sorted = [...comments];
 
-    sorted.sort((a, b) => {
-      switch (sortBy) {
-        case 'time':
-          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-        case 'likes':
-          return b.likes - a.likes;
-        case 'replies':
-          return b.replies.length - a.replies.length;
-        default:
-          return 0;
-      }
-    });
+      sorted.sort((a, b) => {
+        switch (sortBy) {
+          case 'time':
+            return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+          case 'likes':
+            return b.likes - a.likes;
+          case 'replies':
+            return b.replies.length - a.replies.length;
+          default:
+            return 0;
+        }
+      });
 
-    const sortReplies = (c: Comment[]): Comment[] =>
-      c.map((comment) => ({
-        ...comment,
-        replies: comment.replies.length > 0 ? sortReplies(comment.replies) : comment.replies,
-      }));
+      const sortReplies = (c: Comment[]): Comment[] =>
+        c.map((comment) => ({
+          ...comment,
+          replies: comment.replies.length > 0 ? sortReplies(comment.replies) : comment.replies,
+        }));
 
-    return sortReplies(sorted);
-  }, [sortBy]);
+      return sortReplies(sorted);
+    },
+    [sortBy],
+  );
 
   const filterComments = useCallback((comments: Comment[], searchTerm: string): Comment[] => {
     if (!searchTerm) return comments;

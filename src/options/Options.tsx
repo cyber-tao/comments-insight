@@ -304,9 +304,7 @@ const Options: React.FC = () => {
                   {t('options.developerMode')}
                 </label>
               </div>
-              <p className="text-xs text-gray-500 ml-6">
-                {t('options.developerModeHint')}
-              </p>
+              <p className="text-xs text-gray-500 ml-6">{t('options.developerModeHint')}</p>
             </section>
 
             {/* DOM Analysis Configuration */}
@@ -426,7 +424,9 @@ const Options: React.FC = () => {
                 <div className="flex gap-2">
                   <input
                     type={showApiKey ? 'text' : 'password'}
-                    value={showApiKey ? settings.aiModel.apiKey : maskApiKey(settings.aiModel.apiKey)}
+                    value={
+                      showApiKey ? settings.aiModel.apiKey : maskApiKey(settings.aiModel.apiKey)
+                    }
                     onChange={(e) =>
                       handleSettingsChange({
                         ...settings,
@@ -567,9 +567,7 @@ const Options: React.FC = () => {
             <section className="mb-8 bg-white p-6 rounded-lg shadow">
               <div className="mb-4">
                 <div className="flex justify-between items-center mb-2">
-                  <label className="block text-sm font-medium">
-                    {t('options.promptTemplate')}
-                  </label>
+                  <label className="block text-sm font-medium">{t('options.promptTemplate')}</label>
                   <button
                     type="button"
                     onClick={() =>

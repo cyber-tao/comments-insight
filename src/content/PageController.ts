@@ -14,7 +14,7 @@ export class PageController {
     let totalHeight = document.documentElement.scrollHeight;
     const viewportHeight = window.innerHeight;
     let currentScroll = window.scrollY;
-    
+
     // Scroll in steps to trigger lazy loading
     // We scroll slightly less than a viewport to ensure overlap
     const step = Math.floor(viewportHeight * SCROLL.SCROLL_STEP_RATIO);
@@ -22,23 +22,23 @@ export class PageController {
     while (currentScroll < totalHeight) {
       // Calculate next position
       const nextScroll = Math.min(currentScroll + step, totalHeight);
-      
+
       if (nextScroll === currentScroll) break; // Already at bottom
 
       window.scrollTo(0, nextScroll);
       currentScroll = nextScroll;
-      
+
       // Small pause to allow browser to register scroll event and trigger IO observers
       await this.wait(TIMING.SCROLL_PAUSE_MS);
-      
+
       // Update total height in case content expanded
       const newTotalHeight = document.documentElement.scrollHeight;
       if (newTotalHeight > totalHeight) {
-          // Content grew, we update totalHeight to continue scrolling
-          totalHeight = newTotalHeight;
+        // Content grew, we update totalHeight to continue scrolling
+        totalHeight = newTotalHeight;
       }
     }
-    
+
     // Ensure we are really at the bottom
     window.scrollTo(0, document.documentElement.scrollHeight);
   }

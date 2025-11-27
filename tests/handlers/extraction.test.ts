@@ -106,7 +106,10 @@ describe('extraction handlers', () => {
       };
 
       await expect(
-        handleStartExtraction(message as Extract<import('../../src/types').Message, { type: 'START_EXTRACTION' }>, context),
+        handleStartExtraction(
+          message as Extract<import('../../src/types').Message, { type: 'START_EXTRACTION' }>,
+          context,
+        ),
       ).rejects.toThrow('URL is required');
     });
   });
@@ -122,7 +125,11 @@ describe('extraction handlers', () => {
       const result = await handleExtractionProgress(message, context);
 
       expect(result.success).toBe(true);
-      expect(context.taskManager.updateTaskProgress).toHaveBeenCalledWith('task_123', 50, expect.stringContaining('Extracting comments'));
+      expect(context.taskManager.updateTaskProgress).toHaveBeenCalledWith(
+        'task_123',
+        50,
+        expect.stringContaining('Extracting comments'),
+      );
     });
 
     it('should handle progress with data', async () => {
@@ -136,7 +143,12 @@ describe('extraction handlers', () => {
       } as unknown as Partial<HandlerContext>);
       const message = {
         type: 'EXTRACTION_PROGRESS' as const,
-        payload: { taskId: 'task_123', progress: 100, message: 'Completed', data: { commentCount: 50 } },
+        payload: {
+          taskId: 'task_123',
+          progress: 100,
+          message: 'Completed',
+          data: { commentCount: 50 },
+        },
       };
 
       const result = await handleExtractionProgress(message, context);

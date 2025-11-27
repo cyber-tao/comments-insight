@@ -126,7 +126,10 @@ describe('scraper handlers', () => {
       };
 
       await expect(
-        handleCheckScraperConfig(message as Extract<import('../../src/types').Message, { type: 'CHECK_SCRAPER_CONFIG' }>, context),
+        handleCheckScraperConfig(
+          message as Extract<import('../../src/types').Message, { type: 'CHECK_SCRAPER_CONFIG' }>,
+          context,
+        ),
       ).rejects.toThrow('URL is required');
     });
   });
@@ -140,7 +143,10 @@ describe('scraper handlers', () => {
       };
 
       await expect(
-        handleDeleteScraperConfig(message as Extract<import('../../src/types').Message, { type: 'DELETE_SCRAPER_CONFIG' }>, context),
+        handleDeleteScraperConfig(
+          message as Extract<import('../../src/types').Message, { type: 'DELETE_SCRAPER_CONFIG' }>,
+          context,
+        ),
       ).rejects.toThrow('Config ID is required');
     });
   });

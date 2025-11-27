@@ -58,7 +58,12 @@ export class ExtensionError extends Error {
   public readonly timestamp: number;
   public readonly retryable: boolean;
 
-  constructor(code: ErrorCode, message: string, details?: Record<string, unknown>, retryable: boolean = false) {
+  constructor(
+    code: ErrorCode,
+    message: string,
+    details?: Record<string, unknown>,
+    retryable: boolean = false,
+  ) {
     super(message);
     this.name = 'ExtensionError';
     this.code = code;
@@ -380,7 +385,7 @@ export class ErrorHandler {
         priority: 2,
       });
     } catch (notificationError) {
-       try {
+      try {
         const { Logger } = await import('./logger.js');
         Logger.error('[ErrorHandler] Failed to show notification:', { error: notificationError });
       } catch {
@@ -452,14 +457,21 @@ export function getUserFriendlyMessage(code: ErrorCode, technicalMessage: string
 /**
  * Create a network error
  */
-export function createNetworkError(message: string, details?: Record<string, unknown>): ExtensionError {
+export function createNetworkError(
+  message: string,
+  details?: Record<string, unknown>,
+): ExtensionError {
   return new ExtensionError(ErrorCode.NETWORK_ERROR, message, details, true);
 }
 
 /**
  * Create an AI error
  */
-export function createAIError(code: ErrorCode, message: string, details?: Record<string, unknown>): ExtensionError {
+export function createAIError(
+  code: ErrorCode,
+  message: string,
+  details?: Record<string, unknown>,
+): ExtensionError {
   const retryable = [ErrorCode.AI_TIMEOUT, ErrorCode.AI_RATE_LIMIT].includes(code);
   return new ExtensionError(code, message, details, retryable);
 }
@@ -467,14 +479,21 @@ export function createAIError(code: ErrorCode, message: string, details?: Record
 /**
  * Create a storage error
  */
-export function createStorageError(message: string, details?: Record<string, unknown>): ExtensionError {
+export function createStorageError(
+  message: string,
+  details?: Record<string, unknown>,
+): ExtensionError {
   return new ExtensionError(ErrorCode.STORAGE_ERROR, message, details, false);
 }
 
 /**
  * Create a configuration error
  */
-export function createConfigError(code: ErrorCode, message: string, details?: Record<string, unknown>): ExtensionError {
+export function createConfigError(
+  code: ErrorCode,
+  message: string,
+  details?: Record<string, unknown>,
+): ExtensionError {
   return new ExtensionError(code, message, details, false);
 }
 

@@ -20,7 +20,11 @@ describe('Prompts Utils', () => {
     };
 
     it('should replace all placeholders with metadata', () => {
-      const result = buildAnalysisPrompt(mockComments, DEFAULT_ANALYSIS_PROMPT_TEMPLATE, mockMetadata);
+      const result = buildAnalysisPrompt(
+        mockComments,
+        DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
+        mockMetadata,
+      );
       expect(result).toContain(mockComments);
       expect(result).toContain(mockMetadata.datetime);
       expect(result).toContain(mockMetadata.videoTime);
@@ -78,4 +82,3 @@ describe('Prompts Utils', () => {
     });
   });
 });
-

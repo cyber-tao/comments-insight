@@ -26,7 +26,7 @@ vi.mock('../src/utils/logger', () => ({
     debug: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-  }
+  },
 }));
 
 // Mock Web Crypto API
@@ -53,12 +53,22 @@ vi.stubGlobal('crypto', {
 });
 
 // Mock TextEncoder/Decoder
-vi.stubGlobal('TextEncoder', class {
-  encode(str: string) { return new Uint8Array(Buffer.from(str)); }
-});
-vi.stubGlobal('TextDecoder', class {
-  decode(arr: Uint8Array) { return Buffer.from(arr).toString(); }
-});
+vi.stubGlobal(
+  'TextEncoder',
+  class {
+    encode(str: string) {
+      return new Uint8Array(Buffer.from(str));
+    }
+  },
+);
+vi.stubGlobal(
+  'TextDecoder',
+  class {
+    decode(arr: Uint8Array) {
+      return Buffer.from(arr).toString();
+    }
+  },
+);
 
 describe('StorageManager', () => {
   let storageManager: StorageManager;
@@ -71,9 +81,9 @@ describe('StorageManager', () => {
   describe('getSettings', () => {
     it('should return default settings if storage is empty', async () => {
       mockStorageGet.mockResolvedValue({});
-      
+
       const settings = await storageManager.getSettings();
-      
+
       expect(settings.maxComments).toBeDefined();
       expect(mockStorageSet).toHaveBeenCalled(); // Should save defaults
     });
@@ -81,9 +91,9 @@ describe('StorageManager', () => {
     it('should merge stored settings with defaults', async () => {
       const storedSettings: Partial<Settings> = { maxComments: 100 };
       mockStorageGet.mockResolvedValue({ settings: storedSettings });
-      
+
       const settings = await storageManager.getSettings();
-      
+
       expect(settings.maxComments).toBe(100);
       expect(settings.aiModel).toBeDefined(); // Default merged
     });
@@ -93,13 +103,13 @@ describe('StorageManager', () => {
     it('should save settings to storage', async () => {
       const newSettings: Partial<Settings> = { maxComments: 200 };
       mockStorageGet.mockResolvedValue({}); // Allow getting current settings
-      
+
       await storageManager.saveSettings(newSettings);
-      
+
       expect(mockStorageSet).toHaveBeenCalledWith(
         expect.objectContaining({
-          settings: expect.objectContaining({ maxComments: 200 })
-        })
+          settings: expect.objectContaining({ maxComments: 200 }),
+        }),
       );
     });
   });
@@ -112,36 +122,37 @@ describe('StorageManager', () => {
       platform: 'Test',
       extractedAt: 1000,
       commentsCount: 0,
-      comments: []
+      comments: [],
     };
 
     it('should save history item', async () => {
       await storageManager.saveHistory(mockHistoryItem as any);
-      
+
       expect(mockStorageSet).toHaveBeenCalledWith(
         expect.objectContaining({
-          'history_test-id': expect.anything()
-        })
+          'history_test-id': expect.anything(),
+        }),
       );
-      
+
       // Should update index
       expect(mockStorageSet).toHaveBeenCalledWith(
         expect.objectContaining({
-          'history_index': expect.arrayContaining(['test-id'])
-        })
+          history_index: expect.arrayContaining(['test-id']),
+        }),
       );
     });
 
     it('should get history items', async () => {
       mockStorageGet.mockImplementation((key) => {
         if (key === 'history_index') return { history_index: ['1'] };
-        if (key === 'history_1') return { 
-          history_1: { 
-            ...mockHistoryItem, 
-            id: '1',
-            comments: '' // LZString mock handled implicitly or empty
-          } 
-        };
+        if (key === 'history_1')
+          return {
+            history_1: {
+              ...mockHistoryItem,
+              id: '1',
+              comments: '', // LZString mock handled implicitly or empty
+            },
+          };
         return {};
       });
 
@@ -152,14 +163,13 @@ describe('StorageManager', () => {
 
     it('should delete history item', async () => {
       mockStorageGet.mockResolvedValue({ history_index: ['1', '2'] });
-      
+
       await storageManager.deleteHistoryItem('1');
-      
+
       expect(mockStorageRemove).toHaveBeenCalledWith('history_1');
       expect(mockStorageSet).toHaveBeenCalledWith({
-        history_index: ['2']
+        history_index: ['2'],
       });
     });
   });
 });
-

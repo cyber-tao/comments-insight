@@ -107,12 +107,13 @@ function displayLogs() {
           const sysLog = log as SystemLog & { key: string; logType: 'system' };
           const levelValue = sysLog.level || 'INFO';
           const levelClass = levelValue.toLowerCase();
-          const levelIcon = {
-            DEBUG: '🔍',
-            INFO: 'ℹ️',
-            WARN: '⚠️',
-            ERROR: '❌',
-          }[levelValue] || 'ℹ️';
+          const levelIcon =
+            {
+              DEBUG: '🔍',
+              INFO: 'ℹ️',
+              WARN: '⚠️',
+              ERROR: '❌',
+            }[levelValue] || 'ℹ️';
 
           return `
         <div class="log-item-wrapper">
@@ -394,13 +395,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const levelSelect = document.getElementById('levelFilter') as HTMLSelectElement | null;
   levelSelect?.addEventListener('change', (e) => {
-    const val = (e.target as HTMLSelectElement).value as 'all' | 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
+    const val = (e.target as HTMLSelectElement).value as
+      | 'all'
+      | 'DEBUG'
+      | 'INFO'
+      | 'WARN'
+      | 'ERROR';
     currentLevelFilter = val;
     displayLogs();
     updateStats();
   });
 
-  const outputLevelSelect = document.getElementById('outputLevelSelect') as HTMLSelectElement | null;
+  const outputLevelSelect = document.getElementById(
+    'outputLevelSelect',
+  ) as HTMLSelectElement | null;
   outputLevelSelect?.addEventListener('change', async (e) => {
     const val = (e.target as HTMLSelectElement).value as LogLevel;
     await Logger.setMinLevel(val);
@@ -408,7 +416,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     const stored = await chrome.storage.local.get(STORAGE.LOG_LEVEL_KEY);
-    const val = stored[STORAGE.LOG_LEVEL_KEY];
+    const val = stored[STORAGE.LOG_LEVEL_KEY] as string | undefined;
     if (val && (LOG_LEVELS as readonly string[]).includes(val)) {
       if (outputLevelSelect) {
         outputLevelSelect.value = val;

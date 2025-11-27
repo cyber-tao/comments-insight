@@ -8,7 +8,7 @@ vi.mock('../src/utils/logger', () => ({
     debug: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
-  }
+  },
 }));
 
 // Mock Chrome API
@@ -57,15 +57,15 @@ describe('ScraperConfigManager', () => {
       selectors: {}, // Simplified
       createdAt: 2000,
       updatedAt: 2000,
-    }
+    },
   ];
 
   beforeEach(() => {
     vi.clearAllMocks();
     // Default storage mock
     mockStorageGet.mockResolvedValue({
-      'scraperConfigsInitialized': true, // Skip default init
-      'scraperConfigs': { configs: mockConfigs, version: '1.0.0' }
+      scraperConfigsInitialized: true, // Skip default init
+      scraperConfigs: { configs: mockConfigs, version: '1.0.0' },
     });
   });
 
@@ -91,33 +91,29 @@ describe('ScraperConfigManager', () => {
       };
 
       const created = await ScraperConfigManager.create(newConfigData as any);
-      
+
       expect(created.id).toBeDefined();
       expect(created.createdAt).toBeDefined();
-      
+
       expect(mockStorageSet).toHaveBeenCalledWith(
         expect.objectContaining({
           scraperConfigs: expect.objectContaining({
-            configs: expect.arrayContaining([
-              expect.objectContaining({ name: 'New Config' })
-            ])
-          })
-        })
+            configs: expect.arrayContaining([expect.objectContaining({ name: 'New Config' })]),
+          }),
+        }),
       );
     });
 
     it('delete should remove config and update storage', async () => {
       const result = await ScraperConfigManager.delete('1');
-      
+
       expect(result).toBe(true);
       expect(mockStorageSet).toHaveBeenCalledWith(
         expect.objectContaining({
           scraperConfigs: expect.objectContaining({
-            configs: expect.not.arrayContaining([
-              expect.objectContaining({ id: '1' })
-            ])
-          })
-        })
+            configs: expect.not.arrayContaining([expect.objectContaining({ id: '1' })]),
+          }),
+        }),
       );
     });
   });
@@ -145,13 +141,15 @@ describe('ScraperConfigManager', () => {
       mockStorageGet.mockResolvedValue({
         scraperConfigsInitialized: true,
         scraperConfigs: {
-          configs: [{
-            ...mockConfigs[0],
-            domains: ['www.example.com'],
-            urlPatterns: [] // Match all
-          }],
-          version: '1.0.0'
-        }
+          configs: [
+            {
+              ...mockConfigs[0],
+              domains: ['www.example.com'],
+              urlPatterns: [], // Match all
+            },
+          ],
+          version: '1.0.0',
+        },
       });
 
       const config = await ScraperConfigManager.findMatchingConfig('https://example.com/video');
@@ -189,4 +187,3 @@ describe('ScraperConfigManager', () => {
     });
   });
 });
-

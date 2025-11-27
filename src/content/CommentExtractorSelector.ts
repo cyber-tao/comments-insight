@@ -7,11 +7,7 @@ import { Tokenizer } from '@/utils/tokenizer';
 import { getShadowRoot, querySelectorAllDeep } from '@/utils/dom-query';
 import { sendMessage, sendMessageVoid } from '@/utils/chrome-message';
 import { performanceMonitor } from '@/utils/performance';
-import {
-  selectorValidator,
-  selectorCacheManager,
-  commentParser,
-} from './extractors';
+import { selectorValidator, selectorCacheManager, commentParser } from './extractors';
 
 /**
  * AI response structure
@@ -43,49 +39,53 @@ export class CommentExtractorSelector {
   ): Promise<Comment[]> {
     Logger.info('[CommentExtractorSelector] Starting selector-based extraction');
 
-    return performanceMonitor.measureAsync('extractWithDiscovery', async () => {
-      const analysis = await performanceMonitor.measureAsync(
-        'analyzePage',
-        () => this.analyzePage(platform, onProgress),
-        { platform },
-      );
+    return performanceMonitor.measureAsync(
+      'extractWithDiscovery',
+      async () => {
+        const analysis = await performanceMonitor.measureAsync(
+          'analyzePage',
+          () => this.analyzePage(platform, onProgress),
+          { platform },
+        );
 
-      Logger.debug('[CommentExtractorSelector] AI Analysis', { analysis });
+        Logger.debug('[CommentExtractorSelector] AI Analysis', { analysis });
 
-      if (analysis.confidence < AI.CONFIDENCE_THRESHOLD) {
-        throw new Error('Low confidence in structure analysis');
-      }
+        if (analysis.confidence < AI.CONFIDENCE_THRESHOLD) {
+          throw new Error('Low confidence in structure analysis');
+        }
 
-      const url = window.location.href;
-      const cfgResponse = await sendMessage<{ config?: ScraperConfig }>({
-        type: MESSAGES.CHECK_SCRAPER_CONFIG,
-        payload: { url },
-      });
-      const scrollCfg: ScrollConfig | undefined = cfgResponse?.config?.scrollConfig;
+        const url = window.location.href;
+        const cfgResponse = await sendMessage<{ config?: ScraperConfig }>({
+          type: MESSAGES.CHECK_SCRAPER_CONFIG,
+          payload: { url },
+        });
+        const scrollCfg: ScrollConfig | undefined = cfgResponse?.config?.scrollConfig;
 
-      const comments = await performanceMonitor.measureAsync(
-        'extractWithScrolling',
-        () =>
-          this.extractWithScrolling(
-            analysis.selectors,
-            analysis.structure,
-            maxComments,
-            platform,
-            onProgress,
-            scrollCfg,
-          ),
-        { platform, maxComments },
-      );
+        const comments = await performanceMonitor.measureAsync(
+          'extractWithScrolling',
+          () =>
+            this.extractWithScrolling(
+              analysis.selectors,
+              analysis.structure,
+              maxComments,
+              platform,
+              onProgress,
+              scrollCfg,
+            ),
+          { platform, maxComments },
+        );
 
-      await this.updateSelectorValidation(analysis.selectors, comments.length > 0);
+        await this.updateSelectorValidation(analysis.selectors, comments.length > 0);
 
-      onProgress?.('complete', comments.length);
-      Logger.info('[CommentExtractorSelector] Extraction complete', { count: comments.length });
+        onProgress?.('complete', comments.length);
+        Logger.info('[CommentExtractorSelector] Extraction complete', { count: comments.length });
 
-      performanceMonitor.logSummary();
+        performanceMonitor.logSummary();
 
-      return comments;
-    }, { platform, maxComments });
+        return comments;
+      },
+      { platform, maxComments },
+    );
   }
 
   /**
@@ -120,7 +120,9 @@ export class CommentExtractorSelector {
           confidence: 1.0,
         };
       } else {
-        Logger.warn('[CommentExtractorSelector] Cached selectors are no longer valid, analyzing again');
+        Logger.warn(
+          '[CommentExtractorSelector] Cached selectors are no longer valid, analyzing again',
+        );
       }
     }
 
@@ -131,7 +133,9 @@ export class CommentExtractorSelector {
     const maxModelTokens = settings?.aiModel?.maxTokens ?? AI.DEFAULT_MAX_TOKENS;
     const chunks = this.chunkDomStructure(domStructure, maxModelTokens);
 
-    Logger.debug('[CommentExtractorSelector] DOM Structure length', { length: domStructure.length });
+    Logger.debug('[CommentExtractorSelector] DOM Structure length', {
+      length: domStructure.length,
+    });
     // Logger.debug('[CommentExtractorSelector] DOM Structure preview', { preview: domStructure.substring(0, 500) });
 
     let successfulSelectors: Partial<SelectorMap> = {};
@@ -212,7 +216,11 @@ Identify the comment section and provide CSS selectors for each field.
       const isValid = selectorValidator.validateSelectorResults(testResult);
       if (isValid) {
         onProgress?.('analyzing', -1);
-        await selectorCacheManager.saveSelectorCache(domain, platform, successfulSelectors as SelectorMap);
+        await selectorCacheManager.saveSelectorCache(
+          domain,
+          platform,
+          successfulSelectors as SelectorMap,
+        );
         return {
           selectors: successfulSelectors as SelectorMap,
           structure: aggregatedStructure,
@@ -228,7 +236,9 @@ Identify the comment section and provide CSS selectors for each field.
     }
 
     Logger.warn('[CommentExtractorSelector] Max retries reached, using best-effort selectors');
-    Logger.warn('[CommentExtractorSelector] Successful selectors', { selectors: Object.keys(successfulSelectors) });
+    Logger.warn('[CommentExtractorSelector] Successful selectors', {
+      selectors: Object.keys(successfulSelectors),
+    });
     onProgress?.('analyzing', -1);
 
     return {
@@ -238,9 +248,10 @@ Identify the comment section and provide CSS selectors for each field.
         repliesNested: true,
         needsExpand: false,
       },
-      confidence: Object.keys(successfulSelectors).length >= 6
-        ? AI.HIGH_CONFIDENCE_THRESHOLD
-        : AI.LOW_CONFIDENCE_THRESHOLD,
+      confidence:
+        Object.keys(successfulSelectors).length >= 6
+          ? AI.HIGH_CONFIDENCE_THRESHOLD
+          : AI.LOW_CONFIDENCE_THRESHOLD,
     };
   }
 
@@ -263,7 +274,11 @@ Identify the comment section and provide CSS selectors for each field.
   /**
    * Extract simplified DOM structure (only tags, ids, classes)
    */
-  private extractDOMStructure(element: Element | DocumentFragment, depth: number = 0, maxDepth: number = 20): string {
+  private extractDOMStructure(
+    element: Element | DocumentFragment,
+    depth: number = 0,
+    maxDepth: number = 20,
+  ): string {
     // Limit depth to avoid huge output
     if (depth > maxDepth) {
       return '';
@@ -382,20 +397,20 @@ Identify the comment section and provide CSS selectors for each field.
       }
 
       const containers = querySelectorAllDeep(document, selectors.commentContainer);
-      
+
       const buttonsToClick: HTMLElement[] = [];
       for (const container of containers) {
         const toggles = querySelectorAllDeep(container, selectors.replyToggle);
         for (const toggle of toggles) {
           const button = toggle as HTMLElement;
           const style = window.getComputedStyle(button);
-          const isVisible = 
-            style.display !== 'none' && 
-            style.visibility !== 'hidden' && 
+          const isVisible =
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
             (button.offsetParent !== null || button.getBoundingClientRect().height > 0);
 
           if (isVisible) {
-             buttonsToClick.push(button);
+            buttonsToClick.push(button);
           }
         }
       }
@@ -405,25 +420,29 @@ Identify the comment section and provide CSS selectors for each field.
       }
 
       onProgress?.('expanding', currentCommentCount);
-      Logger.info('[CommentExtractorSelector] Found reply toggles', { count: buttonsToClick.length });
-      
-      const baseDelay = scrollCfg?.scrollDelay ? Math.min(scrollCfg.scrollDelay, TIMING.EXPAND_REPLY_MAX) : TIMING.SCROLL_BASE_DELAY_MS;
+      Logger.info('[CommentExtractorSelector] Found reply toggles', {
+        count: buttonsToClick.length,
+      });
+
+      const baseDelay = scrollCfg?.scrollDelay
+        ? Math.min(scrollCfg.scrollDelay, TIMING.EXPAND_REPLY_MAX)
+        : TIMING.SCROLL_BASE_DELAY_MS;
 
       for (let i = 0; i < buttonsToClick.length; i++) {
         const button = buttonsToClick[i];
-        
+
         if (!document.contains(button)) continue;
 
         try {
           button.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          
+
           await this.delay(TIMING.DOM_SETTLE_MS);
 
           const clickOpts = { bubbles: true, cancelable: true, view: window };
           button.dispatchEvent(new MouseEvent('mousedown', clickOpts));
           button.dispatchEvent(new MouseEvent('mouseup', clickOpts));
           button.click();
-          
+
           totalExpanded++;
 
           await this.delay(baseDelay);
@@ -434,7 +453,9 @@ Identify the comment section and provide CSS selectors for each field.
 
       if (totalExpanded > 0) {
         await this.delay(TIMING.AI_RETRY_DELAY_MS);
-        Logger.info('[CommentExtractorSelector] Total reply expansion completed', { totalExpanded });
+        Logger.info('[CommentExtractorSelector] Total reply expansion completed', {
+          totalExpanded,
+        });
       }
 
       return totalExpanded;
@@ -465,10 +486,15 @@ Identify the comment section and provide CSS selectors for each field.
 
     while (allComments.length < maxComments && scrollAttempts < maxScrollAttempts) {
       if (scrollAttempts === 0 || scrollAttempts % SCROLL.REPLY_EXPAND_SCROLL_FREQUENCY === 0) {
-        const expandedCount = await this.expandReplies(selectors, allComments.length, onProgress, scrollCfg);
-        
+        const expandedCount = await this.expandReplies(
+          selectors,
+          allComments.length,
+          onProgress,
+          scrollCfg,
+        );
+
         if (expandedCount > 0) {
-           await this.delay(TIMING.SCROLL_BASE_DELAY_MS);
+          await this.delay(TIMING.SCROLL_BASE_DELAY_MS);
         }
       }
 
@@ -494,7 +520,10 @@ Identify the comment section and provide CSS selectors for each field.
         }
       }
 
-      Logger.info('[CommentExtractorSelector] Extracted new comments', { addedCount, total: allComments.length });
+      Logger.info('[CommentExtractorSelector] Extracted new comments', {
+        addedCount,
+        total: allComments.length,
+      });
 
       // Check if we got new comments
       if (addedCount === 0) {
@@ -534,7 +563,14 @@ Identify the comment section and provide CSS selectors for each field.
     this.logSelectorMatches('Pre-extraction selector test', selectors, selectorTestResults);
 
     // 按配置提取一次，不进行 AI 重试
-    const comments = await this.extractWithScrolling(selectors, {}, maxComments, platform, onProgress, scrollCfg);
+    const comments = await this.extractWithScrolling(
+      selectors,
+      {},
+      maxComments,
+      platform,
+      onProgress,
+      scrollCfg,
+    );
 
     // 根据实际提取结果标注 selector 成功/失败
     const metrics: Record<string, number> = {
@@ -555,7 +591,13 @@ Identify the comment section and provide CSS selectors for each field.
     if (configId) {
       const allKeys = Object.keys(selectors) as (keyof SelectorMap)[];
       const measuredKeys = new Set(Object.keys(metrics));
-      const optionalKeys = new Set(['replyToggle', 'replyContainer', 'postTitle', 'videoTime', 'replyItem']);
+      const optionalKeys = new Set([
+        'replyToggle',
+        'replyContainer',
+        'postTitle',
+        'videoTime',
+        'replyItem',
+      ]);
       for (const key of allKeys) {
         const selectorValue = selectors[key];
         if (!selectorValue) {
@@ -578,7 +620,9 @@ Identify the comment section and provide CSS selectors for each field.
         });
       }
     } else {
-      Logger.warn('[CommentExtractorSelector] Unable to update selector validation without configId');
+      Logger.warn(
+        '[CommentExtractorSelector] Unable to update selector validation without configId',
+      );
     }
 
     return comments;
@@ -620,13 +664,23 @@ Identify the comment section and provide CSS selectors for each field.
       const testResults = selectorValidator.testSelectors(selectors);
 
       // Update validation status for each selector based on test results
-      const optionalKeys = new Set(['replyToggle', 'replyContainer', 'postTitle', 'videoTime', 'replyItem']);
+      const optionalKeys = new Set([
+        'replyToggle',
+        'replyContainer',
+        'postTitle',
+        'videoTime',
+        'replyItem',
+      ]);
       for (const [key, value] of Object.entries(selectors)) {
         if (value) {
           const count = typeof testResults[key] === 'number' ? testResults[key] : 0;
           const status: 'success' | 'failed' = optionalKeys.has(key)
-            ? (count === -1 ? 'failed' : 'success')
-            : (count > 0 ? 'success' : 'failed');
+            ? count === -1
+              ? 'failed'
+              : 'success'
+            : count > 0
+              ? 'success'
+              : 'failed';
 
           await sendMessageVoid({
             type: MESSAGES.UPDATE_SELECTOR_VALIDATION,
@@ -637,7 +691,9 @@ Identify the comment section and provide CSS selectors for each field.
         }
       }
 
-      Logger.info('[CommentExtractorSelector] Updated selector validation for config', { configId });
+      Logger.info('[CommentExtractorSelector] Updated selector validation for config', {
+        configId,
+      });
     } catch (error) {
       Logger.warn('[CommentExtractorSelector] Failed to update selector validation', { error });
     }
@@ -688,7 +744,8 @@ Identify the comment section and provide CSS selectors for each field.
         key,
         selector,
         count: counts[key] ?? 0,
-        status: (counts[key] ?? 0) === -1 ? 'invalid' : (counts[key] ?? 0) > 0 ? 'success' : 'failed',
+        status:
+          (counts[key] ?? 0) === -1 ? 'invalid' : (counts[key] ?? 0) > 0 ? 'success' : 'failed',
       }));
 
     Logger.info(`[CommentExtractorSelector] Selector test: ${title}`, { summary });

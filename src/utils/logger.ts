@@ -80,7 +80,7 @@ export class Logger {
     try {
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area === 'local' && changes[STORAGE.LOG_LEVEL_KEY]) {
-          const nv = changes[STORAGE.LOG_LEVEL_KEY].newValue;
+          const nv = changes[STORAGE.LOG_LEVEL_KEY].newValue as string | undefined;
           if (nv && (LOG_LEVELS as readonly string[]).includes(nv)) {
             this.config.minLevel = nv as LogLevel;
           }
@@ -100,7 +100,7 @@ export class Logger {
 
     try {
       const stored = await chrome.storage.local.get(STORAGE.LOG_LEVEL_KEY);
-      const val = stored[STORAGE.LOG_LEVEL_KEY];
+      const val = stored[STORAGE.LOG_LEVEL_KEY] as string | undefined;
       if (val && (LOG_LEVELS as readonly string[]).includes(val)) {
         this.config.minLevel = val as LogLevel;
       }
@@ -289,7 +289,9 @@ export class Logger {
         logs = logs.filter(
           (log) =>
             log.message.toLowerCase().includes(searchLower) ||
-            JSON.stringify(log.data || {}).toLowerCase().includes(searchLower),
+            JSON.stringify(log.data || {})
+              .toLowerCase()
+              .includes(searchLower),
         );
       }
 

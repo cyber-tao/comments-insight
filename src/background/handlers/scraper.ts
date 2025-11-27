@@ -87,7 +87,7 @@ export async function handleGenerateScraperConfig(
   context: HandlerContext,
 ): Promise<GenerateScraperConfigResponse> {
   const { url, domStructure, platform: _platform, title: payloadTitle } = message.payload || {};
-  const title = payloadTitle || 'Untitled'; 
+  const title = payloadTitle || 'Untitled';
 
   if (!url) {
     throw new Error('URL is required');
@@ -103,39 +103,39 @@ export async function handleGenerateScraperConfig(
     // BUT the original code didn't require popup to send it; background fetched it.
     // If I stick to the NEW type, I must update the caller to send it.
     // OR I update the type to NOT require it and fetch it here if missing.
-    
+
     // Given "Refactor message types" task, I should arguably stick to the new safer type.
     // But if the caller doesn't send it, it will fail.
-    
+
     // Let's look at `handleGenerateScraperConfig` in Router again.
     // It gets `tabId` from sender.
     // Then `sendMessage` to tab.
-    
+
     // If I want to keep that logic, my type for `GENERATE_SCRAPER_CONFIG` should NOT have `domStructure` as required payload.
     // It should be `payload: { url: string; title?: string }`.
-    
+
     // I will fix the type definition AGAIN.
     // But for now I will implement the logic to fetch it if missing (or ignore the type constraint with casting if needed).
-    
+
     let structure = domStructure;
     if (!structure) {
-       // Fetch from tab if not provided (fallback to original logic)
-       let tabId = context.sender?.tab?.id;
-       if (!tabId) {
-         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-         tabId = activeTab?.id;
-       }
-       
-       if (tabId) {
-         const domResponse: DomStructureResponse = await chrome.tabs.sendMessage(tabId, {
-            type: MESSAGES.GET_DOM_STRUCTURE,
-          });
-          structure = domResponse?.domStructure;
-       }
+      // Fetch from tab if not provided (fallback to original logic)
+      let tabId = context.sender?.tab?.id;
+      if (!tabId) {
+        const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        tabId = activeTab?.id;
+      }
+
+      if (tabId) {
+        const domResponse: DomStructureResponse = await chrome.tabs.sendMessage(tabId, {
+          type: MESSAGES.GET_DOM_STRUCTURE,
+        });
+        structure = domResponse?.domStructure;
+      }
     }
-    
+
     if (!structure) {
-        throw new Error('Failed to get DOM structure');
+      throw new Error('Failed to get DOM structure');
     }
 
     const settings = await context.storageManager.getSettings();

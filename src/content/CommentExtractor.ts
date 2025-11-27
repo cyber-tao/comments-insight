@@ -29,10 +29,10 @@ export class CommentExtractor {
     onProgress?: (progress: number, message: string) => void,
   ): Promise<Comment[]> {
     Logger.info('[CommentExtractor] Starting extraction');
-    
+
     // Initialize the extraction engine
     const selectorExtractor = new CommentExtractorSelector(this.pageController);
-    
+
     const cfgResponse = await sendMessage<{ config?: ScraperConfig }>({
       type: MESSAGES.CHECK_SCRAPER_CONFIG,
       payload: { url: window.location.href },
@@ -50,17 +50,13 @@ export class CommentExtractor {
     }
 
     // Execute strategy
-    const comments = await strategy.execute(
-      maxComments, 
-      platform, 
-      onProgress
-    );
-      
+    const comments = await strategy.execute(maxComments, platform, onProgress);
+
     onProgress?.(80, 'validating');
     const validComments = this.validateComments(comments, platform);
     const limitedComments = validComments.slice(0, maxComments);
     onProgress?.(100, 'complete');
-    
+
     return limitedComments;
   }
 

@@ -61,9 +61,7 @@ export function extractDomain(hostname: string): string {
   if (!hostname) {
     return '';
   }
-  return hostname.startsWith(HOST.WWW_PREFIX)
-    ? hostname.slice(HOST.WWW_PREFIX.length)
-    : hostname;
+  return hostname.startsWith(HOST.WWW_PREFIX) ? hostname.slice(HOST.WWW_PREFIX.length) : hostname;
 }
 
 export function getHostname(url: string): string {
@@ -78,11 +76,7 @@ export function matchesDomain(hostname: string, domain: string): boolean {
   if (!hostname || !domain) {
     return false;
   }
-  return (
-    hostname === domain ||
-    hostname.endsWith('.' + domain) ||
-    domain.endsWith('.' + hostname)
-  );
+  return hostname === domain || hostname.endsWith('.' + domain) || domain.endsWith('.' + hostname);
 }
 
 export function getCurrentDomain(): string {
@@ -98,4 +92,3 @@ export function getCurrentHostname(): string {
   }
   return '';
 }
-

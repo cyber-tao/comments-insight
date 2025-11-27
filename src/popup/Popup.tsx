@@ -71,7 +71,6 @@ const Popup: React.FC = () => {
     }
   };
 
-
   useEffect(() => {
     isUnmountedRef.current = false;
 
@@ -139,10 +138,10 @@ const Popup: React.FC = () => {
       const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_TASK_STATUS });
 
       if (response?.tasks) {
-      const currentUrlTask = response.tasks.find(
-        (task: Task) =>
-          task.url === tab.url && (task.status === 'running' || task.status === 'pending'),
-      );
+        const currentUrlTask = response.tasks.find(
+          (task: Task) =>
+            task.url === tab.url && (task.status === 'running' || task.status === 'pending'),
+        );
 
         if (currentUrlTask) {
           Logger.debug('[Popup] Found current task', { task: currentUrlTask });
@@ -345,69 +344,72 @@ const Popup: React.FC = () => {
     }
   };
 
-  const monitorTask = useCallback(async (taskId: string) => {
-    const checkStatus = async () => {
-      if (isUnmountedRef.current) return;
-
-      try {
-        const response = await chrome.runtime.sendMessage({
-          type: MESSAGES.GET_TASK_STATUS,
-          payload: { taskId },
-        });
-
+  const monitorTask = useCallback(
+    async (taskId: string) => {
+      const checkStatus = async () => {
         if (isUnmountedRef.current) return;
 
-        if (response?.task) {
-          const task = response.task;
-          setCurrentTask({
-            id: task.id,
-            type: task.type,
-            status: task.status,
-            progress: task.progress,
-            message: task.message || task.error,
+        try {
+          const response = await chrome.runtime.sendMessage({
+            type: MESSAGES.GET_TASK_STATUS,
+            payload: { taskId },
           });
 
-          if (task.status === 'running' || task.status === 'pending') {
-            monitorTimeoutRef.current = setTimeout(checkStatus, TIMING.POLL_TASK_RUNNING_MS);
-          } else if (task.status === 'completed') {
-            // Get current tab URL directly instead of relying on pageInfo state
-            // This fixes the issue where pageInfo might not be updated yet after popup reopens
-            try {
-              const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-              if (tab?.url) {
-                await checkPageStatus(tab.url);
-              }
-            } catch (e) {
-              Logger.error('[Popup] Failed to get tab URL for status update', { error: e });
-            }
-            toast.success(
-              task.type === 'extract'
-                ? t('popup.extractionCompleted')
-                : t('popup.analysisCompleted'),
-            );
-            monitorTimeoutRef.current = setTimeout(() => {
-              if (!isUnmountedRef.current) {
-                setCurrentTask(null);
-              }
-            }, TIMING.CLEAR_TASK_DELAY_MS);
-          } else if (task.status === 'failed') {
-            toast.error(
-              task.error ? `${t('popup.taskFailed')}: ${task.error}` : t('popup.taskFailed'),
-            );
-            monitorTimeoutRef.current = setTimeout(() => {
-              if (!isUnmountedRef.current) {
-                setCurrentTask(null);
-              }
-            }, TIMING.CLEAR_TASK_FAILED_MS);
-          }
-        }
-      } catch (error) {
-        Logger.error('[Popup] Failed to check task status', { error });
-      }
-    };
+          if (isUnmountedRef.current) return;
 
-    checkStatus();
-  }, [t, toast]);
+          if (response?.task) {
+            const task = response.task;
+            setCurrentTask({
+              id: task.id,
+              type: task.type,
+              status: task.status,
+              progress: task.progress,
+              message: task.message || task.error,
+            });
+
+            if (task.status === 'running' || task.status === 'pending') {
+              monitorTimeoutRef.current = setTimeout(checkStatus, TIMING.POLL_TASK_RUNNING_MS);
+            } else if (task.status === 'completed') {
+              // Get current tab URL directly instead of relying on pageInfo state
+              // This fixes the issue where pageInfo might not be updated yet after popup reopens
+              try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                if (tab?.url) {
+                  await checkPageStatus(tab.url);
+                }
+              } catch (e) {
+                Logger.error('[Popup] Failed to get tab URL for status update', { error: e });
+              }
+              toast.success(
+                task.type === 'extract'
+                  ? t('popup.extractionCompleted')
+                  : t('popup.analysisCompleted'),
+              );
+              monitorTimeoutRef.current = setTimeout(() => {
+                if (!isUnmountedRef.current) {
+                  setCurrentTask(null);
+                }
+              }, TIMING.CLEAR_TASK_DELAY_MS);
+            } else if (task.status === 'failed') {
+              toast.error(
+                task.error ? `${t('popup.taskFailed')}: ${task.error}` : t('popup.taskFailed'),
+              );
+              monitorTimeoutRef.current = setTimeout(() => {
+                if (!isUnmountedRef.current) {
+                  setCurrentTask(null);
+                }
+              }, TIMING.CLEAR_TASK_FAILED_MS);
+            }
+          }
+        } catch (error) {
+          Logger.error('[Popup] Failed to check task status', { error });
+        }
+      };
+
+      checkStatus();
+    },
+    [t, toast],
+  );
 
   const handleOpenHistory = () => {
     chrome.tabs.create({ url: chrome.runtime.getURL(PATHS.HISTORY_PAGE) });
@@ -461,7 +463,9 @@ const Popup: React.FC = () => {
               {aiModelName && (
                 <div className="flex items-center text-xs opacity-90 bg-white/20 px-2 py-0.5 rounded w-fit mt-1">
                   <span className="mr-1">🤖</span>
-                  <span>{t('options.model')}: {aiModelName}</span>
+                  <span>
+                    {t('options.model')}: {aiModelName}
+                  </span>
                 </div>
               )}
             </div>
@@ -510,7 +514,7 @@ const Popup: React.FC = () => {
       {/* Page Status */}
       <div className="p-4 bg-white border-b">
         <div className="flex justify-between items-start mb-2">
-            <h2 className="text-sm font-semibold text-gray-700">{t('popup.currentPage')}</h2>
+          <h2 className="text-sm font-semibold text-gray-700">{t('popup.currentPage')}</h2>
         </div>
         {pageInfo ? (
           <div className="space-y-2">
@@ -611,7 +615,9 @@ const Popup: React.FC = () => {
               onClick={() => {
                 if (pageStatus.extracted) {
                   chrome.tabs.create({
-                    url: chrome.runtime.getURL(`${PATHS.HISTORY_PAGE}?id=${pageStatus.historyId}&tab=comments`),
+                    url: chrome.runtime.getURL(
+                      `${PATHS.HISTORY_PAGE}?id=${pageStatus.historyId}&tab=comments`,
+                    ),
                   });
                   window.close();
                 } else {
@@ -754,7 +760,9 @@ const Popup: React.FC = () => {
                 className="px-2 py-2 border rounded"
               >
                 {[10, 20, 50, 100].map((n) => (
-                  <option key={n} value={n}>{n}</option>
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
                 ))}
               </select>
               <button
@@ -781,7 +789,10 @@ const Popup: React.FC = () => {
                     </thead>
                     <tbody>
                       {testItems
-                        .slice((testPage - 1) * testPageSize, (testPage - 1) * testPageSize + testPageSize)
+                        .slice(
+                          (testPage - 1) * testPageSize,
+                          (testPage - 1) * testPageSize + testPageSize,
+                        )
                         .map((it) => (
                           <tr key={`${it.tag}-${it.index}`} className="border-t">
                             <td className="p-2">{it.index + 1}</td>
@@ -806,11 +817,16 @@ const Popup: React.FC = () => {
                         {t('popup.prev')}
                       </button>
                       <span className="text-xs">
-                        {t('popup.page')}: {testPage} / {Math.max(1, Math.ceil(testItems.length / testPageSize))}
+                        {t('popup.page')}: {testPage} /{' '}
+                        {Math.max(1, Math.ceil(testItems.length / testPageSize))}
                       </span>
                       <button
                         className="px-2 py-1 border rounded"
-                        onClick={() => setTestPage(Math.min(Math.ceil(testItems.length / testPageSize), testPage + 1))}
+                        onClick={() =>
+                          setTestPage(
+                            Math.min(Math.ceil(testItems.length / testPageSize), testPage + 1),
+                          )
+                        }
                         disabled={testPage >= Math.ceil(testItems.length / testPageSize)}
                       >
                         {t('popup.next')}

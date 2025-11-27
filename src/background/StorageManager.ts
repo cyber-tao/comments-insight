@@ -96,7 +96,10 @@ export class StorageManager {
   async getTokenStats(): Promise<{ today: number; total: number; lastReset: number }> {
     try {
       const result = await chrome.storage.local.get(StorageManager.TOKEN_STATS_KEY);
-      return result[StorageManager.TOKEN_STATS_KEY] || { today: 0, total: 0, lastReset: 0 };
+      const stats = result[StorageManager.TOKEN_STATS_KEY] as
+        | { today: number; total: number; lastReset: number }
+        | undefined;
+      return stats || { today: 0, total: 0, lastReset: 0 };
     } catch (error) {
       Logger.error('[StorageManager] Failed to get token stats', { error });
       return { today: 0, total: 0, lastReset: 0 };
@@ -105,7 +108,7 @@ export class StorageManager {
 
   private async getOrCreateSalt(): Promise<ArrayBuffer> {
     const result = await chrome.storage.local.get(StorageManager.ENCRYPTION_SALT_KEY);
-    let saltBase64 = result[StorageManager.ENCRYPTION_SALT_KEY];
+    let saltBase64 = result[StorageManager.ENCRYPTION_SALT_KEY] as string | undefined;
     if (!saltBase64) {
       const salt = crypto.getRandomValues(new Uint8Array(SECURITY.SALT_LENGTH));
       saltBase64 = btoa(String.fromCharCode(...salt));
@@ -199,8 +202,10 @@ export class StorageManager {
         apiKey: await this.decrypt(normalizedModel.apiKey || ''),
       };
 
-      delete (merged as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig }).extractorModel;
-      delete (merged as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig }).analyzerModel;
+      delete (merged as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig })
+        .extractorModel;
+      delete (merged as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig })
+        .analyzerModel;
       Logger.debug('[StorageManager] Settings retrieved successfully');
       return merged;
     } catch (error) {
@@ -238,8 +243,10 @@ export class StorageManager {
         } as AIConfig;
       }
 
-      delete (updatedSettings as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig }).extractorModel;
-      delete (updatedSettings as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig }).analyzerModel;
+      delete (updatedSettings as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig })
+        .extractorModel;
+      delete (updatedSettings as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig })
+        .analyzerModel;
 
       await chrome.storage.local.set({
         [StorageManager.SETTINGS_KEY]: updatedSettings,
@@ -346,7 +353,9 @@ export class StorageManager {
   async getHistoryItem(id: string): Promise<HistoryItem | undefined> {
     try {
       const result = await chrome.storage.local.get(`${StorageManager.HISTORY_KEY}_${id}`);
-      const compressedItem = result[`${StorageManager.HISTORY_KEY}_${id}`];
+      const compressedItem = result[`${StorageManager.HISTORY_KEY}_${id}`] as
+        | (Omit<HistoryItem, 'comments'> & { comments: string })
+        | undefined;
 
       if (!compressedItem) {
         return undefined;
@@ -359,7 +368,7 @@ export class StorageManager {
       return {
         ...compressedItem,
         comments,
-      };
+      } as HistoryItem;
     } catch (error) {
       Logger.error('[StorageManager] Failed to get history item', { id, error });
       return undefined;
@@ -410,7 +419,7 @@ export class StorageManager {
   private async getHistoryIndex(): Promise<string[]> {
     try {
       const result = await chrome.storage.local.get(StorageManager.HISTORY_INDEX_KEY);
-      return result[StorageManager.HISTORY_INDEX_KEY] || [];
+      return (result[StorageManager.HISTORY_INDEX_KEY] as string[] | undefined) || [];
     } catch (error) {
       Logger.error('[StorageManager] Failed to get history index', { error });
       return [];
@@ -466,8 +475,7 @@ export class StorageManager {
     return (
       typeof s.maxComments === 'number' &&
       (this.validateAIConfig(s.aiModel) ||
-        (this.validateAIConfig(s.extractorModel) &&
-          this.validateAIConfig(s.analyzerModel))) &&
+        (this.validateAIConfig(s.extractorModel) && this.validateAIConfig(s.analyzerModel))) &&
       typeof s.analyzerPromptTemplate === 'string' &&
       typeof s.language === 'string'
     );
@@ -493,10 +501,12 @@ export class StorageManager {
     );
   }
 
-  private normalizeAIModel(settings: Partial<Settings> & {
-    extractorModel?: AIConfig;
-    analyzerModel?: AIConfig;
-  }): AIConfig {
+  private normalizeAIModel(
+    settings: Partial<Settings> & {
+      extractorModel?: AIConfig;
+      analyzerModel?: AIConfig;
+    },
+  ): AIConfig {
     const baseModel = settings.aiModel || settings.analyzerModel || settings.extractorModel;
     return {
       ...DEFAULT_SETTINGS.aiModel,

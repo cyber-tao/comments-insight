@@ -8,7 +8,15 @@ import {
   createAIError,
   createNetworkError,
 } from '../utils/errors';
-import { AI as AI_CONST, REGEX, LOG_PREFIX, ANALYSIS_FORMAT, RETRY, DEFAULTS, LANGUAGES } from '@/config/constants';
+import {
+  AI as AI_CONST,
+  REGEX,
+  LOG_PREFIX,
+  ANALYSIS_FORMAT,
+  RETRY,
+  DEFAULTS,
+  LANGUAGES,
+} from '@/config/constants';
 import { storageManager } from './StorageManager';
 import { Tokenizer } from '../utils/tokenizer';
 
@@ -20,9 +28,11 @@ async function runWithConcurrencyLimit<T>(
   const executing: Promise<void>[] = [];
 
   for (const task of tasks) {
-    const p = Promise.resolve().then(() => task()).then((result) => {
-      results.push(result);
-    });
+    const p = Promise.resolve()
+      .then(() => task())
+      .then((result) => {
+        results.push(result);
+      });
 
     executing.push(p as unknown as Promise<void>);
 
@@ -248,7 +258,7 @@ export class AIService {
         return this.getDefaultModels();
       }
 
-      const data = await response.json() as { data?: Array<{ id: string }> };
+      const data = (await response.json()) as { data?: Array<{ id: string }> };
       const models = data.data?.map((model) => model.id) || [];
 
       Logger.info('[AIService] Available models fetched', { count: models.length });
@@ -357,10 +367,7 @@ export class AIService {
     const batches: Comment[][] = [];
     let currentBatch: Comment[] = [];
     let currentTokens = 0;
-    const availableTokens = Math.max(
-      1,
-      Math.floor(maxTokens * (1 - AI_CONST.TOKEN_RESERVE_RATIO)),
-    );
+    const availableTokens = Math.max(1, Math.floor(maxTokens * (1 - AI_CONST.TOKEN_RESERVE_RATIO)));
 
     for (const comment of comments) {
       const commentTokens = this.estimateTokensForComment(comment);
@@ -538,12 +545,9 @@ export class AIService {
     const likes = this.formatLikesValue(comment.likes);
     const content = this.normalizeTextValue(comment.content, ANALYSIS_FORMAT.UNKNOWN_CONTENT);
 
-    return [
-      `${prefix}${username}`,
-      timestamp,
-      likes,
-      content,
-    ].join(ANALYSIS_FORMAT.FIELD_SEPARATOR);
+    return [`${prefix}${username}`, timestamp, likes, content].join(
+      ANALYSIS_FORMAT.FIELD_SEPARATOR,
+    );
   }
 
   private normalizeTextValue(value: string | undefined | null, fallback: string): string {
