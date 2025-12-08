@@ -5,6 +5,10 @@
 
 import { LOG_PREFIX, STORAGE, DEFAULTS, LOG_LEVELS } from '@/config/constants';
 
+interface StoredSettings {
+  developerMode?: boolean;
+}
+
 export enum LogLevel {
   DEBUG = 'DEBUG',
   INFO = 'INFO',
@@ -74,15 +78,23 @@ export class Logger {
     } else {
       this.config.minLevel = LogLevel.ERROR;
       this.config.enableConsole = true;
-      this.config.enableStorage = true;
+      this.config.enableStorage = false;
     }
 
     try {
       chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === 'local' && changes[STORAGE.LOG_LEVEL_KEY]) {
-          const nv = changes[STORAGE.LOG_LEVEL_KEY].newValue as string | undefined;
-          if (nv && (LOG_LEVELS as readonly string[]).includes(nv)) {
-            this.config.minLevel = nv as LogLevel;
+        if (area === 'local') {
+          if (changes[STORAGE.LOG_LEVEL_KEY]) {
+            const nv = changes[STORAGE.LOG_LEVEL_KEY].newValue as string | undefined;
+            if (nv && (LOG_LEVELS as readonly string[]).includes(nv)) {
+              this.config.minLevel = nv as LogLevel;
+            }
+          }
+          if (changes[STORAGE.SETTINGS_KEY]) {
+            const settings = changes[STORAGE.SETTINGS_KEY].newValue as StoredSettings | undefined;
+            if (settings !== undefined) {
+              this.config.enableStorage = settings.developerMode === true;
+            }
           }
         }
       });
@@ -99,10 +111,14 @@ export class Logger {
     }
 
     try {
-      const stored = await chrome.storage.local.get(STORAGE.LOG_LEVEL_KEY);
+      const stored = await chrome.storage.local.get([STORAGE.LOG_LEVEL_KEY, STORAGE.SETTINGS_KEY]);
       const val = stored[STORAGE.LOG_LEVEL_KEY] as string | undefined;
       if (val && (LOG_LEVELS as readonly string[]).includes(val)) {
         this.config.minLevel = val as LogLevel;
+      }
+      const settings = stored[STORAGE.SETTINGS_KEY] as StoredSettings | undefined;
+      if (settings !== undefined) {
+        this.config.enableStorage = settings.developerMode === true;
       }
       this.storageConfigLoaded = true;
     } catch {

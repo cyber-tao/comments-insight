@@ -1,6 +1,7 @@
 import { Message } from '../../types';
 import { HandlerContext, PingResponse } from './types';
 import { Logger } from '../../utils/logger';
+import { ERRORS } from '@/config/constants';
 
 export interface ModelsResponse {
   models: string[];
@@ -28,7 +29,7 @@ export async function handleGetAvailableModels(
   const { apiUrl, apiKey } = message.payload || {};
 
   if (!apiUrl || !apiKey) {
-    throw new Error('API URL and API Key are required');
+    throw new Error(ERRORS.API_CONFIG_REQUIRED);
   }
 
   try {
@@ -47,7 +48,7 @@ export async function handleTestModel(
   const { config } = message.payload || {};
 
   if (!config || !config.apiUrl || !config.apiKey || !config.model) {
-    throw new Error('Complete model configuration is required');
+    throw new Error(ERRORS.COMPLETE_MODEL_CONFIG_REQUIRED);
   }
 
   try {
@@ -63,7 +64,7 @@ export async function handleTestModel(
         response: response.content.substring(0, 100),
       };
     } else {
-      throw new Error('No response from model');
+      throw new Error(ERRORS.NO_RESPONSE_FROM_MODEL);
     }
   } catch (error) {
     Logger.error('[MiscHandler] Model test failed', { error });

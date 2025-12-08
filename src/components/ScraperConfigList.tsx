@@ -90,7 +90,7 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
       URL.revokeObjectURL(url);
     } catch (error) {
       Logger.error('[ScraperConfigList] Failed to export', { error });
-      alert('Failed to export configurations');
+      alert(t('scraper.exportFailed'));
     }
   };
 
@@ -368,13 +368,16 @@ export const ScraperConfigList: React.FC<ScraperConfigListProps> = ({ onConfigCh
 
                     if (validationStatus === 'success') {
                       statusIcon = (
-                        <span className="text-green-600 ml-2" title="Validated successfully">
+                        <span
+                          className="text-green-600 ml-2"
+                          title={t('scraper.selectorValidated')}
+                        >
                           ✓
                         </span>
                       );
                     } else if (validationStatus === 'failed') {
                       statusIcon = (
-                        <span className="text-red-600 ml-2" title="Validation failed">
+                        <span className="text-red-600 ml-2" title={t('scraper.selectorFailed')}>
                           ✗
                         </span>
                       );

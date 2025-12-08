@@ -187,6 +187,30 @@ export const TEXT = {
   API_KEY_PLACEHOLDER: 'sk-...',
 };
 
+export const ERRORS = {
+  FAILED_TO_SAVE_SETTINGS: 'Failed to save settings',
+  FAILED_TO_EXPORT_SETTINGS: 'Failed to export settings',
+  INVALID_SETTINGS_FORMAT: 'Invalid settings format',
+  FAILED_TO_IMPORT_SETTINGS: 'Failed to import settings',
+  FAILED_TO_SAVE_HISTORY: 'Failed to save history',
+  FAILED_TO_DELETE_HISTORY: 'Failed to delete history',
+  TASK_CANCELLED_BY_USER: 'Task cancelled by user',
+  URL_REQUIRED: 'URL is required',
+  NO_TAB_ID_AVAILABLE: 'No tab ID available',
+  PROMPT_REQUIRED: 'Prompt is required',
+  COMMENTS_ARRAY_REQUIRED: 'Comments array is required',
+  HISTORY_ITEM_ID_REQUIRED: 'History item ID is required',
+  INVALID_EXPORT_TYPE: 'Invalid export type',
+  API_CONFIG_REQUIRED: 'API configuration is required',
+  COMPLETE_MODEL_CONFIG_REQUIRED: 'Complete model configuration is required',
+  NO_RESPONSE_FROM_MODEL: 'No response from model',
+  FAILED_TO_GET_DOM_STRUCTURE: 'Failed to get DOM structure',
+  CONFIG_DATA_REQUIRED: 'Configuration data is required',
+  CONFIG_ID_REQUIRED: 'Configuration ID is required',
+  SELECTOR_VALIDATION_PARAMS_REQUIRED: 'Selector validation parameters are required',
+  SETTINGS_DATA_REQUIRED: 'Settings data is required',
+};
+
 export const DEFAULTS = {
   LOGS_MAX_STORED: 100,
   MAX_COMMENTS: 100,
@@ -232,6 +256,7 @@ export const SCROLL = {
 export const DOM = {
   SIMPLIFY_MAX_DEPTH: 10,
   SIMPLIFY_MAX_NODES: 1000,
+  DEFAULT_EXPAND_DEPTH: 2,
   TEXT_PREVIEW_LENGTH: 100,
   HTML_PREVIEW_LENGTH: 200,
   SERIALIZE_TRUNCATE_LENGTH: 100,
@@ -239,6 +264,8 @@ export const DOM = {
   SAMPLE_NODES_COUNT: 10,
   CHILDREN_LIMIT: 20,
   CHILDREN_MAX: 50,
+  MAX_EXTRACT_DEPTH: 20,
+  NO_NEW_COMMENTS_THRESHOLD: 3,
 };
 
 export const CLICK = {
@@ -265,4 +292,20 @@ export const PAGINATION = {
 export const PERFORMANCE = {
   MAX_METRICS_COUNT: 1000,
   SLOW_OPERATION_THRESHOLD_MS: 100,
+};
+
+export const LIMITS = {
+  API_KEY_MASK_PREFIX: 4,
+  API_KEY_MASK_SUFFIX: 4,
+  API_KEY_MASK_MIN_LENGTH: 8,
+  API_KEY_MASK_MAX_STARS: 20,
+  MAX_COMMENTS_DEFAULT: 500,
+  MIN_COMMENTS: 10,
+  MAX_COMMENTS: 10000,
+  MAX_SCROLLS_MIN: 1,
+  MAX_SCROLLS_MAX: 100,
+  SCROLL_DELAY_MIN: 100,
+  SCROLL_DELAY_MAX: 10000,
+  MODEL_RESPONSE_PREVIEW_LENGTH: 100,
+  LOG_PROMPT_PREVIEW_LENGTH: 500,
 };

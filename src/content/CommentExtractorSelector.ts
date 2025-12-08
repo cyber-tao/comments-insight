@@ -147,10 +147,21 @@ export class CommentExtractorSelector {
 
       const successfulInfo =
         Object.keys(successfulSelectors).length > 0
-          ? `\n\n## Previous Successful Selectors (KEEP THESE):\n${JSON.stringify(successfulSelectors, null, 2)}\n\n## Only provide selectors for these missing fields:\n${selectorValidator.getMissingFields(successfulSelectors).join(', ')}`
+          ? `
+
+## Previous Successful Selectors (KEEP THESE):
+${JSON.stringify(successfulSelectors, null, 2)}
+
+## Only provide selectors for these missing fields:
+${selectorValidator.getMissingFields(successfulSelectors).join(', ')}`
           : '';
       const errorInfo = lastError
-        ? `\n\n## Previous Attempt Failed:\n${lastError}\n\nPlease analyze more carefully and provide different, more accurate selectors.`
+        ? `
+
+## Previous Attempt Failed:
+${lastError}
+
+Please analyze more carefully and provide different, more accurate selectors.`
         : '';
 
       // Paginate large DOM structure and aggregate
@@ -277,7 +288,7 @@ Identify the comment section and provide CSS selectors for each field.
   private extractDOMStructure(
     element: Element | DocumentFragment,
     depth: number = 0,
-    maxDepth: number = 20,
+    maxDepth: number = DOM.MAX_EXTRACT_DEPTH,
   ): string {
     // Limit depth to avoid huge output
     if (depth > maxDepth) {
@@ -325,20 +336,22 @@ Identify the comment section and provide CSS selectors for each field.
       }
 
       let nodesToShow: Element[];
-      if (nodes.length <= 30) {
+      if (nodes.length <= DOM.SAMPLE_NODES_THRESHOLD) {
         nodesToShow = nodes;
       } else {
-        const first10 = nodes.slice(0, 10);
-        const middle10 = nodes.slice(
-          Math.floor(nodes.length / 2) - 5,
-          Math.floor(nodes.length / 2) + 5,
+        const sampleCount = DOM.SAMPLE_NODES_COUNT;
+        const halfSample = Math.floor(sampleCount / 2);
+        const first = nodes.slice(0, sampleCount);
+        const middle = nodes.slice(
+          Math.floor(nodes.length / 2) - halfSample,
+          Math.floor(nodes.length / 2) + halfSample,
         );
-        const last10 = nodes.slice(-10);
-        nodesToShow = [...first10, ...middle10, ...last10];
+        const last = nodes.slice(-sampleCount);
+        nodesToShow = [...first, ...middle, ...last];
 
         html +=
           '  '.repeat(indentDepth) +
-          `<!-- Showing 30 of ${nodes.length} nodes (sampled from start, middle, end) -->\n`;
+          `<!-- Showing ${DOM.SAMPLE_NODES_THRESHOLD} of ${nodes.length} nodes (sampled from start, middle, end) -->\n`;
       }
 
       for (const child of nodesToShow) {
@@ -528,8 +541,10 @@ Identify the comment section and provide CSS selectors for each field.
       // Check if we got new comments
       if (addedCount === 0) {
         noNewCommentsCount++;
-        if (noNewCommentsCount >= 3) {
-          Logger.info('[CommentExtractorSelector] No new comments after 3 attempts, stopping');
+        if (noNewCommentsCount >= DOM.NO_NEW_COMMENTS_THRESHOLD) {
+          Logger.info(
+            `[CommentExtractorSelector] No new comments after ${DOM.NO_NEW_COMMENTS_THRESHOLD} attempts, stopping`,
+          );
           break;
         }
       } else {

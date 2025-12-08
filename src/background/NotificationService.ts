@@ -50,7 +50,9 @@ export class NotificationService {
         type: 'basic' as const,
         iconUrl: ICONS.ICON_48,
         title: TEXT.TASK_FAILED_TITLE,
-        message: `${taskType === 'extract' ? 'Extraction' : 'Analysis'} failed: ${error}`,
+        message: taskType === 'extract'
+          ? `Extraction failed: ${error}`
+          : `Analysis failed: ${error}`,
         requireInteraction: false,
       };
 
@@ -96,9 +98,13 @@ export class NotificationService {
     const truncatedTitle = title.length > 50 ? title.substring(0, 50) + '...' : title;
 
     if (taskType === 'extract') {
-      return `Extraction completed for "${truncatedTitle}"${commentsCount ? ` (${commentsCount} comments)` : ''}`;
+      return commentsCount
+        ? `Extraction completed for "${truncatedTitle}" (${commentsCount} comments)`
+        : `Extraction completed for "${truncatedTitle}"`;
     } else {
-      return `Analysis completed for "${truncatedTitle}"${commentsCount ? ` (${commentsCount} comments analyzed)` : ''}`;
+      return commentsCount
+        ? `Analysis completed for "${truncatedTitle}" (${commentsCount} comments analyzed)`
+        : `Analysis completed for "${truncatedTitle}"`;
     }
   }
 }

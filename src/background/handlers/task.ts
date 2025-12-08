@@ -1,5 +1,6 @@
 import { Message } from '../../types';
 import { HandlerContext, TaskStatusResponse, SuccessResponse } from './types';
+import i18n from '../../utils/i18n';
 
 export function handleGetTaskStatus(
   message: Extract<Message, { type: 'GET_TASK_STATUS' }>,
@@ -23,7 +24,7 @@ export function handleCancelTask(
   const { taskId } = message.payload;
 
   if (!taskId) {
-    throw new Error('Task ID is required');
+    throw new Error(i18n.t('errors.taskIdRequired'));
   }
 
   context.taskManager.cancelTask(taskId);

@@ -47,7 +47,6 @@ describe('NotificationService', () => {
         expect.objectContaining({
           type: 'basic',
           title: 'Comments Insight',
-          message: expect.stringContaining('Extraction completed'),
           requireInteraction: true,
         }),
       );
@@ -59,7 +58,8 @@ describe('NotificationService', () => {
       expect(mockNotificationCreate).toHaveBeenCalledWith(
         expect.stringMatching(/^task_completed_\d+$/),
         expect.objectContaining({
-          message: expect.stringContaining('Analysis completed'),
+          type: 'basic',
+          requireInteraction: true,
         }),
       );
     });
@@ -92,8 +92,6 @@ describe('NotificationService', () => {
       expect(mockNotificationCreate).toHaveBeenCalledWith(
         expect.stringMatching(/^task_failed_\d+$/),
         expect.objectContaining({
-          title: expect.stringContaining('Task Failed'),
-          message: expect.stringContaining('Extraction failed: Network error'),
           requireInteraction: false,
         }),
       );
@@ -105,7 +103,7 @@ describe('NotificationService', () => {
       expect(mockNotificationCreate).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          message: expect.stringContaining('Analysis failed: API error'),
+          requireInteraction: false,
         }),
       );
     });

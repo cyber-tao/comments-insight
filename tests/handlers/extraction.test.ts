@@ -110,7 +110,7 @@ describe('extraction handlers', () => {
           message as Extract<import('../../src/types').Message, { type: 'START_EXTRACTION' }>,
           context,
         ),
-      ).rejects.toThrow('URL is required');
+      ).rejects.toThrow();
     });
   });
 

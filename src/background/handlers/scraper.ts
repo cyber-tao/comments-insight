@@ -3,13 +3,12 @@ import { ScraperConfig, ScraperSelectors, ScrollConfig } from '../../types/scrap
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
 import { ScraperConfigManager } from '../../utils/ScraperConfigManager';
-import { MESSAGES, AI, REGEX } from '@/config/constants';
+import { MESSAGES, AI, REGEX, ERRORS, TEXT } from '@/config/constants';
 import { getDomain } from '../../utils/url';
 import {
   generateScraperConfigPrompt,
   SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT,
 } from '../../utils/prompts-scraper';
-import i18n from '../../utils/i18n';
 import { chunkDomText } from './extraction';
 
 interface CheckScraperConfigResponse {
@@ -64,7 +63,7 @@ export async function handleCheckScraperConfig(
 
   if (!url) {
     Logger.error('[ScraperHandler] URL is required but not provided');
-    throw new Error('URL is required');
+    throw new Error(ERRORS.URL_REQUIRED);
   }
 
   try {
@@ -90,7 +89,7 @@ export async function handleGenerateScraperConfig(
   const title = payloadTitle || 'Untitled';
 
   if (!url) {
-    throw new Error('URL is required');
+    throw new Error(ERRORS.URL_REQUIRED);
   }
 
   try {
@@ -135,7 +134,7 @@ export async function handleGenerateScraperConfig(
     }
 
     if (!structure) {
-      throw new Error('Failed to get DOM structure');
+      throw new Error(ERRORS.FAILED_TO_GET_DOM_STRUCTURE);
     }
 
     const settings = await context.storageManager.getSettings();
@@ -151,7 +150,7 @@ export async function handleGenerateScraperConfig(
       const prompt = generateScraperConfigPrompt(
         chunks[i],
         url,
-        title || i18n.t('common.untitled'),
+        title || TEXT.UNTITLED,
       );
       const response = await context.aiService.callAI({
         prompt,
@@ -238,7 +237,7 @@ export async function handleSaveScraperConfig(
   const { config } = message.payload || {};
 
   if (!config) {
-    throw new Error('Config data is required');
+    throw new Error(ERRORS.CONFIG_DATA_REQUIRED);
   }
 
   try {
@@ -267,7 +266,7 @@ export async function handleDeleteScraperConfig(
   const { id } = message.payload || {};
 
   if (!id) {
-    throw new Error('Config ID is required');
+    throw new Error(ERRORS.CONFIG_ID_REQUIRED);
   }
 
   try {
@@ -286,7 +285,7 @@ export async function handleUpdateSelectorValidation(
   const { configId, selectorKey, status, count } = message.payload || {};
 
   if (!configId || !selectorKey || !status) {
-    throw new Error('Config ID, selector key, and status are required');
+    throw new Error(ERRORS.SELECTOR_VALIDATION_PARAMS_REQUIRED);
   }
 
   try {

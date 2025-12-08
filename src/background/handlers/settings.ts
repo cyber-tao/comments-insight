@@ -1,6 +1,7 @@
 import { Message } from '../../types';
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
+import { ERRORS } from '@/config/constants';
 
 export async function handleGetSettings(
   _message: Extract<Message, { type: 'GET_SETTINGS' }>,
@@ -19,7 +20,7 @@ export async function handleSaveSettings(
   const { settings } = message.payload || {};
 
   if (!settings) {
-    throw new Error('Settings data is required');
+    throw new Error(ERRORS.SETTINGS_DATA_REQUIRED);
   }
 
   await context.storageManager.saveSettings(settings);

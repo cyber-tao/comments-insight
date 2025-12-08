@@ -55,3 +55,6 @@ i18n.use(initReactI18next).init({
 });
 
 export default i18n;
+
+/** Translation function for use outside React components */
+export const t = i18n.t.bind(i18n);

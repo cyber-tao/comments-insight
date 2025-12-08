@@ -2,6 +2,7 @@ import { Task, Platform } from '../types';
 import { NotificationService } from './NotificationService';
 import { Logger } from '../utils/logger';
 import { ExtensionError, ErrorCode } from '../utils/errors';
+import { ERRORS } from '@/config/constants';
 
 export interface TaskResult {
   tokensUsed?: number;
@@ -194,7 +195,7 @@ export class TaskManager {
     }
 
     task.status = 'failed';
-    task.error = 'Task cancelled by user';
+    task.error = ERRORS.TASK_CANCELLED_BY_USER;
     task.endTime = Date.now();
 
     if (this.currentTaskId === taskId) {

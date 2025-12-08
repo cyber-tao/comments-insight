@@ -153,17 +153,19 @@ export class AIService {
             } else if (response.status === 404) {
               throw createAIError(
                 ErrorCode.AI_MODEL_NOT_FOUND,
-                `Model not found: ${config.model}`,
+                `Model '${config.model}' not found`,
                 { status: response.status, model: config.model },
               );
             } else if (response.status === 401 || response.status === 403) {
-              throw createAIError(ErrorCode.MISSING_API_KEY, 'Invalid API key or unauthorized', {
-                status: response.status,
-              });
+              throw createAIError(
+                ErrorCode.MISSING_API_KEY,
+                'Invalid API key or unauthorized',
+                { status: response.status },
+              );
             } else {
               throw createAIError(
                 ErrorCode.API_ERROR,
-                `AI API error: ${response.status} - ${errorText}`,
+                `API error (${response.status}): ${errorText}`,
                 { status: response.status, response: errorText },
               );
             }
@@ -213,7 +215,9 @@ export class AIService {
 
           // Handle network errors
           if (error instanceof TypeError && error.message.includes('fetch')) {
-            throw createNetworkError('Network request failed', { originalError: error.message });
+            throw createNetworkError('Network request failed', {
+              originalError: error.message,
+            });
           }
 
           Logger.error('[AIService] AI call failed', { error });

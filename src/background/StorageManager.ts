@@ -1,5 +1,5 @@
 import { Settings, HistoryItem, AIConfig } from '../types';
-import { SECURITY, API, STORAGE, AI, LANGUAGES } from '@/config/constants';
+import { SECURITY, API, STORAGE, AI, LANGUAGES, ERRORS } from '@/config/constants';
 import LZString from 'lz-string';
 import { Logger } from '../utils/logger';
 import { ErrorHandler } from '../utils/errors';
@@ -255,7 +255,7 @@ export class StorageManager {
       Logger.info('[StorageManager] Settings saved successfully');
     } catch (error) {
       Logger.error('[StorageManager] Failed to save settings', { error });
-      throw new Error('Failed to save settings');
+      throw new Error(ERRORS.FAILED_TO_SAVE_SETTINGS);
     }
   }
 
@@ -269,7 +269,7 @@ export class StorageManager {
       return JSON.stringify(settings, null, 2);
     } catch (error) {
       Logger.error('[StorageManager] Failed to export settings', { error });
-      throw new Error('Failed to export settings');
+      throw new Error(ERRORS.FAILED_TO_EXPORT_SETTINGS);
     }
   }
 
@@ -283,14 +283,14 @@ export class StorageManager {
 
       // Validate settings structure
       if (!this.validateSettings(settings)) {
-        throw new Error('Invalid settings format');
+        throw new Error(ERRORS.INVALID_SETTINGS_FORMAT);
       }
 
       await this.saveSettings(settings);
       Logger.info('[StorageManager] Settings imported successfully');
     } catch (error) {
       Logger.error('[StorageManager] Failed to import settings', { error });
-      throw new Error('Failed to import settings: ' + (error as Error).message);
+      throw new Error(ERRORS.FAILED_TO_IMPORT_SETTINGS);
     }
   }
 
@@ -317,7 +317,7 @@ export class StorageManager {
       Logger.info('[StorageManager] History item saved', { id: item.id });
     } catch (error) {
       Logger.error('[StorageManager] Failed to save history', { error });
-      throw new Error('Failed to save history');
+      throw new Error(ERRORS.FAILED_TO_SAVE_HISTORY);
     }
   }
 
@@ -386,7 +386,7 @@ export class StorageManager {
       Logger.info('[StorageManager] History item deleted', { id });
     } catch (error) {
       Logger.error('[StorageManager] Failed to delete history item', { id, error });
-      throw new Error('Failed to delete history item');
+      throw new Error(ERRORS.FAILED_TO_DELETE_HISTORY);
     }
   }
 

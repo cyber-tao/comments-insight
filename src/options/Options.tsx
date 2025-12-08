@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { API, MESSAGES, TIMING, LANGUAGES } from '@/config/constants';
+import { API, MESSAGES, TIMING, LANGUAGES, LIMITS } from '@/config/constants';
 import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
 import { Settings } from '../types';
 import i18n from '../utils/i18n';
@@ -33,7 +33,9 @@ const Options: React.FC = () => {
 
         if (chrome.runtime.lastError) {
           Logger.error('[Options] Runtime error', { error: chrome.runtime.lastError });
-          toast.error('Failed to load settings: ' + chrome.runtime.lastError.message);
+          toast.error(
+            t('options.loadSettingsError', { message: chrome.runtime.lastError.message }),
+          );
           return;
         }
 
@@ -48,12 +50,14 @@ const Options: React.FC = () => {
           setTimeout(() => setIsInitialLoad(false), 100);
         } else {
           Logger.error('[Options] No settings in response', { response });
-          toast.error('Failed to load settings: Invalid response');
+          toast.error(t('options.loadSettingsInvalid'));
         }
       } catch (error) {
         Logger.error('[Options] Failed to load settings', { error });
         toast.error(
-          'Failed to load settings: ' + (error instanceof Error ? error.message : 'Unknown error'),
+          t('options.loadSettingsError', {
+            message: error instanceof Error ? error.message : 'Unknown error',
+          }),
         );
       }
     };
@@ -111,7 +115,7 @@ const Options: React.FC = () => {
         toast.success(t('options.exportSettings') + ' ' + t('common.save'));
       }
     } catch (_error) {
-      toast.error('Failed to export settings');
+      toast.error(t('options.exportError'));
     }
   };
 
@@ -127,7 +131,7 @@ const Options: React.FC = () => {
         setSettings(imported);
         toast.success(t('options.importedSuccess'));
       } catch (_error) {
-        toast.error('Failed to import settings');
+        toast.error(t('options.importError'));
       }
     };
     reader.readAsText(file);
@@ -139,7 +143,7 @@ const Options: React.FC = () => {
     const config = settings.aiModel;
 
     if (!config.apiUrl || !config.apiKey) {
-      toast.warning('Please configure API URL and API Key first');
+      toast.warning(t('options.configureApiFirst'));
       return;
     }
 
@@ -156,12 +160,12 @@ const Options: React.FC = () => {
 
       if (response?.models && response.models.length > 0) {
         setAvailableModels(response.models);
-        toast.success(`Found ${response.models.length} models`);
+        toast.success(t('options.modelsFound', { count: response.models.length }));
       } else {
-        toast.info('No models found or API does not support model listing');
+        toast.info(t('options.noModelsFound'));
       }
     } catch (_error) {
-      toast.error('Failed to fetch models');
+      toast.error(t('options.fetchModelsFailed'));
     } finally {
       setLoadingModels(false);
     }
@@ -173,7 +177,7 @@ const Options: React.FC = () => {
     const config = settings.aiModel;
 
     if (!config.apiUrl || !config.apiKey || !config.model) {
-      toast.warning('Please configure all required fields');
+      toast.warning(t('options.configureAllFields'));
       return;
     }
 
@@ -207,10 +211,14 @@ const Options: React.FC = () => {
   };
 
   const maskApiKey = (key: string): string => {
-    if (!key || key.length < 8) return key;
-    const start = key.substring(0, 4);
-    const end = key.substring(key.length - 4);
-    return `${start}${'*'.repeat(Math.min(20, key.length - 8))}${end}`;
+    if (!key || key.length < LIMITS.API_KEY_MASK_MIN_LENGTH) return key;
+    const start = key.substring(0, LIMITS.API_KEY_MASK_PREFIX);
+    const end = key.substring(key.length - LIMITS.API_KEY_MASK_SUFFIX);
+    const starCount = Math.min(
+      LIMITS.API_KEY_MASK_MAX_STARS,
+      key.length - LIMITS.API_KEY_MASK_PREFIX - LIMITS.API_KEY_MASK_SUFFIX,
+    );
+    return `${start}${'*'.repeat(starCount)}${end}`;
   };
 
   if (!settings) {

@@ -1,4 +1,5 @@
 import { ICONS, TEXT, RETRY } from '@/config/constants';
+import i18n from './i18n';
 
 interface ErrorConstructorWithCapture extends ErrorConstructor {
   captureStackTrace?(targetObject: object, constructorOpt?: NewableFunction): void;
@@ -403,55 +404,47 @@ export class ErrorHandler {
   }
 }
 
+const ERROR_CODE_TO_I18N_KEY: Record<ErrorCode, string> = {
+  [ErrorCode.NETWORK_ERROR]: 'errors.networkError',
+  [ErrorCode.API_ERROR]: 'errors.apiError',
+  [ErrorCode.TIMEOUT_ERROR]: 'errors.timeoutError',
+  [ErrorCode.AI_TIMEOUT]: 'errors.aiTimeout',
+  [ErrorCode.AI_RATE_LIMIT]: 'errors.aiRateLimit',
+  [ErrorCode.AI_INVALID_RESPONSE]: 'errors.aiInvalidResponse',
+  [ErrorCode.AI_QUOTA_EXCEEDED]: 'errors.aiQuotaExceeded',
+  [ErrorCode.AI_MODEL_NOT_FOUND]: 'errors.aiModelNotFound',
+  [ErrorCode.PLATFORM_NOT_SUPPORTED]: 'errors.platformNotSupported',
+  [ErrorCode.EXTRACTION_FAILED]: 'errors.extractionFailed',
+  [ErrorCode.NO_COMMENTS_FOUND]: 'errors.noCommentsFound',
+  [ErrorCode.DOM_ANALYSIS_FAILED]: 'errors.domAnalysisFailed',
+  [ErrorCode.STORAGE_QUOTA_EXCEEDED]: 'errors.storageQuotaExceeded',
+  [ErrorCode.STORAGE_ERROR]: 'errors.storageError',
+  [ErrorCode.STORAGE_READ_ERROR]: 'errors.storageReadError',
+  [ErrorCode.STORAGE_WRITE_ERROR]: 'errors.storageWriteError',
+  [ErrorCode.INVALID_CONFIG]: 'errors.invalidConfig',
+  [ErrorCode.MISSING_API_KEY]: 'errors.missingApiKey',
+  [ErrorCode.INVALID_API_URL]: 'errors.invalidApiUrl',
+  [ErrorCode.INVALID_MODEL]: 'errors.invalidModel',
+  [ErrorCode.TASK_NOT_FOUND]: 'errors.taskNotFound',
+  [ErrorCode.TASK_ALREADY_RUNNING]: 'errors.taskAlreadyRunning',
+  [ErrorCode.TASK_CANCELLED]: 'errors.taskCancelled',
+  [ErrorCode.UNKNOWN_ERROR]: 'errors.unknownError',
+  [ErrorCode.VALIDATION_ERROR]: 'errors.validationError',
+  [ErrorCode.PERMISSION_DENIED]: 'errors.permissionDenied',
+};
+
 /**
  * Get user-friendly error message
  * @param code - Error code
  * @param technicalMessage - Technical error message
  * @returns User-friendly message
  */
-export function getUserFriendlyMessage(code: ErrorCode, technicalMessage: string): string {
-  const messages: Record<ErrorCode, string> = {
-    [ErrorCode.NETWORK_ERROR]:
-      'Network connection failed. Please check your internet connection and try again.',
-    [ErrorCode.API_ERROR]: 'API request failed. Please check your API configuration.',
-    [ErrorCode.TIMEOUT_ERROR]: 'Request timed out. Please try again.',
-
-    [ErrorCode.AI_TIMEOUT]: 'AI request timed out. The model may be overloaded. Please try again.',
-    [ErrorCode.AI_RATE_LIMIT]: 'Rate limit exceeded. Please wait a moment before trying again.',
-    [ErrorCode.AI_INVALID_RESPONSE]:
-      'AI returned an invalid response. Please try again or use a different model.',
-    [ErrorCode.AI_QUOTA_EXCEEDED]:
-      'API quota exceeded. Please check your API account or try again later.',
-    [ErrorCode.AI_MODEL_NOT_FOUND]:
-      'The selected AI model was not found. Please check your model configuration.',
-
-    [ErrorCode.PLATFORM_NOT_SUPPORTED]: 'This platform is not supported yet.',
-    [ErrorCode.EXTRACTION_FAILED]:
-      'Failed to extract comments. The page structure may have changed.',
-    [ErrorCode.NO_COMMENTS_FOUND]: 'No comments found on this page.',
-    [ErrorCode.DOM_ANALYSIS_FAILED]: 'Failed to analyze page structure. Please try again.',
-
-    [ErrorCode.STORAGE_QUOTA_EXCEEDED]:
-      'Storage quota exceeded. Please delete some history items to free up space.',
-    [ErrorCode.STORAGE_ERROR]: 'Storage operation failed. Please try again.',
-    [ErrorCode.STORAGE_READ_ERROR]: 'Failed to read from storage. Please try again.',
-    [ErrorCode.STORAGE_WRITE_ERROR]: 'Failed to write to storage. Please try again.',
-
-    [ErrorCode.INVALID_CONFIG]: 'Invalid configuration. Please check your settings.',
-    [ErrorCode.MISSING_API_KEY]: 'API key is missing. Please configure your API key in settings.',
-    [ErrorCode.INVALID_API_URL]: 'Invalid API URL. Please check your API configuration.',
-    [ErrorCode.INVALID_MODEL]: 'Invalid model configuration. Please check your model settings.',
-
-    [ErrorCode.TASK_NOT_FOUND]: 'Task not found. It may have been cancelled or completed.',
-    [ErrorCode.TASK_ALREADY_RUNNING]: 'A task is already running. Please wait for it to complete.',
-    [ErrorCode.TASK_CANCELLED]: 'Task was cancelled.',
-
-    [ErrorCode.UNKNOWN_ERROR]: technicalMessage || 'An unknown error occurred. Please try again.',
-    [ErrorCode.VALIDATION_ERROR]: 'Validation failed. Please check your input.',
-    [ErrorCode.PERMISSION_DENIED]: 'Permission denied. Please check extension permissions.',
-  };
-
-  return messages[code] || technicalMessage || 'An error occurred.';
+export function getUserFriendlyMessage(code: ErrorCode, technicalMessage?: string): string {
+  const i18nKey = ERROR_CODE_TO_I18N_KEY[code];
+  if (i18nKey) {
+    return i18n.t(i18nKey);
+  }
+  return technicalMessage || i18n.t('errors.unknownError');
 }
 
 /**

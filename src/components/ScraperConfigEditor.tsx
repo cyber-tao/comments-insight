@@ -68,7 +68,7 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
 
       onSave(savedConfig);
     } catch (_error) {
-      setErrors(['Failed to save configuration']);
+      setErrors([t('scraper.saveConfigFailed')]);
     }
   };
 
@@ -115,13 +115,13 @@ export const ScraperConfigEditor: React.FC<ScraperConfigEditorProps> = ({
 
     if (status === 'success') {
       return (
-        <span className="text-green-600 text-lg" title="Selector validated successfully">
+        <span className="text-green-600 text-lg" title={t('scraper.selectorValidated')}>
           ✓
         </span>
       );
     } else if (status === 'failed') {
       return (
-        <span className="text-red-600 text-lg" title="Selector validation failed">
+        <span className="text-red-600 text-lg" title={t('scraper.selectorFailed')}>
           ✗
         </span>
       );

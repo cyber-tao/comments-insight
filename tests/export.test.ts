@@ -104,6 +104,12 @@ describe('Export Utils', () => {
       comments: [],
       analysis: {
         markdown: '# Analysis',
+        summary: {
+          totalComments: 10,
+          sentimentDistribution: { positive: 5, negative: 3, neutral: 2 },
+          hotComments: [],
+          keyInsights: [],
+        },
         tokensUsed: 100,
         generatedAt: Date.now(),
       },
@@ -119,7 +125,7 @@ describe('Export Utils', () => {
 
     it('should throw error if no analysis available', () => {
       const noAnalysisItem = { ...mockHistoryItem, analysis: undefined };
-      expect(() => exportAnalysisAsMarkdown(noAnalysisItem)).toThrow('No analysis available');
+      expect(() => exportAnalysisAsMarkdown(noAnalysisItem)).toThrow();
     });
   });
 

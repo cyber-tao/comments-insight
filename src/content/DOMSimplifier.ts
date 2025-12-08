@@ -15,7 +15,7 @@ export class DOMSimplifier {
    */
   simplifyElement(
     element: Element,
-    maxDepth: number = 2,
+    maxDepth: number = DOM.DEFAULT_EXPAND_DEPTH,
     currentDepth: number = 0,
     forceExpandParent: boolean = false,
   ): SimplifiedNode {
@@ -240,7 +240,7 @@ export class DOMSimplifier {
    * @param depth - Depth to expand
    * @returns Simplified node or null if not found
    */
-  expandNode(selector: string, depth: number = 2): SimplifiedNode | null {
+  expandNode(selector: string, depth: number = DOM.DEFAULT_EXPAND_DEPTH): SimplifiedNode | null {
     try {
       const element = querySelectorDeep(document, selector);
       if (!element) {
@@ -319,7 +319,10 @@ export class DOMSimplifier {
   /**
    * Batch expand multiple nodes
    */
-  expandMultipleNodes(selectors: string[], depth: number = 2): Map<string, SimplifiedNode | null> {
+  expandMultipleNodes(
+    selectors: string[],
+    depth: number = DOM.DEFAULT_EXPAND_DEPTH,
+  ): Map<string, SimplifiedNode | null> {
     const results = new Map<string, SimplifiedNode | null>();
 
     for (const selector of selectors) {
@@ -343,7 +346,7 @@ export class DOMSimplifier {
       includeText?: boolean;
     } = {},
   ): SimplifiedNode {
-    const { maxDepth = 10 } = options;
+    const { maxDepth = DOM.SIMPLIFY_MAX_DEPTH } = options;
     const simplifier = new DOMSimplifier();
     return simplifier.simplifyElement(element, maxDepth);
   }

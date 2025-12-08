@@ -249,8 +249,10 @@ const History: React.FC = () => {
                     >
                       <span>{isExpanded ? '▼' : '▶'}</span>
                       <span>
-                        💬 {comment.replies.length}{' '}
-                        {comment.replies.length === 1 ? 'reply' : 'replies'}
+                        💬{' '}
+                        {comment.replies.length === 1
+                          ? t('history.reply', { count: comment.replies.length })
+                          : t('history.replies', { count: comment.replies.length })}
                       </span>
                     </button>
                   )}
@@ -332,8 +334,12 @@ const History: React.FC = () => {
                     </button>
                   </div>
                   <div className="flex gap-4 text-xs text-gray-500">
-                    <span>💬 {item.commentsCount} comments</span>
-                    {item.analysis && <span>🔥 {item.analysis.tokensUsed} tokens</span>}
+                    <span>💬 {t('history.commentsWithCount', { count: item.commentsCount })}</span>
+                    {item.analysis && (
+                      <span>
+                        🔥 {t('history.tokensWithCount', { count: item.analysis.tokensUsed })}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}
@@ -361,7 +367,9 @@ const History: React.FC = () => {
               <div className="flex gap-4 text-sm text-gray-600">
                 <span>{selectedItem.platform}</span>
                 <span>📅 {formatDate(selectedItem.extractedAt)}</span>
-                <span>💬 {selectedItem.commentsCount} comments</span>
+                <span>
+                  💬 {t('history.commentsWithCount', { count: selectedItem.commentsCount })}
+                </span>
               </div>
             </div>
 

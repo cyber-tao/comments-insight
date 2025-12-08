@@ -1,7 +1,7 @@
 import { Message, Comment } from '../../types';
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
-import { REGEX, AI } from '@/config/constants';
+import { REGEX, AI, ERRORS } from '@/config/constants';
 import { getDomain } from '../../utils/url';
 import { Tokenizer } from '../../utils/tokenizer';
 
@@ -68,7 +68,7 @@ export async function handleStartExtraction(
   const { url, maxComments } = message.payload || {};
 
   if (!url) {
-    throw new Error('URL is required');
+    throw new Error(ERRORS.URL_REQUIRED);
   }
 
   const domain = getDomain(url) || 'unknown';
@@ -117,7 +117,7 @@ async function startExtractionTask(
   await context.taskManager.startTask(taskId);
 
   if (!tabId) {
-    throw new Error('No tab ID available');
+    throw new Error(ERRORS.NO_TAB_ID_AVAILABLE);
   }
 
   const response: ExtractionContentResponse = await chrome.tabs.sendMessage(tabId, {
@@ -160,7 +160,7 @@ export async function handleAIAnalyzeStructure(
   const { prompt } = message.payload || {};
 
   if (!prompt) {
-    throw new Error('Prompt is required');
+    throw new Error(ERRORS.PROMPT_REQUIRED);
   }
 
   try {
@@ -235,7 +235,7 @@ export async function handleStartAnalysis(
   const { comments, metadata, historyId } = message.payload || {};
 
   if (!comments || !Array.isArray(comments)) {
-    throw new Error('Comments array is required');
+    throw new Error(ERRORS.COMMENTS_ARRAY_REQUIRED);
   }
 
   const finalUrl = metadata?.url;
