@@ -14,10 +14,11 @@ class ServiceContainer {
 
   private getDefaults(): ServiceInstances {
     if (!this.defaultServices) {
+      const storageManager = new StorageManager();
       this.defaultServices = {
-        aiService: new AIService(),
-        taskManager: new TaskManager(),
-        storageManager: new StorageManager(),
+        aiService: new AIService(storageManager),
+        taskManager: new TaskManager({ enablePersistence: true }),
+        storageManager,
       };
     }
     return this.defaultServices;

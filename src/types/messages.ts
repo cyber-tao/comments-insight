@@ -7,7 +7,7 @@ export type SystemMessage =
 
 export type SettingsMessage =
   | { type: 'GET_SETTINGS'; payload?: never }
-  | { type: 'SAVE_SETTINGS'; payload: { settings: Settings } };
+  | { type: 'SAVE_SETTINGS'; payload: { settings: Partial<Settings> } };
 
 export type ExtractionMessage =
   | { type: 'START_EXTRACTION'; payload: { url: string; maxComments?: number } }

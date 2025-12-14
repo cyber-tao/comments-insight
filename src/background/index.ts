@@ -7,6 +7,15 @@ import { Logger } from '../utils/logger';
 
 Logger.info('Comments Insight Service Worker loaded');
 
+getTaskManager()
+  .initialize()
+  .then(() => {
+    Logger.info('[Background] TaskManager initialized');
+  })
+  .catch((error) => {
+    Logger.warn('[Background] TaskManager initialization failed', { error });
+  });
+
 const messageRouter = new MessageRouter(getTaskManager(), getAIService(), getStorageManager());
 
 // Setup notification handlers

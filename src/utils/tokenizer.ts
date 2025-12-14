@@ -56,4 +56,40 @@ export const Tokenizer = {
     if (current.length > 0) parts.push(current.join('\n'));
     return parts.length > 0 ? parts : [text];
   },
+
+  chunkTextWithOverhead(
+    text: string,
+    maxTokens: number,
+    overheadText: string,
+    reserveRatio = TOKENIZER.RESERVE_RATIO,
+    minChunkSize = TOKENIZER.MIN_CHUNK_SIZE,
+  ): string[] {
+    const baseLimit = Math.floor(maxTokens * (1 - reserveRatio));
+    const overheadTokens = this.estimateTokens(overheadText);
+    const limit = Math.max(minChunkSize, baseLimit - overheadTokens);
+
+    const parts: string[] = [];
+    let current: string[] = [];
+    let tokens = 0;
+
+    const lines = text.split(/(?<=>)\n|\n/);
+
+    for (const line of lines) {
+      const t = this.estimateTokens(line) + 1;
+      if (tokens + t > limit && current.length > 0) {
+        parts.push(current.join('\n'));
+        current = [line];
+        tokens = t;
+      } else {
+        current.push(line);
+        tokens += t;
+      }
+    }
+
+    if (current.length > 0) {
+      parts.push(current.join('\n'));
+    }
+
+    return parts.length > 0 ? parts : [''];
+  },
 };

@@ -55,10 +55,44 @@ export class StorageManager {
   private static readonly SETTINGS_KEY = STORAGE.SETTINGS_KEY;
   private static readonly HISTORY_KEY = STORAGE.HISTORY_KEY;
   private static readonly HISTORY_INDEX_KEY = STORAGE.HISTORY_INDEX_KEY;
+  private static readonly HISTORY_URL_INDEX_KEY = STORAGE.HISTORY_URL_INDEX_KEY;
   private static readonly ENCRYPTION_SALT_KEY = STORAGE.ENCRYPTION_SALT_KEY;
-  private static readonly TOKEN_STATS_KEY = 'token_stats';
+  private static readonly ENCRYPTION_SECRET_KEY = STORAGE.ENCRYPTION_SECRET_KEY;
+  private static readonly TOKEN_STATS_KEY = STORAGE.TOKEN_STATS_KEY;
   private encryptionKey?: CryptoKey;
   private encryptionEnabled = false;
+  private encryptionInitPromise?: Promise<void>;
+
+  private async ensureEncryptionReady(): Promise<void> {
+    if (this.encryptionEnabled) {
+      return;
+    }
+
+    if (!this.encryptionInitPromise) {
+      this.encryptionInitPromise = (async () => {
+        try {
+          const secret = await this.getOrCreateSecret();
+          await this.enableEncryption(secret);
+        } catch (error) {
+          Logger.warn('[StorageManager] Failed to initialize encryption', { error });
+          this.disableEncryption();
+        }
+      })();
+    }
+
+    await this.encryptionInitPromise;
+  }
+
+  private async getOrCreateSecret(): Promise<string> {
+    const result = await chrome.storage.local.get(StorageManager.ENCRYPTION_SECRET_KEY);
+    let secretBase64 = result[StorageManager.ENCRYPTION_SECRET_KEY] as string | undefined;
+    if (!secretBase64) {
+      const secret = crypto.getRandomValues(new Uint8Array(SECURITY.SECRET_LENGTH));
+      secretBase64 = btoa(String.fromCharCode(...secret));
+      await chrome.storage.local.set({ [StorageManager.ENCRYPTION_SECRET_KEY]: secretBase64 });
+    }
+    return secretBase64;
+  }
 
   async enableEncryption(passphrase: string): Promise<void> {
     const salt = await this.getOrCreateSalt();
@@ -160,17 +194,22 @@ export class StorageManager {
   private async decrypt(text: string): Promise<string> {
     if (!text.startsWith('enc:')) return text;
     if (!this.encryptionKey) return '';
-    const base64 = text.slice(4);
-    const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-    const iv = bytes.slice(0, 12);
-    const data = bytes.slice(12);
-    const plaintext = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
-      this.encryptionKey,
-      data,
-    );
-    const dec = new TextDecoder();
-    return dec.decode(plaintext);
+    try {
+      const base64 = text.slice(4);
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const iv = bytes.slice(0, SECURITY.IV_LENGTH);
+      const data = bytes.slice(SECURITY.IV_LENGTH);
+      const plaintext = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv },
+        this.encryptionKey,
+        data,
+      );
+      const dec = new TextDecoder();
+      return dec.decode(plaintext);
+    } catch (error) {
+      Logger.warn('[StorageManager] Failed to decrypt value', { error });
+      return '';
+    }
   }
 
   /**
@@ -179,6 +218,7 @@ export class StorageManager {
    */
   async getSettings(): Promise<Settings> {
     try {
+      await this.ensureEncryptionReady();
       Logger.debug('[StorageManager] Getting settings from storage');
       const result = await chrome.storage.local.get(StorageManager.SETTINGS_KEY);
       const settings = result[StorageManager.SETTINGS_KEY];
@@ -221,6 +261,7 @@ export class StorageManager {
    */
   async saveSettings(settings: Partial<Settings>): Promise<void> {
     try {
+      await this.ensureEncryptionReady();
       Logger.debug('[StorageManager] Saving settings');
 
       // Get current settings directly from storage to avoid recursion
@@ -235,6 +276,7 @@ export class StorageManager {
 
       if (
         typeof updatedSettings.aiModel.apiKey === 'string' &&
+        updatedSettings.aiModel.apiKey.length > 0 &&
         !updatedSettings.aiModel.apiKey.startsWith('enc:')
       ) {
         updatedSettings.aiModel = {
@@ -314,10 +356,51 @@ export class StorageManager {
       // Update history index
       await this.updateHistoryIndex(item.id);
 
+      // Update URL index
+      if (typeof item.url === 'string' && item.url.length > 0) {
+        await this.addToHistoryUrlIndex(item.url, item.id);
+      }
+
       Logger.info('[StorageManager] History item saved', { id: item.id });
     } catch (error) {
       Logger.error('[StorageManager] Failed to save history', { error });
       throw new Error(ERRORS.FAILED_TO_SAVE_HISTORY);
+    }
+  }
+
+  async getLatestHistoryIdByUrl(url: string): Promise<string | null> {
+    try {
+      if (!url) {
+        return null;
+      }
+
+      const index = await this.getHistoryUrlIndex();
+      const ids = index[url];
+      if (!ids || ids.length === 0) {
+        return null;
+      }
+      return ids[ids.length - 1] || null;
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to get history id by url', { url, error });
+      return null;
+    }
+  }
+
+  async clearAllHistory(): Promise<number> {
+    try {
+      const ids = await this.getHistoryIndex();
+      const keysToRemove = ids.map((id) => `${StorageManager.HISTORY_KEY}_${id}`);
+      keysToRemove.push(StorageManager.HISTORY_INDEX_KEY);
+      keysToRemove.push(StorageManager.HISTORY_URL_INDEX_KEY);
+
+      if (keysToRemove.length > 0) {
+        await chrome.storage.local.remove(keysToRemove);
+      }
+
+      return ids.length;
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to clear all history', { error });
+      return 0;
     }
   }
 
@@ -381,8 +464,17 @@ export class StorageManager {
    */
   async deleteHistoryItem(id: string): Promise<void> {
     try {
+      const meta = await chrome.storage.local.get(`${StorageManager.HISTORY_KEY}_${id}`);
+      const storedItem = meta[`${StorageManager.HISTORY_KEY}_${id}`] as
+        | { url?: string }
+        | undefined;
+
       await chrome.storage.local.remove(`${StorageManager.HISTORY_KEY}_${id}`);
       await this.removeFromHistoryIndex(id);
+
+      if (storedItem?.url) {
+        await this.removeFromHistoryUrlIndex(storedItem.url, id);
+      }
       Logger.info('[StorageManager] History item deleted', { id });
     } catch (error) {
       Logger.error('[StorageManager] Failed to delete history item', { id, error });
@@ -462,6 +554,50 @@ export class StorageManager {
     }
   }
 
+  private async getHistoryUrlIndex(): Promise<Record<string, string[]>> {
+    try {
+      const result = await chrome.storage.local.get(StorageManager.HISTORY_URL_INDEX_KEY);
+      const index = result[StorageManager.HISTORY_URL_INDEX_KEY] as
+        | Record<string, string[]>
+        | undefined;
+      return index || {};
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to get history url index', { error });
+      return {};
+    }
+  }
+
+  private async setHistoryUrlIndex(index: Record<string, string[]>): Promise<void> {
+    try {
+      await chrome.storage.local.set({ [StorageManager.HISTORY_URL_INDEX_KEY]: index });
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to set history url index', { error });
+    }
+  }
+
+  private async addToHistoryUrlIndex(url: string, id: string): Promise<void> {
+    const index = await this.getHistoryUrlIndex();
+    const existing = index[url] || [];
+    const next = existing.includes(id) ? existing : [...existing, id];
+    index[url] = next;
+    await this.setHistoryUrlIndex(index);
+  }
+
+  private async removeFromHistoryUrlIndex(url: string, id: string): Promise<void> {
+    const index = await this.getHistoryUrlIndex();
+    const existing = index[url];
+    if (!existing || existing.length === 0) {
+      return;
+    }
+    const next = existing.filter((x) => x !== id);
+    if (next.length === 0) {
+      delete index[url];
+    } else {
+      index[url] = next;
+    }
+    await this.setHistoryUrlIndex(index);
+  }
+
   /**
    * Validate settings structure
    * @param settings - Settings to validate
@@ -514,8 +650,3 @@ export class StorageManager {
     };
   }
 }
-
-/**
- * @deprecated Use getStorageManager() from ServiceContainer instead
- */
-export const storageManager = new StorageManager();

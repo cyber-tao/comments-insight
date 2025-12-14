@@ -96,7 +96,7 @@ const Popup: React.FC = () => {
 
   const loadSettings = async () => {
     try {
-      const response = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
+      const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_SETTINGS });
       if (response?.settings) {
         if (response.settings.aiModel?.model) {
           setAIModelName(response.settings.aiModel.model);
@@ -110,7 +110,7 @@ const Popup: React.FC = () => {
 
   const loadLanguage = async () => {
     try {
-      const response = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
+      const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_SETTINGS });
       if (response?.settings?.language) {
         const i18nModule = await import('../utils/i18n');
         i18nModule.default.changeLanguage(response.settings.language);
@@ -205,7 +205,7 @@ const Popup: React.FC = () => {
   const checkPageStatus = async (url: string) => {
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'GET_HISTORY_BY_URL',
+        type: MESSAGES.GET_HISTORY_BY_URL,
         payload: { url },
       });
 
@@ -268,7 +268,7 @@ const Popup: React.FC = () => {
 
     try {
       const response = await chrome.runtime.sendMessage({
-        type: 'START_EXTRACTION',
+        type: MESSAGES.START_EXTRACTION,
         payload: {
           url: pageInfo.url,
         },

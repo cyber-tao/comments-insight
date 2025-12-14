@@ -249,22 +249,44 @@ export class Logger {
       await chrome.storage.local.set({
         [logKey]: entry,
       });
-      await this.cleanupOldLogs();
+      void this.appendSystemLogKey(logKey);
     } catch (error) {
       console.error('[Logger] Storage error:', error);
     }
   }
 
-  private static async cleanupOldLogs(): Promise<void> {
+  private static async getSystemLogIndex(): Promise<string[]> {
     try {
-      const storage = await chrome.storage.local.get(null);
-      const logKeys = Object.keys(storage).filter((key) => key.startsWith('log_'));
+      const result = await chrome.storage.local.get(STORAGE.SYSTEM_LOG_INDEX_KEY);
+      const index = result[STORAGE.SYSTEM_LOG_INDEX_KEY] as string[] | undefined;
+      return Array.isArray(index) ? index : [];
+    } catch {
+      return [];
+    }
+  }
 
-      if (logKeys.length > this.config.maxStoredLogs) {
-        logKeys.sort();
-        const toRemove = logKeys.slice(0, logKeys.length - this.config.maxStoredLogs);
+  private static async setSystemLogIndex(index: string[]): Promise<void> {
+    try {
+      await chrome.storage.local.set({ [STORAGE.SYSTEM_LOG_INDEX_KEY]: index });
+    } catch {
+      return;
+    }
+  }
+
+  private static async appendSystemLogKey(logKey: string): Promise<void> {
+    try {
+      const index = await this.getSystemLogIndex();
+      const next = index.includes(logKey) ? index : [...index, logKey];
+
+      if (next.length > this.config.maxStoredLogs) {
+        const toRemove = next.slice(0, next.length - this.config.maxStoredLogs);
+        const kept = next.slice(next.length - this.config.maxStoredLogs);
         await chrome.storage.local.remove(toRemove);
+        await this.setSystemLogIndex(kept);
+        return;
       }
+
+      await this.setSystemLogIndex(next);
     } catch (error) {
       console.error('[Logger] Cleanup error:', error);
     }
@@ -326,9 +348,21 @@ export class Logger {
 
   static async clearLogs(): Promise<void> {
     try {
-      const storage = await chrome.storage.local.get(null);
-      const logKeys = Object.keys(storage).filter((key) => key.startsWith('log_'));
-      await chrome.storage.local.remove(logKeys);
+      const index = await this.getSystemLogIndex();
+      if (index.length > 0) {
+        const keys = [...index];
+        keys.push(STORAGE.SYSTEM_LOG_INDEX_KEY);
+        await chrome.storage.local.remove(keys);
+      } else {
+        const storage = await chrome.storage.local.get(null);
+        const logKeys = Object.keys(storage).filter((key) => key.startsWith('log_'));
+
+        if (logKeys.length > 0) {
+          await chrome.storage.local.remove(logKeys);
+        }
+
+        await chrome.storage.local.remove([STORAGE.SYSTEM_LOG_INDEX_KEY]);
+      }
       this.info('[Logger] All logs cleared');
     } catch (error) {
       console.error('[Logger] Failed to clear logs:', error);

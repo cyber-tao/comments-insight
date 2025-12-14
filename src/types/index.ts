@@ -45,6 +45,7 @@ export interface Task {
   status: 'pending' | 'running' | 'completed' | 'failed';
   url: string;
   platform?: string;
+  tabId?: number;
   progress: number;
   startTime: number;
   endTime?: number;

@@ -8,7 +8,7 @@
 
 AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-18.3-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-5.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.0-000000)](https://crxjs.dev/vite-plugin/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.2-000000)](https://crxjs.dev/vite-plugin/)
 
 </div>
 
@@ -131,11 +131,11 @@ vite.config.ts          # Build config
 - **Developer Mode**: Enable in Settings to see "View AI Logs" and selector testing tools in the Popup.
 
 ## 🧰 Tech Stack
-- **Framework**: React 18, Vite 5
-- **Language**: TypeScript 5.6
+- **Framework**: React 19, Vite 6
+- **Language**: TypeScript 5.9
 - **Styling**: TailwindCSS
 - **Extension**: Manifest V3, CRXJS
-- **Utils**: `i18next`, `react-markdown`, `lz-string`, `crypto-js`
+- **Utils**: `i18next`, `react-markdown`, `lz-string`
 
 ## 🛠️ Commands
 - `npm run dev`: Start dev server

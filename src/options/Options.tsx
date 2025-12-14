@@ -75,9 +75,12 @@ const Options: React.FC = () => {
       setSaving(true);
 
       try {
+        const { selectorCache: _selectorCache, ...settingsToSave } = settings as Settings & {
+          selectorCache?: Settings['selectorCache'];
+        };
         await chrome.runtime.sendMessage({
           type: MESSAGES.SAVE_SETTINGS,
-          payload: { settings },
+          payload: { settings: settingsToSave },
         });
 
         if (isUserChangeRef.current) {
@@ -142,7 +145,7 @@ const Options: React.FC = () => {
 
     const config = settings.aiModel;
 
-    if (!config.apiUrl || !config.apiKey) {
+    if (!config.apiUrl) {
       toast.warning(t('options.configureApiFirst'));
       return;
     }
@@ -176,7 +179,7 @@ const Options: React.FC = () => {
 
     const config = settings.aiModel;
 
-    if (!config.apiUrl || !config.apiKey || !config.model) {
+    if (!config.apiUrl || !config.model) {
       toast.warning(t('options.configureAllFields'));
       return;
     }

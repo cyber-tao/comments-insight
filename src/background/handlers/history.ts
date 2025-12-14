@@ -58,10 +58,12 @@ export async function handleGetHistoryByUrl(
     throw new Error(ERRORS.URL_REQUIRED);
   }
 
-  const history = await context.storageManager.getHistory();
-  const item = history.find((h) => h.url === url) || null;
-
-  return { item };
+  const id = await context.storageManager.getLatestHistoryIdByUrl(url);
+  if (!id) {
+    return { item: null };
+  }
+  const item = await context.storageManager.getHistoryItem(id);
+  return { item: item || null };
 }
 
 export async function handleDeleteHistory(
@@ -82,13 +84,8 @@ export async function handleClearAllHistory(
   _message: Extract<Message, { type: 'CLEAR_ALL_HISTORY' }>,
   context: HandlerContext,
 ): Promise<ClearHistoryResponse> {
-  const history = await context.storageManager.getHistory();
-
-  for (const item of history) {
-    await context.storageManager.deleteHistoryItem(item.id);
-  }
-
-  return { success: true, count: history.length };
+  const count = await context.storageManager.clearAllHistory();
+  return { success: true, count };
 }
 
 export async function handleExportData(

@@ -1,7 +1,7 @@
-import { Message, Comment } from '../../types';
+import { Message, Comment, Task } from '../../types';
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
-import { REGEX, AI, ERRORS } from '@/config/constants';
+import { REGEX, AI, ERRORS, MESSAGES } from '@/config/constants';
 import { getDomain } from '../../utils/url';
 import { Tokenizer } from '../../utils/tokenizer';
 
@@ -57,8 +57,40 @@ interface StartAnalysisResponse {
   taskId: string;
 }
 
-export function chunkDomText(structure: string, maxTokens: number): string[] {
+export function chunkDomText(
+  structure: string,
+  maxTokens: number,
+  overheadText?: string,
+): string[] {
+  if (overheadText && overheadText.length > 0) {
+    return Tokenizer.chunkTextWithOverhead(structure, maxTokens, overheadText);
+  }
   return Tokenizer.chunkText(structure, maxTokens);
+}
+
+function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(new Error(ERRORS.TASK_CANCELLED_BY_USER));
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(new Error(ERRORS.TASK_CANCELLED_BY_USER));
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+
+    promise
+      .then((value) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      })
+      .catch((error) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      });
+  });
 }
 
 export async function handleStartExtraction(
@@ -80,8 +112,6 @@ export async function handleStartExtraction(
     finalMaxComments = settings.maxComments || 100;
   }
 
-  const taskId = context.taskManager.createTask('extract', url, domain, finalMaxComments);
-
   // Get tab ID - either from sender or current active tab
   let tabId = context.sender?.tab?.id;
 
@@ -99,58 +129,48 @@ export async function handleStartExtraction(
     maxComments: finalMaxComments,
   });
 
-  // Start the extraction task asynchronously
-  startExtractionTask(taskId, tabId, finalMaxComments, context).catch((error) => {
-    Logger.error('[ExtractionHandler] Extraction task failed', { error });
-    context.taskManager.failTask(taskId, error.message);
+  const taskId = context.taskManager.createTask('extract', url, domain, finalMaxComments, tabId);
+
+  context.taskManager.setExecutor(taskId, async (task: Task, signal: AbortSignal) => {
+    if (!task.tabId) {
+      throw new Error(ERRORS.NO_TAB_ID_AVAILABLE);
+    }
+
+    const respPromise = chrome.tabs.sendMessage(task.tabId, {
+      type: MESSAGES.START_EXTRACTION,
+      payload: { taskId: task.id, maxComments: finalMaxComments },
+    }) as Promise<ExtractionContentResponse>;
+
+    const response = await abortable(respPromise, signal);
+
+    if (!response.success) {
+      throw new Error(response.error || 'Extraction failed');
+    }
+
+    const { comments, postInfo } = response;
+
+    if (comments && comments.length > 0) {
+      const historyItem = {
+        id: `history_${Date.now()}`,
+        url: postInfo?.url || task.url,
+        title: postInfo?.title || 'Untitled',
+        platform: task.platform || 'unknown',
+        videoTime: postInfo?.videoTime,
+        extractedAt: Date.now(),
+        commentsCount: comments.length,
+        comments,
+      };
+
+      await context.storageManager.saveHistory(historyItem);
+    }
+
+    return {
+      tokensUsed: 0,
+      commentsCount: comments?.length || 0,
+    };
   });
 
   return { taskId };
-}
-
-async function startExtractionTask(
-  taskId: string,
-  tabId: number | undefined,
-  maxComments: number,
-  context: HandlerContext,
-): Promise<void> {
-  await context.taskManager.startTask(taskId);
-
-  if (!tabId) {
-    throw new Error(ERRORS.NO_TAB_ID_AVAILABLE);
-  }
-
-  const response: ExtractionContentResponse = await chrome.tabs.sendMessage(tabId, {
-    type: 'START_EXTRACTION',
-    payload: { taskId, maxComments },
-  });
-
-  if (!response.success) {
-    throw new Error(response.error || 'Extraction failed');
-  }
-
-  const { comments, postInfo } = response;
-
-  const task = context.taskManager.getTask(taskId);
-  if (task && comments && comments.length > 0) {
-    const historyItem = {
-      id: `history_${Date.now()}`,
-      url: postInfo?.url || task.url,
-      title: postInfo?.title || 'Untitled',
-      platform: task.platform || 'unknown',
-      videoTime: postInfo?.videoTime,
-      extractedAt: Date.now(),
-      commentsCount: comments.length,
-      comments,
-    };
-
-    await context.storageManager.saveHistory(historyItem);
-  }
-
-  context.taskManager.completeTask(taskId, {
-    tokensUsed: 0,
-    commentsCount: comments?.length || 0,
-  });
 }
 
 export async function handleAIAnalyzeStructure(
@@ -243,73 +263,53 @@ export async function handleStartAnalysis(
 
   const taskId = context.taskManager.createTask('analyze', finalUrl || 'unknown', domain);
 
-  // Start the analysis task asynchronously
-  startAnalysisTask(taskId, comments, historyId, context).catch((error) => {
-    Logger.error('[ExtractionHandler] Analysis task failed', { error });
-    context.taskManager.failTask(taskId, error.message);
-  });
+  context.taskManager.setExecutor(taskId, async (task: Task, signal: AbortSignal) => {
+    const settings = await context.storageManager.getSettings();
 
-  return { taskId };
-}
+    context.taskManager.updateTaskProgress(taskId, 25);
 
-async function startAnalysisTask(
-  taskId: string,
-  comments: Comment[],
-  historyId: string | undefined,
-  context: HandlerContext,
-): Promise<void> {
-  await context.taskManager.startTask(taskId);
+    let platform = 'Unknown Platform';
+    let url = 'N/A';
+    let title = 'Untitled';
+    let videoTime = 'N/A';
 
-  const settings = await context.storageManager.getSettings();
-
-  context.taskManager.updateTaskProgress(taskId, 25);
-
-  let platform = 'Unknown Platform';
-  let url = 'N/A';
-  let title = 'Untitled';
-  let videoTime = 'N/A';
-
-  if (historyId) {
-    const historyItem = await context.storageManager.getHistoryItem(historyId);
-    if (historyItem) {
-      platform = historyItem.platform || 'Unknown Platform';
-      url = historyItem.url || 'N/A';
-      title = historyItem.title || 'Untitled';
-      videoTime = (historyItem as HistoryItemWithVideoTime).videoTime || 'N/A';
-    }
-  } else {
-    const task = context.taskManager.getTask(taskId);
-    if (task) {
+    if (historyId) {
+      const historyItem = await context.storageManager.getHistoryItem(historyId);
+      if (historyItem) {
+        platform = historyItem.platform || 'Unknown Platform';
+        url = historyItem.url || 'N/A';
+        title = historyItem.title || 'Untitled';
+        videoTime = (historyItem as HistoryItemWithVideoTime).videoTime || 'N/A';
+      }
+    } else {
       platform = task.platform || 'Unknown Platform';
       url = task.url || 'N/A';
     }
-  }
 
-  const result = await context.aiService.analyzeComments(
-    comments,
-    settings.aiModel,
-    settings.analyzerPromptTemplate,
-    settings.language,
-    {
-      platform,
-      url,
-      title,
-      videoTime,
-    },
-  );
+    const result = await context.aiService.analyzeComments(
+      comments,
+      settings.aiModel,
+      settings.analyzerPromptTemplate,
+      settings.language,
+      {
+        platform,
+        url,
+        title,
+        videoTime,
+      },
+      signal,
+    );
 
-  context.taskManager.updateTaskProgress(taskId, 75);
+    context.taskManager.updateTaskProgress(taskId, 75);
 
-  if (historyId) {
-    const historyItem = await context.storageManager.getHistoryItem(historyId);
-    if (historyItem) {
-      historyItem.analysis = result;
-      historyItem.analyzedAt = Date.now();
-      await context.storageManager.saveHistory(historyItem);
-    }
-  } else {
-    const task = context.taskManager.getTask(taskId);
-    if (task) {
+    if (historyId) {
+      const historyItem = await context.storageManager.getHistoryItem(historyId);
+      if (historyItem) {
+        historyItem.analysis = result;
+        historyItem.analyzedAt = Date.now();
+        await context.storageManager.saveHistory(historyItem);
+      }
+    } else {
       await context.storageManager.saveHistory({
         id: `history_${Date.now()}`,
         url: task.url,
@@ -322,10 +322,12 @@ async function startAnalysisTask(
         analyzedAt: Date.now(),
       });
     }
-  }
 
-  context.taskManager.completeTask(taskId, {
-    tokensUsed: result.tokensUsed,
-    commentsCount: comments.length,
+    return {
+      tokensUsed: result.tokensUsed,
+      commentsCount: comments.length,
+    };
   });
+
+  return { taskId };
 }

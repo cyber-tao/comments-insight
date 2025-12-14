@@ -93,29 +93,6 @@ export async function handleGenerateScraperConfig(
   }
 
   try {
-    // Note: The original router logic fetched DOM structure from content script here!
-    // "const domResponse = await chrome.tabs.sendMessage(tabId, { type: MESSAGES.GET_DOM_STRUCTURE });"
-    // But my NEW type payload HAS `domStructure`.
-    // If the payload already has it, we don't need to fetch it.
-    // This is a change in logic/architecture I implicitly made.
-    // IF the caller (popup?) sends `domStructure`, great.
-    // BUT the original code didn't require popup to send it; background fetched it.
-    // If I stick to the NEW type, I must update the caller to send it.
-    // OR I update the type to NOT require it and fetch it here if missing.
-
-    // Given "Refactor message types" task, I should arguably stick to the new safer type.
-    // But if the caller doesn't send it, it will fail.
-
-    // Let's look at `handleGenerateScraperConfig` in Router again.
-    // It gets `tabId` from sender.
-    // Then `sendMessage` to tab.
-
-    // If I want to keep that logic, my type for `GENERATE_SCRAPER_CONFIG` should NOT have `domStructure` as required payload.
-    // It should be `payload: { url: string; title?: string }`.
-
-    // I will fix the type definition AGAIN.
-    // But for now I will implement the logic to fetch it if missing (or ignore the type constraint with casting if needed).
-
     let structure = domStructure;
     if (!structure) {
       // Fetch from tab if not provided (fallback to original logic)
@@ -138,7 +115,12 @@ export async function handleGenerateScraperConfig(
     }
 
     const settings = await context.storageManager.getSettings();
-    const chunks = chunkDomText(structure, settings.aiModel.maxTokens ?? AI.DEFAULT_MAX_TOKENS);
+    const overhead = generateScraperConfigPrompt('', url, title || TEXT.UNTITLED);
+    const chunks = chunkDomText(
+      structure,
+      settings.aiModel.maxTokens ?? AI.DEFAULT_MAX_TOKENS,
+      overhead,
+    );
     let configData: GeneratedConfigData = {
       name: '',
       domains: [],
@@ -147,11 +129,7 @@ export async function handleGenerateScraperConfig(
       scrollConfig: undefined,
     };
     for (let i = 0; i < chunks.length; i++) {
-      const prompt = generateScraperConfigPrompt(
-        chunks[i],
-        url,
-        title || TEXT.UNTITLED,
-      );
+      const prompt = generateScraperConfigPrompt(chunks[i], url, title || TEXT.UNTITLED);
       const response = await context.aiService.callAI({
         prompt,
         systemPrompt: SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT,

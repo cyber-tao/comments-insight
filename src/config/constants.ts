@@ -42,6 +42,7 @@ export const LIKES = {
 export const SECURITY = {
   SALT_LENGTH: 16,
   IV_LENGTH: 12,
+  SECRET_LENGTH: 32,
   PBKDF2_ITERATIONS: 100_000,
   PBKDF2_HASH: 'SHA-256' as const,
 };
@@ -110,8 +111,20 @@ export const STORAGE = {
   SETTINGS_KEY: 'settings',
   HISTORY_KEY: 'history',
   HISTORY_INDEX_KEY: 'history_index',
+  HISTORY_URL_INDEX_KEY: 'history_url_index',
   ENCRYPTION_SALT_KEY: 'encryption_salt',
+  ENCRYPTION_SECRET_KEY: 'encryption_secret',
+  TOKEN_STATS_KEY: 'token_stats',
   LOG_LEVEL_KEY: 'log_min_level',
+  SYSTEM_LOG_INDEX_KEY: 'system_log_index',
+  AI_LOG_INDEX_KEY: 'ai_log_index',
+  TASK_STATE_KEY: 'task_state',
+};
+
+export const SCRAPER = {
+  CONFIG_STORAGE_KEY: 'scraperConfigs',
+  INITIALIZED_KEY: 'scraperConfigsInitialized',
+  CONFIG_VERSION: '1.0.0',
 };
 
 export const LOG_PREFIX = {
@@ -195,6 +208,7 @@ export const ERRORS = {
   FAILED_TO_SAVE_HISTORY: 'Failed to save history',
   FAILED_TO_DELETE_HISTORY: 'Failed to delete history',
   TASK_CANCELLED_BY_USER: 'Task cancelled by user',
+  TASK_INTERRUPTED_BY_RESTART: 'Task interrupted due to extension restart',
   URL_REQUIRED: 'URL is required',
   NO_TAB_ID_AVAILABLE: 'No tab ID available',
   PROMPT_REQUIRED: 'Prompt is required',
@@ -213,6 +227,7 @@ export const ERRORS = {
 
 export const DEFAULTS = {
   LOGS_MAX_STORED: 100,
+  AI_LOGS_MAX_STORED: 100,
   MAX_COMMENTS: 100,
   FILENAME_MAX_LENGTH: 100,
   SENTIMENT_POSITIVE: 33,
@@ -242,6 +257,7 @@ export const TIMING = {
   CLEAR_TASK_DELAY_MS: 2000,
   CLEAR_TASK_FAILED_MS: 5000,
   DEBOUNCE_SAVE_MS: 500,
+  TASK_STATE_PERSIST_DEBOUNCE_MS: 300,
   EXPAND_REPLY_MAX: 800,
 };
 
@@ -275,6 +291,7 @@ export const CLICK = {
 export const TIMEOUT = {
   WAIT_ELEMENT_MS: 10000,
   COMMENTS_SECTION_MS: 5000,
+  MESSAGE_RESPONSE_MS: 10000,
 };
 
 export const SELECTORS = {
@@ -299,6 +316,8 @@ export const LIMITS = {
   API_KEY_MASK_SUFFIX: 4,
   API_KEY_MASK_MIN_LENGTH: 8,
   API_KEY_MASK_MAX_STARS: 20,
+  RANDOM_ID_START_INDEX: 2,
+  ID_RANDOM_LENGTH: 9,
   MAX_COMMENTS_DEFAULT: 500,
   MIN_COMMENTS: 10,
   MAX_COMMENTS: 10000,
@@ -308,4 +327,6 @@ export const LIMITS = {
   SCROLL_DELAY_MAX: 10000,
   MODEL_RESPONSE_PREVIEW_LENGTH: 100,
   LOG_PROMPT_PREVIEW_LENGTH: 500,
+  NOTIFICATION_TITLE_MAX_LENGTH: 50,
+  EXPORT_ISO_TIMESTAMP_LENGTH: 19,
 };

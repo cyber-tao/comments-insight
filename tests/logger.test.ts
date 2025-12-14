@@ -125,14 +125,18 @@ describe('Logger', () => {
       expect(console.info).toHaveBeenCalledWith(expect.stringContaining('Test with data'), data);
 
       // Check storage call
-      // Since we cleared mocks in beforeEach, this should be the only call
-      expect(mockStorageSet).toHaveBeenCalledTimes(1);
+      expect(mockStorageSet).toHaveBeenCalled();
 
-      const callArgs = mockStorageSet.mock.calls[0][0];
+      const logCall = mockStorageSet.mock.calls
+        .map((c) => c[0] as Record<string, unknown>)
+        .find((payload) => Object.keys(payload).some((k) => /^log_info_/.test(k)));
+      expect(logCall).toBeTruthy();
+
+      const callArgs = logCall as Record<string, unknown>;
       const keys = Object.keys(callArgs);
-      expect(keys.length).toBe(1);
-      expect(keys[0]).toMatch(/^log_info_/);
-      expect(callArgs[keys[0]]).toEqual(
+      const logKey = keys.find((k) => /^log_info_/.test(k));
+      expect(logKey).toBeTruthy();
+      expect(callArgs[logKey as string]).toEqual(
         expect.objectContaining({
           message: 'Test with data',
           data: data,

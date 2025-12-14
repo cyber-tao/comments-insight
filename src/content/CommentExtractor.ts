@@ -33,12 +33,17 @@ export class CommentExtractor {
     // Initialize the extraction engine
     const selectorExtractor = new CommentExtractorSelector(this.pageController);
 
-    const cfgResponse = await sendMessage<{ config?: ScraperConfig }>({
-      type: MESSAGES.CHECK_SCRAPER_CONFIG,
-      payload: { url: window.location.href },
-    });
-
-    const config = cfgResponse?.config;
+    let config: ScraperConfig | undefined;
+    try {
+      const cfgResponse = await sendMessage<{ config?: ScraperConfig }>({
+        type: MESSAGES.CHECK_SCRAPER_CONFIG,
+        payload: { url: window.location.href },
+      });
+      config = cfgResponse?.config;
+    } catch (error) {
+      Logger.warn('[CommentExtractor] Failed to check scraper config', { error });
+      config = undefined;
+    }
     let strategy: ExtractionStrategy;
 
     if (config && config.selectors) {

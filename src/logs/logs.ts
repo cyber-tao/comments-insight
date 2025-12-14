@@ -28,18 +28,65 @@ let allLogs: LogEntry[] = [];
 let currentFilter: 'all' | 'ai' | 'system' | 'error' = 'all';
 let currentLevelFilter: 'all' | 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' = 'all';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isAILog(value: unknown): value is AILog {
+  if (!isRecord(value)) {
+    return false;
+  }
+  const type = value.type;
+  return (
+    (type === 'extraction' || type === 'analysis') &&
+    typeof value.timestamp === 'number' &&
+    typeof value.prompt === 'string' &&
+    typeof value.response === 'string'
+  );
+}
+
+function normalizeSystemLogLevel(level: unknown): SystemLog['level'] | null {
+  if (level === 'DEBUG' || level === 'INFO' || level === 'WARN' || level === 'ERROR') {
+    return level;
+  }
+  return null;
+}
+
+function isSystemLog(value: unknown): value is SystemLog {
+  if (!isRecord(value)) {
+    return false;
+  }
+  return (
+    typeof value.timestamp === 'number' &&
+    typeof value.message === 'string' &&
+    normalizeSystemLogLevel(value.level) !== null
+  );
+}
+
 async function loadLogs() {
   const storage = await chrome.storage.local.get(null);
 
   // Load AI logs
   const aiLogs = Object.entries(storage)
     .filter(([key]) => key.startsWith(LOG_PREFIX.AI))
-    .map(([key, value]: [string, any]) => ({ key, ...value, logType: 'ai' as const }));
+    .map(([key, value]: [string, unknown]) => {
+      if (!isAILog(value)) {
+        return null;
+      }
+      return { key, ...value, logType: 'ai' as const };
+    })
+    .filter((log): log is AILog & { key: string; logType: 'ai' } => log !== null);
 
   // Load system logs
   const systemLogs = Object.entries(storage)
     .filter(([key]) => key.startsWith(LOG_PREFIX.SYSTEM))
-    .map(([key, value]: [string, any]) => ({ key, ...value, logType: 'system' as const }));
+    .map(([key, value]: [string, unknown]) => {
+      if (!isSystemLog(value)) {
+        return null;
+      }
+      return { key, ...value, logType: 'system' as const };
+    })
+    .filter((log): log is SystemLog & { key: string; logType: 'system' } => log !== null);
 
   allLogs = [...aiLogs, ...systemLogs].sort((a, b) => b.timestamp - a.timestamp);
 

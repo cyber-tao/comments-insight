@@ -2,7 +2,7 @@
  * Export utilities for Comments Insight
  */
 import { HistoryItem, Comment } from '../types';
-import { REGEX, DEFAULTS } from '../config/constants';
+import { REGEX, DEFAULTS, LIMITS } from '../config/constants';
 import { t } from './i18n';
 
 /**
@@ -69,7 +69,10 @@ export function exportCommentsAsCSV(comments: Comment[], title?: string, filenam
   const csv = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
 
   // Generate filename with title and timestamp
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[:.]/g, '-')
+    .substring(0, LIMITS.EXPORT_ISO_TIMESTAMP_LENGTH);
   const defaultFilename = title
     ? `${sanitizeFilename(title)}_comments_${timestamp}.csv`
     : `comments_${timestamp}.csv`;
@@ -108,7 +111,10 @@ ${item.analysis.markdown}
 `;
 
   // Generate filename with title and timestamp
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[:.]/g, '-')
+    .substring(0, LIMITS.EXPORT_ISO_TIMESTAMP_LENGTH);
   const defaultFilename = `${sanitizeFilename(item.title)}_analysis_${timestamp}.md`;
 
   downloadFile(markdown, filename || defaultFilename, 'text/markdown');

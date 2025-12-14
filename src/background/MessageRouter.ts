@@ -30,7 +30,7 @@ export class MessageRouter {
    * @param sender - Message sender
    * @returns Response data
    */
-  async handleMessage(message: Message, sender: chrome.runtime.MessageSender): Promise<any> {
+  async handleMessage(message: Message, sender: chrome.runtime.MessageSender): Promise<unknown> {
     Logger.debug('[MessageRouter] Handling message', {
       type: message.type,
     });
@@ -114,13 +114,7 @@ export class MessageRouter {
         case 'GET_PLATFORM_INFO':
         case 'GET_DOM_STRUCTURE':
         case 'TEST_SELECTOR_QUERY':
-        case 'CANCEL_EXTRACTION': // Handled by content script too?
-          // Wait, CANCEL_EXTRACTION was in MessageRouter switch before but handled by handleCancelTask?
-          // No, `CANCEL_TASK` was handled. `CANCEL_EXTRACTION`?
-          // Router: case MESSAGES.CANCEL_TASK: return this.handleCancelTask(message);
-          // It did NOT have CANCEL_EXTRACTION.
-          // Content script handles CANCEL_EXTRACTION.
-          // So background ignores it.
+        case 'CANCEL_EXTRACTION':
           return;
 
         default:

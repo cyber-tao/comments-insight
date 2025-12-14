@@ -1,7 +1,7 @@
 /**
  * NotificationService handles browser notifications
  */
-import { ICONS, PATHS, TEXT } from '@/config/constants';
+import { ICONS, PATHS, TEXT, LIMITS } from '@/config/constants';
 import { Logger } from '@/utils/logger';
 
 export class NotificationService {
@@ -50,9 +50,8 @@ export class NotificationService {
         type: 'basic' as const,
         iconUrl: ICONS.ICON_48,
         title: TEXT.TASK_FAILED_TITLE,
-        message: taskType === 'extract'
-          ? `Extraction failed: ${error}`
-          : `Analysis failed: ${error}`,
+        message:
+          taskType === 'extract' ? `Extraction failed: ${error}` : `Analysis failed: ${error}`,
         requireInteraction: false,
       };
 
@@ -95,7 +94,10 @@ export class NotificationService {
     title: string,
     commentsCount?: number,
   ): string {
-    const truncatedTitle = title.length > 50 ? title.substring(0, 50) + '...' : title;
+    const truncatedTitle =
+      title.length > LIMITS.NOTIFICATION_TITLE_MAX_LENGTH
+        ? title.substring(0, LIMITS.NOTIFICATION_TITLE_MAX_LENGTH) + '...'
+        : title;
 
     if (taskType === 'extract') {
       return commentsCount

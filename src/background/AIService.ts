@@ -16,33 +16,32 @@ import {
   RETRY,
   DEFAULTS,
   LANGUAGES,
+  LIMITS,
+  STORAGE,
 } from '@/config/constants';
-import { storageManager } from './StorageManager';
+import type { StorageManager } from './StorageManager';
 import { Tokenizer } from '../utils/tokenizer';
 
 async function runWithConcurrencyLimit<T>(
   tasks: (() => Promise<T>)[],
   limit: number,
 ): Promise<T[]> {
-  const results: T[] = [];
-  const executing: Promise<void>[] = [];
+  const results = new Array<T>(tasks.length);
+  let nextIndex = 0;
 
-  for (const task of tasks) {
-    const p = Promise.resolve()
-      .then(() => task())
-      .then((result) => {
-        results.push(result);
-      });
-
-    executing.push(p as unknown as Promise<void>);
-
-    if (executing.length >= limit) {
-      await Promise.race(executing);
-      executing.splice(0, executing.findIndex((e) => e === p) + 1);
+  const workerCount = Math.min(Math.max(1, limit), tasks.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (true) {
+      const current = nextIndex;
+      nextIndex += 1;
+      if (current >= tasks.length) {
+        return;
+      }
+      results[current] = await tasks[current]();
     }
-  }
+  });
 
-  await Promise.all(executing);
+  await Promise.all(workers);
   return results;
 }
 
@@ -53,6 +52,47 @@ async function runWithConcurrencyLimit<T>(
 export class AIService {
   private currentLanguage: string = LANGUAGES.DEFAULT;
 
+  constructor(private readonly storageManager: StorageManager) {}
+
+  private async getAiLogIndex(): Promise<string[]> {
+    try {
+      const result = await chrome.storage.local.get(STORAGE.AI_LOG_INDEX_KEY);
+      const index = result[STORAGE.AI_LOG_INDEX_KEY] as string[] | undefined;
+      return Array.isArray(index) ? index : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async setAiLogIndex(index: string[]): Promise<void> {
+    try {
+      await chrome.storage.local.set({ [STORAGE.AI_LOG_INDEX_KEY]: index });
+    } catch {
+      return;
+    }
+  }
+
+  private async appendAiLogKey(logKey: string): Promise<void> {
+    try {
+      const index = await this.getAiLogIndex();
+      const next = index.includes(logKey) ? index : [...index, logKey];
+
+      if (next.length > DEFAULTS.AI_LOGS_MAX_STORED) {
+        const toRemove = next.slice(0, next.length - DEFAULTS.AI_LOGS_MAX_STORED);
+        const kept = next.slice(next.length - DEFAULTS.AI_LOGS_MAX_STORED);
+        await chrome.storage.local.remove(toRemove);
+        await this.setAiLogIndex(kept);
+        return;
+      }
+
+      await this.setAiLogIndex(next);
+    } catch (error) {
+      Logger.warn('[AIService] Failed to cleanup AI logs', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   private logToFile(
     type: 'extraction' | 'analysis',
     data: { prompt: string; response: string; timestamp: number },
@@ -61,14 +101,14 @@ export class AIService {
     Logger.debug(`[AI_LOG_${type.toUpperCase()}]`, {
       timestamp: data.timestamp,
       type,
-      prompt: data.prompt.substring(0, 500) + '...', // First 500 chars
-      response: data.response.substring(0, 500) + '...', // First 500 chars
+      prompt: data.prompt.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + '...',
+      response: data.response.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + '...',
       promptLength: data.prompt.length,
       responseLength: data.response.length,
     });
 
     // Check developer mode before saving to storage
-    storageManager.getSettings().then((settings) => {
+    this.storageManager.getSettings().then((settings) => {
       if (!settings.developerMode) {
         return;
       }
@@ -84,13 +124,14 @@ export class AIService {
             response: data.response,
           },
         })
+        .then(() => this.appendAiLogKey(logKey))
         .catch((err) => Logger.error('[AIService] Failed to save log:', err));
     });
   }
   /**
    * Call AI API with the given request
    * @param request - AI request configuration
-   * @returns AI response
+          this.storageManager.recordTokenUsage(tokensUsed).catch((err) => {
    */
   async callAI(request: AIRequest): Promise<AIResponse> {
     const { prompt, systemPrompt, config, signal } = request;
@@ -103,10 +144,15 @@ export class AIService {
           }
 
           // Validate configuration
-          if (!config.apiUrl || !config.apiKey) {
-            throw createAIError(ErrorCode.MISSING_API_KEY, 'API URL and API Key are required', {
+          if (!config.apiUrl) {
+            throw createAIError(ErrorCode.INVALID_API_URL, 'API URL is required', {
               hasUrl: !!config.apiUrl,
-              hasKey: !!config.apiKey,
+            });
+          }
+
+          if (!config.model) {
+            throw createAIError(ErrorCode.INVALID_MODEL, 'Model is required', {
+              hasModel: !!config.model,
             });
           }
 
@@ -122,12 +168,17 @@ export class AIService {
             promptLength: prompt.length,
           });
 
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+          };
+
+          if (typeof config.apiKey === 'string' && config.apiKey.trim().length > 0) {
+            headers.Authorization = `Bearer ${config.apiKey}`;
+          }
+
           const response = await fetch(apiUrl, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${config.apiKey}`,
-            },
+            headers,
             body: JSON.stringify({
               model: config.model,
               messages: [
@@ -157,11 +208,9 @@ export class AIService {
                 { status: response.status, model: config.model },
               );
             } else if (response.status === 401 || response.status === 403) {
-              throw createAIError(
-                ErrorCode.MISSING_API_KEY,
-                'Invalid API key or unauthorized',
-                { status: response.status },
-              );
+              throw createAIError(ErrorCode.MISSING_API_KEY, 'Invalid API key or unauthorized', {
+                status: response.status,
+              });
             } else {
               throw createAIError(
                 ErrorCode.API_ERROR,
@@ -188,7 +237,7 @@ export class AIService {
           });
 
           // Record token usage
-          storageManager.recordTokenUsage(tokensUsed).catch((err) => {
+          this.storageManager.recordTokenUsage(tokensUsed).catch((err: unknown) => {
             Logger.warn('[AIService] Failed to record tokens', { err });
           });
 
@@ -248,11 +297,14 @@ export class AIService {
 
       Logger.info('[AIService] Fetching available models', { url: modelsUrl });
 
+      const headers: Record<string, string> = {};
+      if (typeof apiKey === 'string' && apiKey.trim().length > 0) {
+        headers.Authorization = `Bearer ${apiKey}`;
+      }
+
       const response = await fetch(modelsUrl, {
         method: 'GET',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
+        headers,
       });
 
       if (!response.ok) {
@@ -294,6 +346,7 @@ export class AIService {
       datetime?: string;
       videoTime?: string;
     },
+    signal?: AbortSignal,
   ): Promise<AnalysisResult> {
     this.currentLanguage = language || LANGUAGES.DEFAULT;
     // Split comments if they exceed token limit
@@ -303,11 +356,17 @@ export class AIService {
 
     if (commentBatches.length === 1) {
       // Single batch - analyze directly
-      return await this.analyzeSingleBatch(commentBatches[0], config, promptTemplate, metadata);
+      return await this.analyzeSingleBatch(
+        commentBatches[0],
+        config,
+        promptTemplate,
+        metadata,
+        signal,
+      );
     } else {
       // Multiple batches - analyze with concurrency limit
       const tasks = commentBatches.map(
-        (batch) => () => this.analyzeSingleBatch(batch, config, promptTemplate, metadata),
+        (batch) => () => this.analyzeSingleBatch(batch, config, promptTemplate, metadata, signal),
       );
       const results = await runWithConcurrencyLimit(tasks, AI_CONST.MAX_CONCURRENT_REQUESTS);
       return this.mergeAnalysisResults(results);
@@ -333,6 +392,7 @@ export class AIService {
       datetime?: string;
       videoTime?: string;
     },
+    signal?: AbortSignal,
   ): Promise<AnalysisResult> {
     const serialized = this.serializeCommentsDense(comments);
     const prompt = this.buildAnalysisPromptWrapper(
@@ -345,6 +405,7 @@ export class AIService {
     const response = await this.callAI({
       prompt,
       config,
+      signal,
     });
 
     // Parse the markdown response
@@ -493,17 +554,24 @@ export class AIService {
     markdown: string,
     comments: Comment[],
   ): AnalysisResult['summary'] {
-    // Simple extraction - in production, this could be more sophisticated
-    const positiveMatch = markdown.match(/Positive:\s*(\d+)%/i);
-    const negativeMatch = markdown.match(/Negative:\s*(\d+)%/i);
-    const neutralMatch = markdown.match(/Neutral:\s*(\d+)%/i);
+    const parsePercent = (re: RegExp): number | undefined => {
+      const match = markdown.match(re);
+      return match ? parseInt(match[1]) : undefined;
+    };
+
+    const positive =
+      parsePercent(/\|\s*Positive\s*\|\s*(\d+)%/i) ?? parsePercent(/Positive:\s*(\d+)%/i);
+    const negative =
+      parsePercent(/\|\s*Negative\s*\|\s*(\d+)%/i) ?? parsePercent(/Negative:\s*(\d+)%/i);
+    const neutral =
+      parsePercent(/\|\s*Neutral\s*\|\s*(\d+)%/i) ?? parsePercent(/Neutral:\s*(\d+)%/i);
 
     return {
       totalComments: comments.length,
       sentimentDistribution: {
-        positive: positiveMatch ? parseInt(positiveMatch[1]) : DEFAULTS.SENTIMENT_POSITIVE,
-        negative: negativeMatch ? parseInt(negativeMatch[1]) : DEFAULTS.SENTIMENT_NEGATIVE,
-        neutral: neutralMatch ? parseInt(neutralMatch[1]) : DEFAULTS.SENTIMENT_NEUTRAL,
+        positive: typeof positive === 'number' ? positive : DEFAULTS.SENTIMENT_POSITIVE,
+        negative: typeof negative === 'number' ? negative : DEFAULTS.SENTIMENT_NEGATIVE,
+        neutral: typeof neutral === 'number' ? neutral : DEFAULTS.SENTIMENT_NEUTRAL,
       },
       hotComments: comments.slice(0, DEFAULTS.HOT_COMMENTS_PREVIEW),
       keyInsights: [],
@@ -588,8 +656,3 @@ export class AIService {
     return [...AI_CONST.DEFAULT_MODELS];
   }
 }
-
-/**
- * @deprecated Use getAIService() from ServiceContainer instead
- */
-export const aiService = new AIService();

@@ -29,6 +29,7 @@ function createMockContext(overrides: Partial<HandlerContext> = {}): HandlerCont
   return {
     taskManager: {
       createTask: vi.fn().mockReturnValue('task_123'),
+      setExecutor: vi.fn(),
       startTask: vi.fn().mockResolvedValue(undefined),
       updateProgress: vi.fn(),
       updateTaskProgress: vi.fn(),
@@ -77,6 +78,7 @@ describe('extraction handlers', () => {
         'https://example.com',
         'example.com',
         50,
+        1,
       );
     });
 
@@ -95,6 +97,7 @@ describe('extraction handlers', () => {
         'https://example.com',
         'example.com',
         100,
+        1,
       );
     });
 

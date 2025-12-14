@@ -6,8 +6,13 @@ import { getCurrentHostname } from '@/utils/url';
 
 export class SelectorCacheManager {
   async getSettings(): Promise<Settings | null> {
-    const response = await sendMessage<{ settings?: Settings }>({ type: MESSAGES.GET_SETTINGS });
-    return response?.settings || null;
+    try {
+      const response = await sendMessage<{ settings?: Settings }>({ type: MESSAGES.GET_SETTINGS });
+      return response?.settings || null;
+    } catch (error) {
+      Logger.warn('[SelectorCacheManager] Failed to get settings', { error });
+      return null;
+    }
   }
 
   getDomain(): string {
@@ -61,7 +66,7 @@ export class SelectorCacheManager {
 
     await sendMessageVoid({
       type: MESSAGES.SAVE_SETTINGS,
-      payload: { settings: { ...settings, selectorCache } },
+      payload: { settings: { selectorCache } },
     });
 
     Logger.info('[SelectorCacheManager] Saved selector cache', { domain });
@@ -82,7 +87,7 @@ export class SelectorCacheManager {
 
       await sendMessageVoid({
         type: MESSAGES.SAVE_SETTINGS,
-        payload: { settings: { ...settings, selectorCache } },
+        payload: { settings: { selectorCache } },
       });
     }
   }

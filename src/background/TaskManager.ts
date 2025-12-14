@@ -2,11 +2,20 @@ import { Task, Platform } from '../types';
 import { NotificationService } from './NotificationService';
 import { Logger } from '../utils/logger';
 import { ExtensionError, ErrorCode } from '../utils/errors';
-import { ERRORS } from '@/config/constants';
+import { ERRORS, LIMITS, STORAGE, TIMING } from '@/config/constants';
 
 export interface TaskResult {
   tokensUsed?: number;
   commentsCount?: number;
+}
+
+type TaskExecutor = (task: Task, signal: AbortSignal) => Promise<TaskResult>;
+
+interface PersistedTaskState {
+  tasks: Task[];
+  queue: string[];
+  currentTaskId: string | null;
+  savedAt: number;
 }
 
 /**
@@ -17,6 +26,58 @@ export class TaskManager {
   private tasks: Map<string, Task> = new Map();
   private queue: string[] = [];
   private currentTaskId: string | null = null;
+  private abortControllers: Map<string, AbortController> = new Map();
+  private executors: Map<string, TaskExecutor> = new Map();
+  private readonly enablePersistence: boolean;
+  private persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(options?: { enablePersistence?: boolean }) {
+    this.enablePersistence = options?.enablePersistence === true;
+  }
+
+  async initialize(): Promise<void> {
+    if (!this.enablePersistence) {
+      return;
+    }
+
+    try {
+      const state = await this.loadState();
+      if (!state) {
+        return;
+      }
+
+      this.tasks = new Map(state.tasks.map((t) => [t.id, t]));
+      this.queue = [...state.queue];
+      this.currentTaskId = state.currentTaskId;
+
+      const now = Date.now();
+      let changed = false;
+
+      for (const task of this.tasks.values()) {
+        if (task.status === 'pending' || task.status === 'running') {
+          task.status = 'failed';
+          task.error = ERRORS.TASK_INTERRUPTED_BY_RESTART;
+          task.endTime = now;
+          changed = true;
+        }
+      }
+
+      if (this.queue.length > 0) {
+        this.queue = [];
+        changed = true;
+      }
+      if (this.currentTaskId !== null) {
+        this.currentTaskId = null;
+        changed = true;
+      }
+
+      if (changed) {
+        await this.saveState();
+      }
+    } catch (error) {
+      Logger.warn('[TaskManager] Failed to initialize task state', { error });
+    }
+  }
 
   /**
    * Create a new task
@@ -25,7 +86,13 @@ export class TaskManager {
    * @param platform - Platform type
    * @returns Task ID
    */
-  createTask(type: Task['type'], url: string, platform: Platform, maxComments?: number): string {
+  createTask(
+    type: Task['type'],
+    url: string,
+    platform: Platform,
+    maxComments?: number,
+    tabId?: number,
+  ): string {
     const id = this.generateTaskId();
     const task: Task = {
       id,
@@ -33,6 +100,7 @@ export class TaskManager {
       status: 'pending',
       url,
       platform,
+      tabId,
       progress: 0,
       startTime: Date.now(),
       tokensUsed: 0,
@@ -42,8 +110,36 @@ export class TaskManager {
     this.tasks.set(id, task);
     this.queue.push(id);
 
+    this.schedulePersist();
+
     Logger.info(`[TaskManager] Task created: ${id}`, { type, url, platform });
     return id;
+  }
+
+  setExecutor(taskId: string, executor: TaskExecutor): void {
+    this.executors.set(taskId, executor);
+    if (!this.queue.includes(taskId)) {
+      this.queue.push(taskId);
+    }
+    this.schedulePersist();
+    this.processQueue();
+  }
+
+  registerAbortController(taskId: string, controller: AbortController): void {
+    this.abortControllers.set(taskId, controller);
+  }
+
+  abortTask(taskId: string): void {
+    const controller = this.abortControllers.get(taskId);
+    if (!controller) {
+      return;
+    }
+    controller.abort();
+    this.abortControllers.delete(taskId);
+  }
+
+  private clearAbortController(taskId: string): void {
+    this.abortControllers.delete(taskId);
   }
 
   /**
@@ -85,6 +181,8 @@ export class TaskManager {
 
     Logger.info(`[TaskManager] Task started: ${taskId}`);
     this.notifyTaskUpdate(task);
+
+    this.schedulePersist();
   }
 
   /**
@@ -109,6 +207,8 @@ export class TaskManager {
       message,
     });
     this.notifyTaskUpdate(task);
+
+    this.schedulePersist();
   }
 
   /**
@@ -122,6 +222,8 @@ export class TaskManager {
       Logger.warn(`[TaskManager] Task not found: ${taskId}`);
       return;
     }
+
+    this.clearAbortController(taskId);
 
     task.status = 'completed';
     task.progress = 100;
@@ -143,6 +245,7 @@ export class TaskManager {
 
     this.currentTaskId = null;
     this.notifyTaskUpdate(task);
+    this.schedulePersist();
     this.processQueue();
   }
 
@@ -158,6 +261,8 @@ export class TaskManager {
       return;
     }
 
+    this.clearAbortController(taskId);
+
     task.status = 'failed';
     task.error = error;
     task.endTime = Date.now();
@@ -169,6 +274,7 @@ export class TaskManager {
 
     this.currentTaskId = null;
     this.notifyTaskUpdate(task);
+    this.schedulePersist();
     this.processQueue();
   }
 
@@ -194,6 +300,10 @@ export class TaskManager {
       this.queue.splice(queueIndex, 1);
     }
 
+    this.executors.delete(taskId);
+
+    this.abortTask(taskId);
+
     task.status = 'failed';
     task.error = ERRORS.TASK_CANCELLED_BY_USER;
     task.endTime = Date.now();
@@ -204,6 +314,7 @@ export class TaskManager {
 
     Logger.info(`[TaskManager] Task cancelled: ${taskId}`);
     this.notifyTaskUpdate(task);
+    this.schedulePersist();
     this.processQueue();
   }
 
@@ -243,9 +354,12 @@ export class TaskManager {
 
     finishedTasks.forEach((task) => {
       this.tasks.delete(task.id);
+      this.executors.delete(task.id);
+      this.abortControllers.delete(task.id);
     });
 
     Logger.info(`[TaskManager] Cleared ${finishedTasks.length} finished tasks`);
+    this.schedulePersist();
   }
 
   /**
@@ -253,7 +367,9 @@ export class TaskManager {
    * @returns Unique task ID
    */
   private generateTaskId(): string {
-    return `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const start = LIMITS.RANDOM_ID_START_INDEX;
+    const end = LIMITS.RANDOM_ID_START_INDEX + LIMITS.ID_RANDOM_LENGTH;
+    return `task_${Date.now()}_${Math.random().toString(36).slice(start, end)}`;
   }
 
   /**
@@ -264,12 +380,91 @@ export class TaskManager {
       return;
     }
 
-    const nextTaskId = this.queue.shift();
-    if (nextTaskId) {
-      this.startTask(nextTaskId).catch((error) => {
+    const nextIndex = this.queue.findIndex((id) => this.executors.has(id));
+    if (nextIndex === -1) {
+      return;
+    }
+
+    const nextTaskId = this.queue.splice(nextIndex, 1)[0];
+    const executor = this.executors.get(nextTaskId);
+    if (!executor) {
+      return;
+    }
+
+    this.startTask(nextTaskId)
+      .then(async () => {
+        const task = this.tasks.get(nextTaskId);
+        if (!task) {
+          return;
+        }
+
+        const controller = new AbortController();
+        this.registerAbortController(nextTaskId, controller);
+
+        try {
+          const result = await executor(task, controller.signal);
+          const latest = this.tasks.get(nextTaskId);
+          if (!latest || latest.status !== 'running') {
+            return;
+          }
+          this.completeTask(nextTaskId, result || {});
+        } catch (error) {
+          const latest = this.tasks.get(nextTaskId);
+          if (!latest || latest.status !== 'running') {
+            return;
+          }
+          Logger.error(`[TaskManager] Executor failed for task ${nextTaskId}`, { error });
+          this.failTask(nextTaskId, error instanceof Error ? error.message : String(error));
+        } finally {
+          this.executors.delete(nextTaskId);
+          this.clearAbortController(nextTaskId);
+        }
+      })
+      .catch((error) => {
         Logger.error(`[TaskManager] Failed to start task ${nextTaskId}`, { error });
-        this.failTask(nextTaskId, error.message);
+        this.failTask(nextTaskId, error instanceof Error ? error.message : String(error));
       });
+  }
+
+  private schedulePersist(): void {
+    if (!this.enablePersistence) {
+      return;
+    }
+    if (this.persistTimer) {
+      return;
+    }
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      this.saveState().catch((error) => {
+        Logger.warn('[TaskManager] Failed to persist task state', { error });
+      });
+    }, TIMING.TASK_STATE_PERSIST_DEBOUNCE_MS);
+  }
+
+  private async loadState(): Promise<PersistedTaskState | null> {
+    try {
+      const result = await chrome.storage.local.get(STORAGE.TASK_STATE_KEY);
+      const state = result[STORAGE.TASK_STATE_KEY] as PersistedTaskState | undefined;
+      return state || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async saveState(): Promise<void> {
+    if (!this.enablePersistence) {
+      return;
+    }
+    try {
+      const state: PersistedTaskState = {
+        tasks: Array.from(this.tasks.values()),
+        queue: [...this.queue],
+        currentTaskId: this.currentTaskId,
+        savedAt: Date.now(),
+      };
+      await chrome.storage.local.set({ [STORAGE.TASK_STATE_KEY]: state });
+    } catch {
+      return;
     }
   }
 
@@ -288,8 +483,3 @@ export class TaskManager {
       });
   }
 }
-
-/**
- * @deprecated Use getTaskManager() from ServiceContainer instead
- */
-export const taskManager = new TaskManager();

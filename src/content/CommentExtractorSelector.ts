@@ -55,11 +55,17 @@ export class CommentExtractorSelector {
         }
 
         const url = window.location.href;
-        const cfgResponse = await sendMessage<{ config?: ScraperConfig }>({
-          type: MESSAGES.CHECK_SCRAPER_CONFIG,
-          payload: { url },
-        });
-        const scrollCfg: ScrollConfig | undefined = cfgResponse?.config?.scrollConfig;
+        let scrollCfg: ScrollConfig | undefined;
+        try {
+          const cfgResponse = await sendMessage<{ config?: ScraperConfig }>({
+            type: MESSAGES.CHECK_SCRAPER_CONFIG,
+            payload: { url },
+          });
+          scrollCfg = cfgResponse?.config?.scrollConfig;
+        } catch (error) {
+          Logger.warn('[CommentExtractorSelector] Failed to get scraper config', { error });
+          scrollCfg = undefined;
+        }
 
         const comments = await performanceMonitor.measureAsync(
           'extractWithScrolling',
@@ -722,7 +728,7 @@ Identify the comment section and provide CSS selectors for each field.
       chrome.runtime.sendMessage(
         {
           type: MESSAGES.AI_ANALYZE_STRUCTURE,
-          data: { prompt },
+          payload: { prompt },
         },
         (response) => {
           if (chrome.runtime.lastError) {
@@ -735,7 +741,7 @@ Identify the comment section and provide CSS selectors for each field.
             return;
           }
 
-          resolve(response.data);
+          resolve((response as { data: AIAnalysisResponse }).data);
         },
       );
     });

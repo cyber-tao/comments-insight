@@ -52,6 +52,10 @@ export interface HistoryResponse {
   total?: number;
 }
 
+export interface SettingsResponse {
+  settings: import('../../types').Settings;
+}
+
 export interface ModelInfo {
   id: string;
 }

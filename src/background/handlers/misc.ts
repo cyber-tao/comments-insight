@@ -1,7 +1,7 @@
 import { Message } from '../../types';
 import { HandlerContext, PingResponse } from './types';
 import { Logger } from '../../utils/logger';
-import { ERRORS } from '@/config/constants';
+import { ERRORS, LIMITS } from '@/config/constants';
 
 export interface ModelsResponse {
   models: string[];
@@ -28,12 +28,12 @@ export async function handleGetAvailableModels(
 ): Promise<ModelsResponse> {
   const { apiUrl, apiKey } = message.payload || {};
 
-  if (!apiUrl || !apiKey) {
+  if (!apiUrl) {
     throw new Error(ERRORS.API_CONFIG_REQUIRED);
   }
 
   try {
-    const models = await context.aiService.getAvailableModels(apiUrl, apiKey);
+    const models = await context.aiService.getAvailableModels(apiUrl, apiKey || '');
     return { models };
   } catch (error) {
     Logger.error('[MiscHandler] Failed to get models', { error });
@@ -47,7 +47,7 @@ export async function handleTestModel(
 ): Promise<TestModelResponse> {
   const { config } = message.payload || {};
 
-  if (!config || !config.apiUrl || !config.apiKey || !config.model) {
+  if (!config || !config.apiUrl || !config.model) {
     throw new Error(ERRORS.COMPLETE_MODEL_CONFIG_REQUIRED);
   }
 
@@ -61,7 +61,7 @@ export async function handleTestModel(
       return {
         success: true,
         message: 'Model is working correctly',
-        response: response.content.substring(0, 100),
+        response: response.content.substring(0, LIMITS.MODEL_RESPONSE_PREVIEW_LENGTH),
       };
     } else {
       throw new Error(ERRORS.NO_RESPONSE_FROM_MODEL);

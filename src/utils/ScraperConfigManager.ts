@@ -1,11 +1,11 @@
 import { ScraperConfig, ScraperConfigList } from '../types/scraper';
-import { PATHS } from '@/config/constants';
+import { PATHS, LIMITS, SCRAPER } from '@/config/constants';
 import { Logger } from '@/utils/logger';
 import { getHostname, matchesDomain } from '@/utils/url';
 
-const STORAGE_KEY = 'scraperConfigs';
-const CONFIG_VERSION = '1.0.0';
-const INITIALIZED_KEY = 'scraperConfigsInitialized';
+const STORAGE_KEY = SCRAPER.CONFIG_STORAGE_KEY;
+const CONFIG_VERSION = SCRAPER.CONFIG_VERSION;
+const INITIALIZED_KEY = SCRAPER.INITIALIZED_KEY;
 
 /**
  * ScraperConfigManager handles CRUD operations for scraper configurations
@@ -428,7 +428,9 @@ export class ScraperConfigManager {
    * Generate a unique ID
    */
   private static generateId(): string {
-    return `scraper_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const start = LIMITS.RANDOM_ID_START_INDEX;
+    const end = LIMITS.RANDOM_ID_START_INDEX + LIMITS.ID_RANDOM_LENGTH;
+    return `scraper_${Date.now()}_${Math.random().toString(36).slice(start, end)}`;
   }
 
   /**

@@ -118,9 +118,9 @@ export class DOMAnalyzer {
 
       // Analyze Shadow DOM children
       const shadowChildren = Array.from(shadowRoot.children);
-      if (shadowChildren.length > 0 && shadowChildren.length < 50) {
+      if (shadowChildren.length > 0 && shadowChildren.length < DOM.CHILDREN_MAX) {
         node.children = shadowChildren
-          .slice(0, 20)
+          .slice(0, DOM.CHILDREN_LIMIT)
           .map((child) => this.analyzeNode(child as Element, currentDepth + 1, maxDepth));
       }
       return node;
@@ -128,10 +128,10 @@ export class DOMAnalyzer {
 
     // Analyze regular children
     const children = Array.from(element.children);
-    if (children.length > 0 && children.length < 50) {
+    if (children.length > 0 && children.length < DOM.CHILDREN_MAX) {
       // Limit children
       node.children = children
-        .slice(0, 20) // Limit to first 20 children
+        .slice(0, DOM.CHILDREN_LIMIT)
         .map((child) => this.analyzeNode(child, currentDepth + 1, maxDepth));
     }
 

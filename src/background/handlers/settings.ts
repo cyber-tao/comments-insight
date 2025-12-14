@@ -1,12 +1,12 @@
 import { Message } from '../../types';
-import { HandlerContext } from './types';
+import { HandlerContext, SettingsResponse, SuccessResponse } from './types';
 import { Logger } from '../../utils/logger';
 import { ERRORS } from '@/config/constants';
 
 export async function handleGetSettings(
   _message: Extract<Message, { type: 'GET_SETTINGS' }>,
   context: HandlerContext,
-): Promise<any> {
+): Promise<SettingsResponse> {
   Logger.debug('[SettingsHandler] Getting settings');
   const settings = await context.storageManager.getSettings();
   Logger.debug('[SettingsHandler] Settings retrieved', { settings });
@@ -16,7 +16,7 @@ export async function handleGetSettings(
 export async function handleSaveSettings(
   message: Extract<Message, { type: 'SAVE_SETTINGS' }>,
   context: HandlerContext,
-): Promise<any> {
+): Promise<SuccessResponse> {
   const { settings } = message.payload || {};
 
   if (!settings) {
