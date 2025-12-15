@@ -1,5 +1,5 @@
 import { Settings, HistoryItem, AIConfig } from '../types';
-import { SECURITY, API, STORAGE, AI, LANGUAGES, ERRORS } from '@/config/constants';
+import { SECURITY, API, STORAGE, AI, LANGUAGES, ERRORS, HISTORY } from '@/config/constants';
 import LZString from 'lz-string';
 import { Logger } from '../utils/logger';
 import { ErrorHandler } from '../utils/errors';
@@ -342,16 +342,36 @@ export class StorageManager {
    */
   async saveHistory(item: HistoryItem): Promise<void> {
     try {
-      // Compress comments data to save space
-      const compressedItem = {
-        ...item,
-        comments: LZString.compressToUTF16(JSON.stringify(item.comments)),
-      };
+      const baseKey = `${StorageManager.HISTORY_KEY}_${item.id}`;
 
-      // Save the item with its ID as key
-      await chrome.storage.local.set({
-        [`${StorageManager.HISTORY_KEY}_${item.id}`]: compressedItem,
-      });
+      // Compress comments data to save space
+      const compressedComments = LZString.compressToUTF16(JSON.stringify(item.comments));
+
+      const chunks: string[] = [];
+      for (let i = 0; i < compressedComments.length; i += HISTORY.COMMENTS_CHUNK_SIZE) {
+        chunks.push(compressedComments.slice(i, i + HISTORY.COMMENTS_CHUNK_SIZE));
+      }
+
+      const toSet: Record<string, unknown> = {};
+
+      if (chunks.length <= 1) {
+        toSet[baseKey] = {
+          ...item,
+          comments: compressedComments,
+        };
+      } else {
+        for (let i = 0; i < chunks.length; i++) {
+          toSet[`${baseKey}_comments_${i}`] = chunks[i];
+        }
+
+        toSet[baseKey] = {
+          ...item,
+          comments: '',
+          commentsChunks: chunks.length,
+        };
+      }
+
+      await chrome.storage.local.set(toSet);
 
       // Update history index
       await this.updateHistoryIndex(item.id);
@@ -389,7 +409,24 @@ export class StorageManager {
   async clearAllHistory(): Promise<number> {
     try {
       const ids = await this.getHistoryIndex();
-      const keysToRemove = ids.map((id) => `${StorageManager.HISTORY_KEY}_${id}`);
+      const keysToRemove: string[] = [];
+
+      for (const id of ids) {
+        const baseKey = `${StorageManager.HISTORY_KEY}_${id}`;
+        keysToRemove.push(baseKey);
+
+        try {
+          const meta = await chrome.storage.local.get(baseKey);
+          const storedItem = meta[baseKey] as { commentsChunks?: number } | undefined;
+          const chunks = storedItem?.commentsChunks || 0;
+          for (let i = 0; i < chunks; i++) {
+            keysToRemove.push(`${baseKey}_comments_${i}`);
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       keysToRemove.push(StorageManager.HISTORY_INDEX_KEY);
       keysToRemove.push(StorageManager.HISTORY_URL_INDEX_KEY);
 
@@ -435,17 +472,34 @@ export class StorageManager {
    */
   async getHistoryItem(id: string): Promise<HistoryItem | undefined> {
     try {
-      const result = await chrome.storage.local.get(`${StorageManager.HISTORY_KEY}_${id}`);
-      const compressedItem = result[`${StorageManager.HISTORY_KEY}_${id}`] as
-        | (Omit<HistoryItem, 'comments'> & { comments: string })
+      const baseKey = `${StorageManager.HISTORY_KEY}_${id}`;
+      const result = await chrome.storage.local.get(baseKey);
+      const compressedItem = result[baseKey] as
+        | (Omit<HistoryItem, 'comments'> & { comments: string; commentsChunks?: number })
         | undefined;
 
       if (!compressedItem) {
         return undefined;
       }
 
-      // Decompress comments data
-      const decompressed = LZString.decompressFromUTF16(compressedItem.comments);
+      let compressedComments = compressedItem.comments;
+
+      if (!compressedComments && typeof compressedItem.commentsChunks === 'number') {
+        const chunks: string[] = [];
+        for (let i = 0; i < compressedItem.commentsChunks; i++) {
+          const chunkKey = `${baseKey}_comments_${i}`;
+          const chunkResult = await chrome.storage.local.get(chunkKey);
+          const chunk = chunkResult[chunkKey] as string | undefined;
+          if (typeof chunk === 'string') {
+            chunks.push(chunk);
+          }
+        }
+        compressedComments = chunks.join('');
+      }
+
+      const decompressed = compressedComments
+        ? LZString.decompressFromUTF16(compressedComments)
+        : null;
       const comments = decompressed ? JSON.parse(decompressed) : [];
 
       return {
@@ -464,12 +518,17 @@ export class StorageManager {
    */
   async deleteHistoryItem(id: string): Promise<void> {
     try {
-      const meta = await chrome.storage.local.get(`${StorageManager.HISTORY_KEY}_${id}`);
-      const storedItem = meta[`${StorageManager.HISTORY_KEY}_${id}`] as
-        | { url?: string }
-        | undefined;
+      const baseKey = `${StorageManager.HISTORY_KEY}_${id}`;
+      const meta = await chrome.storage.local.get(baseKey);
+      const storedItem = meta[baseKey] as { url?: string; commentsChunks?: number } | undefined;
 
-      await chrome.storage.local.remove(`${StorageManager.HISTORY_KEY}_${id}`);
+      const keysToRemove: string[] = [baseKey];
+      const chunks = storedItem?.commentsChunks || 0;
+      for (let i = 0; i < chunks; i++) {
+        keysToRemove.push(`${baseKey}_comments_${i}`);
+      }
+
+      await chrome.storage.local.remove(keysToRemove);
       await this.removeFromHistoryIndex(id);
 
       if (storedItem?.url) {
@@ -528,10 +587,30 @@ export class StorageManager {
 
       if (!index.includes(id)) {
         index.push(id);
-        await chrome.storage.local.set({
-          [StorageManager.HISTORY_INDEX_KEY]: index,
-        });
       }
+
+      if (index.length > HISTORY.MAX_ITEMS) {
+        const toRemove = index.slice(0, index.length - HISTORY.MAX_ITEMS);
+        const kept = index.slice(index.length - HISTORY.MAX_ITEMS);
+
+        await chrome.storage.local.set({
+          [StorageManager.HISTORY_INDEX_KEY]: kept,
+        });
+
+        for (const oldId of toRemove) {
+          try {
+            await this.deleteHistoryItem(oldId);
+          } catch (e) {
+            Logger.warn('[StorageManager] Failed to prune history item', { id: oldId, error: e });
+          }
+        }
+
+        return;
+      }
+
+      await chrome.storage.local.set({
+        [StorageManager.HISTORY_INDEX_KEY]: index,
+      });
     } catch (error) {
       Logger.error('[StorageManager] Failed to update history index', { error });
     }

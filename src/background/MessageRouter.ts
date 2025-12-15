@@ -47,6 +47,9 @@ export class MessageRouter {
         case 'PING':
           return miscHandlers.handlePing(message, context);
 
+        case 'ENSURE_CONTENT_SCRIPT':
+          return await miscHandlers.handleEnsureContentScript(message, context);
+
         case 'START_EXTRACTION':
           return await extractionHandlers.handleStartExtraction(message, context);
 

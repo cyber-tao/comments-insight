@@ -5,6 +5,8 @@ import { CommentExtractor } from './CommentExtractor';
 import { Comment } from '@/types';
 import { Logger } from '@/utils/logger';
 import { getCurrentHostname } from '@/utils/url';
+import { DOMAnalyzer } from './DOMAnalyzer';
+import { setExtractionActive } from './extractionState';
 
 interface ExtractionResponse {
   success: boolean;
@@ -27,78 +29,86 @@ interface TestSelectorPayload {
   selector?: string;
 }
 
-Logger.debug('Comments Insight Content Script loaded');
+const globalAny = globalThis as unknown as { __COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED?: boolean };
 
-// Get basic page info
-Logger.debug('[Content] Page loaded', { href: window.location.href });
+let domAnalyzer: DOMAnalyzer | null = null;
+let pageController: PageController | null = null;
+let commentExtractor: CommentExtractor | null = null;
 
-// Initialize extractors with Shadow DOM support
-import { DOMAnalyzer } from './DOMAnalyzer';
-
-const domAnalyzer = new DOMAnalyzer();
-const pageController = new PageController(domAnalyzer);
-// Use the high-level CommentExtractor which handles fallback logic
-const commentExtractor = new CommentExtractor(pageController);
+const getTools = () => {
+  if (!domAnalyzer) domAnalyzer = new DOMAnalyzer();
+  if (!pageController) pageController = new PageController(domAnalyzer);
+  if (!commentExtractor) commentExtractor = new CommentExtractor(pageController);
+  return { domAnalyzer, commentExtractor };
+};
 
 // Track current extraction task
 let currentTaskId: string | null = null;
 
-// Listen for messages from background
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  Logger.debug('[Content] Received message', { type: message.type });
+if (!globalAny.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED) {
+  globalAny.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED = true;
 
-  // Handle different message types
-  switch (message.type) {
-    case MESSAGES.GET_PLATFORM_INFO:
-      sendResponse({
-        url: window.location.href,
-        title: document.title,
-      });
-      break;
+  Logger.debug('Comments Insight Content Script loaded');
+  Logger.debug('[Content] Page loaded', { href: window.location.href });
 
-    case MESSAGES.START_EXTRACTION:
-      handleStartExtraction(message.payload, sendResponse);
-      return true; // Keep channel open for async response
+  // Listen for messages from background
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    Logger.debug('[Content] Received message', { type: message.type });
 
-    case MESSAGES.CANCEL_EXTRACTION:
-      handleCancelExtraction(message.payload.taskId);
-      sendResponse({ success: true });
-      break;
+    // Handle different message types
+    switch (message.type) {
+      case MESSAGES.GET_PLATFORM_INFO:
+        sendResponse({
+          url: window.location.href,
+          title: document.title,
+        });
+        break;
 
-    case MESSAGES.GET_DOM_STRUCTURE:
-      handleGetDOMStructure(sendResponse);
-      return true; // Keep channel open for async response
+      case MESSAGES.START_EXTRACTION:
+        handleStartExtraction(message.payload, sendResponse);
+        return true; // Keep channel open for async response
 
-    case MESSAGES.TEST_SELECTOR_QUERY: {
-      try {
-        const payload = message.payload as TestSelectorPayload;
-        const selector = payload?.selector;
-        if (!selector) {
-          sendResponse({ success: false, error: 'Missing selector' });
-          return true;
+      case MESSAGES.CANCEL_EXTRACTION:
+        handleCancelExtraction(message.payload.taskId);
+        sendResponse({ success: true });
+        break;
+
+      case MESSAGES.GET_DOM_STRUCTURE:
+        handleGetDOMStructure(sendResponse);
+        return true; // Keep channel open for async response
+
+      case MESSAGES.TEST_SELECTOR_QUERY: {
+        try {
+          const payload = message.payload as TestSelectorPayload;
+          const selector = payload?.selector;
+          if (!selector) {
+            sendResponse({ success: false, error: 'Missing selector' });
+            return true;
+          }
+          const { domAnalyzer } = getTools();
+          const nodes = domAnalyzer.querySelectorAllDeep(document, selector);
+          const items = nodes.map((el: Element, i: number) => ({
+            index: i,
+            tag: el.tagName.toLowerCase(),
+            id: (el as HTMLElement).id || '',
+            className: (el as HTMLElement).className || '',
+            text: (el.textContent || '').trim().slice(0, DOM.HTML_PREVIEW_LENGTH),
+            html: el.outerHTML.slice(0, DOM.HTML_PREVIEW_LENGTH),
+          }));
+          sendResponse({ success: true, total: nodes.length, items });
+        } catch (e) {
+          sendResponse({ success: false, error: e instanceof Error ? e.message : 'Query failed' });
         }
-        const nodes = domAnalyzer.querySelectorAllDeep(document, selector);
-        const items = nodes.map((el: Element, i: number) => ({
-          index: i,
-          tag: el.tagName.toLowerCase(),
-          id: (el as HTMLElement).id || '',
-          className: (el as HTMLElement).className || '',
-          text: (el.textContent || '').trim().slice(0, DOM.HTML_PREVIEW_LENGTH),
-          html: el.outerHTML.slice(0, DOM.HTML_PREVIEW_LENGTH),
-        }));
-        sendResponse({ success: true, total: nodes.length, items });
-      } catch (e) {
-        sendResponse({ success: false, error: e instanceof Error ? e.message : 'Query failed' });
+        return true;
       }
-      return true;
+
+      default:
+        sendResponse({ status: 'received' });
     }
 
-    default:
-      sendResponse({ status: 'received' });
-  }
-
-  return true;
-});
+    return true;
+  });
+}
 
 /**
  * Handle START_EXTRACTION message
@@ -115,10 +125,12 @@ async function handleStartExtraction(
 
   // Set current task
   currentTaskId = taskId;
+  setExtractionActive(true);
 
   try {
     // Use the unified extractor interface
     // It will try to use config first, then fallback to AI discovery
+    const { commentExtractor } = getTools();
     const comments = await commentExtractor.extractWithAI(
       maxComments,
       getCurrentHostname(),
@@ -159,6 +171,7 @@ async function handleStartExtraction(
     });
   } finally {
     currentTaskId = null;
+    setExtractionActive(false);
   }
 }
 
@@ -170,6 +183,7 @@ function handleCancelExtraction(taskId: string) {
   if (currentTaskId === taskId) {
     Logger.info('[Content] Cancelling extraction', { taskId });
     currentTaskId = null;
+    setExtractionActive(false);
   }
 }
 

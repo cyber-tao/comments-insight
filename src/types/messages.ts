@@ -5,6 +5,11 @@ export type SystemMessage =
   | { type: 'PING'; payload?: never }
   | { type: 'GET_PLATFORM_INFO'; payload?: never };
 
+export type InjectionMessage = {
+  type: 'ENSURE_CONTENT_SCRIPT';
+  payload?: { tabId?: number };
+};
+
 export type SettingsMessage =
   | { type: 'GET_SETTINGS'; payload?: never }
   | { type: 'SAVE_SETTINGS'; payload: { settings: Partial<Settings> } };
@@ -90,6 +95,7 @@ export type ExportMessage = {
 
 export type Message =
   | SystemMessage
+  | InjectionMessage
   | SettingsMessage
   | ExtractionMessage
   | AnalysisMessage

@@ -88,6 +88,13 @@ export const ANALYSIS_FORMAT = {
 
 export const HISTORY = {
   SORT_DESC: true,
+  MAX_ITEMS: 200,
+  COMMENTS_CHUNK_SIZE: 8000,
+};
+
+export const INJECTION = {
+  PING_RETRY_ATTEMPTS: 10,
+  PING_RETRY_DELAY_MS: 100,
 };
 
 export const API = {
@@ -150,6 +157,7 @@ export const REGEX = {
 
 export const MESSAGES = {
   PING: 'PING',
+  ENSURE_CONTENT_SCRIPT: 'ENSURE_CONTENT_SCRIPT',
   GET_PLATFORM_INFO: 'GET_PLATFORM_INFO',
   EXTRACTION_PROGRESS: 'EXTRACTION_PROGRESS',
   CHECK_SCRAPER_CONFIG: 'CHECK_SCRAPER_CONFIG',
@@ -286,6 +294,7 @@ export const DOM = {
 
 export const CLICK = {
   LOAD_MORE_MAX: 5,
+  REPLY_TOGGLE_MAX: 50,
 };
 
 export const TIMEOUT = {

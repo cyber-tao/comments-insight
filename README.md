@@ -71,9 +71,13 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
 ## 🔐 Permissions
 - `storage`: Saving history, settings, and configs.
-- `activeTab`, `scripting`: Injecting content scripts for extraction.
+- `activeTab`, `scripting`: Injecting content scripts only when you run the extension.
+- Per-site access: requested at runtime via `optional_host_permissions`.
 - `notifications`: Alerting on task completion.
-- Host permissions: `<all_urls>` to support extraction on any website.
+- Site access: requested per-site at runtime (no `<all_urls>` host permission at install).
+
+## 🔑 API Key Security Note
+API keys are stored locally (reversible encryption/obfuscation) to avoid accidental exposure, but this is **not** a strong security boundary against malware or other extensions.
 
 ## 🧱 Architecture
 - **Background**: Service Worker orchestrates the Task Queue, AI Service (API calls), and Storage management.

@@ -43,6 +43,8 @@ const Popup: React.FC = () => {
     message?: string;
   } | null>(null);
   const [generatingConfig, setGeneratingConfig] = useState(false);
+  const [hasSiteAccess, setHasSiteAccess] = useState<boolean | null>(null);
+  const [sitePattern, setSitePattern] = useState<string | null>(null);
   const [testSelector, setTestSelector] = useState('');
   const [testItems, setTestItems] = useState<any[]>([]);
   const [testPage, setTestPage] = useState(1);
@@ -50,11 +52,100 @@ const Popup: React.FC = () => {
   const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isUnmountedRef = useRef(false);
 
+  const computeSitePattern = (url: string): string | null => {
+    try {
+      const u = new URL(url);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        return null;
+      }
+      return `${u.protocol}//${u.hostname}/*`;
+    } catch {
+      return null;
+    }
+  };
+
+  const isRequiredOrigin = (origin: string): boolean => {
+    const manifest = chrome.runtime.getManifest();
+    const required = manifest.content_scripts?.flatMap((x) => x.matches || []) || [];
+    return required.includes(origin);
+  };
+
+  const refreshSiteAccess = async (url: string) => {
+    const pattern = computeSitePattern(url);
+    setSitePattern(pattern);
+    if (!pattern) {
+      setHasSiteAccess(null);
+      return;
+    }
+
+    if (isRequiredOrigin(pattern)) {
+      setHasSiteAccess(true);
+      return;
+    }
+
+    try {
+      const has = await chrome.permissions.contains({ origins: [pattern] });
+      setHasSiteAccess(has);
+    } catch {
+      setHasSiteAccess(null);
+    }
+  };
+
+  const ensureContentScript = async () => {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tabId = tabs[0]?.id;
+    if (!tabId) {
+      throw new Error('No active tab');
+    }
+
+    const resp = await chrome.runtime.sendMessage({
+      type: MESSAGES.ENSURE_CONTENT_SCRIPT,
+      payload: { tabId },
+    });
+
+    if (!resp?.success) {
+      throw new Error(resp?.error || 'Failed to inject content script');
+    }
+  };
+
+  const ensureSiteAccess = async (url: string): Promise<boolean> => {
+    const pattern = computeSitePattern(url);
+    if (!pattern) {
+      return false;
+    }
+
+    if (isRequiredOrigin(pattern)) {
+      return true;
+    }
+
+    const has = await chrome.permissions.contains({ origins: [pattern] });
+    if (has) {
+      return true;
+    }
+
+    const granted = await chrome.permissions.request({ origins: [pattern] });
+    if (!granted) {
+      toast.warning(t('popup.accessRequestDenied'));
+      return false;
+    }
+
+    toast.success(t('popup.accessGranted'));
+    await refreshSiteAccess(url);
+    return true;
+  };
+
   const handleTestSelectorQuery = async () => {
     try {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const tabId = tabs[0]?.id;
-      if (!tabId) return;
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id || !tab.url) return;
+
+      const ok = await ensureSiteAccess(tab.url);
+      if (!ok) {
+        return;
+      }
+
+      await ensureContentScript();
+      const tabId = tab.id;
       const resp = await chrome.tabs.sendMessage(tabId, {
         type: MESSAGES.TEST_SELECTOR_QUERY,
         payload: { selector: testSelector },
@@ -193,6 +284,8 @@ const Popup: React.FC = () => {
         hasConfig,
       });
 
+      await refreshSiteAccess(tab.url);
+
       // Check if this page has been extracted/analyzed
       await checkPageStatus(tab.url);
     } catch (error) {
@@ -232,6 +325,12 @@ const Popup: React.FC = () => {
     toast.info(t('popup.analysisConfigStarted'));
 
     try {
+      const ok = await ensureSiteAccess(pageInfo.url);
+      if (!ok) {
+        return;
+      }
+
+      await ensureContentScript();
       const response = await chrome.runtime.sendMessage({
         type: MESSAGES.GENERATE_SCRAPER_CONFIG,
         payload: {
@@ -267,6 +366,12 @@ const Popup: React.FC = () => {
     }
 
     try {
+      const ok = await ensureSiteAccess(pageInfo.url);
+      if (!ok) {
+        return;
+      }
+
+      await ensureContentScript();
       const response = await chrome.runtime.sendMessage({
         type: MESSAGES.START_EXTRACTION,
         payload: {
@@ -288,7 +393,13 @@ const Popup: React.FC = () => {
         monitorTask(response.taskId);
       }
     } catch (error) {
-      Logger.error('[Popup] Failed to start extraction', { error });
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : JSON.stringify(error);
+      Logger.error('[Popup] Failed to start extraction', { error: message });
       setCurrentTask(null);
       toast.error(t('popup.extractionFailed'));
     }
@@ -526,6 +637,19 @@ const Popup: React.FC = () => {
               <span className="text-gray-600">{t('popup.platform')}:</span>
               <span className="font-medium">{pageInfo.domain}</span>
             </div>
+
+            {sitePattern && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">{t('popup.siteAccess')}:</span>
+                <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-800">
+                  {isRequiredOrigin(sitePattern)
+                    ? t('popup.siteAccessStatusRequired')
+                    : hasSiteAccess
+                      ? t('popup.siteAccessStatusGranted')
+                      : t('popup.siteAccessStatusNotGranted')}
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-600">{t('popup.status')}:</span>
               <span

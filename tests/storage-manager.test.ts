@@ -166,7 +166,7 @@ describe('StorageManager', () => {
 
       await storageManager.deleteHistoryItem('1');
 
-      expect(mockStorageRemove).toHaveBeenCalledWith('history_1');
+      expect(mockStorageRemove).toHaveBeenCalledWith(expect.arrayContaining(['history_1']));
       expect(mockStorageSet).toHaveBeenCalledWith({
         history_index: ['2'],
       });

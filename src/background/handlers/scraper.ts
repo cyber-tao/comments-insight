@@ -10,6 +10,7 @@ import {
   SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT,
 } from '../../utils/prompts-scraper';
 import { chunkDomText } from './extraction';
+import { ensureContentScriptInjected } from '../ContentScriptInjector';
 
 interface CheckScraperConfigResponse {
   hasConfig: boolean;
@@ -103,6 +104,7 @@ export async function handleGenerateScraperConfig(
       }
 
       if (tabId) {
+        await ensureContentScriptInjected(tabId);
         const domResponse: DomStructureResponse = await chrome.tabs.sendMessage(tabId, {
           type: MESSAGES.GET_DOM_STRUCTURE,
         });

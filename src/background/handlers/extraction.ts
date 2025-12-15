@@ -4,6 +4,7 @@ import { Logger } from '../../utils/logger';
 import { REGEX, AI, ERRORS, MESSAGES } from '@/config/constants';
 import { getDomain } from '../../utils/url';
 import { Tokenizer } from '../../utils/tokenizer';
+import { ensureContentScriptInjected } from '../ContentScriptInjector';
 
 interface ExtractionContentResponse {
   success: boolean;
@@ -135,6 +136,8 @@ export async function handleStartExtraction(
     if (!task.tabId) {
       throw new Error(ERRORS.NO_TAB_ID_AVAILABLE);
     }
+
+    await ensureContentScriptInjected(task.tabId);
 
     const respPromise = chrome.tabs.sendMessage(task.tabId, {
       type: MESSAGES.START_EXTRACTION,

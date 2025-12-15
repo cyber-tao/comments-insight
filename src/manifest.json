@@ -22,18 +22,22 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
+      "matches": ["https://example.com/*"],
       "js": ["src/content/index.ts"],
       "run_at": "document_idle"
     }
   ],
-  "permissions": ["storage", "activeTab", "notifications"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": ["storage", "activeTab", "notifications", "scripting"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
   "options_page": "src/options/index.html",
   "web_accessible_resources": [
     {
       "resources": ["src/config/default-scrapers.json"],
-      "matches": ["<all_urls>"]
+      "matches": ["http://*/*", "https://*/*"]
+    },
+    {
+      "resources": ["assets/*"],
+      "matches": ["http://*/*", "https://*/*"]
     }
   ],
   "content_security_policy": {

@@ -1,5 +1,6 @@
 import { DOMAnalyzer } from './DOMAnalyzer';
 import { TIMING, SCROLL, CLICK, TIMEOUT } from '@/config/constants';
+import { isExtractionActive } from './extractionState';
 import { Logger } from '../utils/logger';
 
 /**
@@ -20,6 +21,7 @@ export class PageController {
     const step = Math.floor(viewportHeight * SCROLL.SCROLL_STEP_RATIO);
 
     while (currentScroll < totalHeight) {
+      if (!isExtractionActive()) return;
       // Calculate next position
       const nextScroll = Math.min(currentScroll + step, totalHeight);
 
@@ -51,6 +53,7 @@ export class PageController {
     let scrollCount = 0;
 
     while (scrollCount < maxScrolls) {
+      if (!isExtractionActive()) return;
       const previousHeight = document.documentElement.scrollHeight;
 
       // Scroll to bottom
@@ -88,6 +91,7 @@ export class PageController {
     Logger.info('[PageController] Found expand buttons', { count: buttons.length });
 
     for (const button of buttons) {
+      if (!isExtractionActive()) return;
       try {
         (button as HTMLElement).click();
         await this.wait(TIMING.SCROLL_BASE_DELAY_MS);
@@ -106,6 +110,7 @@ export class PageController {
     const maxClicks = CLICK.LOAD_MORE_MAX;
 
     while (clickCount < maxClicks) {
+      if (!isExtractionActive()) return;
       const button = document.querySelector(selector) as HTMLElement;
 
       if (!button || !button.offsetParent) {
@@ -141,6 +146,7 @@ export class PageController {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
+      if (!isExtractionActive()) return null;
       // Use Shadow DOM-aware query if available
       const element = this.domAnalyzer
         ? this.domAnalyzer.querySelectorAllDeep(document, selector)[0]

@@ -2,6 +2,7 @@ import { Message } from '../../types';
 import { HandlerContext, PingResponse } from './types';
 import { Logger } from '../../utils/logger';
 import { ERRORS, LIMITS } from '@/config/constants';
+import { ensureContentScriptInjected } from '../ContentScriptInjector';
 
 export interface ModelsResponse {
   models: string[];
@@ -20,6 +21,29 @@ export function handlePing(
   _context: HandlerContext,
 ): PingResponse {
   return { status: 'ok', timestamp: Date.now() };
+}
+
+export async function handleEnsureContentScript(
+  message: Extract<Message, { type: 'ENSURE_CONTENT_SCRIPT' }>,
+  context: HandlerContext,
+): Promise<{ success: boolean; tabId?: number; error?: string }> {
+  try {
+    let tabId = message.payload?.tabId ?? context.sender?.tab?.id;
+
+    if (!tabId) {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      tabId = activeTab?.id;
+    }
+
+    if (!tabId) {
+      return { success: false, error: 'No tab ID available' };
+    }
+
+    await ensureContentScriptInjected(tabId);
+    return { success: true, tabId };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 export async function handleGetAvailableModels(

@@ -1,5 +1,5 @@
 import { Comment, Platform, SelectorMap } from '../types';
-import { DOM, AI, RETRY, MESSAGES, TIMING, SCROLL } from '@/config/constants';
+import { DOM, AI, RETRY, MESSAGES, TIMING, SCROLL, CLICK } from '@/config/constants';
 import { PageController } from './PageController';
 import { ScrollConfig, ScraperConfig } from '../types/scraper';
 import { Logger } from '@/utils/logger';
@@ -8,6 +8,7 @@ import { getShadowRoot, querySelectorAllDeep } from '@/utils/dom-query';
 import { sendMessage, sendMessageVoid } from '@/utils/chrome-message';
 import { performanceMonitor } from '@/utils/performance';
 import { selectorValidator, selectorCacheManager, commentParser } from './extractors';
+import { isExtractionActive } from './extractionState';
 
 /**
  * AI response structure
@@ -447,7 +448,11 @@ Identify the comment section and provide CSS selectors for each field.
         ? Math.min(scrollCfg.scrollDelay, TIMING.EXPAND_REPLY_MAX)
         : TIMING.SCROLL_BASE_DELAY_MS;
 
-      for (let i = 0; i < buttonsToClick.length; i++) {
+      const maxButtons = Math.min(buttonsToClick.length, CLICK.REPLY_TOGGLE_MAX);
+      for (let i = 0; i < maxButtons; i++) {
+        if (!isExtractionActive()) {
+          break;
+        }
         const button = buttonsToClick[i];
 
         if (!document.contains(button)) continue;
@@ -504,6 +509,9 @@ Identify the comment section and provide CSS selectors for each field.
       : SCROLL.SELECTOR_MAX_SCROLL_ATTEMPTS;
 
     while (allComments.length < maxComments && scrollAttempts < maxScrollAttempts) {
+      if (!isExtractionActive()) {
+        break;
+      }
       if (scrollAttempts === 0 || scrollAttempts % SCROLL.REPLY_EXPAND_SCROLL_FREQUENCY === 0) {
         const expandedCount = await this.expandReplies(
           selectors,

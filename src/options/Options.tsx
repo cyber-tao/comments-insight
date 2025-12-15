@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API, MESSAGES, TIMING, LANGUAGES, LIMITS } from '@/config/constants';
 import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
@@ -23,6 +23,8 @@ const Options: React.FC = () => {
   const [testingModel, setTestingModel] = useState(false);
   const isUserChangeRef = useRef(false); // Track if change is from user interaction
   const [showPlaceholders, setShowPlaceholders] = useState(false);
+  const [grantedOrigins, setGrantedOrigins] = useState<string[]>([]);
+  const [loadingOrigins, setLoadingOrigins] = useState(false);
 
   useEffect(() => {
     // Load settings only once on mount
@@ -65,6 +67,50 @@ const Options: React.FC = () => {
     loadSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const getRequiredOrigins = (): string[] => {
+    const manifest = chrome.runtime.getManifest();
+    return manifest.content_scripts?.flatMap((x) => x.matches || []) || [];
+  };
+
+  const loadGrantedOrigins = useCallback(async () => {
+    try {
+      setLoadingOrigins(true);
+      const perms = await chrome.permissions.getAll();
+      const required = new Set(getRequiredOrigins());
+      setGrantedOrigins((perms.origins || []).filter((x) => !required.has(x)));
+    } catch (e) {
+      Logger.error('[Options] Failed to load granted origins', { error: e });
+      setGrantedOrigins([]);
+    } finally {
+      setLoadingOrigins(false);
+    }
+  }, []);
+
+  const revokeOrigin = async (origin: string) => {
+    try {
+      const required = new Set(getRequiredOrigins());
+      if (required.has(origin)) {
+        toast.warning(t('options.siteAccessRequired'));
+        return;
+      }
+
+      const removed = await chrome.permissions.remove({ origins: [origin] });
+      if (!removed) {
+        toast.warning(t('options.siteAccessRequired'));
+        return;
+      }
+      await loadGrantedOrigins();
+      toast.success(t('options.siteAccessRevoked'));
+    } catch (e) {
+      Logger.error('[Options] Failed to revoke origin', { error: e, origin });
+      toast.error(t('options.siteAccessRevokeFailed'));
+    }
+  };
+
+  useEffect(() => {
+    loadGrantedOrigins();
+  }, [loadGrantedOrigins]);
 
   // Auto-save settings when they change (but not on initial load)
   useEffect(() => {
@@ -456,6 +502,7 @@ const Options: React.FC = () => {
                     {showApiKey ? '🙈' : '👁️'}
                   </button>
                 </div>
+                <p className="text-xs text-gray-500 mt-1">{t('options.apiKeySecurityNote')}</p>
               </div>
 
               <div className="mb-4">
@@ -574,6 +621,40 @@ const Options: React.FC = () => {
                   {testingModel ? t('options.testing') : '🧪 ' + t('options.testModel')}
                 </button>
               </div>
+            </section>
+
+            {/* Site Access */}
+            <section className="mb-8 bg-white p-6 rounded-lg shadow">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold">{t('options.siteAccess')}</h2>
+                <button
+                  type="button"
+                  onClick={loadGrantedOrigins}
+                  disabled={loadingOrigins}
+                  className="px-3 py-2 border rounded hover:bg-gray-100 disabled:bg-gray-100"
+                >
+                  {loadingOrigins ? t('common.loading') : t('options.refresh')}
+                </button>
+              </div>
+
+              {grantedOrigins.length === 0 ? (
+                <p className="text-sm text-gray-600">{t('options.noGrantedSites')}</p>
+              ) : (
+                <ul className="space-y-2">
+                  {grantedOrigins.map((origin) => (
+                    <li key={origin} className="flex items-center justify-between text-sm">
+                      <span className="font-mono break-all mr-3">{origin}</span>
+                      <button
+                        type="button"
+                        onClick={() => revokeOrigin(origin)}
+                        className="px-2 py-1 border rounded hover:bg-gray-100"
+                      >
+                        {t('options.revoke')}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </section>
 
             <section className="mb-8 bg-white p-6 rounded-lg shadow">
