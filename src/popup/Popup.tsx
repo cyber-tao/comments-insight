@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { PATHS, MESSAGES, TIMING } from '@/config/constants';
+import { PATHS, MESSAGES, TIMING, TEXT } from '@/config/constants';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HistoryItem, Task } from '../types';
@@ -104,7 +104,7 @@ const Popup: React.FC = () => {
     });
 
     if (!resp?.success) {
-      throw new Error(resp?.error || 'Failed to inject content script');
+      throw new Error(TEXT.CONTENT_SCRIPT_INJECT_FAILED);
     }
   };
 
@@ -144,7 +144,12 @@ const Popup: React.FC = () => {
         return;
       }
 
-      await ensureContentScript();
+      try {
+        await ensureContentScript();
+      } catch (error) {
+        toast.error(TEXT.CONTENT_SCRIPT_INJECT_FAILED);
+        return;
+      }
       const tabId = tab.id;
       const resp = await chrome.tabs.sendMessage(tabId, {
         type: MESSAGES.TEST_SELECTOR_QUERY,
@@ -330,7 +335,12 @@ const Popup: React.FC = () => {
         return;
       }
 
-      await ensureContentScript();
+      try {
+        await ensureContentScript();
+      } catch (error) {
+        toast.error(TEXT.CONTENT_SCRIPT_INJECT_FAILED);
+        return;
+      }
       const response = await chrome.runtime.sendMessage({
         type: MESSAGES.GENERATE_SCRAPER_CONFIG,
         payload: {
@@ -371,7 +381,12 @@ const Popup: React.FC = () => {
         return;
       }
 
-      await ensureContentScript();
+      try {
+        await ensureContentScript();
+      } catch (error) {
+        toast.error(TEXT.CONTENT_SCRIPT_INJECT_FAILED);
+        return;
+      }
       const response = await chrome.runtime.sendMessage({
         type: MESSAGES.START_EXTRACTION,
         payload: {

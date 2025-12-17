@@ -23,9 +23,56 @@ export class DOMSimplifier {
     const forceExpandCurrent = shadowRoot !== null || this.shouldForceExpandElement(element);
     const shouldExpand = forceExpandParent || forceExpandCurrent || currentDepth < maxDepth;
 
-    // Check for Shadow DOM and filter children
-    const rawChildren = shadowRoot ? Array.from(shadowRoot.children) : Array.from(element.children);
-    const children = rawChildren.filter((child) => !this.shouldIgnoreElement(child as Element));
+    // Light DOM children
+    const lightChildren = Array.from(element.children).filter(
+      (child) => !this.shouldIgnoreElement(child as Element),
+    );
+
+    let children: SimplifiedNode[] | undefined;
+
+    if (shouldExpand) {
+      children = [];
+
+      // 1. Add Shadow Root as a virtual child node if present
+      if (shadowRoot) {
+        const shadowChildrenRaw = Array.from(shadowRoot.children);
+        // We typically want to see inside shadow root if we are expanding the host
+        const shadowChildrenProcessed = shadowChildrenRaw.map((child) =>
+          this.simplifyElement(
+            child as Element,
+            maxDepth,
+            currentDepth + 1,
+            forceExpandParent || forceExpandCurrent,
+          ),
+        );
+
+        if (shadowChildrenProcessed.length > 0) {
+          children.push({
+            tag: '#shadow-root',
+            id: undefined,
+            classes: [],
+            attributes: { mode: shadowRoot.mode },
+            text: undefined,
+            childCount: shadowChildrenRaw.length,
+            expanded: true,
+            children: shadowChildrenProcessed,
+            selector: '',
+            depth: currentDepth + 1,
+          });
+        }
+      }
+
+      // 2. Add Light DOM children
+      const lightChildrenProcessed = lightChildren.map((child) =>
+        this.simplifyElement(
+          child as Element,
+          maxDepth,
+          currentDepth + 1,
+          forceExpandParent || forceExpandCurrent,
+        ),
+      );
+      children.push(...lightChildrenProcessed);
+    }
 
     const node: SimplifiedNode = {
       tag: element.tagName.toLowerCase(),
@@ -33,24 +80,14 @@ export class DOMSimplifier {
       classes: this.getClasses(element),
       attributes: this.getKeyAttributes(element),
       text: this.getTextPreview(element),
-      childCount: children.length,
-      expanded: shouldExpand && children.length > 0,
-      children:
-        shouldExpand && children.length > 0
-          ? children.map((child) =>
-              this.simplifyElement(
-                child as Element,
-                maxDepth,
-                currentDepth + 1,
-                forceExpandParent || forceExpandCurrent,
-              ),
-            )
-          : undefined,
+      childCount: lightChildren.length + (shadowRoot ? 1 : 0),
+      expanded: shouldExpand && (lightChildren.length > 0 || !!shadowRoot),
+      children,
       selector: this.generateSelector(element),
       depth: currentDepth,
     };
 
-    // Mark if element has Shadow DOM
+    // Mark if element has Shadow DOM (keep this attribute for reference)
     if (shadowRoot) {
       node.attributes = { ...node.attributes, 'has-shadow-root': 'true' };
     }
@@ -142,21 +179,42 @@ export class DOMSimplifier {
    * Get key attributes that might help identify comment elements
    */
   private getKeyAttributes(element: Element): Record<string, string> | undefined {
-    const keyAttrs = [
-      'data-id',
-      'data-comment-id',
-      'data-cid',
-      'data-testid',
-      'role',
-      'aria-label',
-    ];
+    const ignoredAttrs = new Set([
+      'style',
+      'd', // SVG path data (usually huge)
+      'onclick',
+      'onmouseover',
+      'onmouseout',
+      'onmousedown',
+      'onmouseup',
+      'onkeydown',
+      'onkeyup',
+      'onkeypress',
+      'onchange',
+      'onsubmit',
+    ]);
     const attrs: Record<string, string> = {};
     let hasAttrs = false;
 
-    for (const attr of keyAttrs) {
-      const value = element.getAttribute(attr);
-      if (value) {
-        attrs[attr] = value;
+    if (element.attributes) {
+      for (let i = 0; i < element.attributes.length; i++) {
+        const attr = element.attributes[i];
+        if (ignoredAttrs.has(attr.name)) {
+          continue;
+        }
+
+        // Skip event handlers just in case
+        if (attr.name.startsWith('on')) {
+          continue;
+        }
+
+        let value = attr.value;
+        // Truncate long values to save tokens
+        if (value.length > 200) {
+          value = value.substring(0, 200) + '...';
+        }
+
+        attrs[attr.name] = value;
         hasAttrs = true;
       }
     }
@@ -274,12 +332,27 @@ export class DOMSimplifier {
       result += ` class="${node.classes.join(' ')}"`;
     }
 
+    // Add attributes
+    if (node.attributes) {
+      for (const [key, value] of Object.entries(node.attributes)) {
+        result += ` ${key}="${value}"`;
+      }
+    }
+
     // Add child count if not expanded
     if (!node.expanded && node.childCount > 0) {
       result += ` childCount="${node.childCount}"`;
     }
 
     result += '>';
+
+    let hasContent = false;
+
+    // Add text content if available
+    if (node.text && node.text.trim().length > 0) {
+      result += ` ${node.text}`;
+      hasContent = true;
+    }
 
     // Add children if expanded
     if (node.expanded && node.children && node.children.length > 0) {
@@ -289,8 +362,9 @@ export class DOMSimplifier {
       }
       result += spaces;
     } else if (!node.expanded && node.childCount > 0) {
-      result += `\n${spaces}  <!-- ${node.childCount} children (not expanded) -->`;
-      result += `\n${spaces}`;
+      if (!hasContent) result += '\n'; // Only add newline if no text was added inline
+      result += `${spaces}  <!-- ${node.childCount} children (not expanded) -->`;
+      if (!hasContent) result += `\n${spaces}`;
     }
 
     result += `</${node.tag}>`;

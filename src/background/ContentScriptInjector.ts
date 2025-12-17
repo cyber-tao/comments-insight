@@ -1,4 +1,4 @@
-import { INJECTION, MESSAGES } from '@/config/constants';
+import { INJECTION, MESSAGES, SCRIPTS } from '@/config/constants';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -16,15 +16,21 @@ export async function ensureContentScriptInjected(tabId: number): Promise<void> 
   }
 
   const manifest = chrome.runtime.getManifest();
-  const file = manifest.content_scripts?.[0]?.js?.[0];
+  const files = manifest.content_scripts?.flatMap((entry) => entry.js || [])?.filter(Boolean) || [];
 
-  if (!file) {
+  // Try to find exact match, otherwise use the first available script (common in Vite builds)
+  const contentScript =
+    files.find((filePath) => filePath === SCRIPTS.CONTENT_MAIN) ||
+    files.find((f) => f.includes('content')) ||
+    files[0];
+
+  if (!contentScript) {
     throw new Error('Content script entry not found in manifest');
   }
 
   await chrome.scripting.executeScript({
     target: { tabId },
-    files: [file],
+    files: [contentScript],
   });
 
   // Wait until the listener is ready

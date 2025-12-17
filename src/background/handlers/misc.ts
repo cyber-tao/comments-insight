@@ -1,7 +1,7 @@
 import { Message } from '../../types';
 import { HandlerContext, PingResponse } from './types';
 import { Logger } from '../../utils/logger';
-import { ERRORS, LIMITS } from '@/config/constants';
+import { ERRORS, LIMITS, TEXT } from '@/config/constants';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
 
 export interface ModelsResponse {
@@ -94,7 +94,7 @@ export async function handleTestModel(
     Logger.error('[MiscHandler] Model test failed', { error });
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? `${error.message} ${TEXT.MODEL_TEST_HINT}` : 'Unknown error',
     };
   }
 }

@@ -2,17 +2,49 @@ import { ScraperConfig } from '../types/scraper';
 
 export const SCRAPER_CONFIG_GENERATION_SYSTEM_PROMPT = `You are an expert web scraper analyzer. Your task is to analyze a simplified DOM structure and identify CSS selectors for extracting comments and their metadata.
 
-You will receive a simplified DOM structure containing only tag names, IDs, and classes. Analyze the structure and identify the appropriate CSS selectors using a hierarchical approach:
-1. Comment container (wraps a single comment thread: the root comment plus its replies)
-2. Comment item (the element containing the main comment body inside the container)
-3. Username (relative to the comment item)
-4. Comment content/text (relative to the comment item)
-5. Timestamp (relative to the comment item)
-6. Likes/reactions count (relative to the comment item)
-7. Reply toggle button (optional, for expanding collapsed replies inside the container)
-8. Reply container (optional, element inside the comment container that wraps all replies)
-9. Individual reply items (optional, relative to the reply container)
+You will receive a simplified DOM structure containing tag names, IDs, classes, and potentially text content. Shadow DOM roots are marked as <#shadow-root>.
 
+### Selector Hierarchy & Logic (CRITICAL)
+The extractor works in the following strict hierarchy. Your selectors MUST adhere to this structure:
+
+1.  **commentContainer** (REQUIRED):
+    *   This MUST select **each individual top-level comment thread/block**.
+    *   It typically matches *multiple* elements on the page (e.g., \`.comment-thread\`, \`ytd-comment-thread-renderer\`).
+    *   **DO NOT** select the single massive wrapper that holds all comments (e.g., \`.comments-list\`).
+    *   If the structure is a flat list inside a parent, use the child selector (e.g., \`.Comments-container > div\`).
+
+2.  **commentItem** (REQUIRED, Relative to commentContainer):
+    *   The specific element *inside* the \`commentContainer\` that holds the main comment's content and metadata.
+    *   Often the same as \`commentContainer\` (use \`& > div\` or similar) or a specific child class.
+
+3.  **Metadata Fields** (Relative to commentItem):
+    *   **username**: Element containing the author's name.
+    *   **content**: Element containing the comment text.
+    *   **timestamp**: Element containing the time/date.
+    *   **likes**: Element containing the vote/like count.
+
+4.  **Replies** (Relative to commentContainer):
+    *   **replyContainer**: The wrapper element *inside* \`commentContainer\` that holds the list of replies.
+    *   **replyItem**: Each individual reply element *inside* \`replyContainer\`.
+    *   **replyToggle**: Button to expand replies (if they are hidden).
+
+### Handling Dynamic/Hash Classes (CRITICAL)
+Many modern sites (Reddit, Zhihu, Twitter) use CSS-in-JS, generating random class names (e.g., \`css-1fo89v5\`, \`_2l7c...\`).
+
+*   **IGNORE** classes that look like hashes or random strings.
+*   **PRIORITIZE** semantic class names (e.g., \`.Comment\`, \`.User\`, \`.RichText\`, \`.ztext\`).
+*   **USE ATTRIBUTES**: If classes are unstable, use stable attributes:
+    *   \`div[data-testid="comment"]\`
+    *   \`div[data-id]\` (existence check)
+    *   \`a[href*="/user/"]\`
+    *   \`span[role="time"]\`
+*   **USE STRUCTURAL SELECTORS**: Use \`:scope > div\` or \`:nth-child\` if containers are stable but items are not.
+
+### Shadow DOM Awareness
+*   If you see <#shadow-root>, it means the content is encapsulated.
+*   Selectors can pierce open Shadow DOMs naturally in this engine, but be aware that structure inside might differ from light DOM.
+
+### Output Format
 Return your analysis in the following JSON format:
 {
   "domains": ["domain1.com", "www.domain1.com"],
@@ -34,43 +66,35 @@ Return your analysis in the following JSON format:
     "scrollDelay": number in milliseconds
   },
   "confidence": "high/medium/low",
-  "notes": "Any observations or recommendations"
+  "notes": "Explain your logic, especially for dynamic classes"
 }
 
-For domains and urlPatterns:
-- Extract the domain from the provided URL
-- Include both with and without "www." prefix
-- For urlPatterns: if this config should only work on specific URL patterns (e.g., only video pages), provide regex patterns. Otherwise, use empty array [] to match all URLs on the domain.
-- Example urlPatterns: ["/watch\\?v="] for YouTube videos, ["/video/BV\\w+"] for Bilibili videos
-
-For domAnalysisConfig:
-- initialDepth: How deep to initially analyze the DOM tree (lower for simple pages, higher for complex nested structures)
-- expandDepth: How deep to expand when exploring specific nodes (usually 2 is sufficient)
-- maxDepth: Maximum depth for full DOM structure analysis (higher for very complex pages)
-
 Guidelines:
-- commentContainer should match a single comment thread (one top-level comment and its replies), not the whole comments list
-- Selectors for username/content/timestamp/likes MUST be relative to commentItem (do not include commentContainer or page-level ancestors)
-- Reply selectors (replyToggle/replyContainer/replyItem) MUST be scoped within the same commentContainer so replies are not mixed between different comments
-- Use specific selectors (prefer stable IDs/classes over generic tags), BUT AVOID overly specific selectors for list items (e.g., do NOT use #comment-123 for commentItem, use class names like .comment-item instead)
-- If a selector includes an ID that looks generated or unique per item, DO NOT use it. Use classes or attribute selectors.
-- Consider that the page might load comments dynamically
-- If you're unsure about a selector, set it to null and explain in notes
-- For scrollConfig, enable it if comments appear to be lazy-loaded
-- Be conservative with confidence ratings`;
+- **commentContainer**: MUST match multiple elements (the list items).
+- **Selectors**: Be specific but robust. Avoid \`div > div > div > div\`.
+- **Confidence**: If you rely on hash classes, mark confidence as "low". If you found semantic classes or attributes, mark as "high".
+`;
 
 export function generateScraperConfigPrompt(
   domStructure: string,
   url: string,
   pageTitle: string,
+  textSamples: string[] = [],
 ): string {
+  const hasSamples = Array.isArray(textSamples) && textSamples.length > 0;
+  const samplesSection = hasSamples
+    ? `\n**Sample Text Snippets (max ${textSamples.length}):**\n${textSamples
+        .map((t) => `- ${t}`)
+        .join('\n')}\n`
+    : '';
+
   return `Analyze the following web page and generate scraper configuration:
 
 **Page Information:**
 - URL: ${url}
 - Title: ${pageTitle}
 
-**Simplified DOM Structure:**
+${samplesSection}**Simplified DOM Structure:**
 \`\`\`
 ${domStructure}
 \`\`\`

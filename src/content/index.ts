@@ -1,8 +1,8 @@
 // Content Script for Comments Insight Extension
 import { PageController } from './PageController';
-import { MESSAGES, DOM } from '@/config/constants';
+import { MESSAGES, DOM, SCRAPER_GENERATION } from '@/config/constants';
+import { Comment, SimplifiedNode } from '@/types';
 import { CommentExtractor } from './CommentExtractor';
-import { Comment } from '@/types';
 import { Logger } from '@/utils/logger';
 import { getCurrentHostname } from '@/utils/url';
 import { DOMAnalyzer } from './DOMAnalyzer';
@@ -22,6 +22,7 @@ interface ExtractionResponse {
 interface DomStructureResponse {
   success: boolean;
   domStructure?: string;
+  textSamples?: string[];
   error?: string;
 }
 
@@ -239,14 +240,21 @@ async function handleGetDOMStructure(sendResponse: (response: DomStructureRespon
       includeText: true,
     });
 
+    const textSamples: string[] = [];
+    collectTextSamples(domStructure, SCRAPER_GENERATION.MAX_TEXT_SAMPLES, textSamples);
+
     // Convert to string format
     const domString = DOMSimplifier.toStringFormat(domStructure);
 
-    Logger.info('[Content] DOM structure generated', { length: domString.length });
+    Logger.info('[Content] DOM structure generated', {
+      length: domString.length,
+      samples: textSamples.length,
+    });
 
     sendResponse({
       success: true,
       domStructure: domString,
+      textSamples,
     });
   } catch (error) {
     Logger.error('[Content] Failed to get DOM structure', { error });
@@ -254,5 +262,20 @@ async function handleGetDOMStructure(sendResponse: (response: DomStructureRespon
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
+  }
+}
+
+function collectTextSamples(node: SimplifiedNode, limit: number, results: string[]): void {
+  if (results.length >= limit) return;
+
+  if (node.text) {
+    results.push(node.text);
+  }
+
+  if (results.length >= limit || !node.children) return;
+
+  for (const child of node.children) {
+    collectTextSamples(child, limit, results);
+    if (results.length >= limit) return;
   }
 }

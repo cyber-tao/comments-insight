@@ -114,6 +114,10 @@ export const ICONS = {
   ICON_128: 'icons/icon-128.png',
 };
 
+export const SCRIPTS = {
+  CONTENT_MAIN: 'src/content/index.ts',
+};
+
 export const STORAGE = {
   SETTINGS_KEY: 'settings',
   HISTORY_KEY: 'history',
@@ -132,6 +136,10 @@ export const SCRAPER = {
   CONFIG_STORAGE_KEY: 'scraperConfigs',
   INITIALIZED_KEY: 'scraperConfigsInitialized',
   CONFIG_VERSION: '1.0.0',
+};
+
+export const SCRAPER_GENERATION = {
+  MAX_TEXT_SAMPLES: 16,
 };
 
 export const LOG_PREFIX = {
@@ -206,6 +214,9 @@ export const TEXT = {
   UNTITLED: 'Untitled',
   DEFAULT_MODEL_NAME: 'gpt-4',
   API_KEY_PLACEHOLDER: 'sk-...',
+  CONTENT_SCRIPT_INJECT_FAILED:
+    'Failed to inject content script. Please grant site access and refresh the page.',
+  MODEL_TEST_HINT: 'Please verify API URL, API key, and network connectivity.',
 };
 
 export const ERRORS = {
@@ -236,12 +247,27 @@ export const ERRORS = {
 export const DEFAULTS = {
   LOGS_MAX_STORED: 100,
   AI_LOGS_MAX_STORED: 100,
-  MAX_COMMENTS: 100,
+  MAX_COMMENTS: 500,
   FILENAME_MAX_LENGTH: 100,
   SENTIMENT_POSITIVE: 33,
   SENTIMENT_NEGATIVE: 33,
   SENTIMENT_NEUTRAL: 34,
   HOT_COMMENTS_PREVIEW: 5,
+};
+
+export const DOM_ANALYSIS_DEFAULTS = {
+  initialDepth: 3,
+  expandDepth: 2,
+  maxDepth: 10,
+};
+
+export const EXTRACTION_PROGRESS = {
+  AI_ANALYZING: 10,
+  CONFIG_ANALYZING: 15,
+  UNKNOWN_COUNT: 15,
+  MIN: 20,
+  RANGE: 75,
+  MAX: 95,
 };
 
 export const TOKENIZER = {

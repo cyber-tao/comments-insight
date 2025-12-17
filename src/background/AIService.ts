@@ -17,7 +17,6 @@ import {
   DEFAULTS,
   LANGUAGES,
   LIMITS,
-  STORAGE,
 } from '@/config/constants';
 import type { StorageManager } from './StorageManager';
 import { Tokenizer } from '../utils/tokenizer';
@@ -54,45 +53,6 @@ export class AIService {
 
   constructor(private readonly storageManager: StorageManager) {}
 
-  private async getAiLogIndex(): Promise<string[]> {
-    try {
-      const result = await chrome.storage.local.get(STORAGE.AI_LOG_INDEX_KEY);
-      const index = result[STORAGE.AI_LOG_INDEX_KEY] as string[] | undefined;
-      return Array.isArray(index) ? index : [];
-    } catch {
-      return [];
-    }
-  }
-
-  private async setAiLogIndex(index: string[]): Promise<void> {
-    try {
-      await chrome.storage.local.set({ [STORAGE.AI_LOG_INDEX_KEY]: index });
-    } catch {
-      return;
-    }
-  }
-
-  private async appendAiLogKey(logKey: string): Promise<void> {
-    try {
-      const index = await this.getAiLogIndex();
-      const next = index.includes(logKey) ? index : [...index, logKey];
-
-      if (next.length > DEFAULTS.AI_LOGS_MAX_STORED) {
-        const toRemove = next.slice(0, next.length - DEFAULTS.AI_LOGS_MAX_STORED);
-        const kept = next.slice(next.length - DEFAULTS.AI_LOGS_MAX_STORED);
-        await chrome.storage.local.remove(toRemove);
-        await this.setAiLogIndex(kept);
-        return;
-      }
-
-      await this.setAiLogIndex(next);
-    } catch (error) {
-      Logger.warn('[AIService] Failed to cleanup AI logs', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
   private logToFile(
     type: 'extraction' | 'analysis',
     data: { prompt: string; response: string; timestamp: number },
@@ -113,19 +73,15 @@ export class AIService {
         return;
       }
 
-      // Save full log to chrome.storage.local
       const logKey = `${LOG_PREFIX.AI}${type}_${data.timestamp}`;
-      chrome.storage.local
-        .set({
-          [logKey]: {
-            type,
-            timestamp: data.timestamp,
-            prompt: data.prompt,
-            response: data.response,
-          },
+      this.storageManager
+        .saveAiLog(logKey, {
+          type,
+          timestamp: data.timestamp,
+          prompt: data.prompt,
+          response: data.response,
         })
-        .then(() => this.appendAiLogKey(logKey))
-        .catch((err) => Logger.error('[AIService] Failed to save log:', err));
+        .catch((error: unknown) => Logger.error('[AIService] Failed to save log', { error }));
     });
   }
   /**
@@ -259,6 +215,17 @@ export class AIService {
           };
         } catch (error) {
           if (error instanceof ExtensionError) {
+            // Log retry intent for debugging
+            if (
+              error.retryable ||
+              [ErrorCode.AI_RATE_LIMIT, ErrorCode.AI_TIMEOUT, ErrorCode.API_ERROR].includes(
+                error.code,
+              )
+            ) {
+              Logger.debug(`[AIService] Encountered retryable error: ${error.code}`, {
+                message: error.message,
+              });
+            }
             throw error;
           }
 

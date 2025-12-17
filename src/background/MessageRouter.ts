@@ -4,6 +4,7 @@ import { AIService } from './AIService';
 import { StorageManager } from './StorageManager';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
+import { MESSAGES } from '@/config/constants';
 import { HandlerContext } from './handlers/types';
 
 import * as extractionHandlers from './handlers/extraction';
@@ -44,80 +45,80 @@ export class MessageRouter {
 
     try {
       switch (message.type) {
-        case 'PING':
+        case MESSAGES.PING:
           return miscHandlers.handlePing(message, context);
 
-        case 'ENSURE_CONTENT_SCRIPT':
+        case MESSAGES.ENSURE_CONTENT_SCRIPT:
           return await miscHandlers.handleEnsureContentScript(message, context);
 
-        case 'START_EXTRACTION':
+        case MESSAGES.START_EXTRACTION:
           return await extractionHandlers.handleStartExtraction(message, context);
 
-        case 'AI_ANALYZE_STRUCTURE':
+        case MESSAGES.AI_ANALYZE_STRUCTURE:
           return await extractionHandlers.handleAIAnalyzeStructure(message, context);
 
-        case 'EXTRACTION_PROGRESS':
+        case MESSAGES.EXTRACTION_PROGRESS:
           return extractionHandlers.handleExtractionProgress(message, context);
 
-        case 'START_ANALYSIS':
+        case MESSAGES.START_ANALYSIS:
           return await extractionHandlers.handleStartAnalysis(message, context);
 
-        case 'GET_TASK_STATUS':
+        case MESSAGES.GET_TASK_STATUS:
           return taskHandlers.handleGetTaskStatus(message, context);
 
-        case 'CANCEL_TASK':
+        case MESSAGES.CANCEL_TASK:
           return taskHandlers.handleCancelTask(message, context);
 
-        case 'GET_SETTINGS':
+        case MESSAGES.GET_SETTINGS:
           return await settingsHandlers.handleGetSettings(message, context);
 
-        case 'SAVE_SETTINGS':
+        case MESSAGES.SAVE_SETTINGS:
           return await settingsHandlers.handleSaveSettings(message, context);
 
-        case 'GET_HISTORY':
+        case MESSAGES.GET_HISTORY:
           return await historyHandlers.handleGetHistory(message, context);
 
-        case 'GET_HISTORY_BY_URL':
+        case MESSAGES.GET_HISTORY_BY_URL:
           return await historyHandlers.handleGetHistoryByUrl(message, context);
 
-        case 'EXPORT_DATA':
+        case MESSAGES.EXPORT_DATA:
           return await historyHandlers.handleExportData(message, context);
 
-        case 'DELETE_HISTORY':
+        case MESSAGES.DELETE_HISTORY:
           return await historyHandlers.handleDeleteHistory(message, context);
 
-        case 'CLEAR_ALL_HISTORY':
+        case MESSAGES.CLEAR_ALL_HISTORY:
           return await historyHandlers.handleClearAllHistory(message, context);
 
-        case 'GET_AVAILABLE_MODELS':
+        case MESSAGES.GET_AVAILABLE_MODELS:
           return await miscHandlers.handleGetAvailableModels(message, context);
 
-        case 'TEST_MODEL':
+        case MESSAGES.TEST_MODEL:
           return await miscHandlers.handleTestModel(message, context);
 
-        case 'CHECK_SCRAPER_CONFIG':
+        case MESSAGES.CHECK_SCRAPER_CONFIG:
           return await scraperHandlers.handleCheckScraperConfig(message, context);
 
-        case 'GENERATE_SCRAPER_CONFIG':
+        case MESSAGES.GENERATE_SCRAPER_CONFIG:
           return await scraperHandlers.handleGenerateScraperConfig(message, context);
 
-        case 'GET_SCRAPER_CONFIGS':
+        case MESSAGES.GET_SCRAPER_CONFIGS:
           return await scraperHandlers.handleGetScraperConfigs(message, context);
 
-        case 'SAVE_SCRAPER_CONFIG':
+        case MESSAGES.SAVE_SCRAPER_CONFIG:
           return await scraperHandlers.handleSaveScraperConfig(message, context);
 
-        case 'DELETE_SCRAPER_CONFIG':
+        case MESSAGES.DELETE_SCRAPER_CONFIG:
           return await scraperHandlers.handleDeleteScraperConfig(message, context);
 
-        case 'UPDATE_SELECTOR_VALIDATION':
+        case MESSAGES.UPDATE_SELECTOR_VALIDATION:
           return await scraperHandlers.handleUpdateSelectorValidation(message, context);
 
         // Messages handled by content script, ignored by background
-        case 'GET_PLATFORM_INFO':
-        case 'GET_DOM_STRUCTURE':
-        case 'TEST_SELECTOR_QUERY':
-        case 'CANCEL_EXTRACTION':
+        case MESSAGES.GET_PLATFORM_INFO:
+        case MESSAGES.GET_DOM_STRUCTURE:
+        case MESSAGES.TEST_SELECTOR_QUERY:
+        case MESSAGES.CANCEL_EXTRACTION:
           return;
 
         default:

@@ -1,7 +1,7 @@
 import { Message, Comment, Task } from '../../types';
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
-import { REGEX, AI, ERRORS, MESSAGES } from '@/config/constants';
+import { REGEX, AI, ERRORS, MESSAGES, DEFAULTS } from '@/config/constants';
 import { getDomain } from '../../utils/url';
 import { Tokenizer } from '../../utils/tokenizer';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
@@ -110,7 +110,7 @@ export async function handleStartExtraction(
   let finalMaxComments = maxComments;
   if (!finalMaxComments) {
     const settings = await context.storageManager.getSettings();
-    finalMaxComments = settings.maxComments || 100;
+    finalMaxComments = settings.maxComments || DEFAULTS.MAX_COMMENTS;
   }
 
   // Get tab ID - either from sender or current active tab

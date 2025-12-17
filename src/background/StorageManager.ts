@@ -1,5 +1,17 @@
 import { Settings, HistoryItem, AIConfig } from '../types';
-import { SECURITY, API, STORAGE, AI, LANGUAGES, ERRORS, HISTORY } from '@/config/constants';
+import {
+  SECURITY,
+  API,
+  STORAGE,
+  AI,
+  LANGUAGES,
+  ERRORS,
+  HISTORY,
+  DEFAULTS,
+  RETRY,
+  DOM_ANALYSIS_DEFAULTS,
+  TEXT,
+} from '@/config/constants';
 import LZString from 'lz-string';
 import { Logger } from '../utils/logger';
 import { ErrorHandler } from '../utils/errors';
@@ -8,11 +20,11 @@ import { ErrorHandler } from '../utils/errors';
  * Default settings for the extension
  */
 const DEFAULT_SETTINGS: Settings = {
-  maxComments: 500,
+  maxComments: DEFAULTS.MAX_COMMENTS,
   aiModel: {
     apiUrl: API.DEFAULT_URL,
     apiKey: '',
-    model: 'gpt-4',
+    model: TEXT.DEFAULT_MODEL_NAME,
     maxTokens: AI.DEFAULT_MAX_TOKENS,
     temperature: AI.DEFAULT_TEMPERATURE,
     topP: AI.DEFAULT_TOP_P,
@@ -37,13 +49,9 @@ const DEFAULT_SETTINGS: Settings = {
 ## Output Format:
 Generate a comprehensive analysis report in Markdown format.`,
   language: LANGUAGES.DEFAULT,
-  selectorRetryAttempts: 3,
+  selectorRetryAttempts: RETRY.SELECTOR_ATTEMPTS,
   selectorCache: [],
-  domAnalysisConfig: {
-    initialDepth: 3,
-    expandDepth: 2,
-    maxDepth: 10,
-  },
+  domAnalysisConfig: DOM_ANALYSIS_DEFAULTS,
   developerMode: false,
 };
 
@@ -59,6 +67,7 @@ export class StorageManager {
   private static readonly ENCRYPTION_SALT_KEY = STORAGE.ENCRYPTION_SALT_KEY;
   private static readonly ENCRYPTION_SECRET_KEY = STORAGE.ENCRYPTION_SECRET_KEY;
   private static readonly TOKEN_STATS_KEY = STORAGE.TOKEN_STATS_KEY;
+  private static readonly AI_LOG_INDEX_KEY = STORAGE.AI_LOG_INDEX_KEY;
   private encryptionKey?: CryptoKey;
   private encryptionEnabled = false;
   private encryptionInitPromise?: Promise<void>;
@@ -137,6 +146,62 @@ export class StorageManager {
     } catch (error) {
       Logger.error('[StorageManager] Failed to get token stats', { error });
       return { today: 0, total: 0, lastReset: 0 };
+    }
+  }
+
+  async saveAiLog(
+    logKey: string,
+    entry: { type: 'extraction' | 'analysis'; timestamp: number; prompt: string; response: string },
+  ): Promise<void> {
+    try {
+      await chrome.storage.local.set({
+        [logKey]: entry,
+      });
+      await this.appendAiLogKey(logKey);
+    } catch (error) {
+      Logger.warn('[StorageManager] Failed to save AI log', {
+        logKey,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async getAiLogIndex(): Promise<string[]> {
+    try {
+      const result = await chrome.storage.local.get(StorageManager.AI_LOG_INDEX_KEY);
+      const index = result[StorageManager.AI_LOG_INDEX_KEY] as string[] | undefined;
+      return Array.isArray(index) ? index : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private async setAiLogIndex(index: string[]): Promise<void> {
+    try {
+      await chrome.storage.local.set({ [StorageManager.AI_LOG_INDEX_KEY]: index });
+    } catch {
+      return;
+    }
+  }
+
+  private async appendAiLogKey(logKey: string): Promise<void> {
+    try {
+      const index = await this.getAiLogIndex();
+      const next = index.includes(logKey) ? index : [...index, logKey];
+
+      if (next.length > DEFAULTS.AI_LOGS_MAX_STORED) {
+        const toRemove = next.slice(0, next.length - DEFAULTS.AI_LOGS_MAX_STORED);
+        const kept = next.slice(next.length - DEFAULTS.AI_LOGS_MAX_STORED);
+        await chrome.storage.local.remove(toRemove);
+        await this.setAiLogIndex(kept);
+        return;
+      }
+
+      await this.setAiLogIndex(next);
+    } catch (error) {
+      Logger.warn('[StorageManager] Failed to cleanup AI logs', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

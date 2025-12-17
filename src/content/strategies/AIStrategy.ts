@@ -2,6 +2,7 @@ import { ExtractionStrategy } from './ExtractionStrategy';
 import { Comment, Platform } from '../../types';
 import { CommentExtractorSelector } from '../CommentExtractorSelector';
 import { Logger } from '../../utils/logger';
+import { EXTRACTION_PROGRESS } from '@/config/constants';
 
 export class AIStrategy implements ExtractionStrategy {
   constructor(private selectorExtractor: CommentExtractorSelector) {}
@@ -13,13 +14,20 @@ export class AIStrategy implements ExtractionStrategy {
   ): Promise<Comment[]> {
     Logger.info('[AIStrategy] Executing AI discovery strategy');
 
-    onProgress?.(10, 'analyzing');
+    onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'analyzing');
 
     const comments = await this.selectorExtractor.extractWithDiscovery(
       maxComments,
       platform,
       (stage: string, count: number) => {
-        const progress = count < 0 ? 15 : Math.min(95, 20 + Math.floor((count / maxComments) * 75));
+        const progress =
+          count < 0
+            ? EXTRACTION_PROGRESS.UNKNOWN_COUNT
+            : Math.min(
+                EXTRACTION_PROGRESS.MAX,
+                EXTRACTION_PROGRESS.MIN +
+                  Math.floor((count / maxComments) * EXTRACTION_PROGRESS.RANGE),
+              );
         onProgress?.(progress, `${stage}:${count}:${maxComments}`);
       },
     );

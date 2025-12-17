@@ -42,7 +42,7 @@ describe('misc handlers - content script injection', () => {
       },
       runtime: {
         getManifest: () => ({
-          content_scripts: [{ js: ['assets/content-script.js'] }],
+          content_scripts: [{ js: ['src/content/index.ts'] }],
         }),
       },
     });
@@ -63,7 +63,7 @@ describe('misc handlers - content script injection', () => {
     expect(res.success).toBe(true);
     expect(mockExecuteScript).toHaveBeenCalledWith({
       target: { tabId: 1 },
-      files: ['assets/content-script.js'],
+      files: ['src/content/index.ts'],
     });
   });
 

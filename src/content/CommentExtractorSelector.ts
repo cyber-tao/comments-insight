@@ -4,11 +4,12 @@ import { PageController } from './PageController';
 import { ScrollConfig, ScraperConfig } from '../types/scraper';
 import { Logger } from '@/utils/logger';
 import { Tokenizer } from '@/utils/tokenizer';
-import { getShadowRoot, querySelectorAllDeep } from '@/utils/dom-query';
+import { querySelectorAllDeep } from '@/utils/dom-query';
 import { sendMessage, sendMessageVoid } from '@/utils/chrome-message';
 import { performanceMonitor } from '@/utils/performance';
 import { selectorValidator, selectorCacheManager, commentParser } from './extractors';
 import { isExtractionActive } from './extractionState';
+import { DOMSimplifier } from './DOMSimplifier';
 
 /**
  * AI response structure
@@ -278,7 +279,12 @@ Identify the comment section and provide CSS selectors for each field.
    */
   private extractDOMStructureForComments(maxDepth: number): string {
     const root = document.body || document.documentElement;
-    return this.extractDOMStructure(root, 0, maxDepth);
+    // Use DOMSimplifier for consistent extraction with text and Shadow DOM support
+    const simplifiedNode = DOMSimplifier.simplifyForAI(root, {
+      maxDepth,
+      includeText: true, // Ensure text is included for AI analysis
+    });
+    return DOMSimplifier.toStringFormat(simplifiedNode);
   }
 
   private chunkDomStructure(structure: string, maxTokens: number): string[] {
@@ -288,117 +294,6 @@ Identify the comment section and provide CSS selectors for each field.
   /**
    * Extract DOM structure with smart sampling to capture different parts of the page
    */
-
-  /**
-   * Extract simplified DOM structure (only tags, ids, classes)
-   */
-  private extractDOMStructure(
-    element: Element | DocumentFragment,
-    depth: number = 0,
-    maxDepth: number = DOM.MAX_EXTRACT_DEPTH,
-  ): string {
-    // Limit depth to avoid huge output
-    if (depth > maxDepth) {
-      return '';
-    }
-
-    // Handle DocumentFragment (Shadow DOM root) - it doesn't have tagName
-    if (!(element instanceof Element)) {
-      let html = '';
-      if (element.children) {
-        const children = Array.from(element.children) as Element[];
-        for (const child of children) {
-          html += this.extractDOMStructure(child, depth, maxDepth);
-        }
-      }
-      return html;
-    }
-
-    const tag = element.tagName.toLowerCase();
-    let html = '  '.repeat(depth) + `<${tag}`;
-
-    // Add id
-    if (element.id) {
-      html += ` id="${element.id}"`;
-    }
-
-    // Add classes
-    const classes = this.getClasses(element);
-    if (classes && classes.length > 0) {
-      html += ` class="${classes.join(' ')}"`;
-    }
-
-    // Check if element has text content (but no children)
-    const hasChildren = element.children.length > 0;
-    if (!hasChildren && element.textContent && element.textContent.trim()) {
-      html += '>...</' + tag + '>\n';
-      return html;
-    }
-
-    html += '>\n';
-
-    const appendChildren = (nodes: Element[], indentDepth: number) => {
-      if (nodes.length === 0) {
-        return;
-      }
-
-      let nodesToShow: Element[];
-      if (nodes.length <= DOM.SAMPLE_NODES_THRESHOLD) {
-        nodesToShow = nodes;
-      } else {
-        const sampleCount = DOM.SAMPLE_NODES_COUNT;
-        const halfSample = Math.floor(sampleCount / 2);
-        const first = nodes.slice(0, sampleCount);
-        const middle = nodes.slice(
-          Math.floor(nodes.length / 2) - halfSample,
-          Math.floor(nodes.length / 2) + halfSample,
-        );
-        const last = nodes.slice(-sampleCount);
-        nodesToShow = [...first, ...middle, ...last];
-
-        html +=
-          '  '.repeat(indentDepth) +
-          `<!-- Showing ${DOM.SAMPLE_NODES_THRESHOLD} of ${nodes.length} nodes (sampled from start, middle, end) -->\n`;
-      }
-
-      for (const child of nodesToShow) {
-        html += this.extractDOMStructure(child, indentDepth, maxDepth);
-      }
-    };
-
-    // Add light DOM children
-    if (hasChildren) {
-      const children = Array.from(element.children) as Element[];
-      appendChildren(children, depth + 1);
-    }
-
-    // Add shadow DOM children if present
-    const shadowRoot = getShadowRoot(element as Element);
-    if (shadowRoot && shadowRoot.children.length > 0) {
-      const shadowChildren = Array.from(shadowRoot.children) as Element[];
-      html += '  '.repeat(depth + 1) + '<shadow-root>\n';
-      appendChildren(shadowChildren, depth + 2);
-      html += '  '.repeat(depth + 1) + '</shadow-root>\n';
-    }
-
-    html += '  '.repeat(depth) + `</${tag}>\n`;
-
-    return html;
-  }
-
-  /**
-   * Get classes from element
-   */
-  private getClasses(element: Element): string[] | null {
-    try {
-      if (element.classList && element.classList.length > 0) {
-        return Array.from(element.classList);
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
 
   /**
    * Expand reply sections

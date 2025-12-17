@@ -22,7 +22,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://example.com/*"],
+      "matches": ["http://*/*", "https://*/*"],
       "js": ["src/content/index.ts"],
       "run_at": "document_idle"
     }
