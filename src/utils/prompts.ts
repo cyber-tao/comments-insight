@@ -200,3 +200,47 @@ export function getAvailablePlaceholders(): Array<{
     },
   ];
 }
+
+export const PROMPT_DETECT_COMMENTS_SECTION = `You are a web page structure analyzer. Your goal is to identify the single best CSS selector that uniquely wraps the **entire comment section** or the **list of comments** on the page.
+
+Input: Simplified DOM structure of the page body.
+
+Task:
+1. Scan the DOM for keywords like "comment", "discussion", "thread", "conversation", "response" in IDs, classes, or attributes.
+2. Identify the container that holds the repeating comment items.
+3. Return a unique CSS selector for this container.
+
+Output JSON format:
+{
+  "sectionSelector": "CSS selector string",
+  "confidence": number (0.0 - 1.0),
+  "reason": "Why you chose this selector"
+}
+
+Note: If there are multiple candidates, prefer the most specific wrapper that contains *all* comments but *excludes* unrelated sidebars/footers.`;
+
+export const PROMPT_EXTRACT_COMMENTS_FROM_HTML = `You are a precise data extraction engine. You will be given a chunk of HTML/Simplified DOM representing a part of a comment section.
+
+Task: Extract all comments, including nested replies, into a structured JSON format.
+
+Input:
+- HTML/DOM Chunk
+
+Output Format (JSON Array of Comment Objects):
+[
+  {
+    "username": "User Name",
+    "content": "The comment text",
+    "timestamp": "Time string (e.g. '2 hours ago', '2023-10-27')",
+    "likes": "Like count (raw string or number, e.g. '1.2k', '5')",
+    "replies": [ ...nested comments... ]
+  },
+  ...
+]
+
+Rules:
+1. **Preserve Hierarchy**: If a comment is visually nested or inside a replies container of another comment, place it in the "replies" array of the parent.
+2. **Text Only**: Extract clear text for content. Remove "Reply", "Share" button texts if possible.
+3. **Missing Data**: If a field (like likes) is missing, use null or "0".
+4. **Accuracy**: Do not hallucinate content. Only extract what is present.
+5. **No Markdown**: Return RAW JSON only.`;

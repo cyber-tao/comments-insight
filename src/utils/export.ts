@@ -14,13 +14,48 @@ import { t } from './i18n';
 function flattenComments(
   comments: Comment[],
   depth: number = 0,
-): Array<Comment & { depth: number }> {
-  const result: Array<Comment & { depth: number }> = [];
+): Array<
+  Comment & {
+    depth: number;
+    likes: number;
+    timestamp: string;
+    replies: Comment[];
+    username: string;
+    content: string;
+  }
+> {
+  const result: Array<
+    Comment & {
+      depth: number;
+      likes: number;
+      timestamp: string;
+      replies: Comment[];
+      username: string;
+      content: string;
+    }
+  > = [];
 
   for (const comment of comments) {
-    result.push({ ...comment, depth });
-    if (comment.replies && comment.replies.length > 0) {
-      result.push(...flattenComments(comment.replies, depth + 1));
+    const normalized: Comment & {
+      depth: number;
+      likes: number;
+      timestamp: string;
+      replies: Comment[];
+      username: string;
+      content: string;
+    } = {
+      ...comment,
+      depth,
+      likes: typeof comment.likes === 'number' ? comment.likes : 0,
+      timestamp: comment.timestamp ?? '',
+      replies: Array.isArray(comment.replies) ? comment.replies : [],
+      username: comment.username ?? '',
+      content: comment.content ?? '',
+    };
+
+    result.push(normalized);
+    if (normalized.replies.length > 0) {
+      result.push(...flattenComments(normalized.replies, depth + 1));
     }
   }
 
@@ -68,6 +103,9 @@ export function exportCommentsAsCSV(comments: Comment[], title?: string, filenam
 
   const csv = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
 
+  // Prepend BOM to ensure Excel correctly recognizes UTF-8 (avoids garbled characters)
+  const csvWithBom = '\uFEFF' + csv;
+
   // Generate filename with title and timestamp
   const timestamp = new Date()
     .toISOString()
@@ -77,7 +115,7 @@ export function exportCommentsAsCSV(comments: Comment[], title?: string, filenam
     ? `${sanitizeFilename(title)}_comments_${timestamp}.csv`
     : `comments_${timestamp}.csv`;
 
-  downloadFile(csv, filename || defaultFilename, 'text/csv');
+  downloadFile(csvWithBom, filename || defaultFilename, 'text/csv');
 }
 
 /**

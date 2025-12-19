@@ -1,13 +1,7 @@
 import { Comment, Platform } from '../types';
-import { MESSAGES } from '@/config/constants';
 import { PageController } from './PageController';
-import { CommentExtractorSelector } from './CommentExtractorSelector';
 import { Logger } from '@/utils/logger';
-import { ExtractionStrategy } from './strategies/ExtractionStrategy';
-import { ConfigStrategy } from './strategies/ConfigStrategy';
 import { AIStrategy } from './strategies/AIStrategy';
-import { sendMessage } from '@/utils/chrome-message';
-import { ScraperConfig } from '../types/scraper';
 
 /**
  * CommentExtractor extracts comments from web pages
@@ -28,31 +22,10 @@ export class CommentExtractor {
     platform: Platform,
     onProgress?: (progress: number, message: string) => void,
   ): Promise<Comment[]> {
-    Logger.info('[CommentExtractor] Starting extraction');
+    Logger.info('[CommentExtractor] Starting pure AI extraction');
 
-    // Initialize the extraction engine
-    const selectorExtractor = new CommentExtractorSelector(this.pageController);
-
-    let config: ScraperConfig | undefined;
-    try {
-      const cfgResponse = await sendMessage<{ config?: ScraperConfig }>({
-        type: MESSAGES.CHECK_SCRAPER_CONFIG,
-        payload: { url: window.location.href },
-      });
-      config = cfgResponse?.config;
-    } catch (error) {
-      Logger.warn('[CommentExtractor] Failed to check scraper config', { error });
-      config = undefined;
-    }
-    let strategy: ExtractionStrategy;
-
-    if (config && config.selectors) {
-      Logger.info('[CommentExtractor] Strategy: Config-based extraction');
-      strategy = new ConfigStrategy(selectorExtractor, config);
-    } else {
-      Logger.info('[CommentExtractor] Strategy: AI Discovery extraction');
-      strategy = new AIStrategy(selectorExtractor);
-    }
+    // Always use AI Strategy
+    const strategy = new AIStrategy(this.pageController);
 
     // Execute strategy
     const comments = await strategy.execute(maxComments, platform, onProgress);

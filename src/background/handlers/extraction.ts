@@ -1,21 +1,10 @@
 import { Message, Comment, Task } from '../../types';
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
-import { REGEX, AI, ERRORS, MESSAGES, DEFAULTS } from '@/config/constants';
+import { REGEX, ERRORS, MESSAGES, DEFAULTS } from '@/config/constants';
 import { getDomain } from '../../utils/url';
 import { Tokenizer } from '../../utils/tokenizer';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
-
-interface ExtractionContentResponse {
-  success: boolean;
-  error?: string;
-  comments?: Comment[];
-  postInfo?: {
-    url?: string;
-    title?: string;
-    videoTime?: string;
-  };
-}
 
 interface ScraperAnalysisResult {
   selectors: Record<string, string>;
@@ -58,6 +47,10 @@ interface StartAnalysisResponse {
   taskId: string;
 }
 
+interface ExtractionCompletionResponse {
+  success: boolean;
+}
+
 export function chunkDomText(
   structure: string,
   maxTokens: number,
@@ -69,30 +62,14 @@ export function chunkDomText(
   return Tokenizer.chunkText(structure, maxTokens);
 }
 
-function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) {
-    return Promise.reject(new Error(ERRORS.TASK_CANCELLED_BY_USER));
+// Map to hold pending task resolvers
+const pendingExtractionTasks = new Map<
+  string,
+  {
+    resolve: (value: any) => void;
+    reject: (reason?: any) => void;
   }
-
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => {
-      signal.removeEventListener('abort', onAbort);
-      reject(new Error(ERRORS.TASK_CANCELLED_BY_USER));
-    };
-
-    signal.addEventListener('abort', onAbort, { once: true });
-
-    promise
-      .then((value) => {
-        signal.removeEventListener('abort', onAbort);
-        resolve(value);
-      })
-      .catch((error) => {
-        signal.removeEventListener('abort', onAbort);
-        reject(error);
-      });
-  });
-}
+>();
 
 export async function handleStartExtraction(
   message: Extract<Message, { type: 'START_EXTRACTION' }>,
@@ -123,7 +100,12 @@ export async function handleStartExtraction(
       tabId = activeTab?.id;
     } catch (error) {
       Logger.error('[ExtractionHandler] Failed to get active tab', { error });
+      throw new Error(ERRORS.NO_TAB_ID_AVAILABLE);
     }
+  }
+
+  if (!tabId) {
+    throw new Error(ERRORS.NO_TAB_ID_AVAILABLE);
   }
 
   Logger.info('[ExtractionHandler] Starting extraction with maxComments', {
@@ -139,41 +121,90 @@ export async function handleStartExtraction(
 
     await ensureContentScriptInjected(task.tabId);
 
-    const respPromise = chrome.tabs.sendMessage(task.tabId, {
-      type: MESSAGES.START_EXTRACTION,
-      payload: { taskId: task.id, maxComments: finalMaxComments },
-    }) as Promise<ExtractionContentResponse>;
-
-    const response = await abortable(respPromise, signal);
-
-    if (!response.success) {
-      throw new Error(response.error || 'Extraction failed');
+    // Send start message to content script (fire and forget pattern from executor perspective)
+    // The content script will reply immediately to acknowledge receipt,
+    // and then send EXTRACTION_COMPLETED later.
+    try {
+      await chrome.tabs.sendMessage(task.tabId, {
+        type: MESSAGES.START_EXTRACTION,
+        payload: { taskId: task.id, maxComments: finalMaxComments },
+      });
+    } catch (error) {
+      // Ignore message timeout as we wait for explicit completion event
+      const msg = error instanceof Error ? error.message : String(error);
+      if (
+        !msg.includes('Message timeout') &&
+        !msg.includes('The message port closed before a response was received')
+      ) {
+        throw error;
+      }
+      Logger.debug('[ExtractionHandler] Message ack timeout ignored, waiting for completion');
     }
+    // Hang here until we receive the completion message
+    return new Promise((resolve, reject) => {
+      pendingExtractionTasks.set(taskId, { resolve, reject });
 
-    const { comments, postInfo } = response;
+      // Clean up if task is cancelled from UI
+      signal.addEventListener('abort', () => {
+        pendingExtractionTasks.delete(taskId);
+        // Notify Content Script to stop
+        chrome.tabs
+          .sendMessage(task.tabId!, {
+            type: MESSAGES.CANCEL_EXTRACTION,
+            payload: { taskId },
+          })
+          .catch(() => {});
 
-    if (comments && comments.length > 0) {
-      const historyItem = {
-        id: `history_${Date.now()}`,
-        url: postInfo?.url || task.url,
-        title: postInfo?.title || 'Untitled',
-        platform: task.platform || 'unknown',
-        videoTime: postInfo?.videoTime,
-        extractedAt: Date.now(),
-        commentsCount: comments.length,
-        comments,
-      };
-
-      await context.storageManager.saveHistory(historyItem);
-    }
-
-    return {
-      tokensUsed: 0,
-      commentsCount: comments?.length || 0,
-    };
+        reject(new Error(ERRORS.TASK_CANCELLED_BY_USER));
+      });
+    });
   });
 
   return { taskId };
+}
+
+export async function handleExtractionCompleted(
+  message: Extract<Message, { type: 'EXTRACTION_COMPLETED' }>,
+  context: HandlerContext,
+): Promise<ExtractionCompletionResponse> {
+  const { taskId, success, comments, postInfo, error } = message.payload;
+  const pending = pendingExtractionTasks.get(taskId);
+
+  if (!pending) {
+    Logger.warn('[ExtractionHandler] Received completion for unknown or finished task', { taskId });
+    return { success: false };
+  }
+
+  pendingExtractionTasks.delete(taskId);
+
+  if (success) {
+    // Save history
+    if (comments && comments.length > 0) {
+      const task = context.taskManager.getTask(taskId);
+      if (task) {
+        const historyItem = {
+          id: `history_${Date.now()}`,
+          url: postInfo?.url || task.url,
+          title: postInfo?.title || 'Untitled',
+          platform: task.platform || 'unknown',
+          videoTime: postInfo?.videoTime,
+          extractedAt: Date.now(),
+          commentsCount: comments.length,
+          comments,
+        };
+        await context.storageManager.saveHistory(historyItem);
+      }
+    }
+
+    pending.resolve({
+      tokensUsed: 0,
+      commentsCount: comments?.length || 0,
+    });
+  } else {
+    pending.reject(new Error(error || 'Extraction failed'));
+  }
+
+  return { success: true };
 }
 
 export async function handleAIAnalyzeStructure(
@@ -188,46 +219,49 @@ export async function handleAIAnalyzeStructure(
 
   try {
     const settings = await context.storageManager.getSettings();
-    const chunks = chunkDomText(prompt, settings.aiModel.maxTokens ?? AI.DEFAULT_MAX_TOKENS);
+    // The caller (AIStrategy) manages chunking and token limits.
+    // We directly call AI service here.
+
+    const response = await context.aiService.callAI({
+      prompt,
+      systemPrompt:
+        'You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start with { and end with }.',
+      config: settings.aiModel,
+      timeout: settings.aiTimeout,
+    });
+
     const aggregated: ScraperAnalysisResult = {
       selectors: {},
       structure: { hasReplies: false, repliesNested: true, needsExpand: false },
       confidence: 0,
     };
-    for (let i = 0; i < chunks.length; i++) {
-      const response = await context.aiService.callAI({
-        prompt: chunks[i],
-        systemPrompt:
-          'You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start with { and end with }.',
-        config: settings.aiModel,
-      });
-      try {
-        let jsonText = response.content.trim();
-        if (jsonText.startsWith('```')) {
-          jsonText = jsonText
-            .replace(REGEX.MD_CODE_JSON_START, '')
-            .replace(REGEX.MD_CODE_ANY_END, '')
-            .trim();
-        }
-        const jsonStart = jsonText.indexOf('{');
-        const jsonEnd = jsonText.lastIndexOf('}');
-        if (jsonStart !== -1 && jsonEnd !== -1) {
-          jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
-        }
-        const data = JSON.parse(jsonText);
-        if (data.selectors && typeof data.selectors === 'object') {
-          aggregated.selectors = { ...aggregated.selectors, ...data.selectors };
-        }
-        if (data.structure) aggregated.structure = data.structure;
-        if (typeof data.confidence === 'number')
-          aggregated.confidence = Math.max(aggregated.confidence, data.confidence);
-      } catch (e) {
-        Logger.warn('[ExtractionHandler] Failed to parse AI structure part', {
-          part: i + 1,
-          error: e,
-        });
+
+    try {
+      let jsonText = response.content.trim();
+      if (jsonText.startsWith('```')) {
+        jsonText = jsonText
+          .replace(REGEX.MD_CODE_JSON_START, '')
+          .replace(REGEX.MD_CODE_ANY_END, '')
+          .trim();
       }
+      const jsonStart = jsonText.indexOf('{');
+      const jsonEnd = jsonText.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+      }
+      const data = JSON.parse(jsonText);
+      if (data.selectors && typeof data.selectors === 'object') {
+        aggregated.selectors = { ...aggregated.selectors, ...data.selectors };
+      }
+      if (data.structure) aggregated.structure = data.structure;
+      if (typeof data.confidence === 'number')
+        aggregated.confidence = Math.max(aggregated.confidence, data.confidence);
+    } catch (e) {
+      Logger.warn('[ExtractionHandler] Failed to parse AI structure response', {
+        error: e,
+      });
     }
+
     return { data: aggregated };
   } catch (error) {
     Logger.error('[ExtractionHandler] AI structure analysis failed', { error });
@@ -301,6 +335,7 @@ export async function handleStartAnalysis(
         videoTime,
       },
       signal,
+      settings.aiTimeout,
     );
 
     context.taskManager.updateTaskProgress(taskId, 75);
@@ -333,4 +368,74 @@ export async function handleStartAnalysis(
   });
 
   return { taskId };
+}
+
+export async function handleAIExtractContent(
+  message: Extract<Message, { type: 'AI_EXTRACT_CONTENT' }>,
+  context: HandlerContext,
+): Promise<{ comments: Comment[]; error?: string }> {
+  const { chunks, systemPrompt } = message.payload || {};
+
+  if (!chunks || !Array.isArray(chunks) || chunks.length === 0) {
+    return { comments: [], error: 'No chunks provided' };
+  }
+
+  try {
+    const settings = await context.storageManager.getSettings();
+    const allComments: Comment[] = [];
+
+    // Process chunks sequentially (or with limited concurrency if we implement it)
+    // For now, sequential to avoid rate limits
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      if (!chunk.trim()) continue;
+
+      try {
+        const response = await context.aiService.callAI({
+          prompt: chunk,
+          systemPrompt: systemPrompt || 'You are a data extractor. Return JSON only.',
+          config: settings.aiModel,
+          timeout: settings.aiTimeout,
+        });
+
+        let jsonText = response.content.trim();
+        // Clean markdown
+        if (jsonText.includes('```')) {
+          jsonText = jsonText
+            .replace(REGEX.MD_CODE_JSON_START, '')
+            .replace(REGEX.MD_CODE_ANY_END, '')
+            .trim();
+        }
+
+        // Find JSON array
+        const jsonStart = jsonText.indexOf('[');
+        const jsonEnd = jsonText.lastIndexOf(']');
+        if (jsonStart !== -1 && jsonEnd !== -1) {
+          jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+          const chunkComments = JSON.parse(jsonText);
+          if (Array.isArray(chunkComments)) {
+            // Assign a temp ID if missing
+            chunkComments.forEach((c: any, idx) => {
+              if (!c.id) c.id = `ai_${Date.now()}_${i}_${idx}`;
+              // Basic normalization
+              if (!c.likes) c.likes = 0;
+              if (!c.replies) c.replies = [];
+            });
+            allComments.push(...chunkComments);
+          }
+        }
+      } catch (e) {
+        Logger.warn('[ExtractionHandler] Failed to extract from chunk', { index: i, error: e });
+        // Continue to next chunk
+      }
+    }
+
+    return { comments: allComments };
+  } catch (error) {
+    Logger.error('[ExtractionHandler] AI extraction failed', { error });
+    return {
+      comments: [],
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
 }

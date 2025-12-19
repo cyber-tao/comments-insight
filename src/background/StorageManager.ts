@@ -1,16 +1,15 @@
 import { Settings, HistoryItem, AIConfig } from '../types';
 import {
-  SECURITY,
   API,
-  STORAGE,
   AI,
   LANGUAGES,
+  RETRY,
+  STORAGE,
+  SECURITY,
   ERRORS,
   HISTORY,
   DEFAULTS,
-  RETRY,
   DOM_ANALYSIS_DEFAULTS,
-  TEXT,
 } from '@/config/constants';
 import LZString from 'lz-string';
 import { Logger } from '../utils/logger';
@@ -24,11 +23,13 @@ const DEFAULT_SETTINGS: Settings = {
   aiModel: {
     apiUrl: API.DEFAULT_URL,
     apiKey: '',
-    model: TEXT.DEFAULT_MODEL_NAME,
-    maxTokens: AI.DEFAULT_MAX_TOKENS,
+    model: AI.DEFAULT_MODELS[0],
+    contextWindowSize: AI.DEFAULT_CONTEXT_WINDOW,
+    maxOutputTokens: AI.DEFAULT_MAX_OUTPUT_TOKENS,
     temperature: AI.DEFAULT_TEMPERATURE,
     topP: AI.DEFAULT_TOP_P,
   },
+  aiTimeout: AI.DEFAULT_TIMEOUT,
   analyzerPromptTemplate: `You are a professional social media analyst. Analyze the following comments and provide insights.
 
 ## Post Information:
@@ -771,11 +772,17 @@ export class StorageManager {
       return false;
     }
     const c = config as Record<string, unknown>;
+    const hasMaxOutputTokens =
+      c.maxOutputTokens === undefined || typeof c.maxOutputTokens === 'number';
+    const hasLegacyMaxTokens = c.maxTokens === undefined || typeof c.maxTokens === 'number';
+
     return (
       typeof c.apiUrl === 'string' &&
       typeof c.apiKey === 'string' &&
       typeof c.model === 'string' &&
-      typeof c.maxTokens === 'number' &&
+      typeof c.contextWindowSize === 'number' &&
+      hasMaxOutputTokens &&
+      hasLegacyMaxTokens &&
       typeof c.temperature === 'number' &&
       typeof c.topP === 'number'
     );

@@ -3,25 +3,41 @@ import { getShadowRoot, querySelectorDeep } from '@/utils/dom-query';
 import { Logger } from '@/utils/logger';
 import { DOM } from '@/config/constants';
 
+interface SimplificationOptions {
+  maxDepth?: number;
+  currentDepth?: number;
+  forceExpandParent?: boolean;
+  includeText?: boolean;
+  maxNodes?: number;
+  _nodeCounter?: { count: number };
+}
+
 export class DOMSimplifier {
   private selectorCache = new WeakMap<Element, string>();
 
   /**
    * Simplify a DOM element to a lightweight structure
-   * @param element - DOM element to simplify
-   * @param maxDepth - Maximum depth to traverse
-   * @param currentDepth - Current depth (internal)
-   * @returns Simplified node structure
    */
-  simplifyElement(
-    element: Element,
-    maxDepth: number = DOM.DEFAULT_EXPAND_DEPTH,
-    currentDepth: number = 0,
-    forceExpandParent: boolean = false,
-  ): SimplifiedNode {
+  simplifyElement(element: Element, options: SimplificationOptions = {}): SimplifiedNode {
+    const {
+      maxDepth = DOM.DEFAULT_EXPAND_DEPTH,
+      currentDepth = 0,
+      forceExpandParent = false,
+      includeText = true,
+      maxNodes = DOM.SIMPLIFY_MAX_NODES,
+      _nodeCounter = { count: 0 },
+    } = options;
+
+    _nodeCounter.count++;
+
     const shadowRoot = getShadowRoot(element);
     const forceExpandCurrent = shadowRoot !== null || this.shouldForceExpandElement(element);
-    const shouldExpand = forceExpandParent || forceExpandCurrent || currentDepth < maxDepth;
+
+    // Stop expanding if we hit node limit (but allow current node)
+    const nodeLimitReached = _nodeCounter.count > maxNodes;
+
+    const shouldExpand =
+      !nodeLimitReached && (forceExpandParent || forceExpandCurrent || currentDepth < maxDepth);
 
     // Light DOM children
     const lightChildren = Array.from(element.children).filter(
@@ -38,12 +54,12 @@ export class DOMSimplifier {
         const shadowChildrenRaw = Array.from(shadowRoot.children);
         // We typically want to see inside shadow root if we are expanding the host
         const shadowChildrenProcessed = shadowChildrenRaw.map((child) =>
-          this.simplifyElement(
-            child as Element,
-            maxDepth,
-            currentDepth + 1,
-            forceExpandParent || forceExpandCurrent,
-          ),
+          this.simplifyElement(child as Element, {
+            ...options,
+            currentDepth: currentDepth + 1,
+            forceExpandParent: forceExpandParent || forceExpandCurrent,
+            _nodeCounter, // Pass the shared counter
+          }),
         );
 
         if (shadowChildrenProcessed.length > 0) {
@@ -64,12 +80,12 @@ export class DOMSimplifier {
 
       // 2. Add Light DOM children
       const lightChildrenProcessed = lightChildren.map((child) =>
-        this.simplifyElement(
-          child as Element,
-          maxDepth,
-          currentDepth + 1,
-          forceExpandParent || forceExpandCurrent,
-        ),
+        this.simplifyElement(child as Element, {
+          ...options,
+          currentDepth: currentDepth + 1,
+          forceExpandParent: forceExpandParent || forceExpandCurrent,
+          _nodeCounter, // Pass the shared counter
+        }),
       );
       children.push(...lightChildrenProcessed);
     }
@@ -79,9 +95,9 @@ export class DOMSimplifier {
       id: element.id || undefined,
       classes: this.getClasses(element),
       attributes: this.getKeyAttributes(element),
-      text: this.getTextPreview(element),
+      text: includeText ? this.getTextPreview(element) : undefined,
       childCount: lightChildren.length + (shadowRoot ? 1 : 0),
-      expanded: shouldExpand && (lightChildren.length > 0 || !!shadowRoot),
+      expanded: shouldExpand && (children ? children.length > 0 : false),
       children,
       selector: this.generateSelector(element),
       depth: currentDepth,
@@ -110,6 +126,7 @@ export class DOMSimplifier {
         'iframe',
         'head',
         'hr',
+        'link',
       ].includes(tag)
     ) {
       return true;
@@ -126,11 +143,18 @@ export class DOMSimplifier {
   private shouldForceExpandElement(element: Element): boolean {
     const tag = element.tagName.toLowerCase();
     if (tag.includes('-')) {
-      return true;
+      return true; // Custom elements often container important info
     }
 
     const id = element.id?.toLowerCase();
-    if (id && (id.includes('comment') || id.includes('reply') || id.includes('contents'))) {
+    if (
+      id &&
+      (id.includes('comment') ||
+        id.includes('reply') ||
+        id.includes('contents') ||
+        id.includes('discussion') ||
+        id.includes('feed'))
+    ) {
       return true;
     }
 
@@ -139,13 +163,15 @@ export class DOMSimplifier {
       className.includes('comment') ||
       className.includes('reply') ||
       className.includes('thread') ||
-      className.includes('content')
+      className.includes('content') ||
+      className.includes('discussion') ||
+      className.includes('feed')
     ) {
       return true;
     }
 
     const role = element.getAttribute('role')?.toLowerCase();
-    if (role && (role.includes('comment') || role.includes('article'))) {
+    if (role && (role.includes('comment') || role.includes('article') || role.includes('feed'))) {
       return true;
     }
 
@@ -192,6 +218,8 @@ export class DOMSimplifier {
       'onkeypress',
       'onchange',
       'onsubmit',
+      'class',
+      'id',
     ]);
     const attrs: Record<string, string> = {};
     let hasAttrs = false;
@@ -305,7 +333,7 @@ export class DOMSimplifier {
         Logger.warn('[DOMSimplifier] Element not found', { selector });
         return null;
       }
-      return this.simplifyElement(element, depth);
+      return this.simplifyElement(element, { maxDepth: depth });
     } catch (error) {
       Logger.error('[DOMSimplifier] Failed to expand node', { selector, error });
       return null;
@@ -373,40 +401,6 @@ export class DOMSimplifier {
   }
 
   /**
-   * Update a simplified DOM tree with an expanded node
-   */
-  updateTreeWithExpanded(tree: SimplifiedNode, expanded: SimplifiedNode): SimplifiedNode {
-    if (tree.selector === expanded.selector) {
-      return expanded;
-    }
-
-    if (tree.children) {
-      return {
-        ...tree,
-        children: tree.children.map((child) => this.updateTreeWithExpanded(child, expanded)),
-      };
-    }
-
-    return tree;
-  }
-
-  /**
-   * Batch expand multiple nodes
-   */
-  expandMultipleNodes(
-    selectors: string[],
-    depth: number = DOM.DEFAULT_EXPAND_DEPTH,
-  ): Map<string, SimplifiedNode | null> {
-    const results = new Map<string, SimplifiedNode | null>();
-
-    for (const selector of selectors) {
-      results.set(selector, this.expandNode(selector, depth));
-    }
-
-    return results;
-  }
-
-  /**
    * Simplify DOM for AI analysis (static method)
    * @param element - Root element to simplify
    * @param options - Simplification options
@@ -420,9 +414,8 @@ export class DOMSimplifier {
       includeText?: boolean;
     } = {},
   ): SimplifiedNode {
-    const { maxDepth = DOM.SIMPLIFY_MAX_DEPTH } = options;
     const simplifier = new DOMSimplifier();
-    return simplifier.simplifyElement(element, maxDepth);
+    return simplifier.simplifyElement(element, options);
   }
 
   /**

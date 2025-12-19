@@ -31,6 +31,16 @@ chrome.runtime.onInstalled.addListener(() => {
     });
 });
 
+// Listen for long-lived port connections
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === 'ai-bridge') {
+    Logger.debug('[Background] AI Bridge Port connected');
+    port.onMessage.addListener((message) => {
+      messageRouter.handlePortMessage(port, message);
+    });
+  }
+});
+
 // Listen for messages from content scripts and popup
 chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) => {
   Logger.debug('Message received', { message });

@@ -10,7 +10,6 @@ import { HandlerContext } from './handlers/types';
 import * as extractionHandlers from './handlers/extraction';
 import * as settingsHandlers from './handlers/settings';
 import * as historyHandlers from './handlers/history';
-import * as scraperHandlers from './handlers/scraper';
 import * as taskHandlers from './handlers/task';
 import * as miscHandlers from './handlers/misc';
 
@@ -24,6 +23,23 @@ export class MessageRouter {
     private aiService: AIService,
     private storageManager: StorageManager,
   ) {}
+
+  /**
+   * Handle message from a long-lived port connection
+   */
+  async handlePortMessage(port: chrome.runtime.Port, message: any): Promise<void> {
+    const correlationId = message.id;
+    try {
+      const response = await this.handleMessage(message, port.sender!);
+      port.postMessage({ id: correlationId, response });
+    } catch (error) {
+      Logger.error('[MessageRouter] Port message handling failed', { error, type: message.type });
+      port.postMessage({
+        id: correlationId,
+        response: { error: error instanceof Error ? error.message : String(error) },
+      });
+    }
+  }
 
   /**
    * Handle incoming message
@@ -56,6 +72,12 @@ export class MessageRouter {
 
         case MESSAGES.AI_ANALYZE_STRUCTURE:
           return await extractionHandlers.handleAIAnalyzeStructure(message, context);
+
+        case MESSAGES.AI_EXTRACT_CONTENT:
+          return await extractionHandlers.handleAIExtractContent(message, context);
+
+        case MESSAGES.EXTRACTION_COMPLETED:
+          return await extractionHandlers.handleExtractionCompleted(message, context);
 
         case MESSAGES.EXTRACTION_PROGRESS:
           return extractionHandlers.handleExtractionProgress(message, context);
@@ -96,28 +118,9 @@ export class MessageRouter {
         case MESSAGES.TEST_MODEL:
           return await miscHandlers.handleTestModel(message, context);
 
-        case MESSAGES.CHECK_SCRAPER_CONFIG:
-          return await scraperHandlers.handleCheckScraperConfig(message, context);
-
-        case MESSAGES.GENERATE_SCRAPER_CONFIG:
-          return await scraperHandlers.handleGenerateScraperConfig(message, context);
-
-        case MESSAGES.GET_SCRAPER_CONFIGS:
-          return await scraperHandlers.handleGetScraperConfigs(message, context);
-
-        case MESSAGES.SAVE_SCRAPER_CONFIG:
-          return await scraperHandlers.handleSaveScraperConfig(message, context);
-
-        case MESSAGES.DELETE_SCRAPER_CONFIG:
-          return await scraperHandlers.handleDeleteScraperConfig(message, context);
-
-        case MESSAGES.UPDATE_SELECTOR_VALIDATION:
-          return await scraperHandlers.handleUpdateSelectorValidation(message, context);
-
         // Messages handled by content script, ignored by background
         case MESSAGES.GET_PLATFORM_INFO:
         case MESSAGES.GET_DOM_STRUCTURE:
-        case MESSAGES.TEST_SELECTOR_QUERY:
         case MESSAGES.CANCEL_EXTRACTION:
           return;
 

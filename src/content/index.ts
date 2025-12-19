@@ -26,10 +26,6 @@ interface DomStructureResponse {
   error?: string;
 }
 
-interface TestSelectorPayload {
-  selector?: string;
-}
-
 const globalAny = globalThis as unknown as { __COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED?: boolean };
 
 let domAnalyzer: DOMAnalyzer | null = null;
@@ -78,31 +74,6 @@ if (!globalAny.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED) {
         handleGetDOMStructure(sendResponse);
         return true; // Keep channel open for async response
 
-      case MESSAGES.TEST_SELECTOR_QUERY: {
-        try {
-          const payload = message.payload as TestSelectorPayload;
-          const selector = payload?.selector;
-          if (!selector) {
-            sendResponse({ success: false, error: 'Missing selector' });
-            return true;
-          }
-          const { domAnalyzer } = getTools();
-          const nodes = domAnalyzer.querySelectorAllDeep(document, selector);
-          const items = nodes.map((el: Element, i: number) => ({
-            index: i,
-            tag: el.tagName.toLowerCase(),
-            id: (el as HTMLElement).id || '',
-            className: (el as HTMLElement).className || '',
-            text: (el.textContent || '').trim().slice(0, DOM.HTML_PREVIEW_LENGTH),
-            html: el.outerHTML.slice(0, DOM.HTML_PREVIEW_LENGTH),
-          }));
-          sendResponse({ success: true, total: nodes.length, items });
-        } catch (e) {
-          sendResponse({ success: false, error: e instanceof Error ? e.message : 'Query failed' });
-        }
-        return true;
-      }
-
       default:
         sendResponse({ status: 'received' });
     }
@@ -120,6 +91,9 @@ async function handleStartExtraction(
   data: { taskId: string; maxComments: number },
   sendResponse: (response: ExtractionResponse) => void,
 ) {
+  // 1. Immediately acknowledge receipt to prevent message timeout
+  sendResponse({ success: true });
+
   const { taskId, maxComments } = data;
 
   Logger.info('[Content] Starting extraction', { taskId });
@@ -130,7 +104,6 @@ async function handleStartExtraction(
 
   try {
     // Use the unified extractor interface
-    // It will try to use config first, then fallback to AI discovery
     const { commentExtractor } = getTools();
     const comments = await commentExtractor.extractWithAI(
       maxComments,
@@ -146,29 +119,33 @@ async function handleStartExtraction(
     // Check if task was cancelled
     if (currentTaskId !== taskId) {
       Logger.info('[Content] Extraction cancelled');
-      sendResponse({
-        success: false,
-        error: 'Extraction cancelled',
-      });
       return;
     }
 
-    // Get post info from page (including video time if available)
-    const postInfo = await getPostInfo();
+    // Get post info from page
+    const postInfo = getPostInfo();
 
-    // Send success response
-    sendResponse({
-      success: true,
-      comments,
-      postInfo,
+    // 2. Send completion message
+    await chrome.runtime.sendMessage({
+      type: MESSAGES.EXTRACTION_COMPLETED,
+      payload: {
+        taskId,
+        success: true,
+        comments,
+        postInfo,
+      },
     });
 
     Logger.info('[Content] Extraction complete', { count: comments.length });
   } catch (error) {
     Logger.error('[Content] Extraction failed', { error });
-    sendResponse({
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+    await chrome.runtime.sendMessage({
+      type: MESSAGES.EXTRACTION_COMPLETED,
+      payload: {
+        taskId,
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
     });
   } finally {
     currentTaskId = null;
@@ -189,36 +166,11 @@ function handleCancelExtraction(taskId: string) {
 }
 
 /**
- * Get post information including video time
+ * Get post information
  */
-async function getPostInfo(): Promise<{ url: string; title: string; videoTime?: string }> {
+function getPostInfo(): { url: string; title: string; videoTime?: string } {
   const url = window.location.href;
   const title = document.title;
-
-  // Try to get video time from scraper config
-  try {
-    const configResponse = await chrome.runtime.sendMessage({
-      type: MESSAGES.CHECK_SCRAPER_CONFIG,
-      payload: { url },
-    });
-
-    if (configResponse?.config?.selectors?.videoTime) {
-      const videoTimeSelector = configResponse.config.selectors.videoTime;
-      const videoTimeElement = document.querySelector(videoTimeSelector);
-
-      if (videoTimeElement) {
-        const videoTime =
-          videoTimeElement.textContent?.trim() || videoTimeElement.getAttribute('datetime');
-        if (videoTime) {
-          Logger.info('[Content] Extracted video time', { videoTime });
-          return { url, title, videoTime };
-        }
-      }
-    }
-  } catch (error) {
-    Logger.warn('[Content] Failed to extract video time', { error });
-  }
-
   return { url, title };
 }
 

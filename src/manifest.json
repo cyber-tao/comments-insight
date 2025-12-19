@@ -27,14 +27,10 @@
       "run_at": "document_idle"
     }
   ],
-  "permissions": ["storage", "activeTab", "notifications", "scripting"],
+  "permissions": ["storage", "activeTab", "notifications", "scripting", "tabs"],
   "optional_host_permissions": ["http://*/*", "https://*/*"],
   "options_page": "src/options/index.html",
   "web_accessible_resources": [
-    {
-      "resources": ["src/config/default-scrapers.json"],
-      "matches": ["http://*/*", "https://*/*"]
-    },
     {
       "resources": ["assets/*"],
       "matches": ["http://*/*", "https://*/*"]

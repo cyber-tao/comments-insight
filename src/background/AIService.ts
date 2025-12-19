@@ -61,8 +61,8 @@ export class AIService {
     Logger.debug(`[AI_LOG_${type.toUpperCase()}]`, {
       timestamp: data.timestamp,
       type,
-      prompt: data.prompt.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + '...',
-      response: data.response.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + '...',
+      prompt: data.prompt.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + '...', // Corrected: Removed unnecessary backticks around string literal
+      response: data.response.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + '...', // Corrected: Removed unnecessary backticks around string literal
       promptLength: data.prompt.length,
       responseLength: data.response.length,
     });
@@ -84,18 +84,34 @@ export class AIService {
         .catch((error: unknown) => Logger.error('[AIService] Failed to save log', { error }));
     });
   }
-  /**
-   * Call AI API with the given request
-   * @param request - AI request configuration
-          this.storageManager.recordTokenUsage(tokensUsed).catch((err) => {
-   */
+
   async callAI(request: AIRequest): Promise<AIResponse> {
-    const { prompt, systemPrompt, config, signal } = request;
+    const { prompt, systemPrompt, config, signal, timeout } = request;
+
+    // Use configured timeout or default
+    const effectiveTimeout = timeout || AI_CONST.DEFAULT_TIMEOUT;
 
     return await ErrorHandler.withRetry(
       async () => {
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const controller = new AbortController();
+
+        // Handle parent signal
+        if (signal) {
+          if (signal.aborted) {
+            controller.abort();
+          } else {
+            signal.addEventListener('abort', () => controller.abort());
+          }
+        }
+
+        // Set timeout
+        timeoutId = setTimeout(() => {
+          controller.abort(new Error('Timeout'));
+        }, effectiveTimeout);
+
         try {
-          if (signal?.aborted) {
+          if (controller.signal.aborted) {
             throw createAIError(ErrorCode.TASK_CANCELLED, 'Request aborted', {});
           }
 
@@ -115,13 +131,14 @@ export class AIService {
           // Ensure API URL ends with /chat/completions
           let apiUrl = config.apiUrl.trim();
           if (!apiUrl.endsWith('/chat/completions')) {
-            apiUrl = apiUrl.replace(/\/$/, '') + '/chat/completions';
+            apiUrl = apiUrl.replace(new RegExp('/$'), '') + '/chat/completions';
           }
 
           Logger.info('[AIService] Calling AI API', {
             url: apiUrl,
             model: config.model,
             promptLength: prompt.length,
+            timeout: effectiveTimeout,
           });
 
           const headers: Record<string, string> = {
@@ -141,11 +158,11 @@ export class AIService {
                 ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
                 { role: 'user', content: prompt },
               ],
-              max_tokens: config.maxTokens,
+              max_tokens: config.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS,
               temperature: config.temperature,
               top_p: config.topP,
             }),
-            signal,
+            signal: controller.signal,
           });
 
           if (!response.ok) {
@@ -157,6 +174,25 @@ export class AIService {
                 status: response.status,
                 response: errorText,
               });
+            } else if (response.status === 400) {
+              if (
+                errorText.includes('max_tokens') ||
+                errorText.includes('context length') ||
+                errorText.includes('maximum context')
+              ) {
+                throw createAIError(
+                  ErrorCode.INVALID_CONFIG,
+                  `Context limit exceeded. Please reduce 'Context Length' in settings or use a larger model. API Error: ${errorText}`,
+                  { status: response.status, response: errorText },
+                  false, // Not retryable
+                );
+              }
+              throw createAIError(
+                ErrorCode.API_ERROR,
+                `API Bad Request (400): ${errorText}`,
+                { status: response.status, response: errorText },
+                false,
+              );
             } else if (response.status === 404) {
               throw createAIError(
                 ErrorCode.AI_MODEL_NOT_FOUND,
@@ -214,6 +250,21 @@ export class AIService {
             finishReason,
           };
         } catch (error) {
+          if (
+            error instanceof Error &&
+            (error.name === 'AbortError' || error.message === 'Timeout')
+          ) {
+            if (signal?.aborted) {
+              throw createAIError(ErrorCode.TASK_CANCELLED, 'Request aborted by user', {});
+            }
+            throw createAIError(
+              ErrorCode.AI_TIMEOUT,
+              `AI Request timed out after ${effectiveTimeout}ms`,
+              {},
+              false,
+            );
+          }
+
           if (error instanceof ExtensionError) {
             // Log retry intent for debugging
             if (
@@ -238,6 +289,8 @@ export class AIService {
 
           Logger.error('[AIService] AI call failed', { error });
           throw error;
+        } finally {
+          if (timeoutId) clearTimeout(timeoutId);
         }
       },
       'AIService.callAI',
@@ -257,9 +310,10 @@ export class AIService {
   async getAvailableModels(apiUrl: string, apiKey: string): Promise<string[]> {
     try {
       // Ensure API URL is base URL (v1)
-      let baseUrl = apiUrl.trim().replace(/\/$/, '');
-      // Remove /chat/completions if present
-      baseUrl = baseUrl.replace(/\/chat\/completions$/, '');
+      let baseUrl = apiUrl
+        .trim()
+        .replace(new RegExp('/$'), '')
+        .replace(new RegExp('/chat/completions$'), '');
       const modelsUrl = baseUrl + '/models';
 
       Logger.info('[AIService] Fetching available models', { url: modelsUrl });
@@ -314,10 +368,11 @@ export class AIService {
       videoTime?: string;
     },
     signal?: AbortSignal,
+    timeout?: number,
   ): Promise<AnalysisResult> {
     this.currentLanguage = language || LANGUAGES.DEFAULT;
     // Split comments if they exceed token limit
-    const commentBatches = this.splitCommentsForAnalysis(comments, config.maxTokens);
+    const commentBatches = this.splitCommentsForAnalysis(comments, config);
 
     Logger.info('[AIService] Analyzing comments', { batches: commentBatches.length });
 
@@ -329,14 +384,47 @@ export class AIService {
         promptTemplate,
         metadata,
         signal,
+        timeout,
       );
     } else {
       // Multiple batches - analyze with concurrency limit
-      const tasks = commentBatches.map(
-        (batch) => () => this.analyzeSingleBatch(batch, config, promptTemplate, metadata, signal),
-      );
+      const tasks = commentBatches.map((batch, index) => async () => {
+        try {
+          const result = await this.analyzeSingleBatch(
+            batch,
+            config,
+            promptTemplate,
+            metadata,
+            signal,
+            timeout,
+          );
+          return { ok: true as const, result };
+        } catch (error) {
+          Logger.error(`[AIService] Analysis batch ${index + 1} failed`, { error });
+          return { ok: false as const, error };
+        }
+      });
+
       const results = await runWithConcurrencyLimit(tasks, AI_CONST.MAX_CONCURRENT_REQUESTS);
-      return this.mergeAnalysisResults(results);
+      const successful = results.filter((item) => item.ok).map((item) => item.result);
+
+      if (successful.length === 0) {
+        throw createAIError(
+          ErrorCode.AI_INVALID_RESPONSE,
+          'All analysis batches failed',
+          {},
+          false,
+        );
+      }
+
+      if (successful.length < results.length) {
+        Logger.warn('[AIService] Partial analysis results due to failed batches', {
+          total: results.length,
+          successful: successful.length,
+        });
+      }
+
+      return this.mergeAnalysisResults(successful);
     }
   }
 
@@ -360,6 +448,7 @@ export class AIService {
       videoTime?: string;
     },
     signal?: AbortSignal,
+    timeout?: number,
   ): Promise<AnalysisResult> {
     const serialized = this.serializeCommentsDense(comments);
     const prompt = this.buildAnalysisPromptWrapper(
@@ -373,6 +462,7 @@ export class AIService {
       prompt,
       config,
       signal,
+      timeout,
     });
 
     // Parse the markdown response
@@ -392,14 +482,21 @@ export class AIService {
   /**
    * Split comments into batches based on token limit
    * @param comments - All comments
-   * @param maxTokens - Maximum tokens per batch
+   * @param config - AI Config
    * @returns Array of comment batches
    */
-  private splitCommentsForAnalysis(comments: Comment[], maxTokens: number): Comment[][] {
+  private splitCommentsForAnalysis(comments: Comment[], config: AIConfig): Comment[][] {
     const batches: Comment[][] = [];
     let currentBatch: Comment[] = [];
     let currentTokens = 0;
-    const availableTokens = Math.max(1, Math.floor(maxTokens * (1 - AI_CONST.TOKEN_RESERVE_RATIO)));
+
+    const maxOutput = config.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS;
+    // Calculate available input tokens: Context Window - Output - Safety Buffer
+    // We use a safety buffer for system prompt and overhead
+    const availableTokens = Math.max(
+      AI_CONST.MIN_AVAILABLE_TOKENS,
+      config.contextWindowSize - maxOutput - AI_CONST.INPUT_TOKEN_BUFFER,
+    );
 
     for (const comment of comments) {
       const commentTokens = this.estimateTokensForComment(comment);

@@ -57,10 +57,16 @@ export const AI = {
   LOW_CONFIDENCE_THRESHOLD: 0.3,
   HIGH_CONFIDENCE_THRESHOLD: 0.7,
   DEFAULT_CONFIDENCE: 0.8,
-  DEFAULT_MAX_TOKENS: 4000,
+  DEFAULT_CONTEXT_WINDOW: 16384,
+  DEFAULT_MAX_OUTPUT_TOKENS: 4096,
   DEFAULT_TEMPERATURE: 0.7,
   DEFAULT_TOP_P: 0.9,
+  DEFAULT_TIMEOUT: 120000,
   MAX_CONCURRENT_REQUESTS: 3,
+  TOKEN_SAFETY_FACTOR: 0.5,
+  INPUT_TOKEN_BUFFER: 2000,
+  MIN_AVAILABLE_TOKENS: 1000,
+  CONFIDENCE_HIGH_THRESHOLD: 0.9,
   CJK_TOKEN_RATIO: 1.5,
   WORD_TOKEN_RATIO: 1.33,
   PUNCT_TOKEN_RATIO: 1.0,
@@ -103,7 +109,6 @@ export const API = {
 };
 
 export const PATHS = {
-  DEFAULT_SCRAPERS_JSON: 'src/config/default-scrapers.json',
   HISTORY_PAGE: 'src/history/index.html',
   OPTIONS_PAGE: 'src/options/index.html',
   LOGS_PAGE: 'src/logs/index.html',
@@ -132,12 +137,6 @@ export const STORAGE = {
   TASK_STATE_KEY: 'task_state',
 };
 
-export const SCRAPER = {
-  CONFIG_STORAGE_KEY: 'scraperConfigs',
-  INITIALIZED_KEY: 'scraperConfigsInitialized',
-  CONFIG_VERSION: '1.0.0',
-};
-
 export const SCRAPER_GENERATION = {
   MAX_TEXT_SAMPLES: 16,
 };
@@ -155,7 +154,7 @@ export const HOST = {
 
 export const REGEX = {
   DOMAIN_EXTRACT: /^(?:https?:\/\/)?(?:www\.)?([^\/\?#]+)/i,
-  FILENAME_INVALID: /[<>:"/\\|?*]/g,
+  FILENAME_INVALID: /[<>:"\/\\|?*]/g,
   WHITESPACE: /\s+/g,
   MD_CODE_JSON_START: /```json\n?/g,
   MD_CODE_ANY_END: /```\n?/g,
@@ -168,18 +167,17 @@ export const MESSAGES = {
   ENSURE_CONTENT_SCRIPT: 'ENSURE_CONTENT_SCRIPT',
   GET_PLATFORM_INFO: 'GET_PLATFORM_INFO',
   EXTRACTION_PROGRESS: 'EXTRACTION_PROGRESS',
-  CHECK_SCRAPER_CONFIG: 'CHECK_SCRAPER_CONFIG',
   GET_SETTINGS: 'GET_SETTINGS',
   SAVE_SETTINGS: 'SAVE_SETTINGS',
-  UPDATE_SELECTOR_VALIDATION: 'UPDATE_SELECTOR_VALIDATION',
   AI_ANALYZE_STRUCTURE: 'AI_ANALYZE_STRUCTURE',
+  AI_EXTRACT_CONTENT: 'AI_EXTRACT_CONTENT',
+  EXTRACTION_COMPLETED: 'EXTRACTION_COMPLETED',
   TASK_UPDATE: 'TASK_UPDATE',
   START_EXTRACTION: 'START_EXTRACTION',
   CANCEL_EXTRACTION: 'CANCEL_EXTRACTION',
   GET_DOM_STRUCTURE: 'GET_DOM_STRUCTURE',
   GET_TASK_STATUS: 'GET_TASK_STATUS',
   GET_HISTORY_BY_URL: 'GET_HISTORY_BY_URL',
-  GENERATE_SCRAPER_CONFIG: 'GENERATE_SCRAPER_CONFIG',
   GET_HISTORY: 'GET_HISTORY',
   START_ANALYSIS: 'START_ANALYSIS',
   EXPORT_DATA: 'EXPORT_DATA',
@@ -188,10 +186,6 @@ export const MESSAGES = {
   DELETE_HISTORY: 'DELETE_HISTORY',
   CLEAR_ALL_HISTORY: 'CLEAR_ALL_HISTORY',
   CANCEL_TASK: 'CANCEL_TASK',
-  GET_SCRAPER_CONFIGS: 'GET_SCRAPER_CONFIGS',
-  SAVE_SCRAPER_CONFIG: 'SAVE_SCRAPER_CONFIG',
-  DELETE_SCRAPER_CONFIG: 'DELETE_SCRAPER_CONFIG',
-  TEST_SELECTOR_QUERY: 'TEST_SELECTOR_QUERY',
 } as const;
 
 export const TEXT = {
@@ -201,9 +195,6 @@ export const TEXT = {
   DISMISS: 'Dismiss',
   ERROR_TITLE: 'Comments Insight Error',
   NOTIFICATION_AUTOCLEAR_MS: 10000,
-  SCRAPER_CONFIG_GENERATED: 'Scraper configuration generated successfully!',
-  SCRAPER_CONFIG_GENERATE_FAILED_WITH_MSG: 'Failed to generate configuration: ',
-  SCRAPER_CONFIG_GENERATE_FAILED: 'Failed to generate configuration',
   TASK_ALREADY_RUNNING: 'Task is already in progress. Please wait for it to complete.',
   COPY_SUCCESS: 'Copied to clipboard!',
   COPY_FAILED: 'Failed to copy to clipboard',
@@ -213,7 +204,7 @@ export const TEXT = {
   VIEW_AI_LOGS: 'View AI Logs',
   UNTITLED: 'Untitled',
   DEFAULT_MODEL_NAME: 'gpt-4',
-  API_KEY_PLACEHOLDER: 'sk-...',
+  API_KEY_PLACEHOLDER: 'sk-',
   CONTENT_SCRIPT_INJECT_FAILED:
     'Failed to inject content script. Please grant site access and refresh the page.',
   MODEL_TEST_HINT: 'Please verify API URL, API key, and network connectivity.',
@@ -256,9 +247,9 @@ export const DEFAULTS = {
 };
 
 export const DOM_ANALYSIS_DEFAULTS = {
-  initialDepth: 3,
-  expandDepth: 2,
-  maxDepth: 10,
+  initialDepth: 5,
+  expandDepth: 3,
+  maxDepth: 25,
 };
 
 export const EXTRACTION_PROGRESS = {
@@ -316,6 +307,11 @@ export const DOM = {
   CHILDREN_MAX: 50,
   MAX_EXTRACT_DEPTH: 20,
   NO_NEW_COMMENTS_THRESHOLD: 3,
+  DETECT_MAX_NODES_BASE: 2500,
+  DETECT_MAX_NODES_FACTOR: 100,
+  EXTRACT_MAX_NODES_BASE: 5000,
+  EXTRACT_MAX_NODES_FACTOR: 200,
+  DETECT_MIN_DEPTH: 10,
 };
 
 export const CLICK = {
@@ -327,6 +323,9 @@ export const TIMEOUT = {
   WAIT_ELEMENT_MS: 10000,
   COMMENTS_SECTION_MS: 5000,
   MESSAGE_RESPONSE_MS: 10000,
+  MIN_AI_SECONDS: 30,
+  MAX_AI_SECONDS: 600,
+  MS_PER_SEC: 1000,
 };
 
 export const SELECTORS = {

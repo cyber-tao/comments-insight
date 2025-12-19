@@ -1,6 +1,5 @@
 // Core type definitions for Comments Insight Extension
 
-// Platform is now determined by scraper config domain, not hardcoded
 export type Platform = string;
 
 // Progress stage for extraction task
@@ -16,6 +15,7 @@ export interface Comment {
   id: string;
   username: string;
   userId?: string;
+  platform?: string;
   timestamp: string;
   likes: number;
   content: string;
@@ -37,8 +37,6 @@ export interface SimplifiedNode {
   depth: number;
 }
 
-// AI extraction response for progressive extraction removed
-
 export interface Task {
   id: string;
   type: 'extract' | 'analyze';
@@ -59,7 +57,8 @@ export interface AIConfig {
   apiUrl: string;
   apiKey: string;
   model: string;
-  maxTokens: number;
+  contextWindowSize: number;
+  maxOutputTokens?: number;
   temperature: number;
   topP: number;
 }
@@ -68,6 +67,7 @@ export interface AIRequest {
   prompt: string;
   systemPrompt?: string;
   config: AIConfig;
+  timeout?: number;
   signal?: AbortSignal;
 }
 
@@ -106,6 +106,7 @@ export interface DOMAnalysisConfig {
 export interface Settings {
   maxComments: number;
   aiModel: AIConfig;
+  aiTimeout: number; // Timeout in milliseconds
   analyzerPromptTemplate: string;
   language: string; // Language code (e.g., 'zh-CN', 'en-US')
   selectorRetryAttempts: number;
@@ -152,7 +153,6 @@ export {
   type AnalysisMessage,
   type TaskMessage,
   type HistoryMessage,
-  type ScraperConfigMessage,
   type AIModelMessage,
   type ExportMessage,
 } from './messages';

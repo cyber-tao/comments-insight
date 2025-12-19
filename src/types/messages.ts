@@ -1,5 +1,4 @@
 import { Comment, Task, Settings, AIConfig } from './index';
-import { ScraperConfig } from './scraper';
 
 export type SystemMessage =
   | { type: 'PING'; payload?: never }
@@ -15,11 +14,21 @@ export type SettingsMessage =
   | { type: 'SAVE_SETTINGS'; payload: { settings: Partial<Settings> } };
 
 export type ExtractionMessage =
-  | { type: 'START_EXTRACTION'; payload: { url: string; maxComments?: number } }
+  | { type: 'START_EXTRACTION'; payload: { taskId?: string; url: string; maxComments?: number } }
   | { type: 'CANCEL_EXTRACTION'; payload: { taskId: string } }
   | {
       type: 'EXTRACTION_PROGRESS';
       payload: { taskId: string; progress: number; message: string; data?: unknown };
+    }
+  | {
+      type: 'EXTRACTION_COMPLETED';
+      payload: {
+        taskId: string;
+        success: boolean;
+        comments?: Comment[];
+        postInfo?: { url?: string; title?: string; videoTime?: string };
+        error?: string;
+      };
     }
   | { type: 'GET_DOM_STRUCTURE'; payload?: never };
 
@@ -40,7 +49,8 @@ export type AnalysisMessage =
         };
       };
     }
-  | { type: 'AI_ANALYZE_STRUCTURE'; payload: { prompt: string } };
+  | { type: 'AI_ANALYZE_STRUCTURE'; payload: { prompt: string } }
+  | { type: 'AI_EXTRACT_CONTENT'; payload: { chunks: string[]; systemPrompt?: string } };
 
 export type TaskMessage =
   | { type: 'TASK_UPDATE'; payload: Task }
@@ -55,31 +65,6 @@ export type HistoryMessage =
   | { type: 'GET_HISTORY_BY_URL'; payload: { url: string } }
   | { type: 'DELETE_HISTORY'; payload: { id: string } }
   | { type: 'CLEAR_ALL_HISTORY'; payload?: never };
-
-export type ScraperConfigMessage =
-  | { type: 'CHECK_SCRAPER_CONFIG'; payload: { url: string } }
-  | { type: 'GET_SCRAPER_CONFIGS'; payload?: never }
-  | { type: 'SAVE_SCRAPER_CONFIG'; payload: { config: ScraperConfig } }
-  | { type: 'DELETE_SCRAPER_CONFIG'; payload: { id: string } }
-  | {
-      type: 'GENERATE_SCRAPER_CONFIG';
-      payload: {
-        url: string;
-        domStructure?: string;
-        platform?: string;
-        title?: string;
-      };
-    }
-  | {
-      type: 'UPDATE_SELECTOR_VALIDATION';
-      payload: {
-        configId: string;
-        selectorKey: string;
-        status: 'success' | 'failed' | 'untested';
-        count?: number;
-      };
-    }
-  | { type: 'TEST_SELECTOR_QUERY'; payload: { selector: string } };
 
 export type AIModelMessage =
   | { type: 'GET_AVAILABLE_MODELS'; payload: { apiUrl: string; apiKey: string } }
@@ -101,7 +86,6 @@ export type Message =
   | AnalysisMessage
   | TaskMessage
   | HistoryMessage
-  | ScraperConfigMessage
   | AIModelMessage
   | ExportMessage;
 

@@ -1,8 +1,8 @@
 import { Task, Platform } from '../types';
 import { NotificationService } from './NotificationService';
 import { Logger } from '../utils/logger';
-import { ExtensionError, ErrorCode } from '../utils/errors';
-import { ERRORS, LIMITS, STORAGE, TIMING } from '@/config/constants';
+import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
+import { ERRORS, LIMITS, RETRY, STORAGE, TIMING } from '@/config/constants';
 
 export interface TaskResult {
   tokensUsed?: number;
@@ -456,15 +456,25 @@ export class TaskManager {
       return;
     }
     try {
-      const state: PersistedTaskState = {
-        tasks: Array.from(this.tasks.values()),
-        queue: [...this.queue],
-        currentTaskId: this.currentTaskId,
-        savedAt: Date.now(),
-      };
-      await chrome.storage.local.set({ [STORAGE.TASK_STATE_KEY]: state });
-    } catch {
-      return;
+      await ErrorHandler.withRetry(
+        async () => {
+          const state: PersistedTaskState = {
+            tasks: Array.from(this.tasks.values()),
+            queue: [...this.queue],
+            currentTaskId: this.currentTaskId,
+            savedAt: Date.now(),
+          };
+          await chrome.storage.local.set({ [STORAGE.TASK_STATE_KEY]: state });
+        },
+        'TaskManager.saveState',
+        {
+          maxAttempts: RETRY.MAX_ATTEMPTS,
+          initialDelay: RETRY.INITIAL_DELAY_MS,
+          maxDelay: RETRY.MAX_DELAY_MS,
+        },
+      );
+    } catch (error) {
+      Logger.warn('[TaskManager] Failed to persist task state', { error });
     }
   }
 

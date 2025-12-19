@@ -11,7 +11,6 @@ interface PageInfo {
   url: string;
   title: string;
   domain: string; // Domain extracted from URL
-  hasConfig: boolean;
 }
 
 interface PageStatus {
@@ -37,18 +36,13 @@ const Popup: React.FC = () => {
   const [developerMode, setDeveloperMode] = useState(false);
   const [currentTask, setCurrentTask] = useState<{
     id: string;
-    type: 'extract' | 'analyze' | 'generate-config';
+    type: 'extract' | 'analyze';
     status: 'pending' | 'running' | 'completed' | 'failed';
     progress: number;
     message?: string;
   } | null>(null);
-  const [generatingConfig, setGeneratingConfig] = useState(false);
   const [hasSiteAccess, setHasSiteAccess] = useState<boolean | null>(null);
   const [sitePattern, setSitePattern] = useState<string | null>(null);
-  const [testSelector, setTestSelector] = useState('');
-  const [testItems, setTestItems] = useState<any[]>([]);
-  const [testPage, setTestPage] = useState(1);
-  const [testPageSize, setTestPageSize] = useState(20);
   const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isUnmountedRef = useRef(false);
 
@@ -132,39 +126,6 @@ const Popup: React.FC = () => {
     toast.success(t('popup.accessGranted'));
     await refreshSiteAccess(url);
     return true;
-  };
-
-  const handleTestSelectorQuery = async () => {
-    try {
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab?.id || !tab.url) return;
-
-      const ok = await ensureSiteAccess(tab.url);
-      if (!ok) {
-        return;
-      }
-
-      try {
-        await ensureContentScript();
-      } catch (error) {
-        toast.error(TEXT.CONTENT_SCRIPT_INJECT_FAILED);
-        return;
-      }
-      const tabId = tab.id;
-      const resp = await chrome.tabs.sendMessage(tabId, {
-        type: MESSAGES.TEST_SELECTOR_QUERY,
-        payload: { selector: testSelector },
-      });
-      if (resp?.success) {
-        setTestItems(resp.items || []);
-        setTestPage(1);
-        toast.success(t('popup.selectorTestSuccess', { count: resp.total }));
-      } else {
-        toast.error(resp?.error || t('popup.selectorTestFailed'));
-      }
-    } catch (_e) {
-      toast.error(t('popup.selectorTestFailed'));
-    }
   };
 
   useEffect(() => {
@@ -271,22 +232,10 @@ const Popup: React.FC = () => {
         return;
       }
 
-      // Check if there's a matching scraper config
-      Logger.debug('[Popup] Checking scraper config', { url: tab.url });
-      const configResponse = await chrome.runtime.sendMessage({
-        type: MESSAGES.CHECK_SCRAPER_CONFIG,
-        payload: { url: tab.url },
-      });
-
-      Logger.debug('[Popup] Config check response', { response: configResponse });
-      const hasConfig = configResponse?.hasConfig || false;
-      Logger.debug('[Popup] Has config', { hasConfig });
-
       setPageInfo({
         url: tab.url,
         title: tab.title || '',
         domain: getDomain(tab.url) || 'unknown',
-        hasConfig,
       });
 
       await refreshSiteAccess(tab.url);
@@ -323,51 +272,8 @@ const Popup: React.FC = () => {
     }
   };
 
-  const handleGenerateConfig = async () => {
-    if (!pageInfo) return;
-
-    setGeneratingConfig(true);
-    toast.info(t('popup.analysisConfigStarted'));
-
-    try {
-      const ok = await ensureSiteAccess(pageInfo.url);
-      if (!ok) {
-        return;
-      }
-
-      try {
-        await ensureContentScript();
-      } catch (error) {
-        toast.error(TEXT.CONTENT_SCRIPT_INJECT_FAILED);
-        return;
-      }
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.GENERATE_SCRAPER_CONFIG,
-        payload: {
-          url: pageInfo.url,
-          title: pageInfo.title,
-        },
-      });
-
-      if (response?.success) {
-        toast.success(t('popup.generateConfigSuccess'));
-        // Reload page info to update hasConfig status
-        await loadPageInfo();
-      } else {
-        toast.error(
-          t('popup.generateConfigFailedWithMsg', { msg: response?.error || 'Unknown error' }),
-        );
-      }
-    } catch (error) {
-      Logger.error('[Popup] Failed to generate config', { error });
-      toast.error(t('popup.generateConfigFailed'));
-    } finally {
-      setGeneratingConfig(false);
-    }
-  };
-
   const handleExtractComments = async () => {
-    if (!pageInfo?.hasConfig) return;
+    if (!pageInfo) return;
 
     // Check if task is already running
     if (currentTask && currentTask.status === 'running') {
@@ -383,7 +289,7 @@ const Popup: React.FC = () => {
 
       try {
         await ensureContentScript();
-      } catch (error) {
+      } catch (_error) {
         toast.error(TEXT.CONTENT_SCRIPT_INJECT_FAILED);
         return;
       }
@@ -471,6 +377,18 @@ const Popup: React.FC = () => {
     }
   };
 
+  const handleCancelTask = async (taskId: string) => {
+    try {
+      await chrome.runtime.sendMessage({
+        type: MESSAGES.CANCEL_TASK,
+        payload: { taskId },
+      });
+      // Task monitor will pick up the 'failed'/'cancelled' status update
+    } catch (error) {
+      Logger.error('[Popup] Failed to cancel task', { error });
+    }
+  };
+
   const monitorTask = useCallback(
     async (taskId: string) => {
       const checkStatus = async () => {
@@ -518,9 +436,14 @@ const Popup: React.FC = () => {
                 }
               }, TIMING.CLEAR_TASK_DELAY_MS);
             } else if (task.status === 'failed') {
-              toast.error(
-                task.error ? `${t('popup.taskFailed')}: ${task.error}` : t('popup.taskFailed'),
-              );
+              const isCancelled = task.error === 'Task cancelled by user';
+              if (isCancelled) {
+                toast.info(t('task.cancel'));
+              } else {
+                toast.error(
+                  task.error ? `${t('popup.taskFailed')}: ${task.error}` : t('popup.taskFailed'),
+                );
+              }
               monitorTimeoutRef.current = setTimeout(() => {
                 if (!isUnmountedRef.current) {
                   setCurrentTask(null);
@@ -711,46 +634,11 @@ const Popup: React.FC = () => {
         )}
       </div>
 
-      {/* Task Status removed to prevent layout shift; use button states and toasts instead */}
-
-      {/* View Data Buttons removed to keep header compact; access via dynamic action buttons below */}
-
       {/* Action Buttons */}
       <div className="p-4 space-y-3">
-        {/* Show AI Generate Config button if no config exists */}
-        {pageInfo && !pageInfo?.hasConfig && (
-          <div>
-            <button
-              onClick={handleGenerateConfig}
-              disabled={generatingConfig || currentTask?.status === 'running'}
-              className="w-full py-3 px-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg font-medium hover:from-purple-600 hover:to-purple-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
-            >
-              {generatingConfig ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                  {t('popup.analyzingConfig')}
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                    />
-                  </svg>
-                  {t('popup.generateConfig')}
-                </>
-              )}
-            </button>
-            <p className="text-xs text-gray-500 mt-2 text-center">{t('popup.noConfigHint')}</p>
-          </div>
-        )}
-
-        {/* Extract Comments button - only enabled if config exists */}
-        {pageInfo?.hasConfig && (
-          <div>
+        {/* Extract Comments button - always visible if valid page */}
+        {pageInfo && (
+          <div className="flex gap-2">
             <button
               onClick={() => {
                 if (pageStatus.extracted) {
@@ -764,16 +652,13 @@ const Popup: React.FC = () => {
                   handleExtractComments();
                 }
               }}
-              disabled={
-                !pageInfo?.hasConfig ||
-                (currentTask?.status === 'running' && currentTask?.type === 'extract')
-              }
-              className={`w-full py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${currentTask?.status === 'running' && currentTask?.type === 'extract' ? 'bg-gray-300 text-gray-700 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700'}`}
+              disabled={currentTask?.status === 'running' && currentTask?.type === 'extract'}
+              className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${currentTask?.status === 'running' && currentTask?.type === 'extract' ? 'bg-gray-300 text-gray-700 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700'}`}
             >
               {currentTask?.status === 'running' && currentTask?.type === 'extract' ? (
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                  <span className="truncate max-w-[220px]">
+                  <span className="truncate max-w-[180px]">
                     {(() => {
                       const msg = currentTask.message || '';
                       const parts = msg.split(':');
@@ -814,10 +699,26 @@ const Popup: React.FC = () => {
                 </>
               )}
             </button>
+            {currentTask?.status === 'running' && currentTask?.type === 'extract' && (
+              <button
+                onClick={() => handleCancelTask(currentTask.id)}
+                className="px-3 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-md flex items-center justify-center"
+                title={t('task.cancel')}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            )}
           </div>
         )}
 
-        <div>
+        <div className="flex gap-2">
           <button
             onClick={() => {
               if (pageStatus.analyzed && pageStatus.historyId) {
@@ -835,7 +736,7 @@ const Popup: React.FC = () => {
               !pageStatus.extracted ||
               (currentTask?.status === 'running' && currentTask?.type === 'analyze')
             }
-            className={`w-full py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${!pageStatus.extracted || (currentTask?.status === 'running' && currentTask?.type === 'analyze') ? 'bg-gray-300 text-gray-700 cursor-not-allowed' : 'bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700'}`}
+            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${!pageStatus.extracted || (currentTask?.status === 'running' && currentTask?.type === 'analyze') ? 'bg-gray-300 text-gray-700 cursor-not-allowed' : 'bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700'}`}
           >
             {currentTask?.status === 'running' && currentTask?.type === 'analyze' ? (
               <>
@@ -868,6 +769,22 @@ const Popup: React.FC = () => {
               </>
             )}
           </button>
+          {currentTask?.status === 'running' && currentTask?.type === 'analyze' && (
+            <button
+              onClick={() => handleCancelTask(currentTask.id)}
+              className="px-3 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-md flex items-center justify-center"
+              title={t('task.cancel')}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          )}
         </div>
 
         <button
@@ -884,100 +801,6 @@ const Popup: React.FC = () => {
           </svg>
           {t('popup.viewHistory')}
         </button>
-
-        {developerMode && (
-          <div className="px-4 py-3">
-            <div className="flex gap-2 items-center">
-              <input
-                value={testSelector}
-                onChange={(e) => setTestSelector(e.target.value)}
-                placeholder={t('popup.enterSelector')}
-                className="flex-1 px-3 py-2 border rounded"
-              />
-              <select
-                value={testPageSize}
-                onChange={(e) => setTestPageSize(Number(e.target.value))}
-                className="px-2 py-2 border rounded"
-              >
-                {[10, 20, 50, 100].map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={handleTestSelectorQuery}
-                className="px-4 py-2 bg-blue-600 text-white rounded"
-              >
-                {t('popup.search')}
-              </button>
-            </div>
-            <div className="mt-2">
-              {testItems.length === 0 ? (
-                <div className="text-sm text-gray-500">{t('popup.noResults')}</div>
-              ) : (
-                <div className="border rounded">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="p-2 text-left">#</th>
-                        <th className="p-2 text-left">{t('popup.tag')}</th>
-                        <th className="p-2 text-left">{t('popup.id')}</th>
-                        <th className="p-2 text-left">{t('popup.class')}</th>
-                        <th className="p-2 text-left">{t('popup.text')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {testItems
-                        .slice(
-                          (testPage - 1) * testPageSize,
-                          (testPage - 1) * testPageSize + testPageSize,
-                        )
-                        .map((it) => (
-                          <tr key={`${it.tag}-${it.index}`} className="border-t">
-                            <td className="p-2">{it.index + 1}</td>
-                            <td className="p-2">{it.tag}</td>
-                            <td className="p-2">{it.id}</td>
-                            <td className="p-2">{it.className}</td>
-                            <td className="p-2">{it.text}</td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
-                  <div className="flex items-center justify-between p-2">
-                    <div className="text-xs text-gray-600">
-                      {t('popup.total')}: {testItems.length}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="px-2 py-1 border rounded"
-                        onClick={() => setTestPage(Math.max(1, testPage - 1))}
-                        disabled={testPage === 1}
-                      >
-                        {t('popup.prev')}
-                      </button>
-                      <span className="text-xs">
-                        {t('popup.page')}: {testPage} /{' '}
-                        {Math.max(1, Math.ceil(testItems.length / testPageSize))}
-                      </span>
-                      <button
-                        className="px-2 py-1 border rounded"
-                        onClick={() =>
-                          setTestPage(
-                            Math.min(Math.ceil(testItems.length / testPageSize), testPage + 1),
-                          )
-                        }
-                        disabled={testPage >= Math.ceil(testItems.length / testPageSize)}
-                      >
-                        {t('popup.next')}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

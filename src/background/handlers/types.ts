@@ -2,7 +2,6 @@ import { TaskManager } from '../TaskManager';
 import { AIService } from '../AIService';
 import { StorageManager } from '../StorageManager';
 import { Task, Comment, SelectorMap } from '../../types';
-import { ScraperConfig } from '../../types/scraper';
 
 export interface HandlerContext {
   taskManager: TaskManager;
@@ -39,11 +38,6 @@ export interface AIAnalysisResponse {
     needsExpand: boolean;
   };
   confidence: number;
-}
-
-export interface ScraperConfigResponse {
-  hasConfig: boolean;
-  config?: ScraperConfig;
 }
 
 export interface HistoryResponse {

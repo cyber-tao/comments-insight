@@ -464,9 +464,13 @@ export function createAIError(
   code: ErrorCode,
   message: string,
   details?: Record<string, unknown>,
+  retryable?: boolean,
 ): ExtensionError {
-  const retryable = [ErrorCode.AI_TIMEOUT, ErrorCode.AI_RATE_LIMIT].includes(code);
-  return new ExtensionError(code, message, details, retryable);
+  const isRetryable =
+    retryable !== undefined
+      ? retryable
+      : [ErrorCode.AI_TIMEOUT, ErrorCode.AI_RATE_LIMIT].includes(code);
+  return new ExtensionError(code, message, details, isRetryable);
 }
 
 /**
