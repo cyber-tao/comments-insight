@@ -4,12 +4,30 @@ export type Platform = string;
 
 // Progress stage for extraction task
 export type ProgressStage =
+  | 'initializing'
   | 'analyzing'
+  | 'detecting'
   | 'extracting'
   | 'expanding'
   | 'scrolling'
   | 'validating'
   | 'complete';
+
+/**
+ * Detailed task progress information for enhanced UI feedback
+ */
+export interface TaskProgress {
+  /** Current stage of the task */
+  stage: ProgressStage;
+  /** Current item being processed (e.g., comment count) */
+  current: number;
+  /** Total items to process (e.g., max comments) */
+  total: number;
+  /** Estimated time remaining in seconds, -1 if unknown */
+  estimatedTimeRemaining: number;
+  /** Stage-specific message */
+  stageMessage?: string;
+}
 
 export interface Comment {
   id: string;
@@ -51,6 +69,8 @@ export interface Task {
   maxComments?: number;
   error?: string;
   message?: string;
+  /** Detailed progress information for enhanced UI feedback */
+  detailedProgress?: TaskProgress;
 }
 
 export interface AIConfig {
@@ -156,3 +176,13 @@ export {
   type AIModelMessage,
   type ExportMessage,
 } from './messages';
+
+export {
+  type PortMessage,
+  type PortMessageResponse,
+  type PortMessageErrorResponse,
+  type MessageHandler,
+  type PortMessageHandler,
+  type ExtractionResult,
+  type TaskResolver,
+} from './handlers';

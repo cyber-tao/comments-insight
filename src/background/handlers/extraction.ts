@@ -1,7 +1,8 @@
-import { Message, Comment, Task } from '../../types';
+import { Message, Comment, Task, TaskResolver } from '../../types';
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
-import { REGEX, ERRORS, MESSAGES, DEFAULTS } from '@/config/constants';
+import { ExtensionError, ErrorCode } from '../../utils/errors';
+import { REGEX, MESSAGES, DEFAULTS } from '@/config/constants';
 import { getDomain } from '../../utils/url';
 import { Tokenizer } from '../../utils/tokenizer';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
@@ -63,22 +64,16 @@ export function chunkDomText(
 }
 
 // Map to hold pending task resolvers
-const pendingExtractionTasks = new Map<
-  string,
-  {
-    resolve: (value: any) => void;
-    reject: (reason?: any) => void;
-  }
->();
+const pendingExtractionTasks = new Map<string, TaskResolver>();
 
 export async function handleStartExtraction(
   message: Extract<Message, { type: 'START_EXTRACTION' }>,
   context: HandlerContext,
 ): Promise<StartExtractionResponse> {
-  const { url, maxComments } = message.payload || {};
+  const { url, maxComments, tabId: payloadTabId } = message.payload || {};
 
   if (!url) {
-    throw new Error(ERRORS.URL_REQUIRED);
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'URL is required');
   }
 
   const domain = getDomain(url) || 'unknown';
@@ -90,8 +85,8 @@ export async function handleStartExtraction(
     finalMaxComments = settings.maxComments || DEFAULTS.MAX_COMMENTS;
   }
 
-  // Get tab ID - either from sender or current active tab
-  let tabId = context.sender?.tab?.id;
+  // Get tab ID - prefer payload tabId, then sender tab, then active tab
+  let tabId = payloadTabId || context.sender?.tab?.id;
 
   // If no tab ID (e.g., message from popup), get the active tab
   if (!tabId) {
@@ -100,12 +95,12 @@ export async function handleStartExtraction(
       tabId = activeTab?.id;
     } catch (error) {
       Logger.error('[ExtractionHandler] Failed to get active tab', { error });
-      throw new Error(ERRORS.NO_TAB_ID_AVAILABLE);
+      throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
     }
   }
 
   if (!tabId) {
-    throw new Error(ERRORS.NO_TAB_ID_AVAILABLE);
+    throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
   }
 
   Logger.info('[ExtractionHandler] Starting extraction with maxComments', {
@@ -116,7 +111,7 @@ export async function handleStartExtraction(
 
   context.taskManager.setExecutor(taskId, async (task: Task, signal: AbortSignal) => {
     if (!task.tabId) {
-      throw new Error(ERRORS.NO_TAB_ID_AVAILABLE);
+      throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
     }
 
     await ensureContentScriptInjected(task.tabId);
@@ -155,7 +150,7 @@ export async function handleStartExtraction(
           })
           .catch(() => {});
 
-        reject(new Error(ERRORS.TASK_CANCELLED_BY_USER));
+        reject(new ExtensionError(ErrorCode.TASK_CANCELLED, 'Task cancelled by user'));
       });
     });
   });
@@ -214,7 +209,7 @@ export async function handleAIAnalyzeStructure(
   const { prompt } = message.payload || {};
 
   if (!prompt) {
-    throw new Error(ERRORS.PROMPT_REQUIRED);
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Prompt is required');
   }
 
   try {
@@ -292,7 +287,7 @@ export async function handleStartAnalysis(
   const { comments, metadata, historyId } = message.payload || {};
 
   if (!comments || !Array.isArray(comments)) {
-    throw new Error(ERRORS.COMMENTS_ARRAY_REQUIRED);
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Comments array is required');
   }
 
   const finalUrl = metadata?.url;
@@ -415,7 +410,7 @@ export async function handleAIExtractContent(
           const chunkComments = JSON.parse(jsonText);
           if (Array.isArray(chunkComments)) {
             // Assign a temp ID if missing
-            chunkComments.forEach((c: any, idx) => {
+            chunkComments.forEach((c: Partial<Comment>, idx: number) => {
               if (!c.id) c.id = `ai_${Date.now()}_${i}_${idx}`;
               // Basic normalization
               if (!c.likes) c.likes = 0;

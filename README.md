@@ -15,6 +15,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 > Extract comments from the web, analyze them with AI, and generate actionable, structured insights.
 
 ## 📚 Table of Contents
+
 - [Overview](#-overview)
 - [Screenshots](#-screenshots)
 - [Features](#-features)
@@ -31,6 +32,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 - [License](#-license)
 
 ## 🔎 Overview
+
 - Manifest V3 Chrome extension with multi-page UI: Popup, Options, History, Logs.
 - Built with Vite, React, TypeScript, and `@crxjs/vite-plugin`.
 - Combines selectors and AI to robustly extract comments (including nested replies) and produce comprehensive Markdown reports with tables and structured data.
@@ -48,6 +50,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 </div>
 
 ## ✨ Features
+
 - 🧲 **Smart Extraction**:
   - Hybrid approach using Config + AI Discovery for robust selector detection.
   - Auto-scroll handling and recursive reply expansion (with visibility checks and interaction simulation).
@@ -70,6 +73,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 - 🛠️ **Developer Mode**: Toggle advanced features like AI Logs and Selector Testing tools.
 
 ## 🔐 Permissions
+
 - `storage`: Saving history, settings, and configs.
 - `activeTab`, `scripting`: Injecting content scripts only when you run the extension.
 - Per-site access: requested at runtime via `optional_host_permissions`.
@@ -77,9 +81,11 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 - Site access: requested per-site at runtime (no `<all_urls>` host permission at install).
 
 ## 🔑 API Key Security Note
+
 API keys are stored locally (reversible encryption/obfuscation) to avoid accidental exposure, but this is **not** a strong security boundary against malware or other extensions.
 
 ## 🧱 Architecture
+
 - **Background**: Service Worker orchestrates the Task Queue, AI Service (API calls), and Storage management.
 - **Content Scripts**: Handles DOM traversal, interaction simulation (clicking "View Replies"), and data extraction.
 - **Popup**: Main control center for triggering tasks, viewing page status, and monitoring progress.
@@ -87,6 +93,7 @@ API keys are stored locally (reversible encryption/obfuscation) to avoid acciden
 - **History**: Rich interface for browsing extracted data and analysis reports.
 
 ## 📦 Project Structure
+
 ```
 src/
   background/            # Service Worker: TaskManager, AIService, etc.
@@ -103,6 +110,7 @@ vite.config.ts          # Build config
 ```
 
 ## 🚀 Quick Start
+
 1. **Prerequisites**: Node.js 18+, Chrome.
 2. **Install dependencies**:
    ```bash
@@ -122,6 +130,7 @@ vite.config.ts          # Build config
    ```
 
 ## 🧭 Usage
+
 1. **Configure AI**: Open Extension Options, enter your API Key/URL (supports standard OpenAI-compatible endpoints).
 2. **Navigate**: Go to a post or video page with comments (e.g., YouTube, Reddit, Bilibili).
 3. **Extract**: Click the extension icon. If a config exists, click "Extract Comments". If not, click "Generate Config" to let AI find selectors.
@@ -130,26 +139,34 @@ vite.config.ts          # Build config
 6. **View**: Click "View History" to see detailed comments (sort by Likes to see top content) and the analysis report.
 
 ## ⚙️ Configuration
+
 - **AI Model**: Supports custom models. Ensure your model handles long context if analyzing many comments.
 - **Prompts**: Customize the extraction or analysis prompts in Settings. Use placeholders like `{comments_data}`.
 - **Developer Mode**: Enable in Settings to see "View AI Logs" and selector testing tools in the Popup.
 
 ## 🧰 Tech Stack
+
 - **Framework**: React 19, Vite 6
 - **Language**: TypeScript 5.9
 - **Styling**: TailwindCSS
 - **Extension**: Manifest V3, CRXJS
 - **Utils**: `i18next`, `react-markdown`, `lz-string`
+- **Testing**: Vitest with coverage reporting
 
 ## 🛠️ Commands
+
 - `npm run dev`: Start dev server
 - `npm run build`: Production build
 - `npm run typecheck`: Run TypeScript checks
 - `npm run lint`: Run ESLint
 - `npm run format`: Format code with Prettier
+- `npm run test`: Run unit tests
+- `npm run test:coverage`: Run tests with coverage report
 
 ## 🤝 Contributing
+
 Issues and PRs are welcome! Please ensure you run `npm run typecheck` and `npm run lint` before submitting.
 
 ## 📝 License
+
 MIT License

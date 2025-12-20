@@ -47,12 +47,18 @@
     "viewAILogs": "AIログを見る",
     "extracting": "コメント抽出中...",
     "analyzing": "コメント分析中...",
+    "progressInitializing": "初期化中",
+    "progressDetecting": "コメント領域を検出中",
     "progressAnalyzing": "構造分析中",
     "progressExtracting": "抽出中",
     "progressExpanding": "返信を展開中",
     "progressScrolling": "さらに読み込み中",
     "progressValidating": "検証中",
     "progressComplete": "完了",
+    "estimatedTime": "残り時間",
+    "timeRemainingSeconds": "{{seconds}} 秒",
+    "timeRemainingMinutes": "{{minutes}} 分",
+    "timeRemainingMinutesSeconds": "{{minutes}} 分 {{seconds}} 秒",
     "extractionCompleted": "コメント抽出が完了しました",
     "analysisCompleted": "コメント分析が完了しました",
     "taskFailed": "タスクが失敗しました",
@@ -252,6 +258,7 @@
     "failedToDeleteHistory": "履歴項目の削除に失敗しました。",
     "failedToImportSettings": "設定のインポートに失敗しました。",
     "taskCancelledByUser": "ユーザーによってタスクがキャンセルされました。",
+    "taskInterruptedByRestart": "拡張機能の再起動によりタスクが中断されました。",
     "lowConfidenceInAnalysis": "構造分析の信頼度が低いです。",
     "configMissingSelectors": "設定にセレクターがありません。",
     "urlRequired": "URLが必要です。",
@@ -300,4 +307,3 @@
     "replies": "件の返信"
   }
 }
-

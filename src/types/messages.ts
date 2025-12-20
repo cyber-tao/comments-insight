@@ -14,7 +14,7 @@ export type SettingsMessage =
   | { type: 'SAVE_SETTINGS'; payload: { settings: Partial<Settings> } };
 
 export type ExtractionMessage =
-  | { type: 'START_EXTRACTION'; payload: { taskId?: string; url: string; maxComments?: number } }
+  | { type: 'START_EXTRACTION'; payload: { taskId?: string; url: string; maxComments?: number; tabId?: number } }
   | { type: 'CANCEL_EXTRACTION'; payload: { taskId: string } }
   | {
       type: 'EXTRACTION_PROGRESS';

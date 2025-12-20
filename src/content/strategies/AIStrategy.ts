@@ -1,10 +1,11 @@
-import { ExtractionStrategy } from './ExtractionStrategy';
+import { ExtractionStrategy, ProgressCallback } from './ExtractionStrategy';
 import { Comment, Platform, Settings } from '../../types';
 import { PageController } from '../PageController';
 import { DOMSimplifier } from '../DOMSimplifier';
 import { Chunker } from '../utils/Chunker';
 import { Tokenizer } from '@/utils/tokenizer';
 import { Logger } from '../../utils/logger';
+import { ExtensionError, ErrorCode } from '@/utils/errors';
 import {
   EXTRACTION_PROGRESS,
   MESSAGES,
@@ -15,19 +16,48 @@ import {
 } from '@/config/constants';
 import { PROMPT_DETECT_COMMENTS_SECTION, PROMPT_EXTRACT_COMMENTS_FROM_HTML } from '@/utils/prompts';
 import { sendMessage } from '@/utils/chrome-message';
+import { isExtractionActive } from '../extractionState';
 
 export class AIStrategy implements ExtractionStrategy {
   private aiPort: chrome.runtime.Port | null = null;
 
   constructor(private pageController: PageController) {}
 
+  /**
+   * 清理资源，断开端口连接
+   * 应在策略不再需要时调用
+   */
+  cleanup(): void {
+    if (this.aiPort) {
+      try {
+        this.aiPort.disconnect();
+      } catch (e) {
+        Logger.debug('[AIStrategy] Error disconnecting port', { error: e });
+      }
+      this.aiPort = null;
+    }
+  }
+
+  /**
+   * Check if extraction should be aborted
+   * @throws ExtensionError if extraction is cancelled
+   */
+  private checkAborted(): void {
+    if (!isExtractionActive()) {
+      throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Extraction cancelled by user', {}, false);
+    }
+  }
+
   async execute(
     maxComments: number,
     platform: Platform,
-    onProgress?: (progress: number, message: string) => void,
+    onProgress?: ProgressCallback,
   ): Promise<Comment[]> {
     Logger.info('[AIStrategy] Starting Pure AI Extraction');
-    onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'loading settings');
+    onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'loading settings', 'initializing', 0, 1);
+
+    // Check if extraction is still active
+    this.checkAborted();
 
     // 0. Load Settings
     let domConfig = DOM_ANALYSIS_DEFAULTS;
@@ -53,6 +83,10 @@ export class AIStrategy implements ExtractionStrategy {
       Logger.warn('[AIStrategy] Failed to load settings, using defaults', { error: e });
     }
 
+    // Check abort status after settings load
+    this.checkAborted();
+    onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'settings loaded', 'initializing', 1, 1);
+
     // Calculate safe max input tokens for chunking
     // Context - Output - Safety Buffer, then multiply by safety factor to handle estimation variance
     const maxChunkTokens = Math.floor(
@@ -72,7 +106,7 @@ export class AIStrategy implements ExtractionStrategy {
       domConfig.maxDepth * DOM.EXTRACT_MAX_NODES_FACTOR,
     );
 
-    onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'detecting comment section');
+    onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'detecting comment section', 'detecting', 0, 1);
 
     // Step 1: Detect Comment Section (Macro)
     const sectionSelector = await this.detectCommentSection(
@@ -80,11 +114,19 @@ export class AIStrategy implements ExtractionStrategy {
       detectMaxNodes,
       maxChunkTokens,
     );
+
+    // Check abort status after detection
+    this.checkAborted();
+
     if (!sectionSelector) {
-      throw new Error('Failed to detect comment section via AI');
+      throw new ExtensionError(
+        ErrorCode.DOM_ANALYSIS_FAILED,
+        'Failed to detect comment section via AI',
+      );
     }
 
     Logger.info('[AIStrategy] Detected comment section', { sectionSelector });
+    onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING + 5, 'comment section found', 'detecting', 1, 1);
 
     // Locate the element
     let sectionElement = document.querySelector(sectionSelector);
@@ -93,24 +135,39 @@ export class AIStrategy implements ExtractionStrategy {
       await this.delay(TIMING.SHORT_WAIT_MS);
       sectionElement = document.querySelector(sectionSelector);
       if (!sectionElement) {
-        throw new Error(`Comment section element not found: ${sectionSelector}`);
+        throw new ExtensionError(
+          ErrorCode.DOM_ANALYSIS_FAILED,
+          `Comment section element not found: ${sectionSelector}`,
+          { selector: sectionSelector },
+        );
       }
     }
 
     const allComments: Comment[] = [];
     const seenHashes = new Set<string>();
     let noNewCommentsCount = 0;
+    let scrollCount = 0;
 
     // Step 2: Loop - Scroll & Extract
     while (allComments.length < maxComments) {
+      // Check abort status at the start of each iteration
+      this.checkAborted();
+
       if (noNewCommentsCount >= DOM.NO_NEW_COMMENTS_THRESHOLD) {
         Logger.info('[AIStrategy] No new comments found after multiple attempts. Stopping.');
         break;
       }
 
+      const currentProgress = Math.min(
+        90,
+        EXTRACTION_PROGRESS.MIN + (allComments.length / maxComments) * 70,
+      );
       onProgress?.(
-        Math.min(90, EXTRACTION_PROGRESS.MIN + (allComments.length / maxComments) * 70),
+        currentProgress,
         `extracting (${allComments.length}/${maxComments})`,
+        'extracting',
+        allComments.length,
+        maxComments,
       );
 
       // 2.1 Get current content of the section
@@ -127,8 +184,18 @@ export class AIStrategy implements ExtractionStrategy {
       Logger.debug('[AIStrategy] Chunked section', { chunks: chunks.length });
 
       // 2.3 AI Extraction (Sequential or batch)
+      onProgress?.(
+        currentProgress,
+        `analyzing chunks (${chunks.length})`,
+        'analyzing',
+        allComments.length,
+        maxComments,
+      );
 
       const newComments = await this.extractFromChunks(chunks);
+
+      // Check abort status after AI extraction
+      this.checkAborted();
 
       // 2.4 Merge & Dedup
       let added = 0;
@@ -158,15 +225,21 @@ export class AIStrategy implements ExtractionStrategy {
       if (allComments.length >= maxComments) break;
 
       // 2.5 Scroll to load more
+      scrollCount++;
       onProgress?.(
         Math.min(90, EXTRACTION_PROGRESS.MIN + (allComments.length / maxComments) * 70),
+        `scrolling (${scrollCount})`,
         'scrolling',
+        allComments.length,
+        maxComments,
       );
 
       await this.pageController.scrollToBottom();
 
       await this.delay(TIMING.SCROLL_DELAY_MS);
     }
+
+    onProgress?.(95, 'validating results', 'validating', allComments.length, maxComments);
 
     return allComments.slice(0, maxComments);
   }

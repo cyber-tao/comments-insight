@@ -1,4 +1,5 @@
 import { INJECTION, MESSAGES, SCRIPTS } from '@/config/constants';
+import { ExtensionError, ErrorCode } from '@/utils/errors';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -25,7 +26,10 @@ export async function ensureContentScriptInjected(tabId: number): Promise<void> 
     files[0];
 
   if (!contentScript) {
-    throw new Error('Content script entry not found in manifest');
+    throw new ExtensionError(
+      ErrorCode.EXTRACTION_FAILED,
+      'Content script entry not found in manifest',
+    );
   }
 
   await chrome.scripting.executeScript({
@@ -43,5 +47,5 @@ export async function ensureContentScriptInjected(tabId: number): Promise<void> 
     }
   }
 
-  throw new Error('Failed to inject content script');
+  throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'Failed to inject content script');
 }

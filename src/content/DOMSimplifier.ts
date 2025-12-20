@@ -3,17 +3,69 @@ import { getShadowRoot, querySelectorDeep } from '@/utils/dom-query';
 import { Logger } from '@/utils/logger';
 import { DOM } from '@/config/constants';
 
+/**
+ * Options for DOM simplification.
+ */
 interface SimplificationOptions {
+  /** Maximum depth to traverse (default: 2) */
   maxDepth?: number;
+  /** Current depth in recursion (internal use) */
   currentDepth?: number;
+  /** Force expansion of parent elements */
   forceExpandParent?: boolean;
+  /** Include text content in output */
   includeText?: boolean;
+  /** Maximum number of nodes to process */
   maxNodes?: number;
+  /** Internal node counter for limiting */
   _nodeCounter?: { count: number };
 }
 
+/**
+ * DOMSimplifier converts complex DOM structures into lightweight
+ * simplified representations suitable for AI analysis.
+ *
+ * This class uses a singleton pattern to avoid repeated instantiation
+ * and maintains a selector cache for performance.
+ *
+ * Features:
+ * - Converts DOM elements to SimplifiedNode structures
+ * - Handles Shadow DOM traversal
+ * - Generates unique CSS selectors for elements
+ * - Limits output size with maxDepth and maxNodes
+ * - Caches selectors for performance
+ *
+ * @example
+ * ```typescript
+ * const simplified = DOMSimplifier.simplifyForAI(document.body, {
+ *   maxDepth: 10,
+ *   includeText: true,
+ *   maxNodes: 1000,
+ * });
+ * const htmlString = DOMSimplifier.toStringFormat(simplified);
+ * ```
+ */
 export class DOMSimplifier {
+  private static instance: DOMSimplifier | null = null;
   private selectorCache = new WeakMap<Element, string>();
+
+  /**
+   * Get the singleton instance of DOMSimplifier
+   * @returns The singleton DOMSimplifier instance
+   */
+  static getInstance(): DOMSimplifier {
+    if (!DOMSimplifier.instance) {
+      DOMSimplifier.instance = new DOMSimplifier();
+    }
+    return DOMSimplifier.instance;
+  }
+
+  /**
+   * Reset the singleton instance (useful for testing)
+   */
+  static resetInstance(): void {
+    DOMSimplifier.instance = null;
+  }
 
   /**
    * Simplify a DOM element to a lightweight structure
@@ -401,7 +453,7 @@ export class DOMSimplifier {
   }
 
   /**
-   * Simplify DOM for AI analysis (static method)
+   * Simplify DOM for AI analysis (static method using singleton)
    * @param element - Root element to simplify
    * @param options - Simplification options
    * @returns Simplified node structure
@@ -414,17 +466,15 @@ export class DOMSimplifier {
       includeText?: boolean;
     } = {},
   ): SimplifiedNode {
-    const simplifier = new DOMSimplifier();
-    return simplifier.simplifyElement(element, options);
+    return DOMSimplifier.getInstance().simplifyElement(element, options);
   }
 
   /**
-   * Convert simplified node to string format for AI
+   * Convert simplified node to string format for AI (static method using singleton)
    * @param node - Simplified node
    * @returns String representation
    */
   static toStringFormat(node: SimplifiedNode): string {
-    const simplifier = new DOMSimplifier();
-    return simplifier.nodeToString(node);
+    return DOMSimplifier.getInstance().nodeToString(node);
   }
 }

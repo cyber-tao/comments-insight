@@ -1,6 +1,17 @@
 /**
- * Structured logging system for Comments Insight Extension
- * Provides different log levels and environment-aware logging
+ * Structured logging system for Comments Insight Extension.
+ *
+ * Provides:
+ * - Multiple log levels (DEBUG, INFO, WARN, ERROR)
+ * - Environment-aware logging (development vs production)
+ * - Optional storage persistence for debugging
+ * - Log filtering and export capabilities
+ *
+ * @example
+ * ```typescript
+ * Logger.info('[MyModule] Operation completed', { count: 10 });
+ * Logger.error('[MyModule] Operation failed', { error });
+ * ```
  */
 
 import { LOG_PREFIX, STORAGE, DEFAULTS, LOG_LEVELS } from '@/config/constants';
@@ -9,41 +20,97 @@ interface StoredSettings {
   developerMode?: boolean;
 }
 
+/**
+ * Log level enumeration for filtering and categorization.
+ */
 export enum LogLevel {
+  /** Detailed debugging information */
   DEBUG = 'DEBUG',
+  /** General informational messages */
   INFO = 'INFO',
+  /** Warning messages for potential issues */
   WARN = 'WARN',
+  /** Error messages for failures */
   ERROR = 'ERROR',
 }
 
+/**
+ * Structure of a stored log entry.
+ */
 export interface LogEntry {
+  /** Log level */
   level: LogLevel;
+  /** Unix timestamp when log was created */
   timestamp: number;
+  /** Log message */
   message: string;
+  /** Optional context identifier (e.g., module name) */
   context?: string;
+  /** Optional structured data */
   data?: Record<string, unknown>;
+  /** Optional stack trace for errors */
   stack?: string;
 }
 
+/**
+ * Logger configuration options.
+ */
 export interface LoggerConfig {
+  /** Minimum level to log (logs below this are ignored) */
   minLevel: LogLevel;
+  /** Whether to output to console */
   enableConsole: boolean;
+  /** Whether to persist logs to storage */
   enableStorage: boolean;
+  /** Maximum number of logs to store */
   maxStoredLogs: number;
 }
 
+/**
+ * Filter options for querying stored logs.
+ */
 export interface LogFilter {
+  /** Filter by single level */
   level?: LogLevel;
+  /** Filter by multiple levels */
   levels?: LogLevel[];
+  /** Filter logs after this timestamp */
   startTime?: number;
+  /** Filter logs before this timestamp */
   endTime?: number;
+  /** Filter by context string */
   context?: string;
+  /** Search in message text */
   search?: string;
+  /** Maximum number of results */
   limit?: number;
 }
 
+/** Supported export formats for logs */
 export type ExportFormat = 'json' | 'csv' | 'text';
 
+/**
+ * Static logger class for application-wide logging.
+ *
+ * The logger automatically adjusts behavior based on environment:
+ * - Development: DEBUG level, console + storage enabled
+ * - Production: ERROR level only, console enabled
+ *
+ * @example
+ * ```typescript
+ * // Basic logging
+ * Logger.debug('[Module] Debug message');
+ * Logger.info('[Module] Info message', { key: 'value' });
+ * Logger.warn('[Module] Warning message');
+ * Logger.error('[Module] Error message', { error });
+ *
+ * // Query stored logs
+ * const logs = await Logger.getLogs({ level: LogLevel.ERROR, limit: 10 });
+ *
+ * // Export logs
+ * const json = await Logger.exportLogs('json');
+ * ```
+ */
 export class Logger {
   private static config: LoggerConfig = {
     minLevel: LogLevel.INFO,

@@ -1,4 +1,4 @@
-import { Message } from '../types';
+import { Message, PortMessage } from '../types';
 import { TaskManager } from './TaskManager';
 import { AIService } from './AIService';
 import { StorageManager } from './StorageManager';
@@ -26,11 +26,14 @@ export class MessageRouter {
 
   /**
    * Handle message from a long-lived port connection
+   * @param port - Chrome runtime port
+   * @param message - Port message with correlation ID
    */
-  async handlePortMessage(port: chrome.runtime.Port, message: any): Promise<void> {
+  async handlePortMessage(port: chrome.runtime.Port, message: PortMessage): Promise<void> {
     const correlationId = message.id;
     try {
-      const response = await this.handleMessage(message, port.sender!);
+      // Cast to Message for handleMessage - the type field ensures compatibility
+      const response = await this.handleMessage(message as unknown as Message, port.sender!);
       port.postMessage({ id: correlationId, response });
     } catch (error) {
       Logger.error('[MessageRouter] Port message handling failed', { error, type: message.type });

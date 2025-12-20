@@ -47,12 +47,18 @@
     "viewAILogs": "Voir les logs IA",
     "extracting": "Extraction des commentaires...",
     "analyzing": "Analyse des commentaires...",
+    "progressInitializing": "Initialisation",
+    "progressDetecting": "Détection de la zone de commentaires",
     "progressAnalyzing": "Analyse de la structure",
     "progressExtracting": "Extraction",
     "progressExpanding": "Expansion des réponses",
     "progressScrolling": "Chargement supplémentaire",
     "progressValidating": "Validation",
     "progressComplete": "Terminé",
+    "estimatedTime": "Temps restant estimé",
+    "timeRemainingSeconds": "{{seconds}} sec",
+    "timeRemainingMinutes": "{{minutes}} min",
+    "timeRemainingMinutesSeconds": "{{minutes}} min {{seconds}} sec",
     "extractionCompleted": "Extraction des commentaires terminée",
     "analysisCompleted": "Analyse des commentaires terminée",
     "taskFailed": "La tâche a échoué",
@@ -252,6 +258,7 @@
     "failedToDeleteHistory": "Échec de la suppression de l'élément d'historique.",
     "failedToImportSettings": "Échec de l'importation des paramètres.",
     "taskCancelledByUser": "Tâche annulée par l'utilisateur.",
+    "taskInterruptedByRestart": "Tâche interrompue en raison du redémarrage de l'extension.",
     "lowConfidenceInAnalysis": "Faible confiance dans l'analyse de la structure.",
     "configMissingSelectors": "La configuration manque de sélecteurs.",
     "urlRequired": "L'URL est requise.",
@@ -300,4 +307,3 @@
     "replies": "réponses"
   }
 }
-

@@ -46,11 +46,29 @@ async function runWithConcurrencyLimit<T>(
 
 /**
  * AIService handles all AI-related operations including
- * comment extraction and analysis
+ * comment extraction and analysis.
+ *
+ * This service is responsible for:
+ * - Making API calls to AI providers (OpenAI-compatible APIs)
+ * - Analyzing extracted comments to generate insights
+ * - Managing AI request logging for debugging
+ *
+ * @example
+ * ```typescript
+ * const aiService = new AIService(storageManager);
+ * const response = await aiService.callAI({
+ *   prompt: 'Analyze these comments...',
+ *   config: { apiUrl: '...', apiKey: '...', model: 'gpt-4', ... }
+ * });
+ * ```
  */
 export class AIService {
   private currentLanguage: string = LANGUAGES.DEFAULT;
 
+  /**
+   * Creates a new AIService instance.
+   * @param storageManager - StorageManager instance for settings and log persistence
+   */
   constructor(private readonly storageManager: StorageManager) {}
 
   private logToFile(
@@ -85,6 +103,28 @@ export class AIService {
     });
   }
 
+  /**
+   * Makes a request to the AI API with retry logic and error handling.
+   *
+   * @param request - The AI request configuration
+   * @param request.prompt - The user prompt to send to the AI
+   * @param request.systemPrompt - Optional system prompt for context
+   * @param request.config - AI configuration (API URL, key, model, etc.)
+   * @param request.signal - Optional AbortSignal for cancellation
+   * @param request.timeout - Optional timeout in milliseconds
+   * @returns Promise resolving to the AI response
+   * @throws {ExtensionError} When API call fails, times out, or is rate limited
+   *
+   * @example
+   * ```typescript
+   * const response = await aiService.callAI({
+   *   prompt: 'Summarize this text...',
+   *   config: settings.aiModel,
+   *   signal: abortController.signal,
+   * });
+   * console.log(response.content);
+   * ```
+   */
   async callAI(request: AIRequest): Promise<AIResponse> {
     const { prompt, systemPrompt, config, signal, timeout } = request;
 
@@ -347,13 +387,39 @@ export class AIService {
   }
 
   /**
-   * Analyze comments using AI
-   * @param comments - Comments to analyze
-   * @param config - AI configuration
-   * @param promptTemplate - Custom prompt template
-   * @param language - Language for analysis
-   * @param metadata - Additional metadata (platform, url, title, datetime, videoTime)
-   * @returns Analysis result
+   * Analyzes comments using AI to generate insights and sentiment analysis.
+   *
+   * This method handles large comment sets by automatically batching them
+   * to fit within the AI model's context window. Results from multiple
+   * batches are merged into a single analysis result.
+   *
+   * @param comments - Array of comments to analyze
+   * @param config - AI configuration (API URL, key, model, context window, etc.)
+   * @param promptTemplate - Custom prompt template with placeholders
+   * @param language - Language code for analysis output (e.g., 'zh-CN', 'en-US')
+   * @param metadata - Additional context for the analysis
+   * @param metadata.platform - Platform name (e.g., 'youtube.com')
+   * @param metadata.url - URL of the source page
+   * @param metadata.title - Title of the post/video
+   * @param metadata.datetime - Current datetime for the report
+   * @param metadata.videoTime - Publication time of the video/post
+   * @param signal - Optional AbortSignal for cancellation
+   * @param timeout - Optional timeout in milliseconds
+   * @returns Promise resolving to AnalysisResult with markdown report and summary
+   * @throws {ExtensionError} When AI request fails or is cancelled
+   *
+   * @example
+   * ```typescript
+   * const result = await aiService.analyzeComments(
+   *   comments,
+   *   settings.aiModel,
+   *   settings.analyzerPromptTemplate,
+   *   'zh-CN',
+   *   { platform: 'youtube.com', title: 'Video Title' },
+   *   abortController.signal,
+   * );
+   * console.log(result.markdown);
+   * ```
    */
   async analyzeComments(
     comments: Comment[],

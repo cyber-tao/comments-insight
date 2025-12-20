@@ -61,6 +61,5 @@ export default tseslint.config(
       'no-empty': 'off',
       'prefer-const': 'off',
     },
-  }
+  },
 );
-

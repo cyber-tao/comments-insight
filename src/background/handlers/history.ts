@@ -1,6 +1,6 @@
 import { Message, HistoryItem } from '../../types';
 import { HandlerContext } from './types';
-import { ERRORS } from '@/config/constants';
+import { ExtensionError, ErrorCode } from '../../utils/errors';
 
 interface GetHistoryListResponse {
   history: HistoryItem[];
@@ -55,7 +55,7 @@ export async function handleGetHistoryByUrl(
   const { url } = message.payload;
 
   if (!url) {
-    throw new Error(ERRORS.URL_REQUIRED);
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'URL is required');
   }
 
   const id = await context.storageManager.getLatestHistoryIdByUrl(url);
@@ -73,7 +73,7 @@ export async function handleDeleteHistory(
   const { id } = message.payload;
 
   if (!id) {
-    throw new Error(ERRORS.HISTORY_ITEM_ID_REQUIRED);
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'History item ID is required');
   }
 
   await context.storageManager.deleteHistoryItem(id);
@@ -99,5 +99,5 @@ export async function handleExportData(
     return { data };
   }
 
-  throw new Error(ERRORS.INVALID_EXPORT_TYPE);
+  throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Invalid export type');
 }

@@ -1,6 +1,6 @@
 {
   "name": "comments-insight",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "AI-powered comment extraction and analysis Chrome extension",
   "type": "module",
   "scripts": {
@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css,html}\"",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
@@ -31,6 +32,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "@vitest/coverage-v8": "^4.0.16",
     "archiver": "^7.0.1",
     "autoprefixer": "^10.4.22",
     "eslint": "^9.39.1",

@@ -6,14 +6,32 @@ import {
   RETRY,
   STORAGE,
   SECURITY,
-  ERRORS,
   HISTORY,
   DEFAULTS,
   DOM_ANALYSIS_DEFAULTS,
 } from '@/config/constants';
 import LZString from 'lz-string';
 import { Logger } from '../utils/logger';
-import { ErrorHandler } from '../utils/errors';
+import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
+
+/**
+ * History index entry for fast pagination queries
+ */
+interface HistoryIndexEntry {
+  id: string;
+  extractedAt: number;
+  url: string;
+  title: string;
+  platform: string;
+}
+
+/**
+ * Sorted history index for efficient pagination
+ */
+interface HistorySortedIndex {
+  entries: HistoryIndexEntry[];
+  lastUpdated: number;
+}
 
 /**
  * Default settings for the extension
@@ -58,13 +76,28 @@ Generate a comprehensive analysis report in Markdown format.`,
 
 /**
  * StorageManager handles all data persistence operations
- * using Chrome's storage API
+ * using Chrome's storage API.
+ *
+ * Features:
+ * - Settings management with defaults
+ * - History storage with compression (lz-string)
+ * - API key encryption for security
+ * - Indexed queries for fast pagination
+ * - AI log storage for debugging
+ *
+ * @example
+ * ```typescript
+ * const storageManager = new StorageManager();
+ * const settings = await storageManager.getSettings();
+ * await storageManager.saveHistory(historyItem);
+ * ```
  */
 export class StorageManager {
   private static readonly SETTINGS_KEY = STORAGE.SETTINGS_KEY;
   private static readonly HISTORY_KEY = STORAGE.HISTORY_KEY;
   private static readonly HISTORY_INDEX_KEY = STORAGE.HISTORY_INDEX_KEY;
   private static readonly HISTORY_URL_INDEX_KEY = STORAGE.HISTORY_URL_INDEX_KEY;
+  private static readonly HISTORY_SORTED_INDEX_KEY = 'history_sorted_index';
   private static readonly ENCRYPTION_SALT_KEY = STORAGE.ENCRYPTION_SALT_KEY;
   private static readonly ENCRYPTION_SECRET_KEY = STORAGE.ENCRYPTION_SECRET_KEY;
   private static readonly TOKEN_STATS_KEY = STORAGE.TOKEN_STATS_KEY;
@@ -72,6 +105,9 @@ export class StorageManager {
   private encryptionKey?: CryptoKey;
   private encryptionEnabled = false;
   private encryptionInitPromise?: Promise<void>;
+
+  /** In-memory cache for sorted index to avoid repeated storage reads */
+  private sortedIndexCache: HistorySortedIndex | null = null;
 
   private async ensureEncryptionReady(): Promise<void> {
     if (this.encryptionEnabled) {
@@ -363,7 +399,9 @@ export class StorageManager {
       Logger.info('[StorageManager] Settings saved successfully');
     } catch (error) {
       Logger.error('[StorageManager] Failed to save settings', { error });
-      throw new Error(ERRORS.FAILED_TO_SAVE_SETTINGS);
+      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save settings', {
+        originalError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -377,7 +415,9 @@ export class StorageManager {
       return JSON.stringify(settings, null, 2);
     } catch (error) {
       Logger.error('[StorageManager] Failed to export settings', { error });
-      throw new Error(ERRORS.FAILED_TO_EXPORT_SETTINGS);
+      throw new ExtensionError(ErrorCode.STORAGE_READ_ERROR, 'Failed to export settings', {
+        originalError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -391,14 +431,19 @@ export class StorageManager {
 
       // Validate settings structure
       if (!this.validateSettings(settings)) {
-        throw new Error(ERRORS.INVALID_SETTINGS_FORMAT);
+        throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Invalid settings format');
       }
 
       await this.saveSettings(settings);
       Logger.info('[StorageManager] Settings imported successfully');
     } catch (error) {
       Logger.error('[StorageManager] Failed to import settings', { error });
-      throw new Error(ERRORS.FAILED_TO_IMPORT_SETTINGS);
+      if (error instanceof ExtensionError) {
+        throw error;
+      }
+      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to import settings', {
+        originalError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -442,6 +487,9 @@ export class StorageManager {
       // Update history index
       await this.updateHistoryIndex(item.id);
 
+      // Update sorted index for pagination
+      await this.addToSortedIndex(item);
+
       // Update URL index
       if (typeof item.url === 'string' && item.url.length > 0) {
         await this.addToHistoryUrlIndex(item.url, item.id);
@@ -450,7 +498,10 @@ export class StorageManager {
       Logger.info('[StorageManager] History item saved', { id: item.id });
     } catch (error) {
       Logger.error('[StorageManager] Failed to save history', { error });
-      throw new Error(ERRORS.FAILED_TO_SAVE_HISTORY);
+      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save history', {
+        historyId: item.id,
+        originalError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -495,10 +546,14 @@ export class StorageManager {
 
       keysToRemove.push(StorageManager.HISTORY_INDEX_KEY);
       keysToRemove.push(StorageManager.HISTORY_URL_INDEX_KEY);
+      keysToRemove.push(StorageManager.HISTORY_SORTED_INDEX_KEY);
 
       if (keysToRemove.length > 0) {
         await chrome.storage.local.remove(keysToRemove);
       }
+
+      // Invalidate cache
+      this.sortedIndexCache = null;
 
       return ids.length;
     } catch (error) {
@@ -528,6 +583,178 @@ export class StorageManager {
     } catch (error) {
       Logger.error('[StorageManager] Failed to get history', { error });
       return [];
+    }
+  }
+
+  /**
+   * Get a page of history items using the sorted index for efficient pagination
+   * @param page - Page number (0-indexed)
+   * @param pageSize - Number of items per page
+   * @returns Object containing items and pagination metadata
+   */
+  async getHistoryPage(
+    page: number = 0,
+    pageSize: number = 20,
+  ): Promise<{
+    items: HistoryItem[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  }> {
+    try {
+      const sortedIndex = await this.getOrBuildSortedIndex();
+      const total = sortedIndex.entries.length;
+      const totalPages = Math.ceil(total / pageSize);
+
+      // Calculate slice bounds
+      const start = page * pageSize;
+      const end = Math.min(start + pageSize, total);
+
+      // Get IDs for this page from the sorted index
+      const pageEntries = sortedIndex.entries.slice(start, end);
+      const items: HistoryItem[] = [];
+
+      // Fetch full items for this page only
+      for (const entry of pageEntries) {
+        const item = await this.getHistoryItem(entry.id);
+        if (item) {
+          items.push(item);
+        }
+      }
+
+      Logger.debug('[StorageManager] History page retrieved', {
+        page,
+        pageSize,
+        itemCount: items.length,
+        total,
+      });
+
+      return {
+        items,
+        total,
+        page,
+        pageSize,
+        totalPages,
+      };
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to get history page', { error });
+      return {
+        items: [],
+        total: 0,
+        page,
+        pageSize,
+        totalPages: 0,
+      };
+    }
+  }
+
+  /**
+   * Get history metadata without loading full items (for fast listing)
+   * @param page - Page number (0-indexed)
+   * @param pageSize - Number of items per page
+   * @returns Object containing metadata entries and pagination info
+   */
+  async getHistoryMetadataPage(
+    page: number = 0,
+    pageSize: number = 20,
+  ): Promise<{
+    entries: HistoryIndexEntry[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  }> {
+    try {
+      const sortedIndex = await this.getOrBuildSortedIndex();
+      const total = sortedIndex.entries.length;
+      const totalPages = Math.ceil(total / pageSize);
+
+      const start = page * pageSize;
+      const end = Math.min(start + pageSize, total);
+      const entries = sortedIndex.entries.slice(start, end);
+
+      return {
+        entries,
+        total,
+        page,
+        pageSize,
+        totalPages,
+      };
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to get history metadata page', { error });
+      return {
+        entries: [],
+        total: 0,
+        page,
+        pageSize,
+        totalPages: 0,
+      };
+    }
+  }
+
+  /**
+   * Search history with pagination using the sorted index
+   * @param query - Search query
+   * @param page - Page number (0-indexed)
+   * @param pageSize - Number of items per page
+   * @returns Object containing filtered items and pagination metadata
+   */
+  async searchHistoryPaginated(
+    query: string,
+    page: number = 0,
+    pageSize: number = 20,
+  ): Promise<{
+    items: HistoryItem[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  }> {
+    try {
+      const sortedIndex = await this.getOrBuildSortedIndex();
+      const lowerQuery = query.toLowerCase();
+
+      // Filter entries using index metadata (fast, no full item load)
+      const matchingEntries = sortedIndex.entries.filter(
+        (entry) =>
+          entry.title.toLowerCase().includes(lowerQuery) ||
+          entry.url.toLowerCase().includes(lowerQuery) ||
+          entry.platform.toLowerCase().includes(lowerQuery),
+      );
+
+      const total = matchingEntries.length;
+      const totalPages = Math.ceil(total / pageSize);
+
+      const start = page * pageSize;
+      const end = Math.min(start + pageSize, total);
+      const pageEntries = matchingEntries.slice(start, end);
+
+      // Load full items only for the current page
+      const items: HistoryItem[] = [];
+      for (const entry of pageEntries) {
+        const item = await this.getHistoryItem(entry.id);
+        if (item) {
+          items.push(item);
+        }
+      }
+
+      return {
+        items,
+        total,
+        page,
+        pageSize,
+        totalPages,
+      };
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to search history paginated', { error });
+      return {
+        items: [],
+        total: 0,
+        page,
+        pageSize,
+        totalPages: 0,
+      };
     }
   }
 
@@ -596,6 +823,7 @@ export class StorageManager {
 
       await chrome.storage.local.remove(keysToRemove);
       await this.removeFromHistoryIndex(id);
+      await this.removeFromSortedIndex(id);
 
       if (storedItem?.url) {
         await this.removeFromHistoryUrlIndex(storedItem.url, id);
@@ -603,7 +831,10 @@ export class StorageManager {
       Logger.info('[StorageManager] History item deleted', { id });
     } catch (error) {
       Logger.error('[StorageManager] Failed to delete history item', { id, error });
-      throw new Error(ERRORS.FAILED_TO_DELETE_HISTORY);
+      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to delete history', {
+        historyId: id,
+        originalError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -741,6 +972,166 @@ export class StorageManager {
       index[url] = next;
     }
     await this.setHistoryUrlIndex(index);
+  }
+
+  /**
+   * Get or build the sorted history index for efficient pagination
+   * @returns Sorted history index
+   */
+  private async getOrBuildSortedIndex(): Promise<HistorySortedIndex> {
+    // Return cached index if available
+    if (this.sortedIndexCache) {
+      return this.sortedIndexCache;
+    }
+
+    try {
+      // Try to load from storage
+      const result = await chrome.storage.local.get(StorageManager.HISTORY_SORTED_INDEX_KEY);
+      const storedIndex = result[StorageManager.HISTORY_SORTED_INDEX_KEY] as
+        | HistorySortedIndex
+        | undefined;
+
+      if (storedIndex && storedIndex.entries) {
+        this.sortedIndexCache = storedIndex;
+        return storedIndex;
+      }
+
+      // Build index from scratch
+      return await this.rebuildSortedIndex();
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to get sorted index', { error });
+      return { entries: [], lastUpdated: Date.now() };
+    }
+  }
+
+  /**
+   * Rebuild the sorted index from all history items
+   * @returns Newly built sorted index
+   */
+  private async rebuildSortedIndex(): Promise<HistorySortedIndex> {
+    try {
+      const ids = await this.getHistoryIndex();
+      const entries: HistoryIndexEntry[] = [];
+
+      for (const id of ids) {
+        const baseKey = `${StorageManager.HISTORY_KEY}_${id}`;
+        const result = await chrome.storage.local.get(baseKey);
+        const item = result[baseKey] as
+          | {
+              id: string;
+              extractedAt: number;
+              url: string;
+              title: string;
+              platform: string;
+            }
+          | undefined;
+
+        if (item) {
+          entries.push({
+            id: item.id,
+            extractedAt: item.extractedAt,
+            url: item.url,
+            title: item.title,
+            platform: item.platform,
+          });
+        }
+      }
+
+      // Sort by extractedAt descending (newest first)
+      entries.sort((a, b) => b.extractedAt - a.extractedAt);
+
+      const sortedIndex: HistorySortedIndex = {
+        entries,
+        lastUpdated: Date.now(),
+      };
+
+      // Save to storage and cache
+      await chrome.storage.local.set({ [StorageManager.HISTORY_SORTED_INDEX_KEY]: sortedIndex });
+      this.sortedIndexCache = sortedIndex;
+
+      Logger.debug('[StorageManager] Sorted index rebuilt', { count: entries.length });
+      return sortedIndex;
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to rebuild sorted index', { error });
+      return { entries: [], lastUpdated: Date.now() };
+    }
+  }
+
+  /**
+   * Update sorted index when a history item is added
+   * @param item - History item to add to index
+   */
+  private async addToSortedIndex(item: HistoryItem): Promise<void> {
+    try {
+      const index = await this.getOrBuildSortedIndex();
+
+      // Remove existing entry if present (for updates)
+      const existingIdx = index.entries.findIndex((e) => e.id === item.id);
+      if (existingIdx !== -1) {
+        index.entries.splice(existingIdx, 1);
+      }
+
+      // Create new entry
+      const entry: HistoryIndexEntry = {
+        id: item.id,
+        extractedAt: item.extractedAt,
+        url: item.url,
+        title: item.title,
+        platform: item.platform,
+      };
+
+      // Insert in sorted position (binary search for efficiency)
+      let left = 0;
+      let right = index.entries.length;
+      while (left < right) {
+        const mid = Math.floor((left + right) / 2);
+        if (index.entries[mid].extractedAt > entry.extractedAt) {
+          left = mid + 1;
+        } else {
+          right = mid;
+        }
+      }
+      index.entries.splice(left, 0, entry);
+
+      index.lastUpdated = Date.now();
+
+      // Save to storage and update cache
+      await chrome.storage.local.set({ [StorageManager.HISTORY_SORTED_INDEX_KEY]: index });
+      this.sortedIndexCache = index;
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to add to sorted index', { error });
+      // Invalidate cache on error
+      this.sortedIndexCache = null;
+    }
+  }
+
+  /**
+   * Remove an item from the sorted index
+   * @param id - History item ID to remove
+   */
+  private async removeFromSortedIndex(id: string): Promise<void> {
+    try {
+      const index = await this.getOrBuildSortedIndex();
+      const idx = index.entries.findIndex((e) => e.id === id);
+
+      if (idx !== -1) {
+        index.entries.splice(idx, 1);
+        index.lastUpdated = Date.now();
+
+        await chrome.storage.local.set({ [StorageManager.HISTORY_SORTED_INDEX_KEY]: index });
+        this.sortedIndexCache = index;
+      }
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to remove from sorted index', { error });
+      this.sortedIndexCache = null;
+    }
+  }
+
+  /**
+   * Invalidate the sorted index cache
+   */
+  invalidateSortedIndexCache(): void {
+    this.sortedIndexCache = null;
   }
 
   /**

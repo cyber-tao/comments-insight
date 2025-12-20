@@ -1,153 +1,53 @@
 import * as React from 'react';
-import { PATHS, MESSAGES, TIMING, TEXT } from '@/config/constants';
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { HistoryItem, Task } from '../types';
-import { useToast } from '../hooks/useToast';
+import { PATHS, MESSAGES } from '@/config/constants';
 import { Logger } from '@/utils/logger';
-import { getDomain } from '@/utils/url';
-
-interface PageInfo {
-  url: string;
-  title: string;
-  domain: string; // Domain extracted from URL
-}
-
-interface PageStatus {
-  extracted: boolean;
-  analyzed: boolean;
-  extractedAt?: number;
-  analyzedAt?: number;
-  commentsCount?: number;
-  historyId?: string;
-}
+import { useTask } from './hooks/useTask';
+import { usePageInfo } from './hooks/usePageInfo';
+import { Header } from './components/Header';
+import { PageStatus } from './components/PageStatus';
+import { ActionButtons } from './components/ActionButtons';
 
 const Popup: React.FC = () => {
   const { t } = useTranslation();
-  const toast = useToast();
-  const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
-  const [pageStatus, setPageStatus] = useState<PageStatus>({
-    extracted: false,
-    analyzed: false,
-  });
-  const [loading, setLoading] = useState(true);
   const [version, setVersion] = useState('');
   const [aiModelName, setAIModelName] = useState('');
   const [developerMode, setDeveloperMode] = useState(false);
-  const [currentTask, setCurrentTask] = useState<{
-    id: string;
-    type: 'extract' | 'analyze';
-    status: 'pending' | 'running' | 'completed' | 'failed';
-    progress: number;
-    message?: string;
-  } | null>(null);
-  const [hasSiteAccess, setHasSiteAccess] = useState<boolean | null>(null);
-  const [sitePattern, setSitePattern] = useState<string | null>(null);
-  const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isUnmountedRef = useRef(false);
 
-  const computeSitePattern = (url: string): string | null => {
-    try {
-      const u = new URL(url);
-      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-        return null;
-      }
-      return `${u.protocol}//${u.hostname}/*`;
-    } catch {
-      return null;
-    }
-  };
+  const {
+    pageInfo,
+    pageStatus,
+    loading,
+    siteAccessInfo,
+    loadPageInfo,
+    refreshPageStatus,
+    ensureSiteAccess,
+  } = usePageInfo();
 
-  const isRequiredOrigin = (origin: string): boolean => {
-    const manifest = chrome.runtime.getManifest();
-    const required = manifest.content_scripts?.flatMap((x) => x.matches || []) || [];
-    return required.includes(origin);
-  };
-
-  const refreshSiteAccess = async (url: string) => {
-    const pattern = computeSitePattern(url);
-    setSitePattern(pattern);
-    if (!pattern) {
-      setHasSiteAccess(null);
-      return;
-    }
-
-    if (isRequiredOrigin(pattern)) {
-      setHasSiteAccess(true);
-      return;
-    }
-
-    try {
-      const has = await chrome.permissions.contains({ origins: [pattern] });
-      setHasSiteAccess(has);
-    } catch {
-      setHasSiteAccess(null);
-    }
-  };
-
-  const ensureContentScript = async () => {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const tabId = tabs[0]?.id;
-    if (!tabId) {
-      throw new Error('No active tab');
-    }
-
-    const resp = await chrome.runtime.sendMessage({
-      type: MESSAGES.ENSURE_CONTENT_SCRIPT,
-      payload: { tabId },
-    });
-
-    if (!resp?.success) {
-      throw new Error(TEXT.CONTENT_SCRIPT_INJECT_FAILED);
-    }
-  };
-
-  const ensureSiteAccess = async (url: string): Promise<boolean> => {
-    const pattern = computeSitePattern(url);
-    if (!pattern) {
-      return false;
-    }
-
-    if (isRequiredOrigin(pattern)) {
-      return true;
-    }
-
-    const has = await chrome.permissions.contains({ origins: [pattern] });
-    if (has) {
-      return true;
-    }
-
-    const granted = await chrome.permissions.request({ origins: [pattern] });
-    if (!granted) {
-      toast.warning(t('popup.accessRequestDenied'));
-      return false;
-    }
-
-    toast.success(t('popup.accessGranted'));
-    await refreshSiteAccess(url);
-    return true;
-  };
+  const {
+    currentTask,
+    loadCurrentTask,
+    startExtraction,
+    startAnalysis,
+    cancelTask,
+    ToastContainer,
+  } = useTask({
+    onStatusRefresh: refreshPageStatus,
+  });
 
   useEffect(() => {
-    isUnmountedRef.current = false;
-
     const initialize = async () => {
       await loadLanguage();
-      await loadPageInfo();
+      const info = await loadPageInfo();
       await loadVersion();
       await loadSettings();
-      await loadCurrentTask();
+      if (info?.url) {
+        await loadCurrentTask(info.url);
+      }
     };
 
     initialize();
-
-    return () => {
-      isUnmountedRef.current = true;
-      if (monitorTimeoutRef.current) {
-        clearTimeout(monitorTimeoutRef.current);
-        monitorTimeoutRef.current = null;
-      }
-    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -186,280 +86,35 @@ const Popup: React.FC = () => {
     }
   };
 
-  const loadCurrentTask = async () => {
-    try {
-      // Get current tab
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (!tab?.url) return;
-
-      // Get all running tasks
-      const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_TASK_STATUS });
-
-      if (response?.tasks) {
-        const currentUrlTask = response.tasks.find(
-          (task: Task) =>
-            task.url === tab.url && (task.status === 'running' || task.status === 'pending'),
-        );
-
-        if (currentUrlTask) {
-          Logger.debug('[Popup] Found current task', { task: currentUrlTask });
-          setCurrentTask({
-            id: currentUrlTask.id,
-            type: currentUrlTask.type,
-            status: currentUrlTask.status,
-            progress: currentUrlTask.progress,
-            message: currentUrlTask.message || currentUrlTask.error,
-          });
-
-          // Start monitoring if task is running
-          if (currentUrlTask.status === 'running' || currentUrlTask.status === 'pending') {
-            monitorTask(currentUrlTask.id);
-          }
-        }
-      }
-    } catch (error) {
-      Logger.error('[Popup] Failed to load current task', { error });
-    }
-  };
-
-  const loadPageInfo = async () => {
-    try {
-      // Get current tab
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-
-      if (!tab?.url) {
-        setLoading(false);
-        return;
-      }
-
-      setPageInfo({
-        url: tab.url,
-        title: tab.title || '',
-        domain: getDomain(tab.url) || 'unknown',
-      });
-
-      await refreshSiteAccess(tab.url);
-
-      // Check if this page has been extracted/analyzed
-      await checkPageStatus(tab.url);
-    } catch (error) {
-      Logger.error('[Popup] Failed to load page info', { error });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const checkPageStatus = async (url: string) => {
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.GET_HISTORY_BY_URL,
-        payload: { url },
-      });
-
-      if (response?.item) {
-        const item: HistoryItem = response.item;
-        setPageStatus({
-          extracted: true,
-          analyzed: !!item.analysis,
-          extractedAt: item.extractedAt,
-          analyzedAt: item.analyzedAt,
-          commentsCount: item.commentsCount,
-          historyId: item.id,
-        });
-      }
-    } catch (error) {
-      Logger.error('[Popup] Failed to check page status', { error });
-    }
-  };
-
   const handleExtractComments = async () => {
     if (!pageInfo) return;
 
-    // Check if task is already running
-    if (currentTask && currentTask.status === 'running') {
-      toast.warning(t('popup.taskAlreadyRunning'));
-      return;
-    }
+    const ok = await ensureSiteAccess(pageInfo.url);
+    if (!ok) return;
 
-    try {
-      const ok = await ensureSiteAccess(pageInfo.url);
-      if (!ok) {
-        return;
-      }
-
-      try {
-        await ensureContentScript();
-      } catch (_error) {
-        toast.error(TEXT.CONTENT_SCRIPT_INJECT_FAILED);
-        return;
-      }
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.START_EXTRACTION,
-        payload: {
-          url: pageInfo.url,
-        },
-      });
-
-      if (response?.taskId) {
-        // Set task and start monitoring
-        setCurrentTask({
-          id: response.taskId,
-          type: 'extract',
-          status: 'running',
-          progress: 0,
-        });
-        toast.info(t('popup.extractionStarted'));
-
-        // Start polling task status
-        monitorTask(response.taskId);
-      }
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : typeof error === 'string'
-            ? error
-            : JSON.stringify(error);
-      Logger.error('[Popup] Failed to start extraction', { error: message });
-      setCurrentTask(null);
-      toast.error(t('popup.extractionFailed'));
-    }
+    await startExtraction(pageInfo.url);
   };
 
   const handleAnalyzeComments = async () => {
     if (!pageStatus.extracted || !pageStatus.historyId) return;
 
-    // Check if task is already running
-    if (currentTask && currentTask.status === 'running') {
-      toast.warning(t('popup.taskAlreadyRunning'));
-      return;
-    }
-
     try {
-      // Get history item
       const response = await chrome.runtime.sendMessage({
         type: MESSAGES.GET_HISTORY,
         payload: { id: pageStatus.historyId },
       });
 
       if (response?.item) {
-        const analysisResponse = await chrome.runtime.sendMessage({
-          type: MESSAGES.START_ANALYSIS,
-          payload: {
-            comments: response.item.comments,
-            historyId: pageStatus.historyId,
-            metadata: {
-              url: pageInfo?.url,
-              platform: pageInfo?.domain,
-              title: pageInfo?.title,
-            },
-          },
+        await startAnalysis(pageStatus.historyId, response.item.comments, {
+          url: pageInfo?.url,
+          platform: pageInfo?.domain,
+          title: pageInfo?.title,
         });
-
-        if (analysisResponse?.taskId) {
-          // Set task and start monitoring
-          setCurrentTask({
-            id: analysisResponse.taskId,
-            type: 'analyze',
-            status: 'running',
-            progress: 0,
-          });
-          toast.info(t('popup.analysisStarted'));
-
-          // Start polling task status
-          monitorTask(analysisResponse.taskId);
-        }
       }
     } catch (error) {
-      Logger.error('[Popup] Failed to start analysis', { error });
-      setCurrentTask(null);
-      toast.error(t('popup.analysisFailed'));
+      Logger.error('[Popup] Failed to get history for analysis', { error });
     }
   };
-
-  const handleCancelTask = async (taskId: string) => {
-    try {
-      await chrome.runtime.sendMessage({
-        type: MESSAGES.CANCEL_TASK,
-        payload: { taskId },
-      });
-      // Task monitor will pick up the 'failed'/'cancelled' status update
-    } catch (error) {
-      Logger.error('[Popup] Failed to cancel task', { error });
-    }
-  };
-
-  const monitorTask = useCallback(
-    async (taskId: string) => {
-      const checkStatus = async () => {
-        if (isUnmountedRef.current) return;
-
-        try {
-          const response = await chrome.runtime.sendMessage({
-            type: MESSAGES.GET_TASK_STATUS,
-            payload: { taskId },
-          });
-
-          if (isUnmountedRef.current) return;
-
-          if (response?.task) {
-            const task = response.task;
-            setCurrentTask({
-              id: task.id,
-              type: task.type,
-              status: task.status,
-              progress: task.progress,
-              message: task.message || task.error,
-            });
-
-            if (task.status === 'running' || task.status === 'pending') {
-              monitorTimeoutRef.current = setTimeout(checkStatus, TIMING.POLL_TASK_RUNNING_MS);
-            } else if (task.status === 'completed') {
-              // Get current tab URL directly instead of relying on pageInfo state
-              // This fixes the issue where pageInfo might not be updated yet after popup reopens
-              try {
-                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-                if (tab?.url) {
-                  await checkPageStatus(tab.url);
-                }
-              } catch (e) {
-                Logger.error('[Popup] Failed to get tab URL for status update', { error: e });
-              }
-              toast.success(
-                task.type === 'extract'
-                  ? t('popup.extractionCompleted')
-                  : t('popup.analysisCompleted'),
-              );
-              monitorTimeoutRef.current = setTimeout(() => {
-                if (!isUnmountedRef.current) {
-                  setCurrentTask(null);
-                }
-              }, TIMING.CLEAR_TASK_DELAY_MS);
-            } else if (task.status === 'failed') {
-              const isCancelled = task.error === 'Task cancelled by user';
-              if (isCancelled) {
-                toast.info(t('task.cancel'));
-              } else {
-                toast.error(
-                  task.error ? `${t('popup.taskFailed')}: ${task.error}` : t('popup.taskFailed'),
-                );
-              }
-              monitorTimeoutRef.current = setTimeout(() => {
-                if (!isUnmountedRef.current) {
-                  setCurrentTask(null);
-                }
-              }, TIMING.CLEAR_TASK_FAILED_MS);
-            }
-          }
-        } catch (error) {
-          Logger.error('[Popup] Failed to check task status', { error });
-        }
-      };
-
-      checkStatus();
-    },
-    [t, toast],
-  );
 
   const handleOpenHistory = () => {
     chrome.tabs.create({ url: chrome.runtime.getURL(PATHS.HISTORY_PAGE) });
@@ -476,20 +131,6 @@ const Popup: React.FC = () => {
     window.close();
   };
 
-  const formatDate = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (minutes < 1) return t('popup.justNow');
-    if (minutes < 60) return `${minutes}${t('popup.minutesAgo')}`;
-    if (hours < 24) return `${hours}${t('popup.hoursAgo')}`;
-    return `${days}${t('popup.daysAgo')}`;
-  };
-
   if (loading) {
     return (
       <div className="w-96 p-6 bg-gradient-to-br from-blue-50 to-purple-50">
@@ -500,308 +141,24 @@ const Popup: React.FC = () => {
 
   return (
     <div className="w-96 bg-gradient-to-br from-blue-50 to-purple-50">
-      <toast.ToastContainer />
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold">{t('popup.title')}</h1>
-            <div className="flex flex-col gap-1">
-              <p className="text-xs opacity-90">
-                {t('popup.version')} {version}
-              </p>
-              {aiModelName && (
-                <div className="flex items-center text-xs opacity-90 bg-white/20 px-2 py-0.5 rounded w-fit mt-1">
-                  <span className="mr-1">🤖</span>
-                  <span>
-                    {t('options.model')}: {aiModelName}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex gap-2">
-            {developerMode && (
-              <button
-                onClick={handleOpenLogs}
-                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-                title={t('popup.viewAILogs')}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                  />
-                </svg>
-              </button>
-            )}
-            <button
-              onClick={handleOpenSettings}
-              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-              title={t('popup.settings')}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Page Status */}
-      <div className="p-4 bg-white border-b">
-        <div className="flex justify-between items-start mb-2">
-          <h2 className="text-sm font-semibold text-gray-700">{t('popup.currentPage')}</h2>
-        </div>
-        {pageInfo ? (
-          <div className="space-y-2">
-            <div className="text-sm mb-2">
-              <span className="font-medium text-gray-800 line-clamp-2">{pageInfo.title}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">{t('popup.platform')}:</span>
-              <span className="font-medium">{pageInfo.domain}</span>
-            </div>
-
-            {sitePattern && (
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">{t('popup.siteAccess')}:</span>
-                <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-800">
-                  {isRequiredOrigin(sitePattern)
-                    ? t('popup.siteAccessStatusRequired')
-                    : hasSiteAccess
-                      ? t('popup.siteAccessStatusGranted')
-                      : t('popup.siteAccessStatusNotGranted')}
-                </span>
-              </div>
-            )}
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">{t('popup.status')}:</span>
-              <span
-                className={`px-2 py-1 rounded text-xs font-medium ${
-                  pageStatus.analyzed
-                    ? 'bg-green-100 text-green-700'
-                    : pageStatus.extracted
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-gray-100 text-gray-700'
-                }`}
-              >
-                {pageStatus.analyzed
-                  ? t('popup.analyzed')
-                  : pageStatus.extracted
-                    ? t('popup.extracted')
-                    : t('popup.notExtracted')}
-              </span>
-            </div>
-            {pageStatus.extracted && (
-              <>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">{t('popup.commentsCount')}:</span>
-                  <span className="font-medium">{pageStatus.commentsCount}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">{t('popup.extractedAt')}:</span>
-                  <span className="text-gray-500 text-xs">
-                    {formatDate(pageStatus.extractedAt!)}
-                  </span>
-                </div>
-                {pageStatus.analyzed && pageStatus.analyzedAt && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">{t('popup.analyzedAt')}:</span>
-                    <span className="text-gray-500 text-xs">
-                      {formatDate(pageStatus.analyzedAt)}
-                    </span>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        ) : (
-          <div className="text-sm text-gray-500 text-center py-2">{t('popup.invalidPage')}</div>
-        )}
-      </div>
-
-      {/* Action Buttons */}
-      <div className="p-4 space-y-3">
-        {/* Extract Comments button - always visible if valid page */}
-        {pageInfo && (
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                if (pageStatus.extracted) {
-                  chrome.tabs.create({
-                    url: chrome.runtime.getURL(
-                      `${PATHS.HISTORY_PAGE}?id=${pageStatus.historyId}&tab=comments`,
-                    ),
-                  });
-                  window.close();
-                } else {
-                  handleExtractComments();
-                }
-              }}
-              disabled={currentTask?.status === 'running' && currentTask?.type === 'extract'}
-              className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${currentTask?.status === 'running' && currentTask?.type === 'extract' ? 'bg-gray-300 text-gray-700 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700'}`}
-            >
-              {currentTask?.status === 'running' && currentTask?.type === 'extract' ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                  <span className="truncate max-w-[180px]">
-                    {(() => {
-                      const msg = currentTask.message || '';
-                      const parts = msg.split(':');
-                      if (parts.length >= 3) {
-                        const [stage, count, max] = parts;
-                        const stageKey = `popup.progress${stage.charAt(0).toUpperCase() + stage.slice(1)}`;
-                        const stageText = t(stageKey);
-                        const countNum = parseInt(count, 10);
-                        return countNum >= 0 ? `${stageText} ${count}/${max}` : stageText;
-                      }
-                      return t('popup.extracting');
-                    })()}
-                  </span>
-                </>
-              ) : pageStatus.extracted ? (
-                <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                    />
-                  </svg>
-                  {t('popup.viewComments')}
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"
-                    />
-                  </svg>
-                  {t('popup.extractComments')}
-                </>
-              )}
-            </button>
-            {currentTask?.status === 'running' && currentTask?.type === 'extract' && (
-              <button
-                onClick={() => handleCancelTask(currentTask.id)}
-                className="px-3 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-md flex items-center justify-center"
-                title={t('task.cancel')}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            )}
-          </div>
-        )}
-
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              if (pageStatus.analyzed && pageStatus.historyId) {
-                chrome.tabs.create({
-                  url: chrome.runtime.getURL(
-                    `${PATHS.HISTORY_PAGE}?id=${pageStatus.historyId}&tab=analysis`,
-                  ),
-                });
-                window.close();
-              } else {
-                handleAnalyzeComments();
-              }
-            }}
-            disabled={
-              !pageStatus.extracted ||
-              (currentTask?.status === 'running' && currentTask?.type === 'analyze')
-            }
-            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${!pageStatus.extracted || (currentTask?.status === 'running' && currentTask?.type === 'analyze') ? 'bg-gray-300 text-gray-700 cursor-not-allowed' : 'bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700'}`}
-          >
-            {currentTask?.status === 'running' && currentTask?.type === 'analyze' ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                {t('popup.analyzing')}
-              </>
-            ) : pageStatus.analyzed ? (
-              <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                  />
-                </svg>
-                {t('popup.viewAnalysis')}
-              </>
-            ) : (
-              <>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-                  />
-                </svg>
-                {t('popup.analyzeComments')}
-              </>
-            )}
-          </button>
-          {currentTask?.status === 'running' && currentTask?.type === 'analyze' && (
-            <button
-              onClick={() => handleCancelTask(currentTask.id)}
-              className="px-3 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-md flex items-center justify-center"
-              title={t('task.cancel')}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          )}
-        </div>
-
-        <button
-          onClick={handleOpenHistory}
-          className="w-full py-3 px-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-medium hover:from-green-600 hover:to-green-700 transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          {t('popup.viewHistory')}
-        </button>
-      </div>
+      <ToastContainer />
+      <Header
+        version={version}
+        aiModelName={aiModelName}
+        developerMode={developerMode}
+        onOpenSettings={handleOpenSettings}
+        onOpenLogs={handleOpenLogs}
+      />
+      <PageStatus pageInfo={pageInfo} pageStatus={pageStatus} siteAccessInfo={siteAccessInfo} />
+      <ActionButtons
+        pageInfo={pageInfo}
+        pageStatus={pageStatus}
+        currentTask={currentTask}
+        onExtract={handleExtractComments}
+        onAnalyze={handleAnalyzeComments}
+        onCancel={cancelTask}
+        onOpenHistory={handleOpenHistory}
+      />
     </div>
   );
 };

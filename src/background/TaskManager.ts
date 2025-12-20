@@ -1,16 +1,38 @@
-import { Task, Platform } from '../types';
+import { Task, Platform, ProgressStage } from '../types';
 import { NotificationService } from './NotificationService';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
-import { ERRORS, LIMITS, RETRY, STORAGE, TIMING } from '@/config/constants';
+import { ERROR_KEYS, LIMITS, RETRY, STORAGE, TIMING } from '@/config/constants';
+import i18n from '@/utils/i18n';
 
+/**
+ * Result returned when a task completes successfully.
+ */
 export interface TaskResult {
+  /** Number of AI tokens consumed during the task */
   tokensUsed?: number;
+  /** Number of comments extracted or analyzed */
   commentsCount?: number;
 }
 
+/**
+ * Detailed progress update for enhanced UI feedback.
+ */
+export interface DetailedProgressUpdate {
+  /** Current stage of the task */
+  stage: ProgressStage;
+  /** Current item count (e.g., comments extracted so far) */
+  current: number;
+  /** Total items to process (e.g., max comments) */
+  total: number;
+  /** Optional stage-specific message */
+  stageMessage?: string;
+}
+
+/** Function type for task executors */
 type TaskExecutor = (task: Task, signal: AbortSignal) => Promise<TaskResult>;
 
+/** Persisted task state for recovery after extension restart */
 interface PersistedTaskState {
   tasks: Task[];
   queue: string[];
@@ -21,6 +43,25 @@ interface PersistedTaskState {
 /**
  * TaskManager handles the creation, execution, and lifecycle of tasks
  * in the Comments Insight extension.
+ *
+ * Features:
+ * - Task queue management with sequential execution
+ * - Task state persistence for recovery after extension restart
+ * - Abort/cancel support with proper cleanup
+ * - Progress tracking with detailed stage information
+ * - Automatic notifications on task completion/failure
+ *
+ * @example
+ * ```typescript
+ * const taskManager = new TaskManager({ enablePersistence: true });
+ * await taskManager.initialize();
+ *
+ * const taskId = taskManager.createTask('extract', url, platform);
+ * taskManager.setExecutor(taskId, async (task, signal) => {
+ *   // Execute extraction...
+ *   return { commentsCount: 100 };
+ * });
+ * ```
  */
 export class TaskManager {
   private tasks: Map<string, Task> = new Map();
@@ -56,7 +97,7 @@ export class TaskManager {
       for (const task of this.tasks.values()) {
         if (task.status === 'pending' || task.status === 'running') {
           task.status = 'failed';
-          task.error = ERRORS.TASK_INTERRUPTED_BY_RESTART;
+          task.error = i18n.t(ERROR_KEYS.TASK_INTERRUPTED_BY_RESTART);
           task.endTime = now;
           changed = true;
         }
@@ -212,6 +253,88 @@ export class TaskManager {
   }
 
   /**
+   * Update task with detailed progress information
+   * @param taskId - ID of the task
+   * @param detailedProgress - Detailed progress update
+   */
+  updateDetailedProgress(taskId: string, detailedProgress: DetailedProgressUpdate): void {
+    const task = this.tasks.get(taskId);
+    if (!task) {
+      Logger.warn(`[TaskManager] Task not found: ${taskId}`);
+      return;
+    }
+
+    // Calculate estimated time remaining based on progress rate
+    const elapsed = Date.now() - task.startTime;
+    const { stage, current, total, stageMessage } = detailedProgress;
+
+    // Calculate progress percentage based on stage and current/total
+    let progressPercent = 0;
+    if (total > 0 && current >= 0) {
+      const stageProgress = current / total;
+      // Map stages to progress ranges
+      switch (stage) {
+        case 'initializing':
+          progressPercent = stageProgress * 5;
+          break;
+        case 'detecting':
+          progressPercent = 5 + stageProgress * 10;
+          break;
+        case 'analyzing':
+          progressPercent = 15 + stageProgress * 10;
+          break;
+        case 'extracting':
+          progressPercent = 25 + stageProgress * 50;
+          break;
+        case 'scrolling':
+          progressPercent = 75 + stageProgress * 10;
+          break;
+        case 'expanding':
+          progressPercent = 85 + stageProgress * 5;
+          break;
+        case 'validating':
+          progressPercent = 90 + stageProgress * 5;
+          break;
+        case 'complete':
+          progressPercent = 100;
+          break;
+        default:
+          progressPercent = (current / total) * 100;
+      }
+    }
+
+    // Estimate remaining time
+    let estimatedTimeRemaining = -1;
+    if (progressPercent > 5 && progressPercent < 100) {
+      const rate = progressPercent / elapsed;
+      const remaining = (100 - progressPercent) / rate;
+      estimatedTimeRemaining = Math.ceil(remaining / 1000); // Convert to seconds
+    }
+
+    // Update task
+    task.progress = Math.min(100, Math.max(0, progressPercent));
+    task.message = `${stage}:${current}:${total}`;
+    task.detailedProgress = {
+      stage,
+      current,
+      total,
+      estimatedTimeRemaining,
+      stageMessage,
+    };
+
+    Logger.debug(`[TaskManager] Detailed progress updated: ${taskId}`, {
+      stage,
+      current,
+      total,
+      progressPercent: task.progress,
+      estimatedTimeRemaining,
+    });
+
+    this.notifyTaskUpdate(task);
+    this.schedulePersist();
+  }
+
+  /**
    * Complete a task successfully
    * @param taskId - ID of the task
    * @param result - Task result data
@@ -305,7 +428,7 @@ export class TaskManager {
     this.abortTask(taskId);
 
     task.status = 'failed';
-    task.error = ERRORS.TASK_CANCELLED_BY_USER;
+    task.error = i18n.t(ERROR_KEYS.TASK_CANCELLED_BY_USER);
     task.endTime = Date.now();
 
     if (this.currentTaskId === taskId) {

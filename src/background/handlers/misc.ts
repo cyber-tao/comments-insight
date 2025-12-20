@@ -1,7 +1,8 @@
 import { Message } from '../../types';
 import { HandlerContext, PingResponse } from './types';
 import { Logger } from '../../utils/logger';
-import { ERRORS, LIMITS, TEXT } from '@/config/constants';
+import { ExtensionError, ErrorCode } from '../../utils/errors';
+import { LIMITS, TEXT } from '@/config/constants';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
 
 export interface ModelsResponse {
@@ -53,7 +54,7 @@ export async function handleGetAvailableModels(
   const { apiUrl, apiKey } = message.payload || {};
 
   if (!apiUrl) {
-    throw new Error(ERRORS.API_CONFIG_REQUIRED);
+    throw new ExtensionError(ErrorCode.INVALID_API_URL, 'API configuration is required');
   }
 
   try {
@@ -72,7 +73,7 @@ export async function handleTestModel(
   const { config } = message.payload || {};
 
   if (!config || !config.apiUrl || !config.model) {
-    throw new Error(ERRORS.COMPLETE_MODEL_CONFIG_REQUIRED);
+    throw new ExtensionError(ErrorCode.INVALID_CONFIG, 'Complete model configuration is required');
   }
 
   try {
@@ -88,7 +89,7 @@ export async function handleTestModel(
         response: response.content.substring(0, LIMITS.MODEL_RESPONSE_PREVIEW_LENGTH),
       };
     } else {
-      throw new Error(ERRORS.NO_RESPONSE_FROM_MODEL);
+      throw new ExtensionError(ErrorCode.AI_INVALID_RESPONSE, 'No response from model');
     }
   } catch (error) {
     Logger.error('[MiscHandler] Model test failed', { error });

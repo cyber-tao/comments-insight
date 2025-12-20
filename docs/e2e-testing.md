@@ -18,10 +18,7 @@ export default defineConfig({
   use: {
     headless: false,
     launchOptions: {
-      args: [
-        `--disable-extensions-except=${extensionPath}`,
-        `--load-extension=${extensionPath}`,
-      ],
+      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
     },
   },
 });
@@ -34,10 +31,7 @@ Similar approach using Puppeteer:
 ```typescript
 const browser = await puppeteer.launch({
   headless: false,
-  args: [
-    `--disable-extensions-except=${extensionPath}`,
-    `--load-extension=${extensionPath}`,
-  ],
+  args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
 });
 ```
 
