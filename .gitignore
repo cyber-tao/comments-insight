@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-package-lock.json
+# package-lock.json should be committed for consistent builds
 yarn.lock
 pnpm-lock.yaml
 
@@ -67,3 +67,6 @@ coverage/
 *.crx
 *.pem
 *.zip
+
+.gemini/
+gha-creds-*.json
