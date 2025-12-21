@@ -30,7 +30,7 @@ const supportedCodes: string[] = LANGUAGES.SUPPORTED.map((l) => l.code);
  * Detect browser language and map to supported language
  */
 const getBrowserLanguage = (): string => {
-  const browserLang = navigator.language || LANGUAGES.DEFAULT;
+  const browserLang = (typeof navigator !== 'undefined' && navigator.language) || LANGUAGES.DEFAULT;
 
   // Check for exact match first
   if (supportedCodes.includes(browserLang)) {
