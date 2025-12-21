@@ -1,1 +1,0 @@
-- 每有一个阶段性的修改后，就要运行typecheck, lint, test和build来确保修改没问题
