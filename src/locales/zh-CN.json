@@ -73,7 +73,9 @@
     "accessRequired": "该权限为必需权限，无法修改",
     "siteAccessStatusGranted": "已授权",
     "siteAccessStatusNotGranted": "未授权",
-    "siteAccessStatusRequired": "必需"
+    "siteAccessStatusRequired": "必需",
+    "generateConfig": "生成配置",
+    "generatingConfig": "正在生成配置..."
   },
   "options": {
     "title": "设置",
@@ -144,7 +146,35 @@
     "modelsFound": "发现 {{count}} 个模型",
     "noModelsFound": "未找到模型或 API 不支持模型列表",
     "fetchModelsFailed": "获取模型失败",
-    "configureAllFields": "请配置所有必填字段"
+    "configureAllFields": "请配置所有必填字段",
+    "crawlingConfigs": {
+      "title": "爬取配置",
+      "subtitle": "管理不同站点的提取规则。这些配置将覆盖 AI 自动检测的结果。",
+      "addConfig": "添加配置",
+      "noConfigs": "暂无配置。当您访问新站点时，扩展将自动生成配置。",
+      "items": "列表项",
+      "replies": "回复",
+      "enabled": "已启用",
+      "disabled": "已禁用",
+      "updated": "更新于",
+      "editing": "编辑配置: {{domain}}",
+      "saveChanges": "保存更改",
+      "cancel": "取消",
+      "cancel": "取消",
+      "domain": "域名 / URL 模式",
+      "domainHint": "例如: youtube.com 或 https://example.com/blog/*",
+      "commentSection": "评论区设置",
+      "containerSelector": "容器选择器 (包含所有评论的包裹元素)",
+      "itemSelector": "单项选择器 (单个评论元素)",
+      "fieldsExtraction": "字段提取",
+      "repliesSection": "回复设置 (可选)",
+      "enableReplies": "启用回复支持",
+      "replyToggle": "回复展开按钮 (可选)",
+      "replyContainer": "回复容器 (相对于评论单项)",
+      "replyItem": "回复单项选择器",
+      "replyFields": "回复字段",
+      "confirmDelete": "确定要删除此配置吗？"
+    }
   },
   "history": {
     "title": "历史记录",

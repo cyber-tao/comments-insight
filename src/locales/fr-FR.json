@@ -89,7 +89,9 @@
     "accessRequired": "Cette autorisation est requise et ne peut pas être modifiée",
     "siteAccessStatusGranted": "Autorisé",
     "siteAccessStatusNotGranted": "Non autorisé",
-    "siteAccessStatusRequired": "Requis"
+    "siteAccessStatusRequired": "Requis",
+    "generateConfig": "Générer la configuration",
+    "generatingConfig": "Génération de la configuration..."
   },
   "options": {
     "title": "Paramètres",
@@ -168,7 +170,34 @@
     "modelsFound": "{{count}} modèles trouvés",
     "noModelsFound": "Aucun modèle trouvé ou l'API ne prend pas en charge la liste des modèles",
     "fetchModelsFailed": "Échec de la récupération des modèles",
-    "configureAllFields": "Veuillez configurer tous les champs requis"
+    "configureAllFields": "Veuillez configurer tous les champs requis",
+    "crawlingConfigs": {
+      "title": "Configurations de scan",
+      "subtitle": "Gérer les règles d'extraction pour différents sites. Ces configurations remplaceront la détection automatique de l'IA.",
+      "addConfig": "Ajouter une configuration",
+      "noConfigs": "Aucune configuration. L'extension générera automatiquement des configurations lorsque vous visiterez de nouveaux sites.",
+      "items": "Éléments",
+      "replies": "Réponses",
+      "enabled": "Activé",
+      "disabled": "Désactivé",
+      "updated": "Mis à jour le",
+      "editing": "Modifier la configuration : {{domain}}",
+      "saveChanges": "Enregistrer les modifications",
+      "cancel": "Annuler",
+      "domain": "Domaine / Modèle d'URL",
+      "domainHint": "ex : youtube.com ou https://example.com/blog/*",
+      "commentSection": "Paramètres de la section commentaires",
+      "containerSelector": "Sélecteur de conteneur (élément enveloppant tous les commentaires)",
+      "itemSelector": "Sélecteur d'élément (élément de commentaire individuel)",
+      "fieldsExtraction": "Extraction de champs",
+      "repliesSection": "Paramètres de réponses (Optionnel)",
+      "enableReplies": "Activer le support des réponses",
+      "replyToggle": "Bouton d'expansion des réponses (Optionnel)",
+      "replyContainer": "Conteneur de réponses (relatif à l'élément de commentaire)",
+      "replyItem": "Sélecteur d'élément de réponse",
+      "replyFields": "Champs de réponse",
+      "confirmDelete": "Êtes-vous sûr de vouloir supprimer cette configuration ?"
+    }
   },
   "history": {
     "title": "Historique",

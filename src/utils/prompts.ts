@@ -244,3 +244,56 @@ Rules:
 3. **Missing Data**: If a field (like likes) is missing, use null or "0".
 4. **Accuracy**: Do not hallucinate content. Only extract what is present.
 5. **No Markdown**: Return RAW JSON only.`;
+
+export const PROMPT_GENERATE_CRAWLING_CONFIG = `You are an expert Web Scraper Configuration Generator.
+Your task is to analyze the provided HTML (Simplified DOM) and generate a **JSON Configuration** directly mapping to the following TypeScript interface.
+
+## Target Interface
+\`\`\`typescript
+interface SelectorRule {
+  selector: string;     // CSS selector (e.g., ".comment-body", "#author")
+  type: "css";          // Always use "css"
+}
+
+interface FieldSelector {
+  name: string;         // One of: "username", "content", "timestamp", "likes"
+  rule: SelectorRule;
+  attribute?: string;   // Optional: if data is in attribute (e.g. "datetime", "title", "aria-label")
+}
+
+interface ReplyConfig {
+  container: SelectorRule; // The wrapper around ALL replies for a single comment
+  item: SelectorRule;      // The selector for an INDIVIDUAL reply item
+  fields: FieldSelector[]; // Same fields as main comment
+}
+
+interface CrawlingConfig {
+  domain: string;          // Extract from context (e.g. "youtube.com")
+  container: SelectorRule; // The wrapper around ALL comments (the main list)
+  item: SelectorRule;      // The selector for an INDIVIDUAL comment item
+  fields: FieldSelector[]; // Fields to extract
+  replies?: ReplyConfig;   // Optional: if replies are detected
+}
+\`\`\`
+
+## Critical Rules for Selectors
+1.  **AVOID Random/Hashed Classes**: Do NOT use classes that look like \`css-1a2b3c\`, \`sc-xyz\`, or \`styled-123\`. These change frequently.
+2.  **PREFER Stable Attributes**: Look for:
+    *   IDs: \`#comments\`, \`#author-text\`
+    *   Data Attributes: \`[data-testid="comment"]\`, \`[data-role="author"]\`
+    *   ARIA Roles: \`[role="article"]\`, \`[aria-label="Comment"]\`
+    *   Semantic Tags: \`article\`, \`time\`, \`h3\`
+3.  **Replies Toggle**: Look for elements that expand replies, often buttons or links with text "View X replies", "Show replies", "More replies".
+    *   Selector examples: \`.more-replies\`, \`#more-replies-sub-thread\`, \`button[aria-label*="replies"]\`.
+4.  **Use Hierarchy**: If a stable class is not available, use structural paths relative to the parent.
+    *   *Bad*: \`.div > .span > .text\`
+    *   *Good*: \`article > header > a.author\`
+4.  **Fields**:
+    *   **username**: The author's name.
+    *   **content**: The main text body of the comment.
+    *   **timestamp**: The time element (often \`<time>\` or text like "2 hours ago").
+    *   **likes**: The like/upvote count.
+
+## Output Format
+Return **ONLY** the JSON object. No markdown code blocks, no explanations.
+`;

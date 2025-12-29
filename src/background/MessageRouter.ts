@@ -79,6 +79,9 @@ export class MessageRouter {
         case MESSAGES.AI_EXTRACT_CONTENT:
           return await extractionHandlers.handleAIExtractContent(message, context);
 
+        case MESSAGES.GENERATE_CRAWLING_CONFIG:
+          return await extractionHandlers.handleGenerateCrawlingConfig(message, context);
+
         case MESSAGES.EXTRACTION_COMPLETED:
           return await extractionHandlers.handleExtractionCompleted(message, context);
 
@@ -99,6 +102,15 @@ export class MessageRouter {
 
         case MESSAGES.SAVE_SETTINGS:
           return await settingsHandlers.handleSaveSettings(message, context);
+
+        case MESSAGES.CACHE_SELECTOR:
+          return await settingsHandlers.handleCacheSelector(message, context);
+
+        case MESSAGES.GET_CRAWLING_CONFIG:
+          return await settingsHandlers.handleGetCrawlingConfig(message, context);
+
+        case MESSAGES.SAVE_CRAWLING_CONFIG:
+          return await settingsHandlers.handleSaveCrawlingConfig(message, context);
 
         case MESSAGES.GET_HISTORY:
           return await historyHandlers.handleGetHistory(message, context);

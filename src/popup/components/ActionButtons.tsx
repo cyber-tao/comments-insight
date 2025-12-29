@@ -71,16 +71,19 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
           <button
             onClick={handleExtractClick}
             disabled={isExtractRunning}
-            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${
-              isExtractRunning
-                ? 'bg-gray-300 text-gray-700 cursor-not-allowed'
-                : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700'
-            }`}
+            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${isExtractRunning
+              ? 'bg-gray-300 text-gray-700 cursor-not-allowed'
+              : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700'
+              }`}
           >
             {isExtractRunning ? (
               <>
                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                <span className="truncate max-w-[180px]">{getProgressMessage()}</span>
+                <span className="truncate max-w-[180px]">
+                  {isExtractRunning && !pageStatus.hasConfig
+                    ? t('popup.generatingConfig')
+                    : getProgressMessage()}
+                </span>
               </>
             ) : pageStatus.extracted ? (
               <>
@@ -93,6 +96,18 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
                   />
                 </svg>
                 {t('popup.viewComments')}
+              </>
+            ) : !pageStatus.hasConfig ? (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
+                  />
+                </svg>
+                {t('popup.generateConfig', 'Generate Config')}
               </>
             ) : (
               <>
@@ -125,18 +140,18 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
             </button>
           )}
         </div>
-      )}
+      )
+      }
 
       {/* Analyze Comments button */}
       <div className="flex gap-2">
         <button
           onClick={handleAnalyzeClick}
           disabled={!pageStatus.extracted || isAnalyzeRunning}
-          className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${
-            !pageStatus.extracted || isAnalyzeRunning
-              ? 'bg-gray-300 text-gray-700 cursor-not-allowed'
-              : 'bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700'
-          }`}
+          className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${!pageStatus.extracted || isAnalyzeRunning
+            ? 'bg-gray-300 text-gray-700 cursor-not-allowed'
+            : 'bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700'
+            }`}
         >
           {isAnalyzeRunning ? (
             <>
@@ -202,6 +217,6 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
         </svg>
         {t('popup.viewHistory')}
       </button>
-    </div>
+    </div >
   );
 };

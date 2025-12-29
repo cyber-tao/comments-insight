@@ -1,4 +1,4 @@
-import { Message } from '../../types';
+import { Message, CrawlingConfig } from '../../types';
 import { HandlerContext, SettingsResponse, SuccessResponse } from './types';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
@@ -24,5 +24,43 @@ export async function handleSaveSettings(
   }
 
   await context.storageManager.saveSettings(settings);
+  return { success: true };
+}
+
+export async function handleCacheSelector(
+  message: Extract<Message, { type: 'CACHE_SELECTOR' }>,
+  context: HandlerContext,
+): Promise<SuccessResponse> {
+  const { hostname, selector } = message.payload;
+
+  if (!hostname || !selector) {
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Hostname and selector required');
+  }
+
+  await context.storageManager.updateSelectorCache(hostname, selector);
+  return { success: true };
+}
+
+export async function handleGetCrawlingConfig(
+  message: Extract<Message, { type: 'GET_CRAWLING_CONFIG' }>,
+  context: HandlerContext,
+): Promise<{ config: CrawlingConfig | null }> {
+  const { domain } = message.payload;
+  if (!domain) {
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Domain is required');
+  }
+  const config = await context.storageManager.getCrawlingConfig(domain);
+  return { config };
+}
+
+export async function handleSaveCrawlingConfig(
+  message: Extract<Message, { type: 'SAVE_CRAWLING_CONFIG' }>,
+  context: HandlerContext,
+): Promise<SuccessResponse> {
+  const { config } = message.payload;
+  if (!config || !config.domain) {
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Valid config with domain is required');
+  }
+  await context.storageManager.saveCrawlingConfig(config);
   return { success: true };
 }

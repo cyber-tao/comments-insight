@@ -14,14 +14,32 @@ import {
   DOM,
   DOM_ANALYSIS_DEFAULTS,
 } from '@/config/constants';
-import { PROMPT_DETECT_COMMENTS_SECTION, PROMPT_EXTRACT_COMMENTS_FROM_HTML } from '@/utils/prompts';
+import {
+  PROMPT_DETECT_COMMENTS_SECTION,
+  PROMPT_EXTRACT_COMMENTS_FROM_HTML,
+  PROMPT_GENERATE_CRAWLING_CONFIG,
+} from '@/utils/prompts';
 import { sendMessage } from '@/utils/chrome-message';
 import { isExtractionActive } from '../extractionState';
+import { getCurrentHostname } from '@/utils/url';
+import { CrawlingConfig } from '../../types';
+import { ConfiguredStrategy } from './ConfiguredStrategy';
+
+const SITE_SELECTORS: Record<string, string> = {
+  'youtube.com': '#comments',
+  'reddit.com': 'shreddit-comments',
+  'bilibili.com': '#comment, .comment-list, .comment-container',
+  'twitter.com': '[aria-label="Timeline: Conversation"]',
+  'x.com': '[aria-label="Timeline: Conversation"]',
+  'juejin.cn': '#comment-box',
+  'zhihu.com': '.Comments-container',
+  'github.com': '.js-discussion',
+};
 
 export class AIStrategy implements ExtractionStrategy {
   private aiPort: chrome.runtime.Port | null = null;
 
-  constructor(private pageController: PageController) {}
+  constructor(private pageController: PageController) { }
 
   /**
    * 清理资源，断开端口连接
@@ -53,13 +71,48 @@ export class AIStrategy implements ExtractionStrategy {
     platform: Platform,
     onProgress?: ProgressCallback,
   ): Promise<Comment[]> {
-    Logger.info('[AIStrategy] Starting Pure AI Extraction');
+    const hostname = getCurrentHostname();
+    Logger.info('[AIStrategy] Starting execution', { hostname });
+
+    // 1. Check for existing Crawling Config
+    try {
+      const resp = await sendMessage<{ config: CrawlingConfig | null }>({
+        type: MESSAGES.GET_CRAWLING_CONFIG,
+        payload: { domain: hostname },
+      });
+
+      if (resp && resp.config) {
+        Logger.info('[AIStrategy] Found valid crawling config. Delegating to ConfiguredStrategy.', {
+          domain: hostname,
+        });
+        const strategy = new ConfiguredStrategy(this.pageController, resp.config);
+        return await strategy.execute(maxComments, platform, onProgress);
+      }
+    } catch (e) {
+      Logger.warn('[AIStrategy] Failed to check crawling config', { error: e });
+    }
+
+    // 2. If no config, fall back to "Legacy" AI Detection + Generation
+    Logger.info('[AIStrategy] No config found. Using AI for detection and config generation.');
+    return await this.executeLegacyAI(maxComments, platform, onProgress);
+  }
+
+  /**
+   * Original AI Logic - now wrapped as a fallback/generator
+   */
+  async executeLegacyAI(
+    maxComments: number,
+    platform: Platform,
+    onProgress?: ProgressCallback,
+  ): Promise<Comment[]> {
+    Logger.info('[AIStrategy] Starting Pure AI Extraction (Legacy Mode)');
     onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'loading settings', 'initializing', 0, 1);
 
     // Check if extraction is still active
     this.checkAborted();
 
     // 0. Load Settings
+    const hostname = getCurrentHostname();
     let domConfig = DOM_ANALYSIS_DEFAULTS;
     let aiConfig = {
       contextWindowSize: AI.DEFAULT_CONTEXT_WINDOW,
@@ -128,6 +181,17 @@ export class AIStrategy implements ExtractionStrategy {
     Logger.info('[AIStrategy] Detected comment section', { sectionSelector });
     onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING + 5, 'comment section found', 'detecting', 1, 1);
 
+    // --- NEW: Generate Config Step ---
+    // We found the container. Now let's try to generate the full config for future use.
+    // We do this in parallel or just before starting the loop.
+    // To be safe, we do it now. If it fails, we continue with Legacy loop.
+    this.generateAndSaveConfig(sectionSelector, hostname, domConfig.maxDepth, detectMaxNodes).catch(
+      (err) => {
+        Logger.warn('[AIStrategy] Background config generation failed', { error: err });
+      },
+    );
+    // ---------------------------------
+
     // Locate the element
     let sectionElement = document.querySelector(sectionSelector);
     if (!sectionElement) {
@@ -164,7 +228,7 @@ export class AIStrategy implements ExtractionStrategy {
       );
       onProgress?.(
         currentProgress,
-        `extracting (${allComments.length}/${maxComments})`,
+        `extracting:${allComments.length}:${maxComments}`,
         'extracting',
         allComments.length,
         maxComments,
@@ -205,6 +269,7 @@ export class AIStrategy implements ExtractionStrategy {
           seenHashes.add(hash);
           // Ensure platform is set
           comment.platform = platform;
+          comment.id = comment.id || hash; // Assign hash if ID is missing
           allComments.push(comment);
           added++;
         }
@@ -250,6 +315,40 @@ export class AIStrategy implements ExtractionStrategy {
     maxTokens: number,
   ): Promise<string | null> {
     try {
+      const hostname = getCurrentHostname();
+
+      // 1. Check Cache
+      try {
+        const settingsResp = await sendMessage<{ settings: Settings }>({
+          type: MESSAGES.GET_SETTINGS,
+        });
+        const cache = settingsResp?.settings?.selectorCache || [];
+        const cached = cache.find((item) => item.domain === hostname);
+
+        if (cached && cached.selectors && cached.selectors.commentContainer) {
+          const selector = cached.selectors.commentContainer;
+          const element = document.querySelector(selector);
+          if (element) {
+            Logger.info('[AIStrategy] Using cached selector', { selector });
+            return selector;
+          } else {
+            Logger.warn('[AIStrategy] Cached selector invalid (element not found)', { selector });
+          }
+        }
+      } catch (err) {
+        Logger.warn('[AIStrategy] Failed to check cache', { error: err });
+      }
+
+      // 2. Check Heuristics
+      const heuristicSelector = this.checkHeuristics(hostname);
+      if (heuristicSelector) {
+        Logger.info('[AIStrategy] Using heuristic selector', { selector: heuristicSelector });
+        // Save to cache for future consistency
+        this.cacheSelector(hostname, heuristicSelector);
+        return heuristicSelector;
+      }
+
+      // 3. AI Detection
       // Simplify body (shallow but wide enough to find the container)
       const simplifiedBody = DOMSimplifier.simplifyForAI(document.body, {
         maxDepth: Math.max(DOM.DETECT_MIN_DEPTH, Math.floor(maxDepth / 2)), // Use shallower depth for detection
@@ -312,6 +411,11 @@ export class AIStrategy implements ExtractionStrategy {
         } catch (err) {
           Logger.warn(`[AIStrategy] Failed to analyze chunk ${i + 1}`, { error: err });
         }
+      }
+
+      if (bestCandidate.selector) {
+        // Cache the result
+        this.cacheSelector(hostname, bestCandidate.selector);
       }
 
       return bestCandidate.selector;
@@ -387,6 +491,86 @@ export class AIStrategy implements ExtractionStrategy {
       hash = hash & hash;
     }
     return Math.abs(hash).toString(36);
+  }
+
+  private cacheSelector(hostname: string, selector: string): void {
+    sendMessage({
+      type: MESSAGES.CACHE_SELECTOR,
+      payload: { hostname, selector },
+    }).catch((err) => {
+      Logger.warn('[AIStrategy] Failed to cache selector', { error: err });
+    });
+  }
+
+  private checkHeuristics(hostname: string): string | null {
+    // Exact match
+    if (SITE_SELECTORS[hostname]) {
+      const selector = SITE_SELECTORS[hostname];
+      if (document.querySelector(selector)) {
+        return selector;
+      }
+    }
+
+    // Suffix match (e.g. m.youtube.com matching youtube.com)
+    for (const [domain, selector] of Object.entries(SITE_SELECTORS)) {
+      if (hostname.endsWith(domain)) {
+        if (document.querySelector(selector)) {
+          return selector;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private async generateAndSaveConfig(
+    sectionSelector: string,
+    hostname: string,
+    maxDepth: number,
+    maxNodes: number,
+  ): Promise<void> {
+    Logger.info('[AIStrategy] Attempting to generate crawling config via AI...');
+
+    // Simplify specifically for Config Generation (we need structure, not necessarily all text)
+    const sectionElement = document.querySelector(sectionSelector);
+    if (!sectionElement) return;
+
+    const simplified = DOMSimplifier.simplifyForAI(sectionElement, {
+      maxDepth: maxDepth || 3, // Use config depth
+      includeText: false, // Structure is more important than text content for config
+      maxNodes: maxNodes || 500,
+    });
+    const domStr = DOMSimplifier.toStringFormat(simplified);
+
+    const prompt =
+      PROMPT_GENERATE_CRAWLING_CONFIG +
+      `\n\nDOM Structure (Container: ${sectionSelector}):\n\`\`\`html\n${domStr}\n\`\`\``;
+
+    // Use Port to call AI
+    const response = await this.callAIviaPort<any>({
+      type: MESSAGES.GENERATE_CRAWLING_CONFIG,
+      payload: { prompt },
+    });
+
+    if (response && response.config) {
+      let config: any = response.config;
+
+      // Check required fields
+      if (config.container && config.item && config.fields) {
+        // Use normalized domain (strip www.) to allow broader matching
+        const normalizedDomain = hostname.startsWith('www.') ? hostname.slice(4) : hostname;
+        config.domain = normalizedDomain;
+        config.id = normalizedDomain + '_' + Date.now();
+        config.lastUpdated = Date.now();
+
+        // Save it!
+        await sendMessage({
+          type: MESSAGES.SAVE_CRAWLING_CONFIG,
+          payload: { config },
+        });
+        Logger.info('[AIStrategy] Automatically generated and saved crawling config!', { config });
+      }
+    }
   }
 
   private delay(ms: number): Promise<void> {

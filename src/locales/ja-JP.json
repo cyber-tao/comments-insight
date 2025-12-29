@@ -89,7 +89,9 @@
     "accessRequired": "この権限は必須のため変更できません",
     "siteAccessStatusGranted": "許可済み",
     "siteAccessStatusNotGranted": "未許可",
-    "siteAccessStatusRequired": "必須"
+    "siteAccessStatusRequired": "必須",
+    "generateConfig": "設定を生成",
+    "generatingConfig": "設定を生成中..."
   },
   "options": {
     "title": "設定",
@@ -168,7 +170,34 @@
     "modelsFound": "{{count}}個のモデルが見つかりました",
     "noModelsFound": "モデルが見つからないか、APIがモデル一覧をサポートしていません",
     "fetchModelsFailed": "モデルの取得に失敗しました",
-    "configureAllFields": "すべての必須フィールドを設定してください"
+    "configureAllFields": "すべての必須フィールドを設定してください",
+    "crawlingConfigs": {
+      "title": "クロール設定",
+      "subtitle": "異なるサイトの抽出ルールを管理します。これらの設定はAIの自動検出結果を上書きします。",
+      "addConfig": "設定を追加",
+      "noConfigs": "設定がありません。新しいサイトにアクセスすると、拡張機能が自動的に設定を生成します。",
+      "items": "アイテム",
+      "replies": "返信",
+      "enabled": "有効",
+      "disabled": "無効",
+      "updated": "更新日時",
+      "editing": "設定を編集: {{domain}}",
+      "saveChanges": "変更を保存",
+      "cancel": "キャンセル",
+      "domain": "ドメイン / URLパターン",
+      "domainHint": "例: youtube.com または https://example.com/blog/*",
+      "commentSection": "コメントセクション設定",
+      "containerSelector": "コンテナセレクター (すべてのコメントを含む要素)",
+      "itemSelector": "アイテムセレクター (個々のコメント要素)",
+      "fieldsExtraction": "フィールド抽出",
+      "repliesSection": "返信設定 (オプション)",
+      "enableReplies": "返信サポートを有効にする",
+      "replyToggle": "返信展開ボタン (オプション)",
+      "replyContainer": "返信コンテナ (コメントアイテムに対する相対パス)",
+      "replyItem": "返信アイテムセレクター",
+      "replyFields": "返信フィールド",
+      "confirmDelete": "この設定を削除してもよろしいですか？"
+    }
   },
   "history": {
     "title": "履歴",

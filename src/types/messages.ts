@@ -1,4 +1,4 @@
-import { Comment, Task, Settings, AIConfig } from './index';
+import { Comment, Task, Settings, AIConfig, CrawlingConfig } from './index';
 
 export type SystemMessage =
   | { type: 'PING'; payload?: never }
@@ -11,7 +11,10 @@ export type InjectionMessage = {
 
 export type SettingsMessage =
   | { type: 'GET_SETTINGS'; payload?: never }
-  | { type: 'SAVE_SETTINGS'; payload: { settings: Partial<Settings> } };
+  | { type: 'SAVE_SETTINGS'; payload: { settings: Partial<Settings> } }
+  | { type: 'CACHE_SELECTOR'; payload: { hostname: string; selector: string } }
+  | { type: 'GET_CRAWLING_CONFIG'; payload: { domain: string } }
+  | { type: 'SAVE_CRAWLING_CONFIG'; payload: { config: CrawlingConfig } };
 
 export type ExtractionMessage =
   | {
@@ -81,6 +84,11 @@ export type ExportMessage = {
     | { format: 'csv' | 'md' | 'json'; historyId: string };
 };
 
+export interface GenerateCrawlingConfigMessage {
+  type: 'GENERATE_CRAWLING_CONFIG';
+  payload: { prompt: string };
+}
+
 export type Message =
   | SystemMessage
   | InjectionMessage
@@ -90,6 +98,7 @@ export type Message =
   | TaskMessage
   | HistoryMessage
   | AIModelMessage
-  | ExportMessage;
+  | ExportMessage
+  | GenerateCrawlingConfigMessage;
 
 export type MessageType = Message['type'];

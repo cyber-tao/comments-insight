@@ -99,14 +99,14 @@ export interface AIResponse {
 
 export interface SelectorMap {
   commentContainer: string;
-  commentItem: string;
+  commentItem?: string;
   replyToggle?: string;
   replyContainer?: string;
   replyItem?: string;
-  username: string;
-  timestamp: string;
-  likes: string;
-  content: string;
+  username?: string;
+  timestamp?: string;
+  likes?: string;
+  content?: string;
 }
 
 export interface SelectorCache {
@@ -115,6 +115,35 @@ export interface SelectorCache {
   selectors: SelectorMap;
   lastUsed: number;
   successCount: number;
+}
+
+export interface SelectorRule {
+  selector: string;
+  type: 'css' | 'xpath';
+}
+
+export interface FieldSelector {
+  name: string;
+  rule: SelectorRule;
+  attribute?: string;
+}
+
+export interface ReplyConfig {
+  container: SelectorRule;
+  item: SelectorRule;
+  fields: FieldSelector[];
+  expandBtn?: SelectorRule;
+}
+
+export interface CrawlingConfig {
+  id: string;
+  domain: string;
+  siteName?: string;
+  container: SelectorRule;
+  item: SelectorRule;
+  fields: FieldSelector[];
+  replies?: ReplyConfig;
+  lastUpdated: number;
 }
 
 export interface DOMAnalysisConfig {
@@ -131,6 +160,7 @@ export interface Settings {
   language: string; // Language code (e.g., 'zh-CN', 'en-US')
   selectorRetryAttempts: number;
   selectorCache: SelectorCache[];
+  crawlingConfigs: CrawlingConfig[];
   domAnalysisConfig: DOMAnalysisConfig; // DOM analysis configuration for structure analysis
   developerMode: boolean;
 }

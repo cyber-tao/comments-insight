@@ -89,7 +89,9 @@
     "accessRequired": "Este permiso es obligatorio y no se puede cambiar",
     "siteAccessStatusGranted": "Concedido",
     "siteAccessStatusNotGranted": "No concedido",
-    "siteAccessStatusRequired": "Obligatorio"
+    "siteAccessStatusRequired": "Obligatorio",
+    "generateConfig": "Generar configuración",
+    "generatingConfig": "Generando configuración..."
   },
   "options": {
     "title": "Configuración",
@@ -168,7 +170,34 @@
     "modelsFound": "Se encontraron {{count}} modelos",
     "noModelsFound": "No se encontraron modelos o la API no admite la lista de modelos",
     "fetchModelsFailed": "Error al obtener los modelos",
-    "configureAllFields": "Por favor, configure todos los campos requeridos"
+    "configureAllFields": "Por favor, configure todos los campos requeridos",
+    "crawlingConfigs": {
+      "title": "Configuraciones de rastreo",
+      "subtitle": "Administrar reglas de extracción para diferentes sitios. Estas configuraciones anularán la detección automática de IA.",
+      "addConfig": "Añadir configuración",
+      "noConfigs": "Sin configuraciones. La extensión generará automáticamente configuraciones cuando visites nuevos sitios.",
+      "items": "Ítems",
+      "replies": "Respuestas",
+      "enabled": "Habilitado",
+      "disabled": "Deshabilitado",
+      "updated": "Actualizado el",
+      "editing": "Editando configuración: {{domain}}",
+      "saveChanges": "Guardar cambios",
+      "cancel": "Cancelar",
+      "domain": "Dominio / Patrón de URL",
+      "domainHint": "ej: example.com o *.example.com",
+      "commentSection": "Configuración de sección de comentarios",
+      "containerSelector": "Selector de contenedor (elemento que envuelve todos los comentarios)",
+      "itemSelector": "Selector de ítem (elemento de comentario individual)",
+      "fieldsExtraction": "Extracción de campos",
+      "repliesSection": "Configuración de respuestas (Opcional)",
+      "enableReplies": "Habilitar soporte de respuestas",
+      "replyToggle": "Botón de expansión de respuestas (Opcional)",
+      "replyContainer": "Contenedor de respuestas (relativo al ítem de comentario)",
+      "replyItem": "Selector de ítem de respuesta",
+      "replyFields": "Campos de respuesta",
+      "confirmDelete": "¿Estás seguro de que deseas eliminar esta configuración?"
+    }
   },
   "history": {
     "title": "Historial",

@@ -565,7 +565,34 @@ export class AIService {
     );
 
     for (const comment of comments) {
-      const commentTokens = this.estimateTokensForComment(comment);
+      let commentTokens = this.estimateTokensForComment(comment);
+
+      // Handle huge single comment
+      if (commentTokens > availableTokens) {
+        Logger.warn('[AIService] Comment exceeds context limit, truncating', {
+          commentTokens,
+          availableTokens,
+        });
+
+        // Reserve space for metadata (username, timestamp etc) - approx 100 tokens
+        const metadataReserve = 100;
+        const maxContentTokens = Math.max(0, availableTokens - metadataReserve);
+
+        // Approximate char count (assuming 2 chars per token to be safe for mixed en/zh)
+        const maxChars = maxContentTokens * 2;
+
+        if (comment.content && comment.content.length > maxChars) {
+          const originalLength = comment.content.length;
+          comment.content = comment.content.substring(0, maxChars) + '... [Truncated]';
+          commentTokens = this.estimateTokensForComment(comment); // Re-calculate
+
+          Logger.info('[AIService] Comment truncated', {
+            originalLength,
+            newLength: comment.content.length,
+            newTokens: commentTokens,
+          });
+        }
+      }
 
       if (currentTokens + commentTokens > availableTokens && currentBatch.length > 0) {
         if (currentBatch.length > 0) {

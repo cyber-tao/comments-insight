@@ -19,6 +19,7 @@ export interface PageStatus {
   analyzedAt?: number;
   commentsCount?: number;
   historyId?: string;
+  hasConfig?: boolean;
 }
 
 export interface SiteAccessInfo {
@@ -34,6 +35,7 @@ export function usePageInfo() {
   const [pageStatus, setPageStatus] = useState<PageStatus>({
     extracted: false,
     analyzed: false,
+    hasConfig: false,
   });
   const [loading, setLoading] = useState(true);
   const [siteAccessInfo, setSiteAccessInfo] = useState<SiteAccessInfo>({
@@ -127,31 +129,49 @@ export function usePageInfo() {
     [t, toast, refreshSiteAccess],
   );
 
-  const checkPageStatus = useCallback(async (url: string) => {
+  const checkPageStatus = useCallback(
+    async (url: string) => {
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: MESSAGES.GET_HISTORY_BY_URL,
+          payload: { url },
+        });
+
+        if (response?.item) {
+          const item: HistoryItem = response.item;
+          setPageStatus({
+            extracted: true,
+            analyzed: !!item.analysis,
+            extractedAt: item.extractedAt,
+            analyzedAt: item.analyzedAt,
+            commentsCount: item.commentsCount,
+            historyId: item.id,
+            hasConfig: pageStatus.hasConfig, // Preserve existing config status
+          });
+        } else {
+          setPageStatus((prev) => ({
+            ...prev,
+            extracted: false,
+            analyzed: false,
+          }));
+        }
+      } catch (error) {
+        Logger.error('[usePageInfo] Failed to check page status', { error });
+      }
+    },
+    [pageStatus.hasConfig],
+  ); // Depend on hasConfig to avoid stale closures if needed, though mostly independent
+
+  const checkConfigStatus = useCallback(async (domain: string) => {
     try {
       const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.GET_HISTORY_BY_URL,
-        payload: { url },
+        type: MESSAGES.GET_CRAWLING_CONFIG,
+        payload: { domain },
       });
-
-      if (response?.item) {
-        const item: HistoryItem = response.item;
-        setPageStatus({
-          extracted: true,
-          analyzed: !!item.analysis,
-          extractedAt: item.extractedAt,
-          analyzedAt: item.analyzedAt,
-          commentsCount: item.commentsCount,
-          historyId: item.id,
-        });
-      } else {
-        setPageStatus({
-          extracted: false,
-          analyzed: false,
-        });
-      }
+      setPageStatus((prev) => ({ ...prev, hasConfig: !!response?.config }));
     } catch (error) {
-      Logger.error('[usePageInfo] Failed to check page status', { error });
+      Logger.warn('[usePageInfo] Failed to check config status', { error });
+      setPageStatus((prev) => ({ ...prev, hasConfig: false }));
     }
   }, []);
 
@@ -172,6 +192,15 @@ export function usePageInfo() {
       setPageInfo(info);
 
       await refreshSiteAccess(tab.url);
+      await refreshSiteAccess(tab.url);
+      if (tab.url) {
+        try {
+          const u = new URL(tab.url);
+          await checkConfigStatus(u.hostname);
+        } catch {
+          // ignore invalid url
+        }
+      }
       await checkPageStatus(tab.url);
 
       return info;
@@ -181,18 +210,22 @@ export function usePageInfo() {
     } finally {
       setLoading(false);
     }
-  }, [refreshSiteAccess, checkPageStatus]);
+  }, [refreshSiteAccess, checkPageStatus, checkConfigStatus]);
 
   const refreshPageStatus = useCallback(async () => {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab?.url) {
+        // Refresh both history status AND config status
+        // We use full hostname for config check to support suffix matching in StorageManager
+        const u = new URL(tab.url);
+        await checkConfigStatus(u.hostname);
         await checkPageStatus(tab.url);
       }
     } catch (error) {
       Logger.error('[usePageInfo] Failed to refresh page status', { error });
     }
-  }, [checkPageStatus]);
+  }, [checkPageStatus, checkConfigStatus]);
 
   return {
     pageInfo,

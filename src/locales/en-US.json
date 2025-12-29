@@ -73,7 +73,9 @@
     "accessRequired": "This permission is required and cannot be changed",
     "siteAccessStatusGranted": "Granted",
     "siteAccessStatusNotGranted": "Not granted",
-    "siteAccessStatusRequired": "Required"
+    "siteAccessStatusRequired": "Required",
+    "generateConfig": "Generate Config",
+    "generatingConfig": "Generating Config..."
   },
   "options": {
     "title": "Settings",
@@ -145,7 +147,35 @@
     "modelsFound": "Found {{count}} models",
     "noModelsFound": "No models found or API does not support model listing",
     "fetchModelsFailed": "Failed to fetch models",
-    "configureAllFields": "Please configure all required fields"
+    "configureAllFields": "Please configure all required fields",
+    "crawlingConfigs": {
+      "title": "Crawling Configurations",
+      "subtitle": "Manage extraction rules for different sites. These overrides AI auto-detection.",
+      "addConfig": "Add Config",
+      "noConfigs": "No configurations found. The extension will generate them automatically as you visit sites.",
+      "items": "Items",
+      "replies": "Replies",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "updated": "Updated",
+      "editing": "Editing Config: {{domain}}",
+      "saveChanges": "Save Changes",
+      "cancel": "Cancel",
+      "cancel": "Cancel",
+      "domain": "Domain / URL Pattern",
+      "domainHint": "e.g. youtube.com or https://example.com/blog/*",
+      "commentSection": "Comment Section",
+      "containerSelector": "Container Selector (Wrapper for all comments)",
+      "itemSelector": "Item Selector (Individual comment element)",
+      "fieldsExtraction": "Fields Extraction",
+      "repliesSection": "Replies (Optional)",
+      "enableReplies": "Enable Replies Support",
+      "replyToggle": "Reply Toggle Button (Optional)",
+      "replyContainer": "Reply Container (Relative to Comment Item)",
+      "replyItem": "Reply Item Selector",
+      "replyFields": "Reply Fields",
+      "confirmDelete": "Are you sure you want to delete this configuration?"
+    }
   },
   "history": {
     "title": "History",

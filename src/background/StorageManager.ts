@@ -1,4 +1,4 @@
-import { Settings, HistoryItem, AIConfig } from '../types';
+import { Settings, HistoryItem, AIConfig, CrawlingConfig } from '../types';
 import {
   API,
   AI,
@@ -70,6 +70,7 @@ Generate a comprehensive analysis report in Markdown format.`,
   language: LANGUAGES.DEFAULT,
   selectorRetryAttempts: RETRY.SELECTOR_ATTEMPTS,
   selectorCache: [],
+  crawlingConfigs: [],
   domAnalysisConfig: DOM_ANALYSIS_DEFAULTS,
   developerMode: false,
 };
@@ -402,6 +403,92 @@ export class StorageManager {
       throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save settings', {
         originalError: error instanceof Error ? error.message : String(error),
       });
+    }
+  }
+
+  /**
+   * Update selector cache for a specific hostname
+   * @param hostname - Hostname to cache selector for
+   * @param selector - Selector string
+   */
+  async updateSelectorCache(hostname: string, selector: string): Promise<void> {
+    try {
+      await this.ensureEncryptionReady();
+      const settings = await this.getSettings();
+      const currentCache = settings.selectorCache || [];
+
+      // Remove existing entry for this hostname if exists
+      // Remove existing entry for this hostname if exists
+      const filtered = currentCache.filter((item) => item.domain !== hostname);
+
+      // Add new entry
+      filtered.push({
+        domain: hostname,
+        selectors: {
+          commentContainer: selector,
+        },
+        lastUsed: Date.now(),
+        successCount: 1,
+      });
+
+      await this.saveSettings({ selectorCache: filtered });
+      Logger.info('[StorageManager] Selector cache updated', { hostname, selector });
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to update selector cache', { error });
+      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to update selector cache');
+    }
+  }
+
+  /**
+   * Get crawling config for a specific domain
+   * @param domain - Domain to get config for (exact match or subdomain match)
+   */
+  async getCrawlingConfig(domain: string): Promise<CrawlingConfig | null> {
+    try {
+      await this.ensureEncryptionReady();
+      const settings = await this.getSettings();
+      const configs = settings.crawlingConfigs || [];
+
+      // 1. Exact match
+      const exact = configs.find((c) => c.domain === domain);
+      if (exact) return exact;
+
+      // 2. Suffix match (e.g. m.youtube.com -> youtube.com)
+      // Sort keys by length desc to match longest suffix (most specific)
+      const matches = configs.filter((c) => domain.endsWith(c.domain));
+      if (matches.length > 0) {
+        // Return the one with the longest domain string (best match)
+        return matches.sort((a, b) => b.domain.length - a.domain.length)[0];
+      }
+
+      return null;
+    } catch (error) {
+      Logger.warn('[StorageManager] Failed to get crawling config', { error });
+      return null;
+    }
+  }
+
+  /**
+   * Save or update a crawling config
+   */
+  async saveCrawlingConfig(config: CrawlingConfig): Promise<void> {
+    try {
+      await this.ensureEncryptionReady();
+      const settings = await this.getSettings();
+      const configs = settings.crawlingConfigs || [];
+
+      const index = configs.findIndex((c) => c.domain === config.domain);
+      if (index >= 0) {
+        configs[index] = config;
+      } else {
+        configs.push(config);
+      }
+
+      await this.saveSettings({ crawlingConfigs: configs });
+      Logger.info('[StorageManager] Crawling config saved', { domain: config.domain });
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to save crawling config', { error });
+      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save crawling config');
     }
   }
 

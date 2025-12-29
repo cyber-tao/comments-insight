@@ -228,9 +228,10 @@ const History: React.FC = () => {
     });
   };
 
+  /* Recursive function to render nested comments */
   const renderCommentTree = (comments: Comment[], depth = 0) => {
     return (
-      <div className={`${depth > 0 ? 'ml-6 border-l-2 border-gray-200 pl-4' : ''}`}>
+      <div className={`${depth > 0 ? 'ml-4 border-l-2 border-gray-200 pl-3' : ''}`}>
         {comments.map((comment) => {
           const hasReplies = comment.replies && comment.replies.length > 0;
           const isExpanded = expandedReplies.has(comment.id);
@@ -314,9 +315,8 @@ const History: React.FC = () => {
                 <div
                   key={item.id}
                   onClick={() => setSelectedItem(item)}
-                  className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
-                    selectedItem?.id === item.id ? 'bg-blue-50' : ''
-                  }`}
+                  className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${selectedItem?.id === item.id ? 'bg-blue-50' : ''
+                    }`}
                 >
                   <div className="flex items-start gap-2 mb-2">
                     <div className="flex-1 min-w-0">
@@ -378,21 +378,19 @@ const History: React.FC = () => {
               <div className="flex gap-4">
                 <button
                   onClick={() => setViewMode('analysis')}
-                  className={`px-4 py-2 border-b-2 transition-colors ${
-                    viewMode === 'analysis'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-800'
-                  }`}
+                  className={`px-4 py-2 border-b-2 transition-colors ${viewMode === 'analysis'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-600 hover:text-gray-800'
+                    }`}
                 >
                   📊 {t('history.analysis')}
                 </button>
                 <button
                   onClick={() => setViewMode('comments')}
-                  className={`px-4 py-2 border-b-2 transition-colors ${
-                    viewMode === 'comments'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-800'
-                  }`}
+                  className={`px-4 py-2 border-b-2 transition-colors ${viewMode === 'comments'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-600 hover:text-gray-800'
+                    }`}
                 >
                   💬 {t('history.comments')}
                 </button>

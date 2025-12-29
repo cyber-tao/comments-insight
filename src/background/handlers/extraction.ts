@@ -266,6 +266,53 @@ export async function handleAIAnalyzeStructure(
   }
 }
 
+export async function handleGenerateCrawlingConfig(
+  message: Extract<Message, { type: 'GENERATE_CRAWLING_CONFIG' }>,
+  context: HandlerContext,
+): Promise<{ config: any; error?: string }> {
+  const { prompt } = message.payload || {};
+
+  if (!prompt) {
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Prompt is required');
+  }
+
+  try {
+    const settings = await context.storageManager.getSettings();
+
+    // Call AI to generate config JSON
+    const response = await context.aiService.callAI({
+      prompt,
+      systemPrompt:
+        'You are a config generator. Return ONLY valid JSON matching the CrawlingConfig interface. No markdown.',
+      config: settings.aiModel,
+      timeout: settings.aiTimeout,
+    });
+
+    let jsonText = response.content.trim();
+    if (jsonText.includes('```')) {
+      jsonText = jsonText
+        .replace(REGEX.MD_CODE_JSON_START, '')
+        .replace(REGEX.MD_CODE_ANY_END, '')
+        .trim();
+    }
+
+    const jsonStart = jsonText.indexOf('{');
+    const jsonEnd = jsonText.lastIndexOf('}');
+    if (jsonStart !== -1 && jsonEnd !== -1) {
+      jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+    }
+
+    const config = JSON.parse(jsonText);
+    return { config };
+  } catch (error) {
+    Logger.error('[ExtractionHandler] Config generation failed', { error });
+    return {
+      config: null,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
 export async function handleExtractionProgress(
   message: Extract<Message, { type: 'EXTRACTION_PROGRESS' }>,
   context: HandlerContext,

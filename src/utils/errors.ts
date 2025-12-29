@@ -1,9 +1,7 @@
 import { ICONS, TEXT, RETRY } from '@/config/constants';
 import i18n from './i18n';
 
-interface ErrorConstructorWithCapture extends ErrorConstructor {
-  captureStackTrace?(targetObject: object, constructorOpt?: NewableFunction): void;
-}
+// interface ErrorConstructorWithCapture removed
 
 /**
  * Error codes for categorizing different types of errors in the extension.
@@ -131,8 +129,8 @@ export class ExtensionError extends Error {
     this.timestamp = Date.now();
     this.retryable = retryable;
 
-    if (typeof (Error as ErrorConstructorWithCapture).captureStackTrace === 'function') {
-      (Error as ErrorConstructorWithCapture).captureStackTrace?.(this, ExtensionError);
+    if (typeof (Error as any).captureStackTrace === 'function') {
+      (Error as any).captureStackTrace(this, ExtensionError);
     }
   }
 

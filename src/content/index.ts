@@ -6,6 +6,7 @@ import { CommentExtractor } from './CommentExtractor';
 import { Logger } from '@/utils/logger';
 import { getCurrentHostname } from '@/utils/url';
 import { DOMAnalyzer } from './DOMAnalyzer';
+import { DOMSimplifier } from './DOMSimplifier';
 import { setExtractionActive } from './extractionState';
 
 interface ExtractionResponse {
@@ -26,7 +27,7 @@ interface DomStructureResponse {
   error?: string;
 }
 
-const globalAny = globalThis as unknown as { __COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED?: boolean };
+const globalAny = globalThis as any;
 
 let domAnalyzer: DOMAnalyzer | null = null;
 let pageController: PageController | null = null;
@@ -79,6 +80,25 @@ if (!globalAny.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED) {
     }
 
     return true;
+  });
+
+  // Expose test hook via window message
+  // Expose test hook via window message
+  window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+    if (event.data && event.data.type === 'COMMENTS_INSIGHT_TEST_TRIGGER') {
+      Logger.info('[Content] 🚀 TEST TRIGGER RECEIVED', event.data);
+      // Console log for Puppeteer
+
+      const maxComments = event.data.maxComments || 10;
+      const taskId = 'test-' + Date.now();
+
+      console.log('[Content] Starting extraction with taskId:', taskId);
+
+      handleStartExtraction({ taskId, maxComments }, (response) => {
+        console.log('__TEST_RESULT__:' + JSON.stringify(response));
+      });
+    }
   });
 }
 
@@ -181,9 +201,6 @@ function getPostInfo(): { url: string; title: string; videoTime?: string } {
 async function handleGetDOMStructure(sendResponse: (response: DomStructureResponse) => void) {
   try {
     Logger.info('[Content] Getting DOM structure for AI analysis');
-
-    // Import DOMSimplifier
-    const { DOMSimplifier } = await import('./DOMSimplifier');
 
     // Get simplified DOM structure
     const domStructure = DOMSimplifier.simplifyForAI(document.body, {
