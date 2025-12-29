@@ -122,7 +122,6 @@ export class AIService {
    *   config: settings.aiModel,
    *   signal: abortController.signal,
    * });
-   * console.log(response.content);
    * ```
    */
   async callAI(request: AIRequest): Promise<AIResponse> {
@@ -418,7 +417,6 @@ export class AIService {
    *   { platform: 'youtube.com', title: 'Video Title' },
    *   abortController.signal,
    * );
-   * console.log(result.markdown);
    * ```
    */
   async analyzeComments(

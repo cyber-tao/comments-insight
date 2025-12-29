@@ -32,13 +32,6 @@ export const TEMPLATE = {
   MAX_LENGTH: 10000,
 };
 
-export const LIKES = {
-  K_MULTIPLIER: 1000,
-  W_MULTIPLIER: 10000,
-  M_MULTIPLIER: 1000000,
-  YI_MULTIPLIER: 100000000,
-};
-
 export const SECURITY = {
   SALT_LENGTH: 16,
   IV_LENGTH: 12,
@@ -48,7 +41,6 @@ export const SECURITY = {
 };
 
 export const AI = {
-  TOKEN_RESERVE_RATIO: 0.4,
   ESTIMATE_WORD_WEIGHT: 0.75,
   ESTIMATE_PUNCT_WEIGHT: 0.25,
   ESTIMATE_CHAR_DIVISOR: 10,
@@ -67,9 +59,6 @@ export const AI = {
   INPUT_TOKEN_BUFFER: 2000,
   MIN_AVAILABLE_TOKENS: 1000,
   CONFIDENCE_HIGH_THRESHOLD: 0.9,
-  CJK_TOKEN_RATIO: 1.5,
-  WORD_TOKEN_RATIO: 1.33,
-  PUNCT_TOKEN_RATIO: 1.0,
   DEFAULT_MODELS: [
     'gpt-4',
     'gpt-4-turbo',
@@ -245,35 +234,6 @@ export const ERROR_KEYS = {
   TASK_ID_REQUIRED: 'errors.taskIdRequired',
 } as const;
 
-/**
- * @deprecated Use ERROR_KEYS with i18n.t() instead for internationalized messages.
- * This is kept for backward compatibility during migration.
- */
-export const ERRORS = {
-  FAILED_TO_SAVE_SETTINGS: 'Failed to save settings',
-  FAILED_TO_EXPORT_SETTINGS: 'Failed to export settings',
-  INVALID_SETTINGS_FORMAT: 'Invalid settings format',
-  FAILED_TO_IMPORT_SETTINGS: 'Failed to import settings',
-  FAILED_TO_SAVE_HISTORY: 'Failed to save history',
-  FAILED_TO_DELETE_HISTORY: 'Failed to delete history',
-  TASK_CANCELLED_BY_USER: 'Task cancelled by user',
-  TASK_INTERRUPTED_BY_RESTART: 'Task interrupted due to extension restart',
-  URL_REQUIRED: 'URL is required',
-  NO_TAB_ID_AVAILABLE: 'No tab ID available',
-  PROMPT_REQUIRED: 'Prompt is required',
-  COMMENTS_ARRAY_REQUIRED: 'Comments array is required',
-  HISTORY_ITEM_ID_REQUIRED: 'History item ID is required',
-  INVALID_EXPORT_TYPE: 'Invalid export type',
-  API_CONFIG_REQUIRED: 'API configuration is required',
-  COMPLETE_MODEL_CONFIG_REQUIRED: 'Complete model configuration is required',
-  NO_RESPONSE_FROM_MODEL: 'No response from model',
-  FAILED_TO_GET_DOM_STRUCTURE: 'Failed to get DOM structure',
-  CONFIG_DATA_REQUIRED: 'Configuration data is required',
-  CONFIG_ID_REQUIRED: 'Configuration ID is required',
-  SELECTOR_VALIDATION_PARAMS_REQUIRED: 'Selector validation parameters are required',
-  SETTINGS_DATA_REQUIRED: 'Settings data is required',
-};
-
 export const DEFAULTS = {
   LOGS_MAX_STORED: 100,
   AI_LOGS_MAX_STORED: 100,
@@ -395,13 +355,6 @@ export const LIMITS = {
   API_KEY_MASK_MAX_STARS: 20,
   RANDOM_ID_START_INDEX: 2,
   ID_RANDOM_LENGTH: 9,
-  MAX_COMMENTS_DEFAULT: 500,
-  MIN_COMMENTS: 10,
-  MAX_COMMENTS: 10000,
-  MAX_SCROLLS_MIN: 1,
-  MAX_SCROLLS_MAX: 100,
-  SCROLL_DELAY_MIN: 100,
-  SCROLL_DELAY_MAX: 10000,
   MODEL_RESPONSE_PREVIEW_LENGTH: 100,
   LOG_PROMPT_PREVIEW_LENGTH: 500,
   NOTIFICATION_TITLE_MAX_LENGTH: 50,

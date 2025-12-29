@@ -10,7 +10,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
   constructor(
     private pageController: PageController,
     private config: CrawlingConfig,
-  ) { }
+  ) {}
 
   cleanup(): void {
     // No specific resources to cleanup for this strategy
@@ -55,7 +55,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
     const allComments: Comment[] = [];
     let noNewCommentsCount = 0;
-    let scrollCount = 0;
+    let _scrollCount = 0;
     // Track elements that have been processed as replies to avoid duplication at top level
     // Now simplified to just use logic skip, but we still need to track processed *items* to avoid re-clicking expand buttons
     // The previous logic issue: We iterate all items every scroll. We MUST skip items we already touched.
@@ -130,7 +130,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
       await this.pageController.scrollToBottom();
       await this.delay(TIMING.SCROLL_DELAY_MS);
-      scrollCount++;
+      _scrollCount++;
 
       // Re-query container in case of re-render
       const newContainer = document.querySelector(containerSelector);
@@ -144,7 +144,9 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
       if (afterScrollHeight === beforeScrollHeight && afterChildCount === beforeChildCount) {
         unchangedScrollCount++;
-        Logger.debug('[ConfiguredStrategy] Scroll didn\'t load new content', { unchangedScrollCount });
+        Logger.debug("[ConfiguredStrategy] Scroll didn't load new content", {
+          unchangedScrollCount,
+        });
         if (unchangedScrollCount >= MAX_UNCHANGED_SCROLLS) {
           Logger.info('[ConfiguredStrategy] Reached bottom of content (no size change). Stopping.');
           break;
@@ -208,7 +210,10 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         if (replyConfig.expandBtn) {
           const expandBtn = element.querySelector(replyConfig.expandBtn.selector) as HTMLElement;
           if (expandBtn) {
-            Logger.info('[ReplyDebug] Found expand button', { selector: replyConfig.expandBtn.selector, text: expandBtn.textContent || '' });
+            Logger.info('[ReplyDebug] Found expand button', {
+              selector: replyConfig.expandBtn.selector,
+              text: expandBtn.textContent || '',
+            });
 
             // Scroll into view to trigger lazy loading and ensure clickability
             expandBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -222,7 +227,9 @@ export class ConfiguredStrategy implements ExtractionStrategy {
               // Smart wait: Poll for replies to appear
               await this.waitForReplies(element, replyConfig);
             } catch (e: any) {
-              Logger.error('[ReplyDebug] Failed to click expand button', { error: e.message || String(e) });
+              Logger.error('[ReplyDebug] Failed to click expand button', {
+                error: e.message || String(e),
+              });
             }
           } else {
             // Logger.debug('[ReplyDebug] Expand button NOT found', { selector: replyConfig.expandBtn.selector });
@@ -233,7 +240,8 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         const replyContainer = element.querySelector(replyConfig.container.selector);
         if (replyContainer) {
           const replyItems = Array.from(replyContainer.querySelectorAll(replyConfig.item.selector));
-          if (replyItems.length > 0) Logger.info(`[ReplyDebug] Found ${replyItems.length} reply items`);
+          if (replyItems.length > 0)
+            Logger.info(`[ReplyDebug] Found ${replyItems.length} reply items`);
 
           for (const replyItem of replyItems) {
             const reply = await this.extractReplyFromElement(
@@ -302,13 +310,17 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       const expandBtn = element.querySelector(replyConfig.expandBtn.selector) as HTMLElement;
       if (expandBtn) {
         try {
-          Logger.info('[ReplyDebug] Found nested expand button', { selector: replyConfig.expandBtn.selector });
+          Logger.info('[ReplyDebug] Found nested expand button', {
+            selector: replyConfig.expandBtn.selector,
+          });
           expandBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
           await this.delay(TIMING.SCROLL_INTO_VIEW_WAIT_MS);
           expandBtn.click();
           await this.waitForReplies(element, replyConfig);
         } catch (e: any) {
-          Logger.error('[ReplyDebug] Failed to click nested expand button', { error: e.message || String(e) });
+          Logger.error('[ReplyDebug] Failed to click nested expand button', {
+            error: e.message || String(e),
+          });
         }
       }
     }
@@ -316,7 +328,8 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     const replyContainer = element.querySelector(replyConfig.container.selector);
     if (replyContainer) {
       const replyItems = Array.from(replyContainer.querySelectorAll(replyConfig.item.selector));
-      if (replyItems.length > 0) Logger.info(`[ReplyDebug] Found ${replyItems.length} nested replies`);
+      if (replyItems.length > 0)
+        Logger.info(`[ReplyDebug] Found ${replyItems.length} nested replies`);
 
       for (const replyItem of replyItems) {
         const reply = await this.extractReplyFromElement(
@@ -368,10 +381,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     return Math.abs(hash).toString(36);
   }
 
-  private async waitForReplies(
-    element: HTMLElement,
-    replyConfig: ReplyConfig
-  ): Promise<void> {
+  private async waitForReplies(element: HTMLElement, replyConfig: ReplyConfig): Promise<void> {
     const startTime = Date.now();
 
     while (Date.now() - startTime < TIMING.REPLY_POLL_TIMEOUT_MS) {

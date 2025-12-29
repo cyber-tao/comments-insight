@@ -20,7 +20,7 @@ import type { ProgressCallback } from './strategies/ExtractionStrategy';
  * ```typescript
  * const extractor = new CommentExtractor(pageController);
  * const comments = await extractor.extractWithAI(100, 'youtube.com', (progress, msg) => {
- *   console.log(`${progress}%: ${msg}`);
+ *   // Handle progress updates
  * });
  * ```
  */

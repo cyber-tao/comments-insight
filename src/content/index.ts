@@ -88,15 +88,16 @@ if (!globalAny.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED) {
     if (event.source !== window) return;
     if (event.data && event.data.type === 'COMMENTS_INSIGHT_TEST_TRIGGER') {
       Logger.info('[Content] 🚀 TEST TRIGGER RECEIVED', event.data);
-      // Console log for Puppeteer
 
       const maxComments = event.data.maxComments || 10;
       const taskId = 'test-' + Date.now();
 
-      console.log('[Content] Starting extraction with taskId:', taskId);
-
       handleStartExtraction({ taskId, maxComments }, (response) => {
-        console.log('__TEST_RESULT__:' + JSON.stringify(response));
+        Logger.debug('[Content] Test extraction completed', {
+          success: response.success,
+          commentsCount: response.comments?.length || 0,
+          error: response.error,
+        });
       });
     }
   });
