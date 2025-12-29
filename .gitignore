@@ -72,7 +72,4 @@ coverage/
 gha-creds-*.json
 
 # Test and analysis files
-zhihu.md
-AGENTS.md
-project_analysis.md
-.serena/
+testmd/
