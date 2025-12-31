@@ -75,7 +75,10 @@
     "siteAccessStatusNotGranted": "未授权",
     "siteAccessStatusRequired": "必需",
     "generateConfig": "生成配置",
-    "generatingConfig": "正在生成配置..."
+    "generatingConfig": "正在生成配置...",
+    "configGenerationStarted": "开始生成配置",
+    "configGenerationFailed": "配置生成失败",
+    "configGenerationCompleted": "配置生成完成"
   },
   "options": {
     "title": "设置",
@@ -173,6 +176,9 @@
       "replyContainer": "回复容器 (相对于评论单项)",
       "replyItem": "回复单项选择器",
       "replyFields": "回复字段",
+      "videoTimeSection": "帖子/视频时间 (可选)",
+      "videoTimeSelector": "时间选择器",
+      "videoTimeHint": "帖子或视频发布时间的选择器。通常在标题附近，不在评论区内。",
       "confirmDelete": "确定要删除此配置吗？"
     }
   },

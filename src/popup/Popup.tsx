@@ -29,9 +29,9 @@ const Popup: React.FC = () => {
     currentTask,
     loadCurrentTask,
     startExtraction,
+    startConfigGeneration,
     startAnalysis,
     cancelTask,
-    ToastContainer,
   } = useTask({
     onStatusRefresh: refreshPageStatus,
   });
@@ -116,6 +116,15 @@ const Popup: React.FC = () => {
     }
   };
 
+  const handleGenerateConfig = async () => {
+    if (!pageInfo) return;
+
+    const ok = await ensureSiteAccess(pageInfo.url);
+    if (!ok) return;
+
+    await startConfigGeneration(pageInfo.url);
+  };
+
   const handleOpenHistory = () => {
     chrome.tabs.create({ url: chrome.runtime.getURL(PATHS.HISTORY_PAGE) });
     window.close();
@@ -141,7 +150,6 @@ const Popup: React.FC = () => {
 
   return (
     <div className="w-96 bg-gradient-to-br from-blue-50 to-purple-50">
-      <ToastContainer />
       <Header
         version={version}
         aiModelName={aiModelName}
@@ -155,6 +163,7 @@ const Popup: React.FC = () => {
         pageStatus={pageStatus}
         currentTask={currentTask}
         onExtract={handleExtractComments}
+        onGenerateConfig={handleGenerateConfig}
         onAnalyze={handleAnalyzeComments}
         onCancel={cancelTask}
         onOpenHistory={handleOpenHistory}

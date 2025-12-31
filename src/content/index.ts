@@ -8,6 +8,7 @@ import { getCurrentHostname } from '@/utils/url';
 import { DOMAnalyzer } from './DOMAnalyzer';
 import { DOMSimplifier } from './DOMSimplifier';
 import { setExtractionActive } from './extractionState';
+import { AIStrategy } from './strategies/AIStrategy';
 
 interface ExtractionResponse {
   success: boolean;
@@ -18,6 +19,11 @@ interface ExtractionResponse {
     title?: string;
     videoTime?: string;
   };
+}
+
+interface ConfigGenerationResponse {
+  success: boolean;
+  error?: string;
 }
 
 interface DomStructureResponse {
@@ -64,7 +70,11 @@ if (!globalAny.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED) {
 
       case MESSAGES.START_EXTRACTION:
         handleStartExtraction(message.payload, sendResponse);
-        return true; // Keep channel open for async response
+        return true;
+
+      case MESSAGES.START_CONFIG_GENERATION:
+        handleStartConfigGeneration(message.payload, sendResponse);
+        return true;
 
       case MESSAGES.CANCEL_EXTRACTION:
         handleCancelExtraction(message.payload.taskId);
@@ -144,7 +154,7 @@ async function handleStartExtraction(
     }
 
     // Get post info from page
-    const postInfo = getPostInfo();
+    const postInfo = await getPostInfo();
 
     // 2. Send completion message
     await chrome.runtime.sendMessage({
@@ -186,13 +196,88 @@ function handleCancelExtraction(taskId: string) {
   }
 }
 
+async function handleStartConfigGeneration(
+  data: { taskId: string },
+  sendResponse: (response: ConfigGenerationResponse) => void,
+) {
+  sendResponse({ success: true });
+
+  const { taskId } = data;
+  Logger.info('[Content] Starting config generation', { taskId });
+
+  currentTaskId = taskId;
+  setExtractionActive(true);
+
+  try {
+    const { domAnalyzer } = getTools();
+    const localPageController = new PageController(domAnalyzer);
+    const strategy = new AIStrategy(localPageController);
+
+    try {
+      await strategy.generateConfig((progress: number, message: string) => {
+        chrome.runtime.sendMessage({
+          type: MESSAGES.EXTRACTION_PROGRESS,
+          payload: { taskId, progress, message },
+        });
+      });
+
+      if (currentTaskId !== taskId) {
+        Logger.info('[Content] Config generation cancelled');
+        return;
+      }
+
+      await chrome.runtime.sendMessage({
+        type: MESSAGES.CONFIG_GENERATION_COMPLETED,
+        payload: { taskId, success: true },
+      });
+
+      Logger.info('[Content] Config generation complete');
+    } finally {
+      strategy.cleanup();
+    }
+  } catch (error) {
+    Logger.error('[Content] Config generation failed', { error });
+    await chrome.runtime.sendMessage({
+      type: MESSAGES.CONFIG_GENERATION_COMPLETED,
+      payload: {
+        taskId,
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+    });
+  } finally {
+    currentTaskId = null;
+    setExtractionActive(false);
+  }
+}
+
 /**
  * Get post information
  */
-function getPostInfo(): { url: string; title: string; videoTime?: string } {
+async function getPostInfo(): Promise<{ url: string; title: string; videoTime?: string }> {
   const url = window.location.href;
   const title = document.title;
-  return { url, title };
+  let videoTime: string | undefined;
+
+  try {
+    const hostname = getCurrentHostname();
+    const response = await chrome.runtime.sendMessage({
+      type: MESSAGES.GET_CRAWLING_CONFIG,
+      payload: { domain: hostname },
+    });
+
+    if (response?.config?.videoTime?.selector) {
+      const element = document.querySelector(response.config.videoTime.selector);
+      if (element) {
+        videoTime = element.textContent?.trim() || undefined;
+        Logger.debug('[Content] Extracted videoTime from config selector', { videoTime });
+      }
+    }
+  } catch (e) {
+    Logger.warn('[Content] Failed to get videoTime from config', { error: e });
+  }
+
+  return { url, title, videoTime };
 }
 
 /**

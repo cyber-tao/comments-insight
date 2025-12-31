@@ -28,6 +28,10 @@ interface StartExtractionResponse {
   taskId: string;
 }
 
+interface StartConfigGenerationResponse {
+  taskId: string;
+}
+
 interface AIAnalyzeStructureResponse {
   selectors?: Record<string, string>;
   structure?: {
@@ -65,6 +69,7 @@ export function chunkDomText(
 
 // Map to hold pending task resolvers
 const pendingExtractionTasks = new Map<string, TaskResolver>();
+const pendingConfigTasks = new Map<string, TaskResolver>();
 
 export async function handleStartExtraction(
   message: Extract<Message, { type: 'START_EXTRACTION' }>,
@@ -197,6 +202,104 @@ export async function handleExtractionCompleted(
     });
   } else {
     pending.reject(new Error(error || 'Extraction failed'));
+  }
+
+  return { success: true };
+}
+
+export async function handleStartConfigGeneration(
+  message: Extract<Message, { type: 'START_CONFIG_GENERATION' }>,
+  context: HandlerContext,
+): Promise<StartConfigGenerationResponse> {
+  const { url, tabId: payloadTabId } = message.payload || {};
+
+  if (!url) {
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'URL is required');
+  }
+
+  const domain = getDomain(url) || 'unknown';
+
+  let tabId = payloadTabId || context.sender?.tab?.id;
+
+  if (!tabId) {
+    try {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      tabId = activeTab?.id;
+    } catch (error) {
+      Logger.error('[ExtractionHandler] Failed to get active tab', { error });
+      throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
+    }
+  }
+
+  if (!tabId) {
+    throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
+  }
+
+  Logger.info('[ExtractionHandler] Starting config generation', { domain });
+
+  const taskId = context.taskManager.createTask('extract', url, domain, 0, tabId);
+
+  context.taskManager.setExecutor(taskId, async (task: Task, signal: AbortSignal) => {
+    if (!task.tabId) {
+      throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
+    }
+
+    await ensureContentScriptInjected(task.tabId);
+
+    try {
+      await chrome.tabs.sendMessage(task.tabId, {
+        type: MESSAGES.START_CONFIG_GENERATION,
+        payload: { taskId: task.id },
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (
+        !msg.includes('Message timeout') &&
+        !msg.includes('The message port closed before a response was received')
+      ) {
+        throw error;
+      }
+      Logger.debug('[ExtractionHandler] Message ack timeout ignored, waiting for completion');
+    }
+
+    return new Promise((resolve, reject) => {
+      pendingConfigTasks.set(taskId, { resolve, reject });
+
+      signal.addEventListener('abort', () => {
+        pendingConfigTasks.delete(taskId);
+        chrome.tabs
+          .sendMessage(task.tabId!, {
+            type: MESSAGES.CANCEL_EXTRACTION,
+            payload: { taskId },
+          })
+          .catch(() => {});
+
+        reject(new ExtensionError(ErrorCode.TASK_CANCELLED, 'Task cancelled by user'));
+      });
+    });
+  });
+
+  return { taskId };
+}
+
+export async function handleConfigGenerationCompleted(
+  message: Extract<Message, { type: 'CONFIG_GENERATION_COMPLETED' }>,
+  _context: HandlerContext,
+): Promise<ExtractionCompletionResponse> {
+  const { taskId, success, error } = message.payload;
+  const pending = pendingConfigTasks.get(taskId);
+
+  if (!pending) {
+    Logger.warn('[ExtractionHandler] Received config completion for unknown task', { taskId });
+    return { success: false };
+  }
+
+  pendingConfigTasks.delete(taskId);
+
+  if (success) {
+    pending.resolve({ tokensUsed: 0, commentsCount: 0 });
+  } else {
+    pending.reject(new Error(error || 'Config generation failed'));
   }
 
   return { success: true };

@@ -143,6 +143,7 @@ export interface CrawlingConfig {
   item: SelectorRule;
   fields: FieldSelector[];
   replies?: ReplyConfig;
+  videoTime?: SelectorRule;
   lastUpdated: number;
 }
 

@@ -36,6 +36,8 @@ const SITE_SELECTORS: Record<string, string> = {
   'github.com': '.js-discussion',
 };
 
+export type ConfigGenerationCallback = (progress: number, message: string) => void;
+
 export class AIStrategy implements ExtractionStrategy {
   private aiPort: chrome.runtime.Port | null = null;
 
@@ -531,14 +533,13 @@ export class AIStrategy implements ExtractionStrategy {
   ): Promise<void> {
     Logger.info('[AIStrategy] Attempting to generate crawling config via AI...');
 
-    // Simplify specifically for Config Generation (we need structure, not necessarily all text)
     const sectionElement = document.querySelector(sectionSelector);
     if (!sectionElement) return;
 
     const simplified = DOMSimplifier.simplifyForAI(sectionElement, {
-      maxDepth: maxDepth || 3, // Use config depth
-      includeText: false, // Structure is more important than text content for config
-      maxNodes: maxNodes || 500,
+      maxDepth: maxDepth || DOM_ANALYSIS_DEFAULTS.initialDepth,
+      includeText: true,
+      maxNodes: maxNodes || DOM.SIMPLIFY_MAX_NODES,
     });
     const domStr = DOMSimplifier.toStringFormat(simplified);
 
@@ -546,24 +547,20 @@ export class AIStrategy implements ExtractionStrategy {
       PROMPT_GENERATE_CRAWLING_CONFIG +
       `\n\nDOM Structure (Container: ${sectionSelector}):\n\`\`\`html\n${domStr}\n\`\`\``;
 
-    // Use Port to call AI
     const response = await this.callAIviaPort<any>({
       type: MESSAGES.GENERATE_CRAWLING_CONFIG,
       payload: { prompt },
     });
 
     if (response && response.config) {
-      let config: any = response.config;
+      const config: any = response.config;
 
-      // Check required fields
       if (config.container && config.item && config.fields) {
-        // Use normalized domain (strip www.) to allow broader matching
         const normalizedDomain = hostname.startsWith('www.') ? hostname.slice(4) : hostname;
         config.domain = normalizedDomain;
         config.id = normalizedDomain + '_' + Date.now();
         config.lastUpdated = Date.now();
 
-        // Save it!
         await sendMessage({
           type: MESSAGES.SAVE_CRAWLING_CONFIG,
           payload: { config },
@@ -575,5 +572,82 @@ export class AIStrategy implements ExtractionStrategy {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async generateConfig(onProgress?: ConfigGenerationCallback): Promise<boolean> {
+    Logger.info('[AIStrategy] Starting config generation');
+    onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'initializing');
+
+    const hostname = getCurrentHostname();
+    let domConfig = DOM_ANALYSIS_DEFAULTS;
+
+    try {
+      const resp = await sendMessage<{ settings: Settings }>({ type: MESSAGES.GET_SETTINGS });
+      if (resp?.settings?.domAnalysisConfig) {
+        domConfig = resp.settings.domAnalysisConfig;
+      }
+    } catch (e) {
+      Logger.warn('[AIStrategy] Failed to load settings, using defaults', { error: e });
+    }
+
+    onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING, 'scrolling to load content');
+
+    await this.pageController.scrollToBottom();
+    await this.delay(TIMING.SCROLL_DELAY_MS);
+
+    onProgress?.(30, 'analyzing page structure');
+
+    const detectMaxNodes = Math.max(
+      DOM.DETECT_MAX_NODES_BASE,
+      domConfig.maxDepth * DOM.DETECT_MAX_NODES_FACTOR,
+    );
+
+    const simplified = DOMSimplifier.simplifyForAI(document.body, {
+      maxDepth: domConfig.maxDepth,
+      includeText: true,
+      maxNodes: detectMaxNodes,
+    });
+    const domStr = DOMSimplifier.toStringFormat(simplified);
+
+    onProgress?.(50, 'generating config via AI');
+
+    const prompt =
+      PROMPT_GENERATE_CRAWLING_CONFIG +
+      `\n\nPage URL: ${window.location.href}\nDomain: ${hostname}\n\nDOM Structure:\n\`\`\`html\n${domStr}\n\`\`\``;
+
+    const response = await this.callAIviaPort<any>({
+      type: MESSAGES.GENERATE_CRAWLING_CONFIG,
+      payload: { prompt },
+    });
+
+    if (!response || !response.config) {
+      throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, 'AI failed to generate config');
+    }
+
+    const config: any = response.config;
+
+    if (!config.container || !config.item || !config.fields) {
+      throw new ExtensionError(
+        ErrorCode.DOM_ANALYSIS_FAILED,
+        'Generated config missing required fields',
+      );
+    }
+
+    onProgress?.(80, 'saving config');
+
+    const normalizedDomain = hostname.startsWith('www.') ? hostname.slice(4) : hostname;
+    config.domain = normalizedDomain;
+    config.id = normalizedDomain + '_' + Date.now();
+    config.lastUpdated = Date.now();
+
+    await sendMessage({
+      type: MESSAGES.SAVE_CRAWLING_CONFIG,
+      payload: { config },
+    });
+
+    onProgress?.(100, 'complete');
+    Logger.info('[AIStrategy] Config generation completed', { config });
+
+    return true;
   }
 }

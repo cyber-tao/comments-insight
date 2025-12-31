@@ -73,6 +73,9 @@ export class MessageRouter {
         case MESSAGES.START_EXTRACTION:
           return await extractionHandlers.handleStartExtraction(message, context);
 
+        case MESSAGES.START_CONFIG_GENERATION:
+          return await extractionHandlers.handleStartConfigGeneration(message, context);
+
         case MESSAGES.AI_ANALYZE_STRUCTURE:
           return await extractionHandlers.handleAIAnalyzeStructure(message, context);
 
@@ -84,6 +87,9 @@ export class MessageRouter {
 
         case MESSAGES.EXTRACTION_COMPLETED:
           return await extractionHandlers.handleExtractionCompleted(message, context);
+
+        case MESSAGES.CONFIG_GENERATION_COMPLETED:
+          return await extractionHandlers.handleConfigGenerationCompleted(message, context);
 
         case MESSAGES.EXTRACTION_PROGRESS:
           return extractionHandlers.handleExtractionProgress(message, context);

@@ -9,6 +9,7 @@ interface ActionButtonsProps {
   pageStatus: PageStatus;
   currentTask: CurrentTask | null;
   onExtract: () => void;
+  onGenerateConfig: () => void;
   onAnalyze: () => void;
   onCancel: (taskId: string) => void;
   onOpenHistory: () => void;
@@ -19,6 +20,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
   pageStatus,
   currentTask,
   onExtract,
+  onGenerateConfig,
   onAnalyze,
   onCancel,
   onOpenHistory,
@@ -31,6 +33,8 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
         url: chrome.runtime.getURL(`${PATHS.HISTORY_PAGE}?id=${pageStatus.historyId}&tab=comments`),
       });
       window.close();
+    } else if (!pageStatus.hasConfig) {
+      onGenerateConfig();
     } else {
       onExtract();
     }
@@ -128,7 +132,6 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
             <button
               onClick={() => onCancel(currentTask.id)}
               className="px-3 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-md flex items-center justify-center"
-              title={t('task.cancel')}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -189,7 +192,6 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
           <button
             onClick={() => onCancel(currentTask.id)}
             className="px-3 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-md flex items-center justify-center"
-            title={t('task.cancel')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path

@@ -42,7 +42,6 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onOpenLogs}
               className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-              title={t('popup.viewAILogs')}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -57,7 +56,6 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={onOpenSettings}
             className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-            title={t('popup.settings')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path

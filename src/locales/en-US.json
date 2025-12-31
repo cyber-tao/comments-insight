@@ -75,7 +75,10 @@
     "siteAccessStatusNotGranted": "Not granted",
     "siteAccessStatusRequired": "Required",
     "generateConfig": "Generate Config",
-    "generatingConfig": "Generating Config..."
+    "generatingConfig": "Generating Config...",
+    "configGenerationStarted": "Config generation started",
+    "configGenerationFailed": "Config generation failed",
+    "configGenerationCompleted": "Config generation completed"
   },
   "options": {
     "title": "Settings",
@@ -174,6 +177,9 @@
       "replyContainer": "Reply Container (Relative to Comment Item)",
       "replyItem": "Reply Item Selector",
       "replyFields": "Reply Fields",
+      "videoTimeSection": "Post/Video Time (Optional)",
+      "videoTimeSelector": "Time Selector",
+      "videoTimeHint": "Selector for the post/video publication time. This is usually near the title, not in the comment section.",
       "confirmDelete": "Are you sure you want to delete this configuration?"
     }
   },

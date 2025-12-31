@@ -273,6 +273,7 @@ interface CrawlingConfig {
   item: SelectorRule;      // The selector for an INDIVIDUAL comment item
   fields: FieldSelector[]; // Fields to extract
   replies?: ReplyConfig;   // Optional: if replies are detected
+  videoTime?: SelectorRule; // Optional: selector for post/video publication time (outside comment section)
 }
 \`\`\`
 
@@ -288,11 +289,15 @@ interface CrawlingConfig {
 4.  **Use Hierarchy**: If a stable class is not available, use structural paths relative to the parent.
     *   *Bad*: \`.div > .span > .text\`
     *   *Good*: \`article > header > a.author\`
-4.  **Fields**:
+5.  **Fields**:
     *   **username**: The author's name.
     *   **content**: The main text body of the comment.
     *   **timestamp**: The time element (often \`<time>\` or text like "2 hours ago").
     *   **likes**: The like/upvote count.
+6.  **videoTime**: The publication time of the post/video (NOT comment time). Look for:
+    *   YouTube: \`#info-strings yt-formatted-string\`, \`#date\`
+    *   General: \`time[datetime]\`, \`.publish-date\`, \`.post-date\`, \`[itemprop="datePublished"]\`
+    *   This is usually near the title or author info, NOT in the comment section.
 
 ## Output Format
 Return **ONLY** the JSON object. No markdown code blocks, no explanations.

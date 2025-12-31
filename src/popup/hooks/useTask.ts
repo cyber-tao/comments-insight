@@ -1,9 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
 import { MESSAGES, TIMING, TEXT } from '@/config/constants';
 import { Task, TaskProgress } from '@/types';
 import { Logger } from '@/utils/logger';
-import { useToast } from '@/hooks/useToast';
 
 export interface CurrentTask {
   id: string;
@@ -20,8 +18,6 @@ interface UseTaskOptions {
 }
 
 export function useTask(options: UseTaskOptions = {}) {
-  const { t } = useTranslation();
-  const toast = useToast();
   const [currentTask, setCurrentTask] = useState<CurrentTask | null>(null);
   const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isUnmountedRef = useRef(false);
@@ -67,25 +63,12 @@ export function useTask(options: UseTaskOptions = {}) {
             } else if (task.status === 'completed') {
               await options.onStatusRefresh?.();
               options.onTaskComplete?.(updatedTask);
-              toast.success(
-                task.type === 'extract'
-                  ? t('popup.extractionCompleted')
-                  : t('popup.analysisCompleted'),
-              );
               monitorTimeoutRef.current = setTimeout(() => {
                 if (!isUnmountedRef.current) {
                   setCurrentTask(null);
                 }
               }, TIMING.CLEAR_TASK_DELAY_MS);
             } else if (task.status === 'failed') {
-              const isCancelled = task.error === 'Task cancelled by user';
-              if (isCancelled) {
-                toast.info(t('task.cancel'));
-              } else {
-                toast.error(
-                  task.error ? `${t('popup.taskFailed')}: ${task.error}` : t('popup.taskFailed'),
-                );
-              }
               monitorTimeoutRef.current = setTimeout(() => {
                 if (!isUnmountedRef.current) {
                   setCurrentTask(null);
@@ -100,7 +83,7 @@ export function useTask(options: UseTaskOptions = {}) {
 
       checkStatus();
     },
-    [t, toast, options],
+    [options],
   );
 
   const loadCurrentTask = useCallback(
@@ -156,14 +139,13 @@ export function useTask(options: UseTaskOptions = {}) {
 
   const startExtraction = async (url: string): Promise<string | null> => {
     if (currentTask && currentTask.status === 'running') {
-      toast.warning(t('popup.taskAlreadyRunning'));
       return null;
     }
 
     try {
       await ensureContentScript();
     } catch (_error) {
-      toast.error(TEXT.CONTENT_SCRIPT_INJECT_FAILED);
+      Logger.error('[useTask] Failed to inject content script');
       return null;
     }
 
@@ -180,7 +162,6 @@ export function useTask(options: UseTaskOptions = {}) {
           status: 'running',
           progress: 0,
         });
-        toast.info(t('popup.extractionStarted'));
         monitorTask(response.taskId);
         return response.taskId;
       }
@@ -194,7 +175,48 @@ export function useTask(options: UseTaskOptions = {}) {
             : JSON.stringify(error);
       Logger.error('[useTask] Failed to start extraction', { error: message });
       setCurrentTask(null);
-      toast.error(t('popup.extractionFailed'));
+      return null;
+    }
+  };
+
+  const startConfigGeneration = async (url: string): Promise<string | null> => {
+    if (currentTask && currentTask.status === 'running') {
+      return null;
+    }
+
+    try {
+      await ensureContentScript();
+    } catch (_error) {
+      Logger.error('[useTask] Failed to inject content script');
+      return null;
+    }
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: MESSAGES.START_CONFIG_GENERATION,
+        payload: { url },
+      });
+
+      if (response?.taskId) {
+        setCurrentTask({
+          id: response.taskId,
+          type: 'extract',
+          status: 'running',
+          progress: 0,
+        });
+        monitorTask(response.taskId);
+        return response.taskId;
+      }
+      return null;
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : JSON.stringify(error);
+      Logger.error('[useTask] Failed to start config generation', { error: message });
+      setCurrentTask(null);
       return null;
     }
   };
@@ -205,7 +227,6 @@ export function useTask(options: UseTaskOptions = {}) {
     metadata: { url?: string; platform?: string; title?: string },
   ): Promise<string | null> => {
     if (currentTask && currentTask.status === 'running') {
-      toast.warning(t('popup.taskAlreadyRunning'));
       return null;
     }
 
@@ -226,7 +247,6 @@ export function useTask(options: UseTaskOptions = {}) {
           status: 'running',
           progress: 0,
         });
-        toast.info(t('popup.analysisStarted'));
         monitorTask(response.taskId);
         return response.taskId;
       }
@@ -234,7 +254,6 @@ export function useTask(options: UseTaskOptions = {}) {
     } catch (error) {
       Logger.error('[useTask] Failed to start analysis', { error });
       setCurrentTask(null);
-      toast.error(t('popup.analysisFailed'));
       return null;
     }
   };
@@ -254,8 +273,8 @@ export function useTask(options: UseTaskOptions = {}) {
     currentTask,
     loadCurrentTask,
     startExtraction,
+    startConfigGeneration,
     startAnalysis,
     cancelTask,
-    ToastContainer: toast.ToastContainer,
   };
 }

@@ -21,6 +21,10 @@ export type ExtractionMessage =
       type: 'START_EXTRACTION';
       payload: { taskId?: string; url: string; maxComments?: number; tabId?: number };
     }
+  | {
+      type: 'START_CONFIG_GENERATION';
+      payload: { url: string; tabId?: number };
+    }
   | { type: 'CANCEL_EXTRACTION'; payload: { taskId: string } }
   | {
       type: 'EXTRACTION_PROGRESS';
@@ -33,6 +37,14 @@ export type ExtractionMessage =
         success: boolean;
         comments?: Comment[];
         postInfo?: { url?: string; title?: string; videoTime?: string };
+        error?: string;
+      };
+    }
+  | {
+      type: 'CONFIG_GENERATION_COMPLETED';
+      payload: {
+        taskId: string;
+        success: boolean;
         error?: string;
       };
     }
