@@ -3,6 +3,7 @@ import { PageController } from './PageController';
 import { Logger } from '@/utils/logger';
 import { AIStrategy } from './strategies/AIStrategy';
 import type { ProgressCallback } from './strategies/ExtractionStrategy';
+import { EXTRACTION_PROGRESS } from '@/config/constants';
 
 /**
  * CommentExtractor extracts comments from web pages using AI-powered strategies.
@@ -68,14 +69,14 @@ export class CommentExtractor {
       // Execute strategy
       const comments = await strategy.execute(maxComments, platform, onProgress);
 
-      onProgress?.(80, 'validating');
+      onProgress?.(EXTRACTION_PROGRESS.VALIDATING, 'validating');
       const validComments = this.validateComments(comments, platform);
       const limitedComments = validComments.slice(0, maxComments);
-      onProgress?.(100, 'complete');
+      onProgress?.(EXTRACTION_PROGRESS.COMPLETE, 'complete');
 
       return limitedComments;
     } finally {
-      // 确保清理策略资源
+      // Ensure strategy resources are cleaned up
       strategy.cleanup();
     }
   }

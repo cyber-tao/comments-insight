@@ -1,5 +1,5 @@
 import { getShadowRoot, querySelectorDeep, querySelectorAllDeep } from '@/utils/dom-query';
-import { DOM } from '@/config/constants';
+import { DOM, DOM_ANALYSIS_DEFAULTS } from '@/config/constants';
 
 export interface DOMNode {
   tag: string;
@@ -19,7 +19,7 @@ export class DOMAnalyzer {
    * @param maxDepth - Maximum depth to analyze
    * @returns Serialized DOM string
    */
-  analyzePage(maxDepth: number = 5): string {
+  analyzePage(maxDepth: number = DOM_ANALYSIS_DEFAULTS.initialDepth): string {
     const root = document.body;
     const domNode = this.analyzeNode(root, 0, maxDepth);
     return this.serializeForAI(domNode);
@@ -30,7 +30,9 @@ export class DOMAnalyzer {
    * @param maxDepth - Maximum depth to analyze
    * @returns Root DOM node
    */
-  async analyzeLayerByLayer(maxDepth: number = 5): Promise<DOMNode> {
+  async analyzeLayerByLayer(
+    maxDepth: number = DOM_ANALYSIS_DEFAULTS.initialDepth,
+  ): Promise<DOMNode> {
     const root = document.body;
     return this.analyzeNode(root, 0, maxDepth);
   }
@@ -56,37 +58,43 @@ export class DOMAnalyzer {
    * @returns Serialized string
    */
   serializeForAI(node: DOMNode, depth: number = 0): string {
-    const indent = '  '.repeat(depth);
-    let result = `${indent}<${node.tag}`;
+    const parts: string[] = [];
+    this.buildSerializedString(node, depth, parts);
+    return parts.join('');
+  }
+
+  private buildSerializedString(node: DOMNode, depth: number, parts: string[]): void {
+    const indent = DOM.INDENT.repeat(depth);
+    parts.push(`${indent}<${node.tag}`);
 
     if (node.id) {
-      result += ` id="${node.id}"`;
+      parts.push(` id="${node.id}"`);
     }
 
     if (node.classes.length > 0) {
-      result += ` class="${node.classes.join(' ')}"`;
+      parts.push(` class="${node.classes.join(' ')}"`);
     }
 
-    result += '>';
+    parts.push('>');
 
     if (node.text && node.text.length > 0) {
       const truncatedText =
         node.text.length > DOM.TEXT_PREVIEW_LENGTH
           ? node.text.substring(0, DOM.TEXT_PREVIEW_LENGTH) + '...'
           : node.text;
-      result += `\n${indent}  ${truncatedText}`;
+      parts.push(`\n${indent}${DOM.INDENT}${truncatedText}`);
     }
 
     if (node.children && node.children.length > 0) {
-      result += '\n';
+      parts.push('\n');
       for (const child of node.children) {
-        result += this.serializeForAI(child, depth + 1) + '\n';
+        this.buildSerializedString(child, depth + 1, parts);
+        parts.push('\n');
       }
-      result += indent;
+      parts.push(indent);
     }
 
-    result += `</${node.tag}>`;
-    return result;
+    parts.push(`</${node.tag}>`);
   }
 
   /**
@@ -144,12 +152,10 @@ export class DOMAnalyzer {
    * @returns Direct text content
    */
   private getDirectText(element: Element): string {
-    let text = '';
-    for (const node of element.childNodes) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        text += node.textContent?.trim() + ' ';
-      }
-    }
-    return text.trim();
+    return Array.from(element.childNodes)
+      .filter((node) => node.nodeType === Node.TEXT_NODE)
+      .map((node) => node.textContent?.trim())
+      .filter((text) => text && text.length > 0)
+      .join(' ');
   }
 }

@@ -13,7 +13,9 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css,html}\"",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "audit": "npm audit && npm outdated",
+    "audit:fix": "npm audit fix"
   },
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",

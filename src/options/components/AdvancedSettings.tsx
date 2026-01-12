@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AI, TIMEOUT, UI_LIMITS } from '@/config/constants';
+import { AI, TIMEOUT, UI_LIMITS, DOM_ANALYSIS_DEFAULTS } from '@/config/constants';
 import { Settings } from '@/types';
 import { useToast } from '@/hooks/useToast';
 import { Logger } from '@/utils/logger';
@@ -94,19 +94,26 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
             <div>
               <label className="block text-sm font-medium mb-2">
                 {t('options.initialDepth')}
-                <span className="text-xs text-gray-500 ml-2">{t('options.recommended')}: 3</span>
+                <span className="text-xs text-gray-500 ml-2">
+                  {t('options.recommended')}: {DOM_ANALYSIS_DEFAULTS.initialDepth}
+                </span>
               </label>
               <input
                 type="number"
-                value={settings.domAnalysisConfig?.initialDepth || 3}
+                value={
+                  settings.domAnalysisConfig?.initialDepth || DOM_ANALYSIS_DEFAULTS.initialDepth
+                }
                 onChange={(e) =>
                   onSettingsChange({
                     ...settings,
                     domAnalysisConfig: {
                       ...settings.domAnalysisConfig,
                       initialDepth: parseInt(e.target.value),
-                      expandDepth: settings.domAnalysisConfig?.expandDepth || 2,
-                      maxDepth: settings.domAnalysisConfig?.maxDepth || 10,
+                      expandDepth:
+                        settings.domAnalysisConfig?.expandDepth ||
+                        DOM_ANALYSIS_DEFAULTS.expandDepth,
+                      maxDepth:
+                        settings.domAnalysisConfig?.maxDepth || DOM_ANALYSIS_DEFAULTS.maxDepth,
                     },
                   })
                 }
@@ -120,19 +127,24 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
             <div>
               <label className="block text-sm font-medium mb-2">
                 {t('options.expandDepth')}
-                <span className="text-xs text-gray-500 ml-2">{t('options.recommended')}: 2</span>
+                <span className="text-xs text-gray-500 ml-2">
+                  {t('options.recommended')}: {DOM_ANALYSIS_DEFAULTS.expandDepth}
+                </span>
               </label>
               <input
                 type="number"
-                value={settings.domAnalysisConfig?.expandDepth || 2}
+                value={settings.domAnalysisConfig?.expandDepth || DOM_ANALYSIS_DEFAULTS.expandDepth}
                 onChange={(e) =>
                   onSettingsChange({
                     ...settings,
                     domAnalysisConfig: {
                       ...settings.domAnalysisConfig,
-                      initialDepth: settings.domAnalysisConfig?.initialDepth || 3,
+                      initialDepth:
+                        settings.domAnalysisConfig?.initialDepth ||
+                        DOM_ANALYSIS_DEFAULTS.initialDepth,
                       expandDepth: parseInt(e.target.value),
-                      maxDepth: settings.domAnalysisConfig?.maxDepth || 10,
+                      maxDepth:
+                        settings.domAnalysisConfig?.maxDepth || DOM_ANALYSIS_DEFAULTS.maxDepth,
                     },
                   })
                 }
@@ -146,18 +158,24 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
             <div>
               <label className="block text-sm font-medium mb-2">
                 {t('options.maxDepth')}
-                <span className="text-xs text-gray-500 ml-2">{t('options.recommended')}: 10</span>
+                <span className="text-xs text-gray-500 ml-2">
+                  {t('options.recommended')}: {DOM_ANALYSIS_DEFAULTS.maxDepth}
+                </span>
               </label>
               <input
                 type="number"
-                value={settings.domAnalysisConfig?.maxDepth || 10}
+                value={settings.domAnalysisConfig?.maxDepth || DOM_ANALYSIS_DEFAULTS.maxDepth}
                 onChange={(e) =>
                   onSettingsChange({
                     ...settings,
                     domAnalysisConfig: {
                       ...settings.domAnalysisConfig,
-                      initialDepth: settings.domAnalysisConfig?.initialDepth || 3,
-                      expandDepth: settings.domAnalysisConfig?.expandDepth || 2,
+                      initialDepth:
+                        settings.domAnalysisConfig?.initialDepth ||
+                        DOM_ANALYSIS_DEFAULTS.initialDepth,
+                      expandDepth:
+                        settings.domAnalysisConfig?.expandDepth ||
+                        DOM_ANALYSIS_DEFAULTS.expandDepth,
                       maxDepth: parseInt(e.target.value),
                     },
                   })
