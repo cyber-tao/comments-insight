@@ -2,7 +2,13 @@ import { Message, Comment, Task, TaskResolver } from '../../types';
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
-import { REGEX, MESSAGES, DEFAULTS } from '@/config/constants';
+import {
+  REGEX,
+  MESSAGES,
+  DEFAULTS,
+  TIME_NORMALIZATION,
+  EXTRACTION_PROGRESS,
+} from '@/config/constants';
 import { getDomain } from '../../utils/url';
 import { Tokenizer } from '../../utils/tokenizer';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
@@ -178,10 +184,37 @@ export async function handleExtractionCompleted(
   pendingExtractionTasks.delete(taskId);
 
   if (success) {
-    // Save history
     if (comments && comments.length > 0) {
       const task = context.taskManager.getTask(taskId);
       if (task) {
+        let normalizedComments = comments;
+        try {
+          const settings = await context.storageManager.getSettings();
+          const totalCount = comments.length;
+          context.taskManager.updateTaskProgress(
+            taskId,
+            EXTRACTION_PROGRESS.NORMALIZING,
+            `normalizing:0:${totalCount}`,
+          );
+          const referenceIso = new Date().toISOString();
+          const referenceTime = `${referenceIso.slice(0, TIME_NORMALIZATION.ISO_MINUTE_LENGTH)}${
+            TIME_NORMALIZATION.ISO_MINUTE_SUFFIX
+          }`;
+          normalizedComments = await context.aiService.normalizeCommentTimestamps(
+            comments,
+            settings.aiModel,
+            referenceTime,
+            settings.aiTimeout,
+          );
+          context.taskManager.updateTaskProgress(
+            taskId,
+            EXTRACTION_PROGRESS.NORMALIZING,
+            `normalizing:${totalCount}:${totalCount}`,
+          );
+        } catch (error) {
+          Logger.warn('[ExtractionHandler] Timestamp normalization failed', { error });
+        }
+
         const historyItem = {
           id: `history_${Date.now()}`,
           url: postInfo?.url || task.url,
@@ -189,8 +222,8 @@ export async function handleExtractionCompleted(
           platform: task.platform || 'unknown',
           videoTime: postInfo?.videoTime,
           extractedAt: Date.now(),
-          commentsCount: comments.length,
-          comments,
+          commentsCount: normalizedComments.length,
+          comments: normalizedComments,
         };
         await context.storageManager.saveHistory(historyItem);
       }

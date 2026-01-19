@@ -82,8 +82,8 @@ Generate a comprehensive analysis report in Markdown format with the following s
 [Actionable suggestions based on the analysis]
 
 ---
-*Analysis performed on: {datetime}*
-*Video/Post published on: {video_time}*
+*Analysis performed on: {date_time}*
+*Video/Post published on: {post_time}*
 *Platform: {platform}*
 *Total comments analyzed: {total_comments}*`;
 
@@ -116,7 +116,9 @@ export function buildAnalysisPrompt(
   const prompt =
     template
       .replace(/{comments_data}/g, commentsData)
+      .replace(/{date_time}/g, metadata?.datetime || new Date().toISOString())
       .replace(/{datetime}/g, metadata?.datetime || new Date().toISOString())
+      .replace(/{post_time}/g, metadata?.videoTime || 'N/A')
       .replace(/{video_time}/g, metadata?.videoTime || 'N/A')
       .replace(/{platform}/g, metadata?.platform || 'Unknown Platform')
       .replace(/{url}/g, metadata?.url || 'N/A')
@@ -163,13 +165,13 @@ export function getAvailablePlaceholders(): Array<{
         'The complete comments data structure in a dense text format (table-like), including all comment fields like username, content, timestamp, likes, and nested replies. This format is optimized for token efficiency.',
     },
     {
-      key: '{datetime}',
+      key: '{date_time}',
       description: 'Current analysis date and time',
       detailedDescription:
         'The current date and time when the analysis is being performed. Format: ISO 8601 (e.g., 2024-01-15T10:30:00Z)',
     },
     {
-      key: '{video_time}',
+      key: '{post_time}',
       description: 'Video/post publication date and time',
       detailedDescription:
         'The date and time when the video or post was originally published. This is extracted from the page using the videoTime selector in scraper config. Helps provide temporal context for understanding comment trends over time.',
@@ -244,6 +246,38 @@ Rules:
 3. **Missing Data**: If a field (like likes) is missing, use null or "0".
 4. **Accuracy**: Do not hallucinate content. Only extract what is present.
 5. **No Markdown**: Return RAW JSON only.`;
+
+export const PROMPT_NORMALIZE_COMMENT_TIMESTAMPS = `You are a time normalization engine.
+
+Input JSON Array:
+{items_json}
+
+Reference time (ISO 8601 UTC):
+{reference_time}
+
+Task:
+1. Convert each item's "timestamp" into ISO 8601 UTC format based on the reference time when needed.
+2. The precision should be to minutes only. Do NOT include seconds.
+3. If the source timestamp is coarse (e.g., "3 days ago", "1 month ago"), use 00:00 for the time.
+4. If the timestamp is already an absolute date, normalize it to ISO 8601 UTC.
+5. If a timestamp cannot be parsed, return it unchanged.
+
+Output JSON Array (same order, same paths):
+[
+  { "path": "0", "timestamp": "2024-01-15T10:30Z" }
+]
+
+Return ONLY valid JSON. No markdown, no explanations.`;
+
+export function buildTimestampNormalizationPrompt(
+  itemsJson: string,
+  referenceTime: string,
+): string {
+  return PROMPT_NORMALIZE_COMMENT_TIMESTAMPS.replace(/{items_json}/g, itemsJson).replace(
+    /{reference_time}/g,
+    referenceTime,
+  );
+}
 
 export const PROMPT_GENERATE_CRAWLING_CONFIG = `You are an expert Web Scraper Configuration Generator.
 Your task is to analyze the provided HTML (Simplified DOM) and generate a **JSON Configuration** directly mapping to the following TypeScript interface.

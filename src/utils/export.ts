@@ -2,7 +2,7 @@
  * Export utilities for Comments Insight
  */
 import { HistoryItem, Comment } from '../types';
-import { REGEX, DEFAULTS, LIMITS } from '../config/constants';
+import { REGEX, DEFAULTS, LIMITS, DATE_TIME } from '../config/constants';
 import { t } from './i18n';
 
 /**
@@ -74,6 +74,28 @@ function sanitizeFilename(filename: string): string {
     .substring(0, DEFAULTS.FILENAME_MAX_LENGTH);
 }
 
+function formatDateTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+  const pad = (value: number) => value.toString().padStart(DATE_TIME.PAD_LENGTH, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + DATE_TIME.MONTH_OFFSET);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${month}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${day}${DATE_TIME.DISPLAY_DATE_TIME_SEPARATOR}${hours}${DATE_TIME.DISPLAY_TIME_SEPARATOR}${minutes}`;
+}
+
+function formatCommentTimestamp(timestamp: string): string {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) {
+    return timestamp;
+  }
+  return formatDateTime(parsed.getTime());
+}
+
 /**
  * Export comments as CSV
  * @param comments - Comments to export
@@ -95,7 +117,7 @@ export function exportCommentsAsCSV(comments: Comment[], title?: string, filenam
   const rows = flatComments.map((comment) => [
     comment.depth.toString(),
     `"${comment.username.replace(/"/g, '""')}"`,
-    `"${comment.timestamp}"`,
+    `"${formatCommentTimestamp(comment.timestamp)}"`,
     comment.likes.toString(),
     `"${comment.content.replace(/"/g, '""').replace(/\n/g, ' ').replace(/\r/g, '')}"`,
     comment.replies.length.toString(),
@@ -134,7 +156,7 @@ export function exportAnalysisAsMarkdown(item: HistoryItem, filename?: string): 
 - **${t('export.title')}**: ${item.title}
 - **${t('export.platform')}**: ${item.platform}
 - **${t('export.url')}**: ${item.url}
-- **${t('export.extracted')}**: ${new Date(item.extractedAt).toLocaleString()}
+- **${t('export.extracted')}**: ${formatDateTime(item.extractedAt)}
 - **${t('export.totalComments')}**: ${item.commentsCount}
 
 ## ${t('export.analysisResults')}
@@ -144,7 +166,7 @@ ${item.analysis.markdown}
 ---
 
 *${t('export.reportGeneratedBy')}*
-*${t('export.analysisDate')}: ${new Date(item.analysis.generatedAt).toLocaleString()}*
+*${t('export.analysisDate')}: ${formatDateTime(item.analysis.generatedAt)}*
 *${t('export.tokensUsed')}: ${item.analysis.tokensUsed}*
 `;
 

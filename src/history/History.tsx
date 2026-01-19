@@ -1,8 +1,7 @@
 import * as React from 'react';
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PAGINATION } from '@/config/constants';
-import { MESSAGES } from '@/config/constants';
+import { PAGINATION, MESSAGES, DATE_TIME } from '@/config/constants';
 import { HistoryItem, Comment } from '../types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -130,6 +129,20 @@ const History: React.FC = () => {
     return new Date(timestamp).toLocaleString();
   };
 
+  const formatCommentTimestamp = (timestamp: string) => {
+    const parsed = new Date(timestamp);
+    if (Number.isNaN(parsed.getTime())) {
+      return timestamp;
+    }
+    const pad = (value: number) => value.toString().padStart(DATE_TIME.PAD_LENGTH, '0');
+    const year = parsed.getFullYear();
+    const month = pad(parsed.getMonth() + DATE_TIME.MONTH_OFFSET);
+    const day = pad(parsed.getDate());
+    const hours = pad(parsed.getHours());
+    const minutes = pad(parsed.getMinutes());
+    return `${year}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${month}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${day}${DATE_TIME.DISPLAY_DATE_TIME_SEPARATOR}${hours}${DATE_TIME.DISPLAY_TIME_SEPARATOR}${minutes}`;
+  };
+
   const sortComments = useCallback(
     (comments: Comment[]): Comment[] => {
       const sorted = [...comments];
@@ -166,10 +179,11 @@ const History: React.FC = () => {
     const filterRecursive = (items: Comment[]): Comment[] =>
       items
         .filter((comment) => {
+          const commentTimestamp = formatCommentTimestamp(comment.timestamp);
           const commentMatches =
             comment.username.toLowerCase().includes(searchLower) ||
             comment.content.toLowerCase().includes(searchLower) ||
-            (comment.timestamp && comment.timestamp.toLowerCase().includes(searchLower));
+            (commentTimestamp && commentTimestamp.toLowerCase().includes(searchLower));
 
           const replyMatches =
             comment.replies &&
@@ -177,7 +191,8 @@ const History: React.FC = () => {
               (reply) =>
                 reply.username.toLowerCase().includes(searchLower) ||
                 reply.content.toLowerCase().includes(searchLower) ||
-                (reply.timestamp && reply.timestamp.toLowerCase().includes(searchLower)),
+                (formatCommentTimestamp(reply.timestamp) &&
+                  formatCommentTimestamp(reply.timestamp).toLowerCase().includes(searchLower)),
             );
 
           return commentMatches || replyMatches;
@@ -241,7 +256,9 @@ const History: React.FC = () => {
               <div className="bg-gray-50 p-3 rounded">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="font-medium text-gray-800">{comment.username}</span>
-                  <span className="text-xs text-gray-500">{comment.timestamp}</span>
+                  <span className="text-xs text-gray-500">
+                    {formatCommentTimestamp(comment.timestamp)}
+                  </span>
                   <span className="text-xs text-gray-500">👍 {comment.likes}</span>
                   {hasReplies && (
                     <button

@@ -1,5 +1,5 @@
 import { AIConfig, AIRequest, AIResponse, Comment, AnalysisResult } from '../types';
-import { buildAnalysisPrompt } from '../utils/prompts';
+import { buildAnalysisPrompt, buildTimestampNormalizationPrompt } from '../utils/prompts';
 import { Logger } from '../utils/logger';
 import {
   ErrorHandler,
@@ -13,6 +13,7 @@ import {
   REGEX,
   LOG_PREFIX,
   ANALYSIS_FORMAT,
+  TIME_NORMALIZATION,
   RETRY,
   DEFAULTS,
   LANGUAGES,
@@ -274,7 +275,9 @@ export class AIService {
 
           // Log the interaction for debugging
           const logType =
-            prompt.includes('extract comments') || prompt.includes('DOM Structure')
+            prompt.includes('extract comments') ||
+            prompt.includes('DOM Structure') ||
+            prompt.includes('time normalization')
               ? 'extraction'
               : 'analysis';
           this.logToFile(logType, {
@@ -316,6 +319,17 @@ export class AIService {
                 message: error.message,
               });
             }
+            const logType =
+              prompt.includes('extract comments') ||
+              prompt.includes('DOM Structure') ||
+              prompt.includes('time normalization')
+                ? 'extraction'
+                : 'analysis';
+            this.logToFile(logType, {
+              prompt,
+              response: error.message,
+              timestamp: Date.now(),
+            });
             throw error;
           }
 
@@ -327,6 +341,17 @@ export class AIService {
           }
 
           Logger.error('[AIService] AI call failed', { error });
+          const logType =
+            prompt.includes('extract comments') ||
+            prompt.includes('DOM Structure') ||
+            prompt.includes('time normalization')
+              ? 'extraction'
+              : 'analysis';
+          this.logToFile(logType, {
+            prompt,
+            response: error instanceof Error ? error.message : String(error),
+            timestamp: Date.now(),
+          });
           throw error;
         } finally {
           if (timeoutId) clearTimeout(timeoutId);
@@ -492,6 +517,61 @@ export class AIService {
     }
   }
 
+  async normalizeCommentTimestamps(
+    comments: Comment[],
+    config: AIConfig,
+    referenceTimeISO: string,
+    timeout?: number,
+  ): Promise<Comment[]> {
+    if (!comments.length) {
+      return comments;
+    }
+
+    const items = this.collectTimestampItems(comments);
+    if (items.length === 0) {
+      return comments;
+    }
+
+    const normalizedMap = new Map<string, string>();
+
+    const batchSize = this.getNormalizationBatchSize(config, referenceTimeISO);
+    for (let i = 0; i < items.length; i += batchSize) {
+      const batch = items.slice(i, i + batchSize);
+      const prompt = buildTimestampNormalizationPrompt(JSON.stringify(batch), referenceTimeISO);
+
+      try {
+        const response = await this.callAI({
+          prompt,
+          systemPrompt:
+            'You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start with [ and end with ].',
+          config,
+          timeout,
+        });
+        const parsed = this.parseTimestampNormalizationResponse(response.content);
+        if (!parsed) {
+          continue;
+        }
+        for (const item of parsed) {
+          if (item.path && item.timestamp) {
+            const normalized = this.normalizeTimestampToMinute(item.timestamp);
+            if (normalized) {
+              normalizedMap.set(item.path, normalized);
+            }
+          }
+        }
+      } catch (error) {
+        Logger.warn('[AIService] Timestamp normalization failed', { error });
+      }
+    }
+
+    if (normalizedMap.size === 0) {
+      return comments;
+    }
+
+    this.applyTimestampNormalization(comments, normalizedMap);
+    return comments;
+  }
+
   /**
    * Analyze a single batch of comments
    * @param comments - Comments to analyze
@@ -541,6 +621,90 @@ export class AIService {
       tokensUsed: response.tokensUsed,
       generatedAt: Date.now(),
     };
+  }
+
+  private collectTimestampItems(
+    comments: Comment[],
+    parentPath: string = '',
+    items: Array<{ path: string; timestamp: string }> = [],
+  ): Array<{ path: string; timestamp: string }> {
+    comments.forEach((comment, index) => {
+      const path = parentPath
+        ? `${parentPath}${TIME_NORMALIZATION.PATH_SEPARATOR}${index}`
+        : `${index}`;
+      items.push({ path, timestamp: comment.timestamp });
+      if (comment.replies?.length) {
+        this.collectTimestampItems(comment.replies, path, items);
+      }
+    });
+    return items;
+  }
+
+  private applyTimestampNormalization(
+    comments: Comment[],
+    normalizedMap: Map<string, string>,
+    parentPath: string = '',
+  ): void {
+    comments.forEach((comment, index) => {
+      const path = parentPath
+        ? `${parentPath}${TIME_NORMALIZATION.PATH_SEPARATOR}${index}`
+        : `${index}`;
+      const normalized = normalizedMap.get(path);
+      if (normalized) {
+        comment.timestamp = normalized;
+      }
+      if (comment.replies?.length) {
+        this.applyTimestampNormalization(comment.replies, normalizedMap, path);
+      }
+    });
+  }
+
+  private parseTimestampNormalizationResponse(
+    content: string,
+  ): Array<{ path: string; timestamp: string }> | null {
+    let jsonText = content.trim();
+    jsonText = jsonText
+      .replace(REGEX.MD_CODE_JSON_START, '')
+      .replace(REGEX.MD_CODE_ANY_END, '')
+      .trim();
+    try {
+      const parsed = JSON.parse(jsonText);
+      if (!Array.isArray(parsed)) {
+        return null;
+      }
+      return parsed.filter(
+        (item): item is { path: string; timestamp: string } =>
+          item &&
+          typeof item === 'object' &&
+          typeof item.path === 'string' &&
+          typeof item.timestamp === 'string',
+      );
+    } catch (error) {
+      Logger.warn('[AIService] Failed to parse timestamp normalization response', { error });
+    }
+    return null;
+  }
+
+  private normalizeTimestampToMinute(timestamp: string): string | null {
+    const parsed = new Date(timestamp);
+    if (Number.isNaN(parsed.getTime())) {
+      return null;
+    }
+    const iso = parsed.toISOString();
+    const minutePrefix = iso.slice(0, TIME_NORMALIZATION.ISO_MINUTE_LENGTH);
+    return `${minutePrefix}${TIME_NORMALIZATION.ISO_MINUTE_SUFFIX}`;
+  }
+
+  private getNormalizationBatchSize(config: AIConfig, referenceTimeISO: string): number {
+    const maxOutput = config.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS;
+    const basePrompt = buildTimestampNormalizationPrompt('[]', referenceTimeISO);
+    const overheadTokens = Tokenizer.estimateTokens(basePrompt);
+    const availableTokens = Math.max(
+      AI_CONST.MIN_AVAILABLE_TOKENS,
+      config.contextWindowSize - maxOutput - AI_CONST.INPUT_TOKEN_BUFFER - overheadTokens,
+    );
+    const estimated = Math.floor(availableTokens / TIME_NORMALIZATION.ITEM_TOKEN_ESTIMATE);
+    return Math.max(1, estimated);
   }
 
   /**

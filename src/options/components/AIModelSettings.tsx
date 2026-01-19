@@ -327,8 +327,8 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({ settings, onSe
                     t={t}
                     descKey="placeholder_comments_data"
                   />
-                  <PlaceholderItem code="{datetime}" t={t} descKey="placeholder_datetime" />
-                  <PlaceholderItem code="{video_time}" t={t} descKey="placeholder_video_time" />
+                  <PlaceholderItem code="{date_time}" t={t} descKey="placeholder_date_time" />
+                  <PlaceholderItem code="{post_time}" t={t} descKey="placeholder_post_time" />
                   <PlaceholderItem code="{platform}" t={t} descKey="placeholder_platform" />
                   <PlaceholderItem code="{url}" t={t} descKey="placeholder_url" />
                   <PlaceholderItem code="{title}" t={t} descKey="placeholder_title" />

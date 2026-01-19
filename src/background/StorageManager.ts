@@ -54,7 +54,7 @@ const DEFAULT_SETTINGS: Settings = {
 - **Title**: {title}
 - **Platform**: {platform}
 - **URL**: {url}
-- **Published**: {video_time}
+- **Published**: {post_time}
 
 ## Comments Data (Dense Format):
 {comments_data}
