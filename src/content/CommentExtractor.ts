@@ -3,7 +3,7 @@ import { PageController } from './PageController';
 import { Logger } from '@/utils/logger';
 import { AIStrategy } from './strategies/AIStrategy';
 import type { ProgressCallback } from './strategies/ExtractionStrategy';
-import { EXTRACTION_PROGRESS } from '@/config/constants';
+import { EXTRACTION, EXTRACTION_PROGRESS, EXTRACTION_PROGRESS_MESSAGE } from '@/config/constants';
 
 /**
  * CommentExtractor extracts comments from web pages using AI-powered strategies.
@@ -66,8 +66,40 @@ export class CommentExtractor {
     const strategy = new AIStrategy(this.pageController);
 
     try {
+      const validationBuffer = Math.min(
+        EXTRACTION.VALIDATION_BUFFER_MAX,
+        Math.max(
+          EXTRACTION.VALIDATION_BUFFER_MIN,
+          Math.ceil(maxComments * EXTRACTION.VALIDATION_BUFFER_RATIO),
+        ),
+      );
+      const targetComments = maxComments + validationBuffer;
+      const normalizeProgressMessage = (message: string, current?: number) => {
+        const parts = message.split(EXTRACTION_PROGRESS_MESSAGE.SEPARATOR);
+        if (parts.length >= EXTRACTION_PROGRESS_MESSAGE.MIN_PARTS) {
+          const resolvedCurrent = typeof current === 'number' ? current : Number(parts[1]);
+          if (!Number.isNaN(resolvedCurrent)) {
+            parts[EXTRACTION_PROGRESS_MESSAGE.CURRENT_INDEX] = String(
+              Math.min(resolvedCurrent, maxComments),
+            );
+          }
+          parts[EXTRACTION_PROGRESS_MESSAGE.TOTAL_INDEX] = String(maxComments);
+          return parts.join(EXTRACTION_PROGRESS_MESSAGE.SEPARATOR);
+        }
+        return message;
+      };
+      const progressAdapter: ProgressCallback | undefined = onProgress
+        ? (progress, message, stage, current, total) => {
+            const safeCurrent =
+              typeof current === 'number' ? Math.min(current, maxComments) : current;
+            const safeTotal = typeof total === 'number' ? maxComments : total;
+            const normalizedMessage = normalizeProgressMessage(message, current);
+            onProgress(progress, normalizedMessage, stage, safeCurrent, safeTotal);
+          }
+        : undefined;
+
       // Execute strategy
-      const comments = await strategy.execute(maxComments, platform, onProgress);
+      const comments = await strategy.execute(targetComments, platform, progressAdapter);
 
       onProgress?.(EXTRACTION_PROGRESS.VALIDATING, 'validating');
       const validComments = this.validateComments(comments, platform);
