@@ -75,8 +75,6 @@ export enum ErrorCode {
   UNKNOWN_ERROR = 'UNKNOWN_ERROR',
   /** Input validation failed */
   VALIDATION_ERROR = 'VALIDATION_ERROR',
-  /** Permission denied for operation */
-  PERMISSION_DENIED = 'PERMISSION_DENIED',
 }
 
 /**
@@ -422,7 +420,6 @@ export class ErrorHandler {
       ErrorCode.MISSING_API_KEY,
       ErrorCode.INVALID_CONFIG,
       ErrorCode.AI_QUOTA_EXCEEDED,
-      ErrorCode.PERMISSION_DENIED,
     ];
     return criticalErrors.includes(code);
   }
@@ -487,7 +484,6 @@ const ERROR_CODE_TO_I18N_KEY: Record<ErrorCode, string> = {
   [ErrorCode.TASK_CANCELLED]: 'errors.taskCancelled',
   [ErrorCode.UNKNOWN_ERROR]: 'errors.unknownError',
   [ErrorCode.VALIDATION_ERROR]: 'errors.validationError',
-  [ErrorCode.PERMISSION_DENIED]: 'errors.permissionDenied',
 };
 
 /**

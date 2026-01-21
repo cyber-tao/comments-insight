@@ -1,14 +1,13 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PageInfo, PageStatus as PageStatusType, SiteAccessInfo } from '../hooks/usePageInfo';
+import type { PageInfo, PageStatus as PageStatusType } from '../hooks/usePageInfo';
 
 interface PageStatusProps {
   pageInfo: PageInfo | null;
   pageStatus: PageStatusType;
-  siteAccessInfo: SiteAccessInfo;
 }
 
-export const PageStatus: React.FC<PageStatusProps> = ({ pageInfo, pageStatus, siteAccessInfo }) => {
+export const PageStatus: React.FC<PageStatusProps> = ({ pageInfo, pageStatus }) => {
   const { t } = useTranslation();
 
   const formatDate = (timestamp: number) => {
@@ -40,18 +39,6 @@ export const PageStatus: React.FC<PageStatusProps> = ({ pageInfo, pageStatus, si
             <span className="font-medium">{pageInfo.domain}</span>
           </div>
 
-          {siteAccessInfo.sitePattern && (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">{t('popup.siteAccess')}:</span>
-              <span className="text-xs px-2 py-1 rounded bg-gray-100 text-gray-800">
-                {siteAccessInfo.isRequired
-                  ? t('popup.siteAccessStatusRequired')
-                  : siteAccessInfo.hasSiteAccess
-                    ? t('popup.siteAccessStatusGranted')
-                    : t('popup.siteAccessStatusNotGranted')}
-              </span>
-            </div>
-          )}
           <div className="flex items-center justify-between text-sm">
             <span className="text-gray-600">{t('popup.status')}:</span>
             <span

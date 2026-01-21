@@ -15,15 +15,7 @@ const Popup: React.FC = () => {
   const [aiModelName, setAIModelName] = useState('');
   const [developerMode, setDeveloperMode] = useState(false);
 
-  const {
-    pageInfo,
-    pageStatus,
-    loading,
-    siteAccessInfo,
-    loadPageInfo,
-    refreshPageStatus,
-    ensureSiteAccess,
-  } = usePageInfo();
+  const { pageInfo, pageStatus, loading, loadPageInfo, refreshPageStatus } = usePageInfo();
 
   const {
     currentTask,
@@ -88,10 +80,6 @@ const Popup: React.FC = () => {
 
   const handleExtractComments = async () => {
     if (!pageInfo) return;
-
-    const ok = await ensureSiteAccess(pageInfo.url);
-    if (!ok) return;
-
     await startExtraction(pageInfo.url);
   };
 
@@ -118,10 +106,6 @@ const Popup: React.FC = () => {
 
   const handleGenerateConfig = async () => {
     if (!pageInfo) return;
-
-    const ok = await ensureSiteAccess(pageInfo.url);
-    if (!ok) return;
-
     await startConfigGeneration(pageInfo.url);
   };
 
@@ -157,7 +141,7 @@ const Popup: React.FC = () => {
         onOpenSettings={handleOpenSettings}
         onOpenLogs={handleOpenLogs}
       />
-      <PageStatus pageInfo={pageInfo} pageStatus={pageStatus} siteAccessInfo={siteAccessInfo} />
+      <PageStatus pageInfo={pageInfo} pageStatus={pageStatus} />
       <ActionButtons
         pageInfo={pageInfo}
         pageStatus={pageStatus}

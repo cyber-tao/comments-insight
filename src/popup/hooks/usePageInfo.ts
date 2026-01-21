@@ -1,10 +1,8 @@
 import { useState, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
 import { MESSAGES } from '@/config/constants';
 import { HistoryItem } from '@/types';
 import { Logger } from '@/utils/logger';
 import { getDomain } from '@/utils/url';
-import { useToast } from '@/hooks/useToast';
 
 export interface PageInfo {
   url: string;
@@ -22,15 +20,7 @@ export interface PageStatus {
   hasConfig?: boolean;
 }
 
-export interface SiteAccessInfo {
-  hasSiteAccess: boolean | null;
-  sitePattern: string | null;
-  isRequired: boolean;
-}
-
 export function usePageInfo() {
-  const { t } = useTranslation();
-  const toast = useToast();
   const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
   const [pageStatus, setPageStatus] = useState<PageStatus>({
     extracted: false,
@@ -38,96 +28,6 @@ export function usePageInfo() {
     hasConfig: false,
   });
   const [loading, setLoading] = useState(true);
-  const [siteAccessInfo, setSiteAccessInfo] = useState<SiteAccessInfo>({
-    hasSiteAccess: null,
-    sitePattern: null,
-    isRequired: false,
-  });
-
-  const computeSitePattern = (url: string): string | null => {
-    try {
-      const u = new URL(url);
-      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-        return null;
-      }
-      return `${u.protocol}//${u.hostname}/*`;
-    } catch {
-      return null;
-    }
-  };
-
-  const isRequiredOrigin = (origin: string): boolean => {
-    const manifest = chrome.runtime.getManifest();
-    const required = manifest.content_scripts?.flatMap((x) => x.matches || []) || [];
-    return required.includes(origin);
-  };
-
-  const refreshSiteAccess = useCallback(async (url: string) => {
-    const pattern = computeSitePattern(url);
-
-    if (!pattern) {
-      setSiteAccessInfo({
-        hasSiteAccess: null,
-        sitePattern: null,
-        isRequired: false,
-      });
-      return;
-    }
-
-    const isRequired = isRequiredOrigin(pattern);
-    if (isRequired) {
-      setSiteAccessInfo({
-        hasSiteAccess: true,
-        sitePattern: pattern,
-        isRequired: true,
-      });
-      return;
-    }
-
-    try {
-      const has = await chrome.permissions.contains({ origins: [pattern] });
-      setSiteAccessInfo({
-        hasSiteAccess: has,
-        sitePattern: pattern,
-        isRequired: false,
-      });
-    } catch {
-      setSiteAccessInfo({
-        hasSiteAccess: null,
-        sitePattern: pattern,
-        isRequired: false,
-      });
-    }
-  }, []);
-
-  const ensureSiteAccess = useCallback(
-    async (url: string): Promise<boolean> => {
-      const pattern = computeSitePattern(url);
-      if (!pattern) {
-        return false;
-      }
-
-      if (isRequiredOrigin(pattern)) {
-        return true;
-      }
-
-      const has = await chrome.permissions.contains({ origins: [pattern] });
-      if (has) {
-        return true;
-      }
-
-      const granted = await chrome.permissions.request({ origins: [pattern] });
-      if (!granted) {
-        toast.warning(t('popup.accessRequestDenied'));
-        return false;
-      }
-
-      toast.success(t('popup.accessGranted'));
-      await refreshSiteAccess(url);
-      return true;
-    },
-    [t, toast, refreshSiteAccess],
-  );
 
   const checkPageStatus = useCallback(
     async (url: string) => {
@@ -191,8 +91,6 @@ export function usePageInfo() {
       };
       setPageInfo(info);
 
-      await refreshSiteAccess(tab.url);
-      await refreshSiteAccess(tab.url);
       if (tab.url) {
         try {
           const u = new URL(tab.url);
@@ -210,7 +108,7 @@ export function usePageInfo() {
     } finally {
       setLoading(false);
     }
-  }, [refreshSiteAccess, checkPageStatus, checkConfigStatus]);
+  }, [checkPageStatus, checkConfigStatus]);
 
   const refreshPageStatus = useCallback(async () => {
     try {
@@ -231,10 +129,8 @@ export function usePageInfo() {
     pageInfo,
     pageStatus,
     loading,
-    siteAccessInfo,
     loadPageInfo,
     checkPageStatus,
     refreshPageStatus,
-    ensureSiteAccess,
   };
 }

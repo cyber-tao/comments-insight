@@ -215,8 +215,7 @@ export const TEXT = {
   UNTITLED: 'Untitled',
   DEFAULT_MODEL_NAME: 'gpt-4',
   API_KEY_PLACEHOLDER: 'sk-',
-  CONTENT_SCRIPT_INJECT_FAILED:
-    'Failed to inject content script. Please grant site access and refresh the page.',
+  CONTENT_SCRIPT_INJECT_FAILED: 'Failed to inject content script. Please refresh the page.',
   MODEL_TEST_HINT: 'Please verify API URL, API key, and network connectivity.',
 };
 

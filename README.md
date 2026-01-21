@@ -19,7 +19,6 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 - [Overview](#-overview)
 - [Screenshots](#-screenshots)
 - [Features](#-features)
-- [Permissions](#-permissions)
 - [Architecture](#-architecture)
 - [Project Structure](#-project-structure)
 - [Quick Start](#-quick-start)
@@ -71,14 +70,6 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
   - Completion and failure notifications.
 - 🌐 **i18n**: Complete Chinese and English UI support.
 - 🛠️ **Developer Mode**: Toggle advanced features like AI Logs and Selector Testing tools.
-
-## 🔐 Permissions
-
-- `storage`: Saving history, settings, and configs.
-- `activeTab`, `scripting`: Injecting content scripts only when you run the extension.
-- Per-site access: requested at runtime via `optional_host_permissions`.
-- `notifications`: Alerting on task completion.
-- Site access: requested per-site at runtime (no `<all_urls>` host permission at install).
 
 ## 🔑 API Key Security Note
 
