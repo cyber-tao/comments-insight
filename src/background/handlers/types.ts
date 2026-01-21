@@ -26,6 +26,7 @@ export interface ExtractionResponse {
     url?: string;
     title?: string;
     videoTime?: string;
+    postContent?: string;
   };
   error?: string;
 }

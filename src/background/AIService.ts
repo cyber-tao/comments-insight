@@ -18,6 +18,7 @@ import {
   DEFAULTS,
   LANGUAGES,
   LIMITS,
+  DATE_TIME,
 } from '@/config/constants';
 import type { StorageManager } from './StorageManager';
 import { Tokenizer } from '../utils/tokenizer';
@@ -455,6 +456,7 @@ export class AIService {
       title?: string;
       datetime?: string;
       videoTime?: string;
+      postContent?: string;
     },
     signal?: AbortSignal,
     timeout?: number,
@@ -572,6 +574,41 @@ export class AIService {
     return comments;
   }
 
+  async normalizeSingleTimestamp(
+    timestamp: string | undefined,
+    config: AIConfig,
+    referenceTimeISO: string,
+    timeout?: number,
+  ): Promise<string | undefined> {
+    if (!timestamp) {
+      return timestamp;
+    }
+
+    const prompt = buildTimestampNormalizationPrompt(
+      JSON.stringify([{ path: '0', timestamp }]),
+      referenceTimeISO,
+    );
+
+    try {
+      const response = await this.callAI({
+        prompt,
+        systemPrompt:
+          'You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start with [ and end with ].',
+        config,
+        timeout,
+      });
+      const parsed = this.parseTimestampNormalizationResponse(response.content);
+      const match = parsed?.find((item) => item.path === '0');
+      if (!match?.timestamp) {
+        return timestamp;
+      }
+      return this.normalizeTimestampToMinute(match.timestamp) || timestamp;
+    } catch (error) {
+      Logger.warn('[AIService] Single timestamp normalization failed', { error });
+      return timestamp;
+    }
+  }
+
   /**
    * Analyze a single batch of comments
    * @param comments - Comments to analyze
@@ -590,6 +627,7 @@ export class AIService {
       title?: string;
       datetime?: string;
       videoTime?: string;
+      postContent?: string;
     },
     signal?: AbortSignal,
     timeout?: number,
@@ -685,14 +723,22 @@ export class AIService {
     return null;
   }
 
+  private formatLocalIsoMinute(date: Date): string {
+    const pad = (value: number) => value.toString().padStart(DATE_TIME.PAD_LENGTH, '0');
+    const year = date.getFullYear();
+    const month = pad(date.getMonth() + DATE_TIME.MONTH_OFFSET);
+    const day = pad(date.getDate());
+    const hours = pad(date.getHours());
+    const minutes = pad(date.getMinutes());
+    return `${year}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${month}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${day}T${hours}${DATE_TIME.DISPLAY_TIME_SEPARATOR}${minutes}`;
+  }
+
   private normalizeTimestampToMinute(timestamp: string): string | null {
     const parsed = new Date(timestamp);
     if (Number.isNaN(parsed.getTime())) {
       return null;
     }
-    const iso = parsed.toISOString();
-    const minutePrefix = iso.slice(0, TIME_NORMALIZATION.ISO_MINUTE_LENGTH);
-    return `${minutePrefix}${TIME_NORMALIZATION.ISO_MINUTE_SUFFIX}`;
+    return this.formatLocalIsoMinute(parsed);
   }
 
   private getNormalizationBatchSize(config: AIConfig, referenceTimeISO: string): number {
@@ -849,6 +895,7 @@ export class AIService {
       title?: string;
       datetime?: string;
       videoTime?: string;
+      postContent?: string;
     },
     totalComments: number = 0,
   ): string {
@@ -858,6 +905,7 @@ export class AIService {
       platform: metadata?.platform || 'Unknown Platform',
       url: metadata?.url || 'N/A',
       title: metadata?.title || 'Untitled',
+      postContent: metadata?.postContent || 'N/A',
       totalComments,
       language: this.currentLanguage,
     });

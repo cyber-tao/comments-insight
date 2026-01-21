@@ -2,13 +2,7 @@ import { Message, Comment, Task, TaskResolver } from '../../types';
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
-import {
-  REGEX,
-  MESSAGES,
-  DEFAULTS,
-  TIME_NORMALIZATION,
-  EXTRACTION_PROGRESS,
-} from '@/config/constants';
+import { REGEX, MESSAGES, DEFAULTS, EXTRACTION_PROGRESS, DATE_TIME } from '@/config/constants';
 import { getDomain } from '../../utils/url';
 import { Tokenizer } from '../../utils/tokenizer';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
@@ -28,6 +22,7 @@ interface HistoryItemWithVideoTime {
   url?: string;
   title?: string;
   videoTime?: string;
+  postContent?: string;
 }
 
 interface StartExtractionResponse {
@@ -188,29 +183,41 @@ export async function handleExtractionCompleted(
       const task = context.taskManager.getTask(taskId);
       if (task) {
         let normalizedComments = comments;
+        let normalizedPostTime = postInfo?.videoTime;
         try {
           const settings = await context.storageManager.getSettings();
-          const totalCount = comments.length;
-          context.taskManager.updateTaskProgress(
-            taskId,
-            EXTRACTION_PROGRESS.NORMALIZING,
-            `normalizing:0:${totalCount}`,
-          );
-          const referenceIso = new Date().toISOString();
-          const referenceTime = `${referenceIso.slice(0, TIME_NORMALIZATION.ISO_MINUTE_LENGTH)}${
-            TIME_NORMALIZATION.ISO_MINUTE_SUFFIX
-          }`;
-          normalizedComments = await context.aiService.normalizeCommentTimestamps(
-            comments,
-            settings.aiModel,
-            referenceTime,
-            settings.aiTimeout,
-          );
-          context.taskManager.updateTaskProgress(
-            taskId,
-            EXTRACTION_PROGRESS.NORMALIZING,
-            `normalizing:${totalCount}:${totalCount}`,
-          );
+          if (settings.normalizeTimestamps) {
+            const totalCount = comments.length + (postInfo?.videoTime ? 1 : 0);
+            context.taskManager.updateTaskProgress(
+              taskId,
+              EXTRACTION_PROGRESS.NORMALIZING,
+              `normalizing:0:${totalCount}`,
+            );
+            const pad = (value: number) => value.toString().padStart(DATE_TIME.PAD_LENGTH, '0');
+            const now = new Date();
+            const referenceTime = `${now.getFullYear()}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${pad(
+              now.getMonth() + DATE_TIME.MONTH_OFFSET,
+            )}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${pad(now.getDate())}T${pad(
+              now.getHours(),
+            )}${DATE_TIME.DISPLAY_TIME_SEPARATOR}${pad(now.getMinutes())}`;
+            normalizedComments = await context.aiService.normalizeCommentTimestamps(
+              comments,
+              settings.aiModel,
+              referenceTime,
+              settings.aiTimeout,
+            );
+            normalizedPostTime = await context.aiService.normalizeSingleTimestamp(
+              postInfo?.videoTime,
+              settings.aiModel,
+              referenceTime,
+              settings.aiTimeout,
+            );
+            context.taskManager.updateTaskProgress(
+              taskId,
+              EXTRACTION_PROGRESS.NORMALIZING,
+              `normalizing:${totalCount}:${totalCount}`,
+            );
+          }
         } catch (error) {
           Logger.warn('[ExtractionHandler] Timestamp normalization failed', { error });
         }
@@ -220,7 +227,8 @@ export async function handleExtractionCompleted(
           url: postInfo?.url || task.url,
           title: postInfo?.title || 'Untitled',
           platform: task.platform || 'unknown',
-          videoTime: postInfo?.videoTime,
+          videoTime: normalizedPostTime,
+          postContent: postInfo?.postContent,
           extractedAt: Date.now(),
           commentsCount: normalizedComments.length,
           comments: normalizedComments,
@@ -487,6 +495,7 @@ export async function handleStartAnalysis(
     let url = 'N/A';
     let title = 'Untitled';
     let videoTime = 'N/A';
+    let postContent = 'N/A';
 
     if (historyId) {
       const historyItem = await context.storageManager.getHistoryItem(historyId);
@@ -495,10 +504,14 @@ export async function handleStartAnalysis(
         url = historyItem.url || 'N/A';
         title = historyItem.title || 'Untitled';
         videoTime = (historyItem as HistoryItemWithVideoTime).videoTime || 'N/A';
+        postContent = (historyItem as HistoryItemWithVideoTime).postContent || 'N/A';
       }
     } else {
       platform = task.platform || 'Unknown Platform';
       url = task.url || 'N/A';
+      title = metadata?.title || title;
+      videoTime = metadata?.videoTime || videoTime;
+      postContent = metadata?.postContent || postContent;
     }
 
     const result = await context.aiService.analyzeComments(
@@ -511,6 +524,7 @@ export async function handleStartAnalysis(
         url,
         title,
         videoTime,
+        postContent,
       },
       signal,
       settings.aiTimeout,
@@ -531,6 +545,7 @@ export async function handleStartAnalysis(
         url: task.url,
         title: `Analysis ${new Date().toLocaleString()}`,
         platform: task.platform || 'unknown',
+        postContent: metadata?.postContent,
         extractedAt: Date.now(),
         commentsCount: comments.length,
         comments,

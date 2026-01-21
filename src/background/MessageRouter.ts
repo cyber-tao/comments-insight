@@ -139,6 +139,9 @@ export class MessageRouter {
         case MESSAGES.TEST_MODEL:
           return await miscHandlers.handleTestModel(message, context);
 
+        case MESSAGES.TEST_SELECTOR:
+          return await miscHandlers.handleTestSelector(message, context);
+
         // Messages handled by content script, ignored by background
         case MESSAGES.GET_PLATFORM_INFO:
         case MESSAGES.GET_DOM_STRUCTURE:

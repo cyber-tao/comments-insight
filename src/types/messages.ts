@@ -36,7 +36,7 @@ export type ExtractionMessage =
         taskId: string;
         success: boolean;
         comments?: Comment[];
-        postInfo?: { url?: string; title?: string; videoTime?: string };
+        postInfo?: { url?: string; title?: string; videoTime?: string; postContent?: string };
         error?: string;
       };
     }
@@ -48,7 +48,11 @@ export type ExtractionMessage =
         error?: string;
       };
     }
-  | { type: 'GET_DOM_STRUCTURE'; payload?: never };
+  | { type: 'GET_DOM_STRUCTURE'; payload?: never }
+  | {
+      type: 'TEST_SELECTOR';
+      payload: { selector: string; selectorType: 'css' | 'xpath'; tabId?: number };
+    };
 
 export type AnalysisMessage =
   | {
@@ -64,6 +68,7 @@ export type AnalysisMessage =
           title?: string;
           datetime?: string;
           videoTime?: string;
+          postContent?: string;
         };
       };
     }

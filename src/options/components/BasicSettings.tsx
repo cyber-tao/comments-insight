@@ -46,6 +46,42 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({ settings, onSettin
           ))}
         </select>
       </div>
+
+      <div className="mb-4 flex items-start gap-2">
+        <input
+          type="checkbox"
+          id="normalizeTimestamps"
+          checked={settings.normalizeTimestamps}
+          onChange={(e) => onSettingsChange({ ...settings, normalizeTimestamps: e.target.checked })}
+          className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+        />
+        <div>
+          <label htmlFor="normalizeTimestamps" className="text-sm font-medium">
+            {t('options.normalizeTimestamps')}
+          </label>
+          <p className="text-xs text-gray-500 mt-1">{t('options.normalizeTimestampsHint')}</p>
+        </div>
+      </div>
+
+      <div className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          id="exportPostContentInMarkdown"
+          checked={settings.exportPostContentInMarkdown}
+          onChange={(e) =>
+            onSettingsChange({ ...settings, exportPostContentInMarkdown: e.target.checked })
+          }
+          className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+        />
+        <div>
+          <label htmlFor="exportPostContentInMarkdown" className="text-sm font-medium">
+            {t('options.exportPostContentInMarkdown')}
+          </label>
+          <p className="text-xs text-gray-500 mt-1">
+            {t('options.exportPostContentInMarkdownHint')}
+          </p>
+        </div>
+      </div>
     </section>
   );
 };

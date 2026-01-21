@@ -48,6 +48,8 @@ const DEFAULT_SETTINGS: Settings = {
     topP: AI.DEFAULT_TOP_P,
   },
   aiTimeout: AI.DEFAULT_TIMEOUT,
+  normalizeTimestamps: false,
+  exportPostContentInMarkdown: false,
   analyzerPromptTemplate: `You are a professional social media analyst. Analyze the following comments and provide insights.
 
 ## Post Information:
@@ -55,6 +57,9 @@ const DEFAULT_SETTINGS: Settings = {
 - **Platform**: {platform}
 - **URL**: {url}
 - **Published**: {post_time}
+
+## Post Content (Original):
+{post_content}
 
 ## Comments Data (Dense Format):
 {comments_data}
@@ -66,7 +71,10 @@ const DEFAULT_SETTINGS: Settings = {
 4. Summary Statistics: Provide overall metrics
 
 ## Output Format:
-Generate a comprehensive analysis report in Markdown format.`,
+Generate a comprehensive analysis report in Markdown format.
+
+## Post Content Summary
+[Summarize the original post content or video description to capture the author's intent]`,
   language: LANGUAGES.DEFAULT,
   selectorRetryAttempts: RETRY.SELECTOR_ATTEMPTS,
   selectorCache: [],

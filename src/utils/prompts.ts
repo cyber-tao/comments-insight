@@ -15,6 +15,9 @@ export const DEFAULT_ANALYSIS_PROMPT_TEMPLATE = `You are a professional social m
 - **Platform**: {platform}
 - **URL**: {url}
 
+## Post Content (Original):
+{post_content}
+
 ## Comments Data (Dense Format):
 {comments_data}
 
@@ -38,6 +41,9 @@ Generate a comprehensive analysis report in Markdown format with the following s
 
 ## Executive Summary
 [Brief overview of the analysis]
+
+## Post Content Summary
+[Summarize the original post content or video description to capture the author's intent]
 
 ## Sentiment Distribution
 | Sentiment | Percentage | Description |
@@ -103,6 +109,7 @@ export function buildAnalysisPrompt(
     platform?: string;
     url?: string;
     title?: string;
+    postContent?: string;
     totalComments?: number;
     language?: string;
   },
@@ -123,6 +130,7 @@ export function buildAnalysisPrompt(
       .replace(/{platform}/g, metadata?.platform || 'Unknown Platform')
       .replace(/{url}/g, metadata?.url || 'N/A')
       .replace(/{title}/g, metadata?.title || 'Untitled')
+      .replace(/{post_content}/g, metadata?.postContent || 'N/A')
       .replace('{total_comments}', String(metadata?.totalComments || 0)) + languageInstruction;
 
   return prompt;
@@ -175,6 +183,12 @@ export function getAvailablePlaceholders(): Array<{
       description: 'Video/post publication date and time',
       detailedDescription:
         'The date and time when the video or post was originally published. This is extracted from the page using the videoTime selector in scraper config. Helps provide temporal context for understanding comment trends over time.',
+    },
+    {
+      key: '{post_content}',
+      description: 'Original post content or video description',
+      detailedDescription:
+        'The original post content or video description extracted from the page. This helps the AI understand the author’s intent and provide a better analysis.',
     },
     {
       key: '{platform}',
@@ -252,19 +266,19 @@ export const PROMPT_NORMALIZE_COMMENT_TIMESTAMPS = `You are a time normalization
 Input JSON Array:
 {items_json}
 
-Reference time (ISO 8601 UTC):
+Reference time (local time, ISO 8601 without timezone):
 {reference_time}
 
 Task:
-1. Convert each item's "timestamp" into ISO 8601 UTC format based on the reference time when needed.
-2. The precision should be to minutes only. Do NOT include seconds.
+1. Convert each item's "timestamp" into local time based on the reference time when needed.
+2. The format should be ISO 8601 without timezone and precision to minutes only (e.g., "2024-01-15T10:30").
 3. If the source timestamp is coarse (e.g., "3 days ago", "1 month ago"), use 00:00 for the time.
-4. If the timestamp is already an absolute date, normalize it to ISO 8601 UTC.
+4. If the timestamp is already an absolute date, normalize it to local time with minute precision.
 5. If a timestamp cannot be parsed, return it unchanged.
 
 Output JSON Array (same order, same paths):
 [
-  { "path": "0", "timestamp": "2024-01-15T10:30Z" }
+  { "path": "0", "timestamp": "2024-01-15T10:30" }
 ]
 
 Return ONLY valid JSON. No markdown, no explanations.`;
@@ -308,6 +322,7 @@ interface CrawlingConfig {
   fields: FieldSelector[]; // Fields to extract
   replies?: ReplyConfig;   // Optional: if replies are detected
   videoTime?: SelectorRule; // Optional: selector for post/video publication time (outside comment section)
+  postContent?: SelectorRule; // Optional: selector for post content or video description
 }
 \`\`\`
 
@@ -332,6 +347,9 @@ interface CrawlingConfig {
     *   YouTube: \`#info-strings yt-formatted-string\`, \`#date\`
     *   General: \`time[datetime]\`, \`.publish-date\`, \`.post-date\`, \`[itemprop="datePublished"]\`
     *   This is usually near the title or author info, NOT in the comment section.
+7.  **postContent**: The original post content or video description. Look for:
+    *   YouTube: \`#description\`, \`#description-inner\`, \`#description-inline-expander\`
+    *   General: \`.post-content\`, \`.content\`, \`[itemprop="articleBody"]\`, \`.description\`
 
 ## Output Format
 Return **ONLY** the JSON object. No markdown code blocks, no explanations.

@@ -145,10 +145,19 @@ export function exportCommentsAsCSV(comments: Comment[], title?: string, filenam
  * @param item - History item with analysis
  * @param filename - Output filename
  */
-export function exportAnalysisAsMarkdown(item: HistoryItem, filename?: string): void {
+export function exportAnalysisAsMarkdown(
+  item: HistoryItem,
+  includePostContent: boolean = false,
+  filename?: string,
+): void {
   if (!item.analysis) {
     throw new Error(t('export.noAnalysisAvailable'));
   }
+
+  const postContentSection =
+    includePostContent && item.postContent
+      ? `- **${t('export.postContent')}**: ${item.postContent}\n`
+      : '';
 
   const markdown = `# ${t('export.reportTitle')}
 
@@ -158,6 +167,7 @@ export function exportAnalysisAsMarkdown(item: HistoryItem, filename?: string): 
 - **${t('export.url')}**: ${item.url}
 - **${t('export.extracted')}**: ${formatDateTime(item.extractedAt)}
 - **${t('export.totalComments')}**: ${item.commentsCount}
+${postContentSection}
 
 ## ${t('export.analysisResults')}
 

@@ -8,6 +8,7 @@ import { usePageInfo } from './hooks/usePageInfo';
 import { Header } from './components/Header';
 import { PageStatus } from './components/PageStatus';
 import { ActionButtons } from './components/ActionButtons';
+import { SelectorTester } from './components/SelectorTester';
 
 const Popup: React.FC = () => {
   const { t } = useTranslation();
@@ -152,6 +153,7 @@ const Popup: React.FC = () => {
         onCancel={cancelTask}
         onOpenHistory={handleOpenHistory}
       />
+      {developerMode && <SelectorTester />}
     </div>
   );
 };

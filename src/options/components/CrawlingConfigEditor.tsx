@@ -231,6 +231,24 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
           />
         </div>
       </section>
+
+      {/* Post Content Config */}
+      <section className="space-y-4 pt-4 border-t">
+        <h4 className="font-medium text-gray-900 flex items-center gap-2">
+          <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs">
+            4
+          </span>
+          {t('options.crawlingConfigs.postContentSection')}
+        </h4>
+        <div className="pl-8 space-y-2">
+          <p className="text-xs text-gray-500">{t('options.crawlingConfigs.postContentHint')}</p>
+          <SelectorInput
+            label={t('options.crawlingConfigs.postContentSelector')}
+            rule={config.postContent || { selector: '', type: 'css' }}
+            onChange={(r) => onChange({ ...config, postContent: r.selector ? r : undefined })}
+          />
+        </div>
+      </section>
     </div>
   );
 };

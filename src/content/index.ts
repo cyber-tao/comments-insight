@@ -1,6 +1,6 @@
 // Content Script for Comments Insight Extension
 import { PageController } from './PageController';
-import { MESSAGES, DOM, SCRAPER_GENERATION } from '@/config/constants';
+import { MESSAGES, DOM, SCRAPER_GENERATION, LIMITS, REGEX } from '@/config/constants';
 import { Comment, SimplifiedNode } from '@/types';
 import { CommentExtractor } from './CommentExtractor';
 import { Logger } from '@/utils/logger';
@@ -9,6 +9,7 @@ import { DOMAnalyzer } from './DOMAnalyzer';
 import { DOMSimplifier } from './DOMSimplifier';
 import { setExtractionActive } from './extractionState';
 import { AIStrategy } from './strategies/AIStrategy';
+import { queryXPathAll } from '@/utils/dom-query';
 
 interface ExtractionResponse {
   success: boolean;
@@ -18,6 +19,7 @@ interface ExtractionResponse {
     url?: string;
     title?: string;
     videoTime?: string;
+    postContent?: string;
   };
 }
 
@@ -30,6 +32,13 @@ interface DomStructureResponse {
   success: boolean;
   domStructure?: string;
   textSamples?: string[];
+  error?: string;
+}
+
+interface SelectorTestResponse {
+  success: boolean;
+  total?: number;
+  items?: string[];
   error?: string;
 }
 
@@ -84,6 +93,10 @@ if (!globalAny.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED) {
       case MESSAGES.GET_DOM_STRUCTURE:
         handleGetDOMStructure(sendResponse);
         return true; // Keep channel open for async response
+
+      case MESSAGES.TEST_SELECTOR:
+        handleTestSelector(message.payload, sendResponse);
+        return true;
 
       default:
         sendResponse({ status: 'received' });
@@ -251,13 +264,57 @@ async function handleStartConfigGeneration(
   }
 }
 
+function handleTestSelector(
+  data: { selector: string; selectorType: 'css' | 'xpath' },
+  sendResponse: (response: SelectorTestResponse) => void,
+) {
+  try {
+    const selector = data?.selector?.trim() || '';
+    const selectorType = data?.selectorType;
+
+    if (!selector || !selectorType) {
+      sendResponse({ success: false, error: 'Selector and selectorType are required' });
+      return;
+    }
+
+    const { domAnalyzer } = getTools();
+    const elements =
+      selectorType === 'xpath'
+        ? queryXPathAll(document, selector)
+        : domAnalyzer.querySelectorAllDeep(document, selector);
+    const total = elements.length;
+    const limited = elements.slice(0, LIMITS.SELECTOR_TEST_MAX_RESULTS);
+    const items = limited.map((element) => {
+      const normalized = (element.textContent || '').replace(REGEX.WHITESPACE, ' ').trim();
+      if (normalized.length <= LIMITS.SELECTOR_TEST_MAX_TEXT_LENGTH) {
+        return normalized;
+      }
+      return normalized.slice(0, LIMITS.SELECTOR_TEST_MAX_TEXT_LENGTH);
+    });
+
+    sendResponse({ success: true, total, items });
+  } catch (error) {
+    Logger.error('[Content] Selector test failed', { error });
+    sendResponse({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+}
+
 /**
  * Get post information
  */
-async function getPostInfo(): Promise<{ url: string; title: string; videoTime?: string }> {
+async function getPostInfo(): Promise<{
+  url: string;
+  title: string;
+  videoTime?: string;
+  postContent?: string;
+}> {
   const url = window.location.href;
   const title = document.title;
   let videoTime: string | undefined;
+  let postContent: string | undefined;
 
   try {
     const hostname = getCurrentHostname();
@@ -273,11 +330,21 @@ async function getPostInfo(): Promise<{ url: string; title: string; videoTime?: 
         Logger.debug('[Content] Extracted videoTime from config selector', { videoTime });
       }
     }
+
+    if (response?.config?.postContent?.selector) {
+      const element = document.querySelector(response.config.postContent.selector);
+      if (element) {
+        postContent = element.textContent?.trim() || undefined;
+        Logger.debug('[Content] Extracted postContent from config selector', {
+          length: postContent?.length || 0,
+        });
+      }
+    }
   } catch (e) {
-    Logger.warn('[Content] Failed to get videoTime from config', { error: e });
+    Logger.warn('[Content] Failed to get post info from config', { error: e });
   }
 
-  return { url, title, videoTime };
+  return { url, title, videoTime, postContent };
 }
 
 /**

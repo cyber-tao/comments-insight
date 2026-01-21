@@ -2,7 +2,7 @@ import { Message } from '../../types';
 import { HandlerContext, PingResponse } from './types';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
-import { LIMITS, TEXT } from '@/config/constants';
+import { LIMITS, MESSAGES, TEXT } from '@/config/constants';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
 
 export interface ModelsResponse {
@@ -14,6 +14,13 @@ export interface TestModelResponse {
   success: boolean;
   message?: string;
   response?: string;
+  error?: string;
+}
+
+export interface SelectorTestResponse {
+  success: boolean;
+  total?: number;
+  items?: string[];
   error?: string;
 }
 
@@ -96,6 +103,45 @@ export async function handleTestModel(
     return {
       success: false,
       error: error instanceof Error ? `${error.message} ${TEXT.MODEL_TEST_HINT}` : 'Unknown error',
+    };
+  }
+}
+
+export async function handleTestSelector(
+  message: Extract<Message, { type: 'TEST_SELECTOR' }>,
+  context: HandlerContext,
+): Promise<SelectorTestResponse> {
+  const { selector, selectorType, tabId: payloadTabId } = message.payload || {};
+
+  if (!selector || !selectorType) {
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Selector and selectorType are required');
+  }
+
+  try {
+    let tabId = payloadTabId ?? context.sender?.tab?.id;
+    if (!tabId) {
+      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      tabId = activeTab?.id;
+    }
+
+    if (!tabId) {
+      return { success: false, error: 'No tab ID available' };
+    }
+
+    await ensureContentScriptInjected(tabId);
+    const response = await chrome.tabs.sendMessage(tabId, {
+      type: MESSAGES.TEST_SELECTOR,
+      payload: { selector, selectorType },
+    });
+    if (response) {
+      return response as SelectorTestResponse;
+    }
+    return { success: false, error: 'No response from content script' };
+  } catch (error) {
+    Logger.error('[MiscHandler] Selector test failed', { error });
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
     };
   }
 }

@@ -120,6 +120,34 @@ export function querySelectorAllDeep(
   return Array.from(new Set(results));
 }
 
+export function queryXPathAll(root: Document | Element | ShadowRoot, selector: string): Element[] {
+  const trimmedSelector = selector.trim();
+  if (!trimmedSelector) {
+    return [];
+  }
+
+  try {
+    const ownerDocument = root instanceof Document ? root : root.ownerDocument || document;
+    const snapshot = ownerDocument.evaluate(
+      trimmedSelector,
+      root,
+      null,
+      XPathResult.ORDERED_NODE_SNAPSHOT_TYPE,
+      null,
+    );
+    const results: Element[] = [];
+    for (let i = 0; i < snapshot.snapshotLength; i++) {
+      const node = snapshot.snapshotItem(i);
+      if (node && node.nodeType === Node.ELEMENT_NODE) {
+        results.push(node as Element);
+      }
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
 export function splitSelector(selector: string): { current: string; rest?: string } {
   const trimmed = selector.trim();
   let inAttr = false;

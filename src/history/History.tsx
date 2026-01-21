@@ -16,6 +16,7 @@ const History: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'comments' | 'analysis'>('analysis');
   const [sortBy, setSortBy] = useState<'time' | 'likes' | 'replies'>('likes');
+  const [exportPostContentInMarkdown, setExportPostContentInMarkdown] = useState(false);
 
   // Comment view search and pagination
   const [commentSearchTerm, setCommentSearchTerm] = useState('');
@@ -28,6 +29,7 @@ const History: React.FC = () => {
       if (response?.settings?.language) {
         i18n.changeLanguage(response.settings.language);
       }
+      setExportPostContentInMarkdown(!!response?.settings?.exportPostContentInMarkdown);
     });
 
     loadHistory();
@@ -389,6 +391,14 @@ const History: React.FC = () => {
                   💬 {t('history.commentsWithCount', { count: selectedItem.commentsCount })}
                 </span>
               </div>
+              {selectedItem.postContent && (
+                <details className="mt-3 text-sm text-gray-700">
+                  <summary className="cursor-pointer text-gray-600">
+                    {t('history.postContent')}
+                  </summary>
+                  <div className="mt-2 whitespace-pre-wrap">{selectedItem.postContent}</div>
+                </details>
+              )}
             </div>
 
             {/* View Mode Tabs */}
@@ -426,7 +436,9 @@ const History: React.FC = () => {
                     <h3 className="text-lg font-semibold">{t('history.analysis')}</h3>
                     {selectedItem.analysis && (
                       <button
-                        onClick={() => exportAnalysisAsMarkdown(selectedItem)}
+                        onClick={() =>
+                          exportAnalysisAsMarkdown(selectedItem, exportPostContentInMarkdown)
+                        }
                         className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm flex items-center gap-2 transition-colors shadow-sm"
                         title={t('history.exportMarkdownTooltip')}
                       >

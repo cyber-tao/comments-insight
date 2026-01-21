@@ -129,13 +129,13 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
                   onClick={() => handleEdit(config)}
                   className="p-2 text-blue-600 hover:bg-blue-50 rounded"
                 >
-                  Edit
+                  {t('options.crawlingConfigs.edit')}
                 </button>
                 <button
                   onClick={() => handleDelete(config.id)}
                   className="p-2 text-red-600 hover:bg-red-50 rounded"
                 >
-                  Delete
+                  {t('options.crawlingConfigs.delete')}
                 </button>
               </div>
             </div>

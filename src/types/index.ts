@@ -144,6 +144,7 @@ export interface CrawlingConfig {
   fields: FieldSelector[];
   replies?: ReplyConfig;
   videoTime?: SelectorRule;
+  postContent?: SelectorRule;
   lastUpdated: number;
 }
 
@@ -159,6 +160,8 @@ export interface Settings {
   aiTimeout: number; // Timeout in milliseconds
   analyzerPromptTemplate: string;
   language: string; // Language code (e.g., 'zh-CN', 'en-US')
+  normalizeTimestamps: boolean;
+  exportPostContentInMarkdown: boolean;
   selectorRetryAttempts: number;
   selectorCache: SelectorCache[];
   crawlingConfigs: CrawlingConfig[];
@@ -188,6 +191,7 @@ export interface HistoryItem {
   title: string;
   platform: string; // Domain or platform identifier
   videoTime?: string; // Video/post publication time (extracted from page)
+  postContent?: string; // Post content or video description (extracted from page)
   extractedAt: number; // When comments were extracted
   commentsCount: number;
   comments: Comment[];
