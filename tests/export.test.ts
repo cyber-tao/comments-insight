@@ -1,12 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  exportCommentsAsCSV,
-  exportAnalysisAsMarkdown,
-  exportCompleteData,
-} from '../src/utils/export';
+import { exportCommentsAsCSV, exportAnalysisAsMarkdown } from '../src/utils/export';
 import { Comment, HistoryItem } from '../src/types';
 
-// Mock DOM APIs
 const mockClick = vi.fn();
 const mockAppendChild = vi.fn();
 const mockRemoveChild = vi.fn();
@@ -78,10 +73,6 @@ describe('Export Utils', () => {
       expect(mockAppendChild).toHaveBeenCalled();
       expect(mockClick).toHaveBeenCalled();
       expect(mockRemoveChild).toHaveBeenCalled();
-
-      // Verify CSV content logic implicitly by checking Blob creation
-      // Note: Since we mocked Blob, we can't easily inspect its content here without more complex mocking
-      // but we verified the flow.
     });
 
     it('should sanitize filenames', () => {
@@ -126,26 +117,6 @@ describe('Export Utils', () => {
     it('should throw error if no analysis available', () => {
       const noAnalysisItem = { ...mockHistoryItem, analysis: undefined };
       expect(() => exportAnalysisAsMarkdown(noAnalysisItem)).toThrow();
-    });
-  });
-
-  describe('exportCompleteData', () => {
-    it('should export JSON data', () => {
-      const mockItem: HistoryItem = {
-        id: '1',
-        url: 'url',
-        platform: 'platform',
-        title: 'title',
-        extractedAt: 100,
-        commentsCount: 0,
-        comments: [],
-      };
-
-      exportCompleteData(mockItem);
-
-      expect(mockCreateElement).toHaveBeenCalledWith('a');
-      const link = mockCreateElement.mock.results[0].value;
-      expect(link.download).toContain('.json');
     });
   });
 });

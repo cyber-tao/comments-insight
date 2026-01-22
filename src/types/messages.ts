@@ -97,8 +97,8 @@ export type ExportMessage = {
   type: 'EXPORT_DATA';
   payload:
     | { type: 'settings' }
-    | { format: 'csv' | 'md' | 'json'; taskId: string }
-    | { format: 'csv' | 'md' | 'json'; historyId: string };
+    | { format: 'csv' | 'md'; taskId: string }
+    | { format: 'csv' | 'md'; historyId: string };
 };
 
 export interface GenerateCrawlingConfigMessage {

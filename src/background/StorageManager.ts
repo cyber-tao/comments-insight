@@ -507,7 +507,8 @@ export class StorageManager {
   async exportSettings(): Promise<string> {
     try {
       const settings = await this.getSettings();
-      return JSON.stringify(settings, null, 2);
+      const { crawlingConfigs: _crawlingConfigs, ...settingsToExport } = settings;
+      return JSON.stringify(settingsToExport, null, 2);
     } catch (error) {
       Logger.error('[StorageManager] Failed to export settings', { error });
       throw new ExtensionError(ErrorCode.STORAGE_READ_ERROR, 'Failed to export settings', {
@@ -529,7 +530,19 @@ export class StorageManager {
         throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Invalid settings format');
       }
 
-      await this.saveSettings(settings);
+      const currentSettings = await this.getSettings();
+      const {
+        crawlingConfigs: _crawlingConfigs,
+        selectorCache: _selectorCache,
+        ...rest
+      } = settings;
+      const merged = {
+        ...currentSettings,
+        ...rest,
+        crawlingConfigs: currentSettings.crawlingConfigs,
+        selectorCache: currentSettings.selectorCache,
+      };
+      await this.saveSettings(merged);
       Logger.info('[StorageManager] Settings imported successfully');
     } catch (error) {
       Logger.error('[StorageManager] Failed to import settings', { error });

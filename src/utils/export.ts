@@ -191,30 +191,6 @@ ${item.analysis.markdown}
 }
 
 /**
- * Export complete data (comments + analysis) as JSON
- * @param item - History item
- * @param filename - Output filename
- */
-export function exportCompleteData(item: HistoryItem, filename?: string): void {
-  const data = {
-    metadata: {
-      title: item.title,
-      platform: item.platform,
-      url: item.url,
-      extractedAt: item.extractedAt,
-      analyzedAt: item.analyzedAt,
-      commentsCount: item.commentsCount,
-      exportDate: Date.now(),
-    },
-    comments: item.comments,
-    analysis: item.analysis,
-  };
-
-  const json = JSON.stringify(data, null, 2);
-  downloadFile(json, filename || `complete-data-${Date.now()}.json`, 'application/json');
-}
-
-/**
  * Download file helper
  * @param content - File content
  * @param filename - Filename

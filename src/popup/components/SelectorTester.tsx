@@ -67,8 +67,17 @@ export const SelectorTester: React.FC = () => {
   }, [hydrated, selector, selectorType, results, total]);
 
   const handleTest = async () => {
+    if (loading) return;
     const trimmed = selector.trim();
-    if (!trimmed || loading) return;
+    if (!trimmed) {
+      setSelector('');
+      setSelectorType('css');
+      setResults([]);
+      setTotal(null);
+      setError(null);
+      await chrome.storage.local.remove(STORAGE.SELECTOR_TESTER_STATE_KEY);
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -126,7 +135,7 @@ export const SelectorTester: React.FC = () => {
           <button
             className="px-3 py-1 text-sm rounded bg-blue-600 text-white disabled:opacity-50"
             onClick={handleTest}
-            disabled={!selector.trim() || loading}
+            disabled={loading}
           >
             {loading ? t('popup.selectorTesterTesting') : t('popup.selectorTesterButton')}
           </button>

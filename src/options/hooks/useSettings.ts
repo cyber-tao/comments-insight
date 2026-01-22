@@ -128,7 +128,15 @@ export function useSettings() {
         try {
           const data = event.target?.result as string;
           const imported = JSON.parse(data);
-          setSettings(imported);
+          setSettings((prev) => {
+            if (!prev) return imported;
+            return {
+              ...prev,
+              ...imported,
+              crawlingConfigs: prev.crawlingConfigs,
+              selectorCache: prev.selectorCache,
+            };
+          });
           toast.success(t('options.importedSuccess'));
         } catch (_error) {
           toast.error(t('options.importError'));
