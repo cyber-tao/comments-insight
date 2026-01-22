@@ -189,7 +189,6 @@
       "editing": "编辑配置: {{domain}}",
       "saveChanges": "保存更改",
       "cancel": "取消",
-      "cancel": "取消",
       "domain": "域名 / URL 模式",
       "domainHint": "例如: youtube.com 或 https://example.com/blog/*",
       "commentSection": "评论区设置",

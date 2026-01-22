@@ -190,7 +190,6 @@
       "editing": "Editing Config: {{domain}}",
       "saveChanges": "Save Changes",
       "cancel": "Cancel",
-      "cancel": "Cancel",
       "domain": "Domain / URL Pattern",
       "domainHint": "e.g. youtube.com or https://example.com/blog/*",
       "commentSection": "Comment Section",
