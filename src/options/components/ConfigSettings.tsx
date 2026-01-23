@@ -188,7 +188,12 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
           return;
         }
         const validated = rawConfigs.filter(isCrawlingConfig).map(normalizeImportedConfig);
-        if (validated.length === 0) {
+        const dedupedByDomain = new Map<string, CrawlingConfig>();
+        for (const config of validated) {
+          dedupedByDomain.set(config.domain, config);
+        }
+        const uniqueConfigs = Array.from(dedupedByDomain.values());
+        if (uniqueConfigs.length === 0) {
           setImportError(t('options.crawlingConfigs.importNoConfigs'));
           setImportOpen(true);
           return;
@@ -196,7 +201,7 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
         const existingByDomain = new Map(configs.map((config) => [config.domain, config]));
         const conflicts: ConflictItem[] = [];
         const additions: CrawlingConfig[] = [];
-        for (const incoming of validated) {
+        for (const incoming of uniqueConfigs) {
           const existing = existingByDomain.get(incoming.domain);
           if (!existing) {
             additions.push(incoming);
