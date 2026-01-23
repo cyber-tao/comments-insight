@@ -439,7 +439,7 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
           <p className="text-sm text-gray-500 mt-1">{t('options.crawlingConfigs.subtitle')}</p>
         </div>
         <div className="flex gap-2">
-          <label className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm font-medium cursor-pointer">
+          <label className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium cursor-pointer">
             {t('options.crawlingConfigs.importConfig')}
             <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
           </label>
@@ -451,7 +451,7 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
           </button>
           <button
             onClick={handleAdd}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium"
+            className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 text-sm font-medium"
           >
             {t('options.crawlingConfigs.newConfig')}
           </button>

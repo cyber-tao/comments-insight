@@ -11,8 +11,15 @@ type Tab = 'extension' | 'crawling';
 
 const Options: React.FC = () => {
   const { t } = useTranslation();
-  const { settings, saving, handleSettingsChange, handleExport, handleImport, ToastContainer } =
-    useSettings();
+  const {
+    settings,
+    saving,
+    handleSettingsChange,
+    handleExport,
+    handleImport,
+    toast,
+    ToastContainer,
+  } = useSettings();
   const [activeTab, setActiveTab] = useState<Tab>('extension');
 
   if (!settings) {
@@ -53,20 +60,27 @@ const Options: React.FC = () => {
         <div className="animate-fade-in">
           {activeTab === 'extension' && (
             <div className="space-y-6">
-              <div className="flex gap-3">
-                <button
-                  onClick={handleExport}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
-                >
-                  {t('common.export')}
-                </button>
-                <label className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium cursor-pointer">
-                  {t('common.import')}
-                  <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-                </label>
-              </div>
+              <section className="bg-white p-6 rounded-lg shadow">
+                <h2 className="text-xl font-semibold mb-4">{t('options.extensionSettings')}</h2>
+                <div className="flex gap-3">
+                  <label className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium cursor-pointer">
+                    {t('common.import')}
+                    <input type="file" accept=".json" onChange={handleImport} className="hidden" />
+                  </label>
+                  <button
+                    onClick={handleExport}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+                  >
+                    {t('common.export')}
+                  </button>
+                </div>
+              </section>
               <BasicSettings settings={settings} onSettingsChange={handleSettingsChange} />
-              <AIModelSettings settings={settings} onSettingsChange={handleSettingsChange} />
+              <AIModelSettings
+                settings={settings}
+                onSettingsChange={handleSettingsChange}
+                toast={toast}
+              />
               <AdvancedSettings settings={settings} onSettingsChange={handleSettingsChange} />
             </div>
           )}

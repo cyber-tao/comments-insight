@@ -16,6 +16,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
 
   return (
     <section className="mb-8 bg-white p-6 rounded-lg shadow">
+      <h2 className="text-xl font-semibold mb-4">{t('options.advancedSettings')}</h2>
       <div className="space-y-8 animate-fade-in">
         {/* AI Timeout */}
         <div>

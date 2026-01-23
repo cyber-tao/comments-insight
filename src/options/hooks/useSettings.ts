@@ -153,6 +153,7 @@ export function useSettings() {
     handleSettingsChange,
     handleExport,
     handleImport,
+    toast,
     ToastContainer: toast.ToastContainer,
   };
 }

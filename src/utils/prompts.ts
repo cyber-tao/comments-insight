@@ -36,6 +36,7 @@ Note on data format:
 ## Output Format:
 Generate a comprehensive analysis report in Markdown format with the following sections.
 **IMPORTANT: Use tables for structured data to ensure a clean and beautiful layout.**
+When referencing a single comment or reply, append the original text after the summary in this format: Original: <comment or reply text>.
 
 # Comment Analysis Report
 

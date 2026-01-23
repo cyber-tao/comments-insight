@@ -4,16 +4,24 @@ import { useTranslation } from 'react-i18next';
 import { API, MESSAGES, LIMITS, UI_LIMITS } from '@/config/constants';
 import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
 import { Settings } from '@/types';
-import { useToast } from '@/hooks/useToast';
 
 interface AIModelSettingsProps {
   settings: Settings;
   onSettingsChange: (settings: Settings) => void;
+  toast: {
+    success: (message: string) => void;
+    error: (message: string) => void;
+    warning: (message: string) => void;
+    info: (message: string) => void;
+  };
 }
 
-export const AIModelSettings: React.FC<AIModelSettingsProps> = ({ settings, onSettingsChange }) => {
+export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
+  settings,
+  onSettingsChange,
+  toast,
+}) => {
   const { t } = useTranslation();
-  const toast = useToast();
   const [loadingModels, setLoadingModels] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [showApiKey, setShowApiKey] = useState(false);
