@@ -14,7 +14,8 @@ export type SettingsMessage =
   | { type: 'SAVE_SETTINGS'; payload: { settings: Partial<Settings> } }
   | { type: 'CACHE_SELECTOR'; payload: { hostname: string; selector: string } }
   | { type: 'GET_CRAWLING_CONFIG'; payload: { domain: string } }
-  | { type: 'SAVE_CRAWLING_CONFIG'; payload: { config: CrawlingConfig } };
+  | { type: 'SAVE_CRAWLING_CONFIG'; payload: { config: CrawlingConfig } }
+  | { type: 'SYNC_CRAWLING_CONFIGS'; payload?: never };
 
 export type ExtractionMessage =
   | {

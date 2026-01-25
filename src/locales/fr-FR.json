@@ -228,7 +228,11 @@
       "postContentSection": "Contenu du post (Optionnel)",
       "postContentSelector": "Sélecteur de contenu",
       "postContentHint": "Sélecteur du contenu original du post ou de la description de la vidéo.",
-      "confirmDelete": "Êtes-vous sûr de vouloir supprimer cette configuration ?"
+      "confirmDelete": "Êtes-vous sûr de vouloir supprimer cette configuration ?",
+      "syncRemote": "Synchroniser depuis le distant",
+      "syncing": "Synchronisation...",
+      "syncSuccess": "Configurations synchronisées avec succès !",
+      "syncError": "Échec de la synchronisation, veuillez réessayer plus tard."
     }
   },
   "history": {

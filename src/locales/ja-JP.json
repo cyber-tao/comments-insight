@@ -228,7 +228,11 @@
       "postContentSection": "投稿内容（任意）",
       "postContentSelector": "内容セレクター",
       "postContentHint": "投稿内容または動画説明のセレクター。",
-      "confirmDelete": "この設定を削除してもよろしいですか？"
+      "confirmDelete": "この設定を削除してもよろしいですか？",
+      "syncRemote": "リモートから同期",
+      "syncing": "同期中...",
+      "syncSuccess": "設定の同期が完了しました！",
+      "syncError": "同期に失敗しました。後でもう一度お試しください。"
     }
   },
   "history": {

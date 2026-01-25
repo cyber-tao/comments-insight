@@ -62,6 +62,7 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
   const [importFileName, setImportFileName] = useState('');
   const [importAdditions, setImportAdditions] = useState<CrawlingConfig[]>([]);
   const [importConflicts, setImportConflicts] = useState<ConflictItem[]>([]);
+  const [syncing, setSyncing] = useState(false);
 
   // Safely access configs (it might be undefined if loaded from old initialized storage)
   const configs = useMemo(() => settings.crawlingConfigs || [], [settings.crawlingConfigs]);
@@ -152,10 +153,11 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
       isSelectorRule(config.item) &&
       Array.isArray(config.fields) &&
       config.fields.every(isFieldSelector) &&
-      typeof config.lastUpdated === 'number' &&
+      (config.lastUpdated === undefined || typeof config.lastUpdated === 'number') &&
       (config.replies === undefined || isReplyConfig(config.replies)) &&
       (config.videoTime === undefined || isSelectorRule(config.videoTime)) &&
-      (config.postContent === undefined || isSelectorRule(config.postContent))
+      (config.postContent === undefined || isSelectorRule(config.postContent)) &&
+      (config.postTime === undefined || isSelectorRule(config.postTime))
     );
   };
 
@@ -165,6 +167,7 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
       ...config,
       id,
       domain: config.domain.trim(),
+      lastUpdated: config.lastUpdated ?? Date.now(),
     };
   };
 
@@ -400,6 +403,21 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
     closeImport();
   };
 
+  const handleSyncRemote = async () => {
+    try {
+      setSyncing(true);
+      await chrome.runtime.sendMessage({ type: 'SYNC_CRAWLING_CONFIGS' });
+      // Reload settings via parent component
+      onSettingsChange({}); // Trigger a refresh if necessary, or let background update notify
+      alert(t('options.crawlingConfigs.syncSuccess'));
+    } catch (error) {
+      console.error('Failed to sync configs:', error);
+      alert(t('options.crawlingConfigs.syncError'));
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleSave = () => {
     if (tempConfig) {
       const exists = configs.find((c) => c.id === tempConfig.id);
@@ -439,6 +457,15 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
           <p className="text-sm text-gray-500 mt-1">{t('options.crawlingConfigs.subtitle')}</p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={handleSyncRemote}
+            disabled={syncing}
+            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium disabled:opacity-50"
+          >
+            {syncing
+              ? t('options.crawlingConfigs.syncing')
+              : t('options.crawlingConfigs.syncRemote')}
+          </button>
           <label className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium cursor-pointer">
             {t('options.crawlingConfigs.importConfig')}
             <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />

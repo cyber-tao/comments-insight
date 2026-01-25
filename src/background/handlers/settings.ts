@@ -64,3 +64,11 @@ export async function handleSaveCrawlingConfig(
   await context.storageManager.saveCrawlingConfig(config);
   return { success: true };
 }
+
+export async function handleSyncCrawlingConfigs(
+  _message: Extract<Message, { type: 'SYNC_CRAWLING_CONFIGS' }>,
+  context: HandlerContext,
+): Promise<SuccessResponse> {
+  await context.storageManager.syncCrawlingConfigs();
+  return { success: true };
+}

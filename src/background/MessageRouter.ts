@@ -118,6 +118,9 @@ export class MessageRouter {
         case MESSAGES.SAVE_CRAWLING_CONFIG:
           return await settingsHandlers.handleSaveCrawlingConfig(message, context);
 
+        case MESSAGES.SYNC_CRAWLING_CONFIGS:
+          return await settingsHandlers.handleSyncCrawlingConfigs(message, context);
+
         case MESSAGES.GET_HISTORY:
           return await historyHandlers.handleGetHistory(message, context);
 

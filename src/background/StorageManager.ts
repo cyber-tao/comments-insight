@@ -10,6 +10,7 @@ import {
   DEFAULTS,
   DOM_ANALYSIS_DEFAULTS,
 } from '@/config/constants';
+import DEFAULT_CRAWLING_RULES from '@/config/default_rules.json';
 import LZString from 'lz-string';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
@@ -78,7 +79,10 @@ Generate a comprehensive analysis report in Markdown format.
   language: LANGUAGES.DEFAULT,
   selectorRetryAttempts: RETRY.SELECTOR_ATTEMPTS,
   selectorCache: [],
-  crawlingConfigs: [],
+  crawlingConfigs: DEFAULT_CRAWLING_RULES.map((config) => ({
+    ...config,
+    lastUpdated: Date.now(),
+  })) as CrawlingConfig[],
   domAnalysisConfig: DOM_ANALYSIS_DEFAULTS,
   developerMode: false,
 };
@@ -347,6 +351,18 @@ export class StorageManager {
         ...settings,
       } as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig };
 
+      // Deep merge crawlingConfigs: default configs + stored configs, stored takes precedence
+      const defaultConfigs = DEFAULT_SETTINGS.crawlingConfigs || [];
+      const storedConfigs = (settings as Partial<Settings>).crawlingConfigs || [];
+      const configMap = new Map<string, CrawlingConfig>();
+      for (const config of defaultConfigs) {
+        configMap.set(config.domain, config);
+      }
+      for (const config of storedConfigs) {
+        configMap.set(config.domain, config);
+      }
+      merged.crawlingConfigs = Array.from(configMap.values());
+
       const normalizedModel = this.normalizeAIModel(merged);
       merged.aiModel = {
         ...normalizedModel,
@@ -473,6 +489,41 @@ export class StorageManager {
     } catch (error) {
       Logger.warn('[StorageManager] Failed to get crawling config', { error });
       return null;
+    }
+  }
+
+  /**
+   * Sync crawling configs from remote GitHub repository
+   */
+  async syncCrawlingConfigs(): Promise<void> {
+    try {
+      const response = await fetch(
+        'https://raw.githubusercontent.com/cyber-tao/comments-insight/main/src/config/default_rules.json',
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to fetch remote config: ${response.statusText}`);
+      }
+
+      const remoteConfigs = (await response.json()) as CrawlingConfig[];
+
+      const settings = await this.getSettings();
+      const currentConfigs = settings.crawlingConfigs || [];
+
+      const merged = [...currentConfigs];
+      for (const remote of remoteConfigs) {
+        const index = merged.findIndex((c) => c.id === remote.id);
+        if (index >= 0) {
+          merged[index] = { ...merged[index], ...remote, lastUpdated: Date.now() };
+        } else {
+          merged.push({ ...remote, lastUpdated: Date.now() });
+        }
+      }
+
+      await this.saveSettings({ crawlingConfigs: merged });
+      Logger.info('[StorageManager] Crawling configs synced successfully');
+    } catch (error) {
+      Logger.error('[StorageManager] Failed to sync crawling configs', { error });
+      throw error;
     }
   }
 
@@ -1126,12 +1177,12 @@ export class StorageManager {
         const result = await chrome.storage.local.get(baseKey);
         const item = result[baseKey] as
           | {
-              id: string;
-              extractedAt: number;
-              url: string;
-              title: string;
-              platform: string;
-            }
+            id: string;
+            extractedAt: number;
+            url: string;
+            title: string;
+            platform: string;
+          }
           | undefined;
 
         if (item) {

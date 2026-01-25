@@ -8,6 +8,8 @@
 
 AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.2-000000)](https://crxjs.dev/vite-plugin/)
 
 </div>
@@ -55,20 +57,18 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
   - Auto-scroll handling and recursive reply expansion (with visibility checks and interaction simulation).
   - Real-time progress tracking (e.g., "Extracting (55/100)").
 - 🧠 **AI Analysis**:
+  - **Scalable Processing**: Automatically batches large comment sets with concurrency control (up to 3 concurrent requests) to handle long threads efficiently.
+  - **Thought Filtering**: Supports reasoning models (like DeepSeek) by automatically stripping `<think>` tags from output for clean reports.
   - Comprehensive reports including Sentiment Distribution, Hot Comments, Top Discussed, and Interaction Analysis.
-  - Beautifully formatted output using Markdown tables.
   - Customizable prompt templates with "Reset to Default" capability.
 - 🧩 **Scraper Config**:
   - Generate/edit/import/export per-site configs.
   - Visual selector validation and caching for performance.
 - 🗂️ **History & Logs**:
+  - **Token Tracking**: Locally records token usage stats for better cost management.
   - Compressed storage (`lz-string`) for efficient local saving.
   - Searchable history with filtering and sorting (by Time, Likes, Replies).
-  - Export data to CSV (comments) or Markdown (analysis).
-- 🔔 **Tasks & Notifications**:
-  - Robust task queue system to prevent conflicts.
-  - Completion and failure notifications.
-- 🌐 **i18n**: Complete Chinese and English UI support.
+- 🌐 **i18n**: Multi-language support: English, Chinese (简体中文), Japanese (日本語), French (Français), and Spanish (Español).
 - 🛠️ **Developer Mode**: Toggle advanced features like AI Logs and Selector Testing tools.
 
 ## 🔑 API Key Security Note
@@ -77,7 +77,7 @@ API keys are stored locally (reversible encryption/obfuscation) to avoid acciden
 
 ## 🧱 Architecture
 
-- **Background**: Service Worker orchestrates the Task Queue, AI Service (API calls), and Storage management.
+- **Background**: Service Worker orchestrates the Task Queue, AIService (handling concurrency, cleaning output, and token tracking), and Storage management.
 - **Content Scripts**: Handles DOM traversal, interaction simulation (clicking "View Replies"), and data extraction.
 - **Popup**: Main control center for triggering tasks, viewing page status, and monitoring progress.
 - **Options**: Configuration for AI models (OpenAI, Ollama, etc.), Prompts, and Scraper Management.
@@ -93,9 +93,9 @@ src/
   options/               # Options Page: Settings & Config Management
   history/               # History Page: Data visualization
   logs/                  # Debug Logs Viewer
-  config/                # Constants, default scrapers
+  config/                # Constants, default scrapers, analysis parameters
   components/            # Shared UI components
-  utils/                 # Helpers: Prompts, Logger, Export, etc.
+  utils/                 # Helpers: Prompts, Logger, Export, ErrorHandler, etc.
   types/                 # TypeScript definitions
 vite.config.ts          # Build config
 ```
@@ -127,13 +127,14 @@ vite.config.ts          # Build config
 3. **Extract**: Click the extension icon. If a config exists, click "Extract Comments". If not, click "Generate Config" to let AI find selectors.
 4. **Monitor**: Watch the progress bar in the popup.
 5. **Analyze**: Once extracted, click "Analyze Comments" to generate a report.
-6. **View**: Click "View History" to see detailed comments (sort by Likes to see top content) and the analysis report.
+6. **View**: Click "View History" to see detailed comments and the analysis report.
 
 ## ⚙️ Configuration
 
-- **AI Model**: Supports custom models. Ensure your model handles long context if analyzing many comments.
-- **Prompts**: Customize the extraction or analysis prompts in Settings. Use placeholders like `{comments_data}`.
-- **Developer Mode**: Enable in Settings to see "View AI Logs" and selector testing tools in the Popup.
+- **AI Model**: Supports custom models. Defaults include GPT-4, Claude 3 (Opus/Sonnet/Haiku).
+- **DOM Analysis**: Configure advanced parameters like `initialDepth`, `expandDepth`, and `maxDepth` for complex pages.
+- **Prompts**: Customize labels/placeholders like `{comments_data}`, `{post_content}`, etc.
+- **Developer Mode**: Enable in Settings to see "View AI Logs" and selector testing tools.
 
 ## 🧰 Tech Stack
 
@@ -142,7 +143,7 @@ vite.config.ts          # Build config
 - **Styling**: TailwindCSS
 - **Extension**: Manifest V3, CRXJS
 - **Utils**: `i18next`, `react-markdown`, `lz-string`
-- **Testing**: Vitest with coverage reporting
+- **Testing**: Vitest with unit and [E2E tests](docs/e2e-testing.md)
 
 ## 🛠️ Commands
 

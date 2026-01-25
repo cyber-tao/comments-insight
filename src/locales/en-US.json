@@ -158,6 +158,10 @@
       "newConfig": "New",
       "importConfig": "Import",
       "exportConfig": "Export",
+      "syncRemote": "Sync from Remote",
+      "syncing": "Syncing...",
+      "syncSuccess": "Configurations synced successfully!",
+      "syncError": "Failed to sync configurations. Please try again.",
       "noConfigs": "No configurations found. The extension will generate them automatically as you visit sites.",
       "items": "Items",
       "replies": "Replies",
@@ -205,9 +209,9 @@
       "videoTimeSection": "Post/Video Time (Optional)",
       "videoTimeSelector": "Time Selector",
       "videoTimeHint": "Selector for the post/video publication time. This is usually near the title, not in the comment section.",
-    "postContentSection": "Post Content (Optional)",
-    "postContentSelector": "Content Selector",
-    "postContentHint": "Selector for the original post content or video description.",
+      "postContentSection": "Post Content (Optional)",
+      "postContentSelector": "Content Selector",
+      "postContentHint": "Selector for the original post content or video description.",
       "confirmDelete": "Are you sure you want to delete this configuration?"
     }
   },

@@ -145,6 +145,7 @@ export interface CrawlingConfig {
   replies?: ReplyConfig;
   videoTime?: SelectorRule;
   postContent?: SelectorRule;
+  postTime?: SelectorRule;
   lastUpdated: number;
 }
 
