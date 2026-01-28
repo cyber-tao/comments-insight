@@ -68,7 +68,7 @@ export async function handleSaveCrawlingConfig(
 export async function handleSyncCrawlingConfigs(
   _message: Extract<Message, { type: 'SYNC_CRAWLING_CONFIGS' }>,
   context: HandlerContext,
-): Promise<SuccessResponse> {
-  await context.storageManager.syncCrawlingConfigs();
-  return { success: true };
+): Promise<{ success: boolean; added: number; updated: number }> {
+  const result = await context.storageManager.syncCrawlingConfigs();
+  return { success: true, ...result };
 }

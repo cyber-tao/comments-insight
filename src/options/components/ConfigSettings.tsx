@@ -13,11 +13,19 @@ type MergeField =
   | 'siteName'
   | 'container'
   | 'item'
-  | 'fields'
-  | 'replies'
+  | 'fieldUsername'
+  | 'fieldContent'
+  | 'fieldTimestamp'
+  | 'fieldLikes'
+  | 'repliesContainer'
+  | 'repliesItem'
+  | 'repliesFieldUsername'
+  | 'repliesFieldContent'
+  | 'repliesFieldTimestamp'
+  | 'repliesFieldLikes'
+  | 'repliesExpandBtn'
   | 'videoTime'
-  | 'postContent'
-  | 'lastUpdated';
+  | 'postContent';
 
 interface ConflictItem {
   existing: CrawlingConfig;
@@ -30,11 +38,19 @@ const MERGE_FIELDS: MergeField[] = [
   'siteName',
   'container',
   'item',
-  'fields',
-  'replies',
+  'fieldUsername',
+  'fieldContent',
+  'fieldTimestamp',
+  'fieldLikes',
+  'repliesContainer',
+  'repliesItem',
+  'repliesFieldUsername',
+  'repliesFieldContent',
+  'repliesFieldTimestamp',
+  'repliesFieldLikes',
+  'repliesExpandBtn',
   'videoTime',
   'postContent',
-  'lastUpdated',
 ];
 
 const DEFAULT_EMPTY_CONFIG: CrawlingConfig = {
@@ -63,6 +79,11 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
   const [importAdditions, setImportAdditions] = useState<CrawlingConfig[]>([]);
   const [importConflicts, setImportConflicts] = useState<ConflictItem[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+  const [isRemoteSync, setIsRemoteSync] = useState(false);
+
+  const SYNC_REMOTE_URL =
+    'https://raw.githubusercontent.com/cyber-tao/comments-insight/refs/heads/master/src/config/default_rules.json';
 
   // Safely access configs (it might be undefined if loaded from old initialized storage)
   const configs = useMemo(() => settings.crawlingConfigs || [], [settings.crawlingConfigs]);
@@ -222,7 +243,9 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
             },
             {} as Record<MergeField, MergeChoice>,
           );
-          conflicts.push({ existing, incoming, diffFields, choices });
+          if (diffFields.length > 0) {
+            conflicts.push({ existing, incoming, diffFields, choices });
+          }
         }
         setImportAdditions(additions);
         setImportConflicts(conflicts);
@@ -237,6 +260,10 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
     reader.readAsText(file);
   };
 
+  const findField = (fields: FieldSelector[] | undefined, name: string): FieldSelector | null => {
+    return fields?.find((f) => f.name === name) || null;
+  };
+
   const getFieldRawValue = (config: CrawlingConfig, field: MergeField): unknown => {
     switch (field) {
       case 'siteName':
@@ -245,16 +272,32 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
         return config.container;
       case 'item':
         return config.item;
-      case 'fields':
-        return config.fields;
-      case 'replies':
-        return config.replies || null;
+      case 'fieldUsername':
+        return findField(config.fields, 'username');
+      case 'fieldContent':
+        return findField(config.fields, 'content');
+      case 'fieldTimestamp':
+        return findField(config.fields, 'timestamp');
+      case 'fieldLikes':
+        return findField(config.fields, 'likes');
+      case 'repliesContainer':
+        return config.replies?.container || null;
+      case 'repliesItem':
+        return config.replies?.item || null;
+      case 'repliesFieldUsername':
+        return findField(config.replies?.fields, 'username');
+      case 'repliesFieldContent':
+        return findField(config.replies?.fields, 'content');
+      case 'repliesFieldTimestamp':
+        return findField(config.replies?.fields, 'timestamp');
+      case 'repliesFieldLikes':
+        return findField(config.replies?.fields, 'likes');
+      case 'repliesExpandBtn':
+        return config.replies?.expandBtn || null;
       case 'videoTime':
         return config.videoTime || null;
       case 'postContent':
         return config.postContent || null;
-      case 'lastUpdated':
-        return config.lastUpdated;
       default:
         return '';
     }
@@ -265,27 +308,10 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
     return `${rule.type}:${rule.selector}`;
   };
 
-  const formatFields = (fields?: FieldSelector[]): string => {
-    if (!fields || fields.length === 0) return '';
-    return fields
-      .map((field) => {
-        const attr = field.attribute ? `@${field.attribute}` : '';
-        return `${field.name}:${formatRule(field.rule)}${attr}`;
-      })
-      .join(' | ');
-  };
-
-  const formatReplies = (replies?: ReplyConfig): string => {
-    if (!replies) return '';
-    const expand = replies.expandBtn ? formatRule(replies.expandBtn) : '';
-    return [
-      formatRule(replies.container),
-      formatRule(replies.item),
-      formatFields(replies.fields),
-      expand,
-    ]
-      .filter((value) => value.length > 0)
-      .join(' | ');
+  const formatFieldSelector = (fs: FieldSelector | null): string => {
+    if (!fs) return '';
+    const attr = fs.attribute ? `@${fs.attribute}` : '';
+    return `${formatRule(fs.rule)}${attr}`;
   };
 
   const formatFieldValue = (config: CrawlingConfig, field: MergeField): string => {
@@ -296,16 +322,32 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
         return formatRule(config.container);
       case 'item':
         return formatRule(config.item);
-      case 'fields':
-        return formatFields(config.fields);
-      case 'replies':
-        return formatReplies(config.replies);
+      case 'fieldUsername':
+        return formatFieldSelector(findField(config.fields, 'username'));
+      case 'fieldContent':
+        return formatFieldSelector(findField(config.fields, 'content'));
+      case 'fieldTimestamp':
+        return formatFieldSelector(findField(config.fields, 'timestamp'));
+      case 'fieldLikes':
+        return formatFieldSelector(findField(config.fields, 'likes'));
+      case 'repliesContainer':
+        return formatRule(config.replies?.container);
+      case 'repliesItem':
+        return formatRule(config.replies?.item);
+      case 'repliesFieldUsername':
+        return formatFieldSelector(findField(config.replies?.fields, 'username'));
+      case 'repliesFieldContent':
+        return formatFieldSelector(findField(config.replies?.fields, 'content'));
+      case 'repliesFieldTimestamp':
+        return formatFieldSelector(findField(config.replies?.fields, 'timestamp'));
+      case 'repliesFieldLikes':
+        return formatFieldSelector(findField(config.replies?.fields, 'likes'));
+      case 'repliesExpandBtn':
+        return formatRule(config.replies?.expandBtn);
       case 'videoTime':
         return formatRule(config.videoTime);
       case 'postContent':
         return formatRule(config.postContent);
-      case 'lastUpdated':
-        return new Date(config.lastUpdated).toLocaleString();
       default:
         return '';
     }
@@ -319,16 +361,32 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
         return t('options.crawlingConfigs.fieldContainer');
       case 'item':
         return t('options.crawlingConfigs.fieldItem');
-      case 'fields':
-        return t('options.crawlingConfigs.fieldFields');
-      case 'replies':
-        return t('options.crawlingConfigs.fieldReplies');
+      case 'fieldUsername':
+        return t('options.crawlingConfigs.fieldUsername');
+      case 'fieldContent':
+        return t('options.crawlingConfigs.fieldContent');
+      case 'fieldTimestamp':
+        return t('options.crawlingConfigs.fieldTimestamp');
+      case 'fieldLikes':
+        return t('options.crawlingConfigs.fieldLikes');
+      case 'repliesContainer':
+        return t('options.crawlingConfigs.fieldRepliesContainer');
+      case 'repliesItem':
+        return t('options.crawlingConfigs.fieldRepliesItem');
+      case 'repliesFieldUsername':
+        return t('options.crawlingConfigs.fieldRepliesUsername');
+      case 'repliesFieldContent':
+        return t('options.crawlingConfigs.fieldRepliesContent');
+      case 'repliesFieldTimestamp':
+        return t('options.crawlingConfigs.fieldRepliesTimestamp');
+      case 'repliesFieldLikes':
+        return t('options.crawlingConfigs.fieldRepliesLikes');
+      case 'repliesExpandBtn':
+        return t('options.crawlingConfigs.fieldRepliesExpandBtn');
       case 'videoTime':
         return t('options.crawlingConfigs.fieldVideoTime');
       case 'postContent':
         return t('options.crawlingConfigs.fieldPostContent');
-      case 'lastUpdated':
-        return t('options.crawlingConfigs.fieldLastUpdated');
       default:
         return field;
     }
@@ -342,12 +400,43 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
     );
   };
 
+  const setAllChoices = (choice: MergeChoice) => {
+    setImportConflicts((prev) =>
+      prev.map((item) => ({
+        ...item,
+        choices: MERGE_FIELDS.reduce<Record<MergeField, MergeChoice>>(
+          (acc, field) => {
+            acc[field] = choice;
+            return acc;
+          },
+          {} as Record<MergeField, MergeChoice>,
+        ),
+      })),
+    );
+  };
+
   const closeImport = () => {
     setImportOpen(false);
     setImportAdditions([]);
     setImportConflicts([]);
     setImportFileName('');
     setImportError(null);
+    setIsRemoteSync(false);
+  };
+
+  const updateFieldInArray = (
+    fields: FieldSelector[],
+    name: string,
+    incoming: FieldSelector | null,
+  ): FieldSelector[] => {
+    if (!incoming) return fields;
+    const idx = fields.findIndex((f) => f.name === name);
+    if (idx >= 0) {
+      const updated = [...fields];
+      updated[idx] = incoming;
+      return updated;
+    }
+    return [...fields, incoming];
   };
 
   const buildMergedConfig = (conflict: ConflictItem): CrawlingConfig => {
@@ -355,7 +444,15 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
       ...conflict.existing,
       id: conflict.existing.id,
       domain: conflict.existing.domain,
+      lastUpdated: Date.now(),
+      fields: [...conflict.existing.fields],
     };
+
+    const mergedReplies = {
+      ...conflict.existing.replies,
+      fields: conflict.existing.replies?.fields ? [...conflict.existing.replies.fields] : [],
+    };
+
     for (const field of MERGE_FIELDS) {
       const choice = conflict.choices[field];
       if (choice === 'incoming') {
@@ -369,11 +466,82 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
           case 'item':
             merged.item = conflict.incoming.item;
             break;
-          case 'fields':
-            merged.fields = conflict.incoming.fields;
+          case 'fieldUsername':
+            merged.fields = updateFieldInArray(
+              merged.fields,
+              'username',
+              findField(conflict.incoming.fields, 'username'),
+            );
             break;
-          case 'replies':
-            merged.replies = conflict.incoming.replies;
+          case 'fieldContent':
+            merged.fields = updateFieldInArray(
+              merged.fields,
+              'content',
+              findField(conflict.incoming.fields, 'content'),
+            );
+            break;
+          case 'fieldTimestamp':
+            merged.fields = updateFieldInArray(
+              merged.fields,
+              'timestamp',
+              findField(conflict.incoming.fields, 'timestamp'),
+            );
+            break;
+          case 'fieldLikes':
+            merged.fields = updateFieldInArray(
+              merged.fields,
+              'likes',
+              findField(conflict.incoming.fields, 'likes'),
+            );
+            break;
+          case 'repliesContainer':
+            if (conflict.incoming.replies?.container) {
+              mergedReplies.container = conflict.incoming.replies.container;
+            }
+            break;
+          case 'repliesItem':
+            if (conflict.incoming.replies?.item) {
+              mergedReplies.item = conflict.incoming.replies.item;
+            }
+            break;
+          case 'repliesFieldUsername':
+            if (conflict.incoming.replies?.fields) {
+              mergedReplies.fields = updateFieldInArray(
+                mergedReplies.fields,
+                'username',
+                findField(conflict.incoming.replies.fields, 'username'),
+              );
+            }
+            break;
+          case 'repliesFieldContent':
+            if (conflict.incoming.replies?.fields) {
+              mergedReplies.fields = updateFieldInArray(
+                mergedReplies.fields,
+                'content',
+                findField(conflict.incoming.replies.fields, 'content'),
+              );
+            }
+            break;
+          case 'repliesFieldTimestamp':
+            if (conflict.incoming.replies?.fields) {
+              mergedReplies.fields = updateFieldInArray(
+                mergedReplies.fields,
+                'timestamp',
+                findField(conflict.incoming.replies.fields, 'timestamp'),
+              );
+            }
+            break;
+          case 'repliesFieldLikes':
+            if (conflict.incoming.replies?.fields) {
+              mergedReplies.fields = updateFieldInArray(
+                mergedReplies.fields,
+                'likes',
+                findField(conflict.incoming.replies.fields, 'likes'),
+              );
+            }
+            break;
+          case 'repliesExpandBtn':
+            mergedReplies.expandBtn = conflict.incoming.replies?.expandBtn;
             break;
           case 'videoTime':
             merged.videoTime = conflict.incoming.videoTime;
@@ -381,14 +549,16 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
           case 'postContent':
             merged.postContent = conflict.incoming.postContent;
             break;
-          case 'lastUpdated':
-            merged.lastUpdated = conflict.incoming.lastUpdated;
-            break;
           default:
             break;
         }
       }
     }
+
+    if (mergedReplies.container && mergedReplies.item) {
+      merged.replies = mergedReplies as typeof merged.replies;
+    }
+
     return merged;
   };
 
@@ -403,13 +573,73 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
     closeImport();
   };
 
-  const handleSyncRemote = async () => {
+  const handleSyncDialogOpen = () => {
+    setSyncDialogOpen(true);
+  };
+
+  const handleSyncDialogClose = () => {
+    setSyncDialogOpen(false);
+  };
+
+  const handleSyncRemoteConfirm = async () => {
+    setSyncDialogOpen(false);
     try {
       setSyncing(true);
-      await chrome.runtime.sendMessage({ type: 'SYNC_CRAWLING_CONFIGS' });
-      // Reload settings via parent component
-      onSettingsChange({}); // Trigger a refresh if necessary, or let background update notify
-      alert(t('options.crawlingConfigs.syncSuccess'));
+      const response = await fetch(SYNC_REMOTE_URL);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch: ${response.statusText}`);
+      }
+      const remoteConfigs = (await response.json()) as CrawlingConfig[];
+      const validated = remoteConfigs.filter(isCrawlingConfig).map(normalizeImportedConfig);
+
+      const dedupedByDomain = new Map<string, CrawlingConfig>();
+      for (const config of validated) {
+        dedupedByDomain.set(config.domain, config);
+      }
+      const uniqueConfigs = Array.from(dedupedByDomain.values());
+
+      if (uniqueConfigs.length === 0) {
+        setImportError(t('options.crawlingConfigs.importNoConfigs'));
+        setIsRemoteSync(true);
+        setImportOpen(true);
+        return;
+      }
+
+      const existingByDomain = new Map(configs.map((config) => [config.domain, config]));
+      const conflicts: ConflictItem[] = [];
+      const additions: CrawlingConfig[] = [];
+
+      for (const incoming of uniqueConfigs) {
+        const existing = existingByDomain.get(incoming.domain);
+        if (!existing) {
+          additions.push(incoming);
+          continue;
+        }
+        const diffFields = MERGE_FIELDS.filter((field) => {
+          const currentValue = getFieldRawValue(existing, field);
+          const incomingValue = getFieldRawValue(incoming, field);
+          return JSON.stringify(currentValue) !== JSON.stringify(incomingValue);
+        });
+        if (diffFields.length === 0) continue;
+        const choices = MERGE_FIELDS.reduce<Record<MergeField, MergeChoice>>(
+          (acc, field) => {
+            acc[field] = 'incoming';
+            return acc;
+          },
+          {} as Record<MergeField, MergeChoice>,
+        );
+        conflicts.push({ existing, incoming, diffFields, choices });
+      }
+
+      if (additions.length === 0 && conflicts.length === 0) {
+        alert(t('options.crawlingConfigs.syncSuccessWithCount', { added: 0, updated: 0 }));
+        return;
+      }
+
+      setImportAdditions(additions);
+      setImportConflicts(conflicts);
+      setIsRemoteSync(true);
+      setImportOpen(true);
     } catch (error) {
       console.error('Failed to sync configs:', error);
       alert(t('options.crawlingConfigs.syncError'));
@@ -458,7 +688,7 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
         </div>
         <div className="flex gap-2">
           <button
-            onClick={handleSyncRemote}
+            onClick={handleSyncDialogOpen}
             disabled={syncing}
             className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium disabled:opacity-50"
           >
@@ -539,9 +769,11 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-semibold">
-                  {t('options.crawlingConfigs.importTitle')}
+                  {isRemoteSync
+                    ? t('options.crawlingConfigs.syncPreviewTitle')
+                    : t('options.crawlingConfigs.importTitle')}
                 </h3>
-                {importFileName && (
+                {!isRemoteSync && importFileName && (
                   <div className="text-xs text-gray-500 mt-1">{importFileName}</div>
                 )}
               </div>
@@ -577,58 +809,112 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
                 )}
 
                 {importConflicts.length > 0 && (
-                  <div className="border rounded p-4">
-                    <div className="text-sm font-semibold text-gray-700 mb-4">
-                      {t('options.crawlingConfigs.importConflicts')}
+                  <div className="border border-orange-200 rounded-lg bg-orange-50/50">
+                    <div className="flex items-center justify-between p-4 border-b border-orange-200 bg-orange-100/50 rounded-t-lg">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-orange-800">
+                          {t('options.crawlingConfigs.importConflicts')}
+                        </span>
+                        <span className="px-2 py-0.5 text-xs font-medium bg-orange-200 text-orange-800 rounded-full">
+                          {importConflicts.length}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setAllChoices('current')}
+                          className="px-3 py-1.5 text-xs font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                        >
+                          {t('options.crawlingConfigs.mergeKeepAllCurrent')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setAllChoices('incoming')}
+                          className="px-3 py-1.5 text-xs font-medium rounded border border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
+                        >
+                          {t('options.crawlingConfigs.mergeUseAllIncoming')}
+                        </button>
+                      </div>
                     </div>
-                    <div className="space-y-4">
+                    <div className="p-4 space-y-4">
                       {importConflicts.map((conflict, conflictIndex) => (
-                        <div key={conflict.existing.domain} className="border rounded p-4">
-                          <div className="text-sm font-semibold text-gray-800 mb-3">
-                            {conflict.existing.domain}
+                        <div
+                          key={conflict.existing.domain}
+                          className="border border-gray-200 rounded-lg bg-white shadow-sm"
+                        >
+                          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
+                            <span className="text-sm font-semibold text-gray-800">
+                              {conflict.existing.domain}
+                            </span>
+                            <span className="ml-2 text-xs text-gray-500">
+                              ({conflict.diffFields.length}{' '}
+                              {conflict.diffFields.length === 1 ? 'field' : 'fields'})
+                            </span>
                           </div>
                           {conflict.diffFields.length === 0 && (
-                            <div className="text-xs text-gray-500">
+                            <div className="p-4 text-xs text-gray-500">
                               {t('options.crawlingConfigs.importNoDifferences')}
                             </div>
                           )}
-                          {conflict.diffFields.map((field) => (
-                            <div key={field} className="grid grid-cols-3 gap-3 mb-3">
-                              <div className="text-xs font-medium text-gray-600">
-                                {getFieldLabel(field)}
-                              </div>
-                              <label className="text-xs text-gray-700 border rounded p-2 space-y-1">
-                                <div className="font-semibold text-gray-500">
-                                  {t('options.crawlingConfigs.mergeKeepCurrent')}
+                          {conflict.diffFields.length > 0 && (
+                            <div className="divide-y divide-gray-100">
+                              {conflict.diffFields.map((field) => (
+                                <div key={field} className="p-3">
+                                  <div className="text-xs font-medium text-gray-500 mb-2">
+                                    {getFieldLabel(field)}
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <label
+                                      className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${conflict.choices[field] === 'current'
+                                        ? 'border-blue-400 bg-blue-50'
+                                        : 'border-gray-200 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                      <input
+                                        type="radio"
+                                        name={`${conflict.existing.domain}-${field}`}
+                                        checked={conflict.choices[field] === 'current'}
+                                        onChange={() => setChoice(conflictIndex, field, 'current')}
+                                        className="mt-0.5"
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-medium text-gray-600 mb-1">
+                                          {t('options.crawlingConfigs.mergeKeepCurrent')}
+                                        </div>
+                                        <div className="text-xs text-gray-700 break-all font-mono bg-gray-100 px-1.5 py-0.5 rounded">
+                                          {formatFieldValue(conflict.existing, field) ||
+                                            t('options.crawlingConfigs.valueEmpty')}
+                                        </div>
+                                      </div>
+                                    </label>
+                                    <label
+                                      className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${conflict.choices[field] === 'incoming'
+                                        ? 'border-green-400 bg-green-50'
+                                        : 'border-gray-200 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                      <input
+                                        type="radio"
+                                        name={`${conflict.existing.domain}-${field}`}
+                                        checked={conflict.choices[field] === 'incoming'}
+                                        onChange={() => setChoice(conflictIndex, field, 'incoming')}
+                                        className="mt-0.5"
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-medium text-green-700 mb-1">
+                                          {t('options.crawlingConfigs.mergeUseIncoming')}
+                                        </div>
+                                        <div className="text-xs text-gray-700 break-all font-mono bg-green-100 px-1.5 py-0.5 rounded">
+                                          {formatFieldValue(conflict.incoming, field) ||
+                                            t('options.crawlingConfigs.valueEmpty')}
+                                        </div>
+                                      </div>
+                                    </label>
+                                  </div>
                                 </div>
-                                <div className="break-words">
-                                  {formatFieldValue(conflict.existing, field) ||
-                                    t('options.crawlingConfigs.valueEmpty')}
-                                </div>
-                                <input
-                                  type="radio"
-                                  name={`${conflict.existing.domain}-${field}`}
-                                  checked={conflict.choices[field] === 'current'}
-                                  onChange={() => setChoice(conflictIndex, field, 'current')}
-                                />
-                              </label>
-                              <label className="text-xs text-gray-700 border rounded p-2 space-y-1">
-                                <div className="font-semibold text-gray-500">
-                                  {t('options.crawlingConfigs.mergeUseIncoming')}
-                                </div>
-                                <div className="break-words">
-                                  {formatFieldValue(conflict.incoming, field) ||
-                                    t('options.crawlingConfigs.valueEmpty')}
-                                </div>
-                                <input
-                                  type="radio"
-                                  name={`${conflict.existing.domain}-${field}`}
-                                  checked={conflict.choices[field] === 'incoming'}
-                                  onChange={() => setChoice(conflictIndex, field, 'incoming')}
-                                />
-                              </label>
+                              ))}
                             </div>
-                          ))}
+                          )}
                         </div>
                       ))}
                     </div>
@@ -654,6 +940,44 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
           </div>
         </div>
       )}
+
+      {syncDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
+            <h3 className="text-lg font-semibold mb-4">
+              {t('options.crawlingConfigs.syncDialogTitle')}
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              {t('options.crawlingConfigs.syncDialogDescription')}
+            </p>
+            <div className="mb-4">
+              <div className="text-xs font-medium text-gray-500 mb-1">
+                {t('options.crawlingConfigs.syncDialogSourceUrl')}
+              </div>
+              <div className="text-xs text-blue-600 break-all bg-gray-50 p-2 rounded border">
+                <a href={SYNC_REMOTE_URL} target="_blank" rel="noopener noreferrer">
+                  {SYNC_REMOTE_URL}
+                </a>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={handleSyncDialogClose}
+                className="px-4 py-2 text-sm rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleSyncRemoteConfirm}
+                className="px-4 py-2 text-sm rounded bg-purple-600 text-white hover:bg-purple-700"
+              >
+                {t('options.crawlingConfigs.syncDialogConfirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

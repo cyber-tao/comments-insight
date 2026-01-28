@@ -495,10 +495,12 @@ export class StorageManager {
   /**
    * Sync crawling configs from remote GitHub repository
    */
-  async syncCrawlingConfigs(): Promise<void> {
+  async syncCrawlingConfigs(): Promise<{ added: number; updated: number }> {
+    let added = 0;
+    let updated = 0;
     try {
       const response = await fetch(
-        'https://raw.githubusercontent.com/cyber-tao/comments-insight/main/src/config/default_rules.json',
+        'https://raw.githubusercontent.com/cyber-tao/comments-insight/refs/heads/master/src/config/default_rules.json',
       );
       if (!response.ok) {
         throw new Error(`Failed to fetch remote config: ${response.statusText}`);
@@ -514,13 +516,16 @@ export class StorageManager {
         const index = merged.findIndex((c) => c.id === remote.id);
         if (index >= 0) {
           merged[index] = { ...merged[index], ...remote, lastUpdated: Date.now() };
+          updated++;
         } else {
           merged.push({ ...remote, lastUpdated: Date.now() });
+          added++;
         }
       }
 
       await this.saveSettings({ crawlingConfigs: merged });
-      Logger.info('[StorageManager] Crawling configs synced successfully');
+      Logger.info('[StorageManager] Crawling configs synced successfully', { added, updated });
+      return { added, updated };
     } catch (error) {
       Logger.error('[StorageManager] Failed to sync crawling configs', { error });
       throw error;
