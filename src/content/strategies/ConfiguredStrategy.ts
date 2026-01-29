@@ -10,7 +10,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
   constructor(
     private pageController: PageController,
     private config: CrawlingConfig,
-  ) {}
+  ) { }
 
   cleanup(): void {
     // No specific resources to cleanup for this strategy
@@ -67,8 +67,6 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
     onProgress?.(EXTRACTION_PROGRESS.MIN + 5, 'Extracting comments', 'extracting', 0, maxComments);
 
-    let unchangedScrollCount = 0;
-    const MAX_UNCHANGED_SCROLLS = 3;
 
     while (allComments.length < maxComments) {
       this.checkAborted();
@@ -96,6 +94,10 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         if (parentItem && container.contains(parentItem)) {
           continue;
         }
+
+        // Scroll element into view to trigger lazy loading before extraction
+        (itemElement as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await this.delay(TIMING.SCROLL_PAUSE_MS);
 
         const comment = await this.extractCommentFromElement(itemElement as HTMLElement, platform);
         if (comment) {
@@ -125,11 +127,8 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         maxComments,
       );
 
-      const beforeScrollHeight = container.scrollHeight;
-      const beforeChildCount = container.childElementCount;
-
-      await this.pageController.scrollToBottom();
-      await this.delay(TIMING.SCROLL_DELAY_MS);
+      // Scroll container to load more items
+      const { contentChanged } = await this.pageController.scrollContainer(container);
       _scrollCount++;
 
       // Re-query container in case of re-render
@@ -138,21 +137,9 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         container = newContainer;
       }
 
-      // Check if content grew
-      const afterScrollHeight = container.scrollHeight;
-      const afterChildCount = container.childElementCount;
-
-      if (afterScrollHeight === beforeScrollHeight && afterChildCount === beforeChildCount) {
-        unchangedScrollCount++;
-        Logger.debug("[ConfiguredStrategy] Scroll didn't load new content", {
-          unchangedScrollCount,
-        });
-        if (unchangedScrollCount >= MAX_UNCHANGED_SCROLLS) {
-          Logger.info('[ConfiguredStrategy] Reached bottom of content (no size change). Stopping.');
-          break;
-        }
-      } else {
-        unchangedScrollCount = 0;
+      // If content changed, reset noNewCommentsCount as new items may appear
+      if (contentChanged) {
+        noNewCommentsCount = Math.max(0, noNewCommentsCount - 1);
       }
     }
 

@@ -316,6 +316,14 @@ async function getPostInfo(): Promise<{
   let videoTime: string | undefined;
   let postContent: string | undefined;
 
+  const queryElement = (selectorRule: { selector: string; type: 'css' | 'xpath' }): Element | null => {
+    if (selectorRule.type === 'xpath') {
+      const results = queryXPathAll(document, selectorRule.selector);
+      return results.length > 0 ? results[0] : null;
+    }
+    return document.querySelector(selectorRule.selector);
+  };
+
   try {
     const hostname = getCurrentHostname();
     const response = await chrome.runtime.sendMessage({
@@ -324,7 +332,7 @@ async function getPostInfo(): Promise<{
     });
 
     if (response?.config?.videoTime?.selector) {
-      const element = document.querySelector(response.config.videoTime.selector);
+      const element = queryElement(response.config.videoTime);
       if (element) {
         videoTime = element.textContent?.trim() || undefined;
         Logger.debug('[Content] Extracted videoTime from config selector', { videoTime });
@@ -332,7 +340,7 @@ async function getPostInfo(): Promise<{
     }
 
     if (response?.config?.postContent?.selector) {
-      const element = document.querySelector(response.config.postContent.selector);
+      const element = queryElement(response.config.postContent);
       if (element) {
         postContent = element.textContent?.trim() || undefined;
         Logger.debug('[Content] Extracted postContent from config selector', {

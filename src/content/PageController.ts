@@ -7,7 +7,7 @@ import { Logger } from '../utils/logger';
  * PageController handles page interactions like scrolling and clicking
  */
 export class PageController {
-  constructor(private domAnalyzer?: DOMAnalyzer) {}
+  constructor(private domAnalyzer?: DOMAnalyzer) { }
   /**
    * Scroll to bottom smoothly to trigger lazy loading
    */
@@ -43,6 +43,58 @@ export class PageController {
 
     // Ensure we are really at the bottom
     window.scrollTo(0, document.documentElement.scrollHeight);
+  }
+
+  async scrollContainer(container: Element): Promise<{ contentChanged: boolean }> {
+    const beforeScrollHeight = container.scrollHeight;
+    const beforeChildCount = container.childElementCount;
+
+    const isScrollable =
+      container.scrollHeight > container.clientHeight &&
+      (container as HTMLElement).style.overflow !== 'hidden';
+
+    if (isScrollable) {
+      const scrollStep = SCROLL.CONTAINER_SCROLL_STEP;
+      const currentScrollTop = container.scrollTop;
+      const maxScrollTop = container.scrollHeight - container.clientHeight;
+
+      if (currentScrollTop < maxScrollTop) {
+        container.scrollTo({
+          top: Math.min(currentScrollTop + scrollStep, maxScrollTop),
+          behavior: 'smooth',
+        });
+        await this.wait(TIMING.SCROLL_PAUSE_MS);
+      }
+    } else {
+      const containerRect = container.getBoundingClientRect();
+      const containerBottom = containerRect.bottom;
+      const viewportHeight = window.innerHeight;
+
+      if (containerBottom > viewportHeight) {
+        const scrollTarget = window.scrollY + Math.min(SCROLL.CONTAINER_SCROLL_STEP, containerBottom - viewportHeight);
+        window.scrollTo({
+          top: scrollTarget,
+          behavior: 'smooth',
+        });
+        await this.wait(TIMING.SCROLL_PAUSE_MS);
+      } else {
+        window.scrollTo({
+          top: window.scrollY + SCROLL.CONTAINER_SCROLL_STEP,
+          behavior: 'smooth',
+        });
+        await this.wait(TIMING.SCROLL_PAUSE_MS);
+      }
+    }
+
+    await this.wait(TIMING.SCROLL_DELAY_MS);
+
+    const afterScrollHeight = container.scrollHeight;
+    const afterChildCount = container.childElementCount;
+
+    const contentChanged =
+      afterScrollHeight !== beforeScrollHeight || afterChildCount !== beforeChildCount;
+
+    return { contentChanged };
   }
 
   /**

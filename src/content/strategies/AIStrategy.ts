@@ -13,6 +13,7 @@ import {
   TIMING,
   DOM,
   DOM_ANALYSIS_DEFAULTS,
+  SCROLL,
 } from '@/config/constants';
 import {
   PROMPT_DETECT_COMMENTS_SECTION,
@@ -41,7 +42,7 @@ export type ConfigGenerationCallback = (progress: number, message: string) => vo
 export class AIStrategy implements ExtractionStrategy {
   private aiPort: chrome.runtime.Port | null = null;
 
-  constructor(private pageController: PageController) {}
+  constructor(private pageController: PageController) { }
 
   /**
    * 清理资源，断开端口连接
@@ -213,6 +214,7 @@ export class AIStrategy implements ExtractionStrategy {
     const seenHashes = new Set<string>();
     let noNewCommentsCount = 0;
     let scrollCount = 0;
+    let unchangedScrollCount = 0;
 
     // Step 2: Loop - Scroll & Extract
     while (allComments.length < maxComments) {
@@ -224,10 +226,37 @@ export class AIStrategy implements ExtractionStrategy {
         break;
       }
 
+      if (unchangedScrollCount >= SCROLL.UNCHANGED_SCROLL_THRESHOLD) {
+        Logger.info('[AIStrategy] Comment container stopped loading new content. Stopping.');
+        break;
+      }
+
       const currentProgress = Math.min(
         90,
         EXTRACTION_PROGRESS.MIN + (allComments.length / maxComments) * 70,
       );
+
+      // 2.1 Scroll first to load more content before extraction
+      if (scrollCount > 0) {
+        onProgress?.(
+          currentProgress,
+          `scrolling (${scrollCount})`,
+          'scrolling',
+          allComments.length,
+          maxComments,
+        );
+
+        const { contentChanged } = await this.pageController.scrollContainer(sectionElement);
+
+        if (!contentChanged) {
+          unchangedScrollCount++;
+          Logger.debug('[AIStrategy] Scroll did not load new content', { unchangedScrollCount });
+        } else {
+          unchangedScrollCount = 0;
+        }
+      }
+      scrollCount++;
+
       onProgress?.(
         currentProgress,
         `extracting:${allComments.length}:${maxComments}`,
@@ -290,20 +319,6 @@ export class AIStrategy implements ExtractionStrategy {
       }
 
       if (allComments.length >= maxComments) break;
-
-      // 2.5 Scroll to load more
-      scrollCount++;
-      onProgress?.(
-        Math.min(90, EXTRACTION_PROGRESS.MIN + (allComments.length / maxComments) * 70),
-        `scrolling (${scrollCount})`,
-        'scrolling',
-        allComments.length,
-        maxComments,
-      );
-
-      await this.pageController.scrollToBottom();
-
-      await this.delay(TIMING.SCROLL_DELAY_MS);
     }
 
     onProgress?.(95, 'validating results', 'validating', allComments.length, maxComments);
