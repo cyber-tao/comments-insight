@@ -5,6 +5,7 @@ import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
 import { EXTRACTION_PROGRESS, TIMING, DOM } from '@/config/constants';
 import { isExtractionActive } from '../extractionState';
+import { querySelectorAllDeep, querySelectorDeep } from '@/utils/dom-query';
 
 export class ConfiguredStrategy implements ExtractionStrategy {
   constructor(
@@ -39,12 +40,12 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     );
 
     const containerSelector = this.config.container.selector;
-    let container = document.querySelector(containerSelector);
+    let container = querySelectorDeep(document, containerSelector);
 
     if (!container) {
       // Try waiting
       await this.delay(TIMING.SHORT_WAIT_MS);
-      container = document.querySelector(containerSelector);
+      container = querySelectorDeep(document, containerSelector);
       if (!container) {
         throw new ExtensionError(
           ErrorCode.DOM_ANALYSIS_FAILED,
@@ -75,8 +76,8 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         break;
       }
 
-      // 1. Extract visible items
-      const items = Array.from(container.querySelectorAll(this.config.item.selector));
+      // 1. Extract visible items (use deep query for Shadow DOM support)
+      const items = querySelectorAllDeep(container, this.config.item.selector);
       let added = 0;
 
       for (const itemElement of items) {
@@ -132,7 +133,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       _scrollCount++;
 
       // Re-query container in case of re-render
-      const newContainer = document.querySelector(containerSelector);
+      const newContainer = querySelectorDeep(document, containerSelector);
       if (newContainer) {
         container = newContainer;
       }
@@ -195,7 +196,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
         // 1. Check for expand button
         if (replyConfig.expandBtn) {
-          const expandBtn = element.querySelector(replyConfig.expandBtn.selector) as HTMLElement;
+          const expandBtn = querySelectorDeep(element, replyConfig.expandBtn.selector) as HTMLElement;
           if (expandBtn) {
             Logger.info('[ReplyDebug] Found expand button', {
               selector: replyConfig.expandBtn.selector,
@@ -224,9 +225,9 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         }
 
         // 2. Find reply container
-        const replyContainer = element.querySelector(replyConfig.container.selector);
+        const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
         if (replyContainer) {
-          const replyItems = Array.from(replyContainer.querySelectorAll(replyConfig.item.selector));
+          const replyItems = querySelectorAllDeep(replyContainer, replyConfig.item.selector);
           if (replyItems.length > 0)
             Logger.info(`[ReplyDebug] Found ${replyItems.length} reply items`);
 
@@ -294,7 +295,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
     // Recursive Reply Extraction
     if (replyConfig.expandBtn) {
-      const expandBtn = element.querySelector(replyConfig.expandBtn.selector) as HTMLElement;
+      const expandBtn = querySelectorDeep(element, replyConfig.expandBtn.selector) as HTMLElement;
       if (expandBtn) {
         try {
           Logger.info('[ReplyDebug] Found nested expand button', {
@@ -312,9 +313,9 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       }
     }
 
-    const replyContainer = element.querySelector(replyConfig.container.selector);
+    const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
     if (replyContainer) {
-      const replyItems = Array.from(replyContainer.querySelectorAll(replyConfig.item.selector));
+      const replyItems = querySelectorAllDeep(replyContainer, replyConfig.item.selector);
       if (replyItems.length > 0)
         Logger.info(`[ReplyDebug] Found ${replyItems.length} nested replies`);
 
@@ -337,7 +338,8 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     if (!field) return null;
 
     // Support multiple comma-separated selectors in one rule (standard CSS)
-    const element = context.querySelector(field.rule.selector);
+    // Use querySelectorDeep for Shadow DOM support
+    const element = querySelectorDeep(context, field.rule.selector);
     if (!element) return null;
 
     if (field.attribute) {
@@ -372,9 +374,9 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     const startTime = Date.now();
 
     while (Date.now() - startTime < TIMING.REPLY_POLL_TIMEOUT_MS) {
-      const replyContainer = element.querySelector(replyConfig.container.selector);
+      const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
       if (replyContainer) {
-        const items = replyContainer.querySelectorAll(replyConfig.item.selector);
+        const items = querySelectorAllDeep(replyContainer, replyConfig.item.selector);
         if (items.length > 0) {
           // Found items!
           // Add a tiny extra delay for render stability
