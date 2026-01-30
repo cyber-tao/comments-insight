@@ -146,7 +146,7 @@
     "maxDepthHint": "Profondeur maximale pour l'analyse complète de la structure DOM (utiliser des valeurs plus élevées pour les pages très complexes)",
     "recommended": "Recommandé",
     "normalizeTimestamps": "Normaliser les dates/heures en heure locale",
-    "normalizeTimestampsHint": "Une fois activé, les temps relatifs seront convertis en date/heure locale après l'extraction.",
+    "normalizeTimestampsHint": "Une fois activé, le modèle IA sera utilisé pour convertir les temps relatifs en date/heure locale après l'extraction.",
     "exportPostContentInMarkdown": "Inclure le contenu du post dans l'export Markdown",
     "exportPostContentInMarkdownHint": "Lorsque cette option est activée, l'export Markdown inclut le contenu original du post.",
     "availablePlaceholders": "Placeholders disponibles",

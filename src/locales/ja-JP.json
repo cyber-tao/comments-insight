@@ -146,7 +146,7 @@
     "maxDepthHint": "完全なDOM構造分析の最大深度（非常に複雑なページには高い値を使用）",
     "recommended": "推奨",
     "normalizeTimestamps": "コメント/投稿の時間をローカル時間に正規化",
-    "normalizeTimestampsHint": "有効にすると、抽出後に相対時間をローカル日時へ変換します。",
+    "normalizeTimestampsHint": "有効にすると、抽出後にAIモデルを使用して相対時間をローカル日時へ変換します。",
     "exportPostContentInMarkdown": "Markdownエクスポートに投稿内容を含める",
     "exportPostContentInMarkdownHint": "有効にすると、Markdownのエクスポートに投稿内容/動画説明が含まれます。",
     "availablePlaceholders": "利用可能なプレースホルダー",

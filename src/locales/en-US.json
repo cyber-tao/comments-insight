@@ -126,7 +126,7 @@
     "maxDepthHint": "Maximum depth for full DOM structure analysis (recommend 20+ for complex pages)",
     "recommended": "Recommended",
     "normalizeTimestamps": "Normalize comment/post times to local time",
-    "normalizeTimestampsHint": "When enabled, relative times will be converted to local date/time after extraction.",
+    "normalizeTimestampsHint": "When enabled, AI model will be used to convert relative times to local date/time after extraction.",
     "exportPostContentInMarkdown": "Include post content in Markdown export",
     "exportPostContentInMarkdownHint": "When enabled, the Markdown export will include the original post content.",
     "availablePlaceholders": "Available Placeholders",

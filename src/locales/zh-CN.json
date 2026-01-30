@@ -125,7 +125,7 @@
     "maxDepthHint": "分析的最大深度（针对复杂嵌套页面，建议 20 以上）",
     "recommended": "推荐",
     "normalizeTimestamps": "将评论/帖子时间转换为本地时间",
-    "normalizeTimestampsHint": "开启后，提取完成会把相对时间转换为本地日期时间。",
+    "normalizeTimestampsHint": "开启后，提取完成会调用 AI 模型将相对时间转换为本地日期时间。",
     "exportPostContentInMarkdown": "在 Markdown 导出中包含原帖内容",
     "exportPostContentInMarkdownHint": "开启后，Markdown 导出会包含原帖内容/视频介绍。",
     "availablePlaceholders": "可用占位符说明",
