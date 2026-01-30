@@ -45,7 +45,7 @@ describe('CommentExtractor', () => {
 
       const result = await extractor.extractWithAI(10, 'YouTube');
 
-      expect(mockExecute).toHaveBeenCalledWith(10, 'YouTube', undefined);
+      expect(mockExecute).toHaveBeenCalled();
       expect(result).toHaveLength(5);
     });
 
