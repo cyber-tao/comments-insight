@@ -1,55 +1,11 @@
-[
-  {
-    "id": "youtube",
-    "siteName": "YouTube",
-    "domain": "youtube.com",
-    "container": {
-      "selector": "ytd-comments#comments ytd-item-section-renderer#sections",
-      "type": "css"
-    },
-    "item": {
-      "selector": "ytd-comment-thread-renderer",
-      "type": "css"
-    },
-    "fields": [
-      {
-        "name": "username",
-        "rule": {
-          "selector": "#author-text span",
-          "type": "css"
-        }
-      },
-      {
-        "name": "content",
-        "rule": {
-          "selector": "#content-text",
-          "type": "css"
-        }
-      },
-      {
-        "name": "timestamp",
-        "rule": {
-          "selector": "#published-time-text a",
-          "type": "css"
-        }
-      },
-      {
-        "name": "likes",
-        "rule": {
-          "selector": "#vote-count-middle",
-          "type": "css"
-        }
-      }
-    ],
-    "replies": {
+{
+  "configs": [
+    {
       "container": {
-        "selector": "#replies",
+        "selector": "ytd-comments#comments ytd-item-section-renderer#sections",
         "type": "css"
       },
-      "item": {
-        "selector": "ytd-comment-view-model",
-        "type": "css"
-      },
+      "domain": "youtube.com",
       "fields": [
         {
           "name": "username",
@@ -80,71 +36,76 @@
           }
         }
       ],
-      "expandBtn": {
-        "selector": "#more-replies button",
-        "type": "css"
-      }
-    },
-    "postContent": {
-      "selector": "#description-inline-expander yt-attributed-string",
-      "type": "css"
-    },
-    "postTime": {
-      "selector": "#info-container #info-strings yt-formatted-string",
-      "type": "css"
-    }
-  },
-  {
-    "id": "bilibili",
-    "siteName": "Bilibili",
-    "domain": "bilibili.com",
-    "container": {
-      "selector": "#commentapp bili-comments #feed",
-      "type": "css"
-    },
-    "item": {
-      "selector": "bili-comment-thread-renderer",
-      "type": "css"
-    },
-    "fields": [
-      {
-        "name": "username",
-        "rule": {
-          "selector": "bili-comment-user-info #user-name a",
-          "type": "css"
-        }
-      },
-      {
-        "name": "content",
-        "rule": {
-          "selector": "#content bili-rich-text",
-          "type": "css"
-        }
-      },
-      {
-        "name": "timestamp",
-        "rule": {
-          "selector": "bili-comment-action-buttons-renderer #pubdate",
-          "type": "css"
-        }
-      },
-      {
-        "name": "likes",
-        "rule": {
-          "selector": "bili-comment-action-buttons-renderer #like span#count",
-          "type": "css"
-        }
-      }
-    ],
-    "replies": {
-      "container": {
-        "selector": "bili-comment-replies-renderer",
-        "type": "css"
-      },
+      "id": "youtube",
       "item": {
-        "selector": "bili-comment-renderer",
+        "selector": "ytd-comment-thread-renderer",
         "type": "css"
       },
+      "lastUpdated": 1769679267853,
+      "postContent": {
+        "selector": "#description-inline-expander",
+        "type": "css"
+      },
+      "postTime": {
+        "selector": "#info-container #info-strings yt-formatted-string",
+        "type": "css"
+      },
+      "replies": {
+        "container": {
+          "selector": "#replies",
+          "type": "css"
+        },
+        "expandBtn": {
+          "selector": "#more-replies button",
+          "type": "css"
+        },
+        "fields": [
+          {
+            "name": "username",
+            "rule": {
+              "selector": "#author-text span",
+              "type": "css"
+            }
+          },
+          {
+            "name": "content",
+            "rule": {
+              "selector": "#content-text",
+              "type": "css"
+            }
+          },
+          {
+            "name": "timestamp",
+            "rule": {
+              "selector": "#published-time-text a",
+              "type": "css"
+            }
+          },
+          {
+            "name": "likes",
+            "rule": {
+              "selector": "#vote-count-middle",
+              "type": "css"
+            }
+          }
+        ],
+        "item": {
+          "selector": "ytd-comment-view-model",
+          "type": "css"
+        }
+      },
+      "siteName": "YouTube",
+      "videoTime": {
+        "selector": "#info > span:nth-child(3)",
+        "type": "css"
+      }
+    },
+    {
+      "container": {
+        "selector": "#commentapp",
+        "type": "css"
+      },
+      "domain": "bilibili.com",
       "fields": [
         {
           "name": "username",
@@ -156,7 +117,7 @@
         {
           "name": "content",
           "rule": {
-            "selector": "#content bili-rich-text",
+            "selector": "bili-rich-text #contents",
             "type": "css"
           }
         },
@@ -170,92 +131,93 @@
         {
           "name": "likes",
           "rule": {
-            "selector": "bili-comment-action-buttons-renderer #like span#count",
+            "selector": "bili-comment-action-buttons-renderer #like #count",
             "type": "css"
           }
         }
       ],
-      "expandBtn": {
-        "selector": "#view-more",
-        "type": "css"
-      }
-    },
-    "postContent": {
-      "selector": ".basic-desc-info",
-      "type": "css"
-    },
-    "videoTime": {
-      "selector": ".video-info-detail-list .pubdate-ip-text",
-      "type": "css"
-    }
-  },
-  {
-    "id": "reddit",
-    "siteName": "Reddit",
-    "domain": "reddit.com",
-    "container": {
-      "selector": "shreddit-comment-tree",
-      "type": "css"
-    },
-    "item": {
-      "selector": "shreddit-comment",
-      "type": "css"
-    },
-    "fields": [
-      {
-        "name": "username",
-        "rule": {
-          "selector": "[slot=\"authorName\"]",
-          "type": "css"
-        }
-      },
-      {
-        "name": "content",
-        "rule": {
-          "selector": ".md",
-          "type": "css"
-        }
-      },
-      {
-        "name": "timestamp",
-        "rule": {
-          "selector": "time",
-          "type": "css"
-        }
-      },
-      {
-        "name": "likes",
-        "rule": {
-          "selector": "faceplate-number[pretty]",
-          "type": "css"
-        }
-      }
-    ],
-    "replies": {
-      "container": {
-        "selector": "shreddit-comment",
-        "type": "css"
-      },
+      "id": "bilibili.com_1769679968783",
       "item": {
-        "selector": "shreddit-comment",
+        "selector": "bili-comment-thread-renderer",
         "type": "css"
       },
+      "lastUpdated": 1769679968783,
+      "postContent": {
+        "selector": ".desc-info-text",
+        "type": "css"
+      },
+      "replies": {
+        "container": {
+          "selector": "bili-comment-replies-renderer",
+          "type": "css"
+        },
+        "expandBtn": {
+          "selector": "#view-more bili-text-button",
+          "type": "css"
+        },
+        "fields": [
+          {
+            "name": "username",
+            "rule": {
+              "selector": "bili-comment-user-info #user-name a",
+              "type": "css"
+            }
+          },
+          {
+            "name": "content",
+            "rule": {
+              "selector": "bili-rich-text #contents",
+              "type": "css"
+            }
+          },
+          {
+            "name": "timestamp",
+            "rule": {
+              "selector": "bili-comment-action-buttons-renderer #pubdate",
+              "type": "css"
+            }
+          },
+          {
+            "name": "likes",
+            "rule": {
+              "selector": "bili-comment-action-buttons-renderer #like #count",
+              "type": "css"
+            }
+          }
+        ],
+        "item": {
+          "selector": "bili-comment-reply-renderer",
+          "type": "css"
+        }
+      },
+      "videoTime": {
+        "selector": ".pubdate-ip-text",
+        "type": "css"
+      }
+    },
+    {
+      "container": {
+        "selector": "shreddit-comment-tree",
+        "type": "css"
+      },
+      "domain": "reddit.com",
       "fields": [
         {
           "name": "username",
           "rule": {
-            "selector": "[slot=\"authorName\"]",
+            "selector": "[noun=\"comment_author\"]",
             "type": "css"
           }
         },
         {
           "name": "content",
           "rule": {
-            "selector": ".md",
+            "selector": "[slot=\"comment\"]",
             "type": "css"
           }
         },
         {
+          "attribute": "datetime",
           "name": "timestamp",
           "rule": {
             "selector": "time",
@@ -265,158 +227,224 @@
         {
           "name": "likes",
           "rule": {
-            "selector": "faceplate-number[pretty]",
+            "selector": "shreddit-comment-action-row faceplate-number",
             "type": "css"
           }
         }
-      ]
-    },
-    "postContent": {
-      "selector": "shreddit-post .md",
-      "type": "css"
-    },
-    "postTime": {
-      "selector": "shreddit-post faceplate-timeago time",
-      "type": "css"
-    }
-  },
-  {
-    "id": "x",
-    "siteName": "X (Twitter)",
-    "domain": "x.com",
-    "container": {
-      "selector": "[data-testid=\"primaryColumn\"] section [aria-label]",
-      "type": "css"
-    },
-    "item": {
-      "selector": "article[data-testid=\"tweet\"]",
-      "type": "css"
-    },
-    "fields": [
-      {
-        "name": "username",
-        "rule": {
-          "selector": "[data-testid=\"User-Name\"]",
-          "type": "css"
-        }
-      },
-      {
-        "name": "content",
-        "rule": {
-          "selector": "[data-testid=\"tweetText\"]",
-          "type": "css"
-        }
-      },
-      {
-        "name": "timestamp",
-        "rule": {
-          "selector": "time",
-          "type": "css"
-        }
-      }
-    ],
-    "postContent": {
-      "selector": "article:first-child [data-testid=\"tweetText\"]",
-      "type": "css"
-    },
-    "postTime": {
-      "selector": "article:first-child time[datetime]",
-      "type": "css"
-    }
-  },
-  {
-    "id": "tiktok",
-    "siteName": "TikTok",
-    "domain": "tiktok.com",
-    "container": {
-      "selector": "[class*=\"DivCommentListContainer\"]",
-      "type": "css"
-    },
-    "item": {
-      "selector": "[class*=\"DivCommentObjectWrapper\"]",
-      "type": "css"
-    },
-    "fields": [
-      {
-        "name": "username",
-        "rule": {
-          "selector": "[data-e2e=\"comment-username-1\"] a p",
-          "type": "css"
-        }
-      },
-      {
-        "name": "content",
-        "rule": {
-          "selector": "[data-e2e=\"comment-level-1\"]",
-          "type": "css"
-        }
-      },
-      {
-        "name": "timestamp",
-        "rule": {
-          "selector": "[class*=\"DivCommentSubContentWrapper\"] span:first-child",
-          "type": "css"
-        }
-      },
-      {
-        "name": "likes",
-        "rule": {
-          "selector": "[class*=\"DivLikeContainer\"] span",
-          "type": "css"
-        }
-      }
-    ],
-    "replies": {
-      "container": {
-        "selector": "[class*=\"DivReplyContainer\"]",
-        "type": "css"
-      },
+      ],
+      "id": "reddit",
       "item": {
-        "selector": "[class*=\"DivReplyItemWrapper\"]",
+        "selector": "shreddit-comment",
         "type": "css"
       },
+      "lastUpdated": 1769582316633,
+      "postContent": {
+        "selector": "shreddit-post-text-body",
+        "type": "css"
+      },
+      "postTime": {
+        "selector": "shreddit-post faceplate-timeago time",
+        "type": "css"
+      },
+      "replies": {
+        "container": {
+          "selector": "shreddit-comment",
+          "type": "css"
+        },
+        "fields": [
+          {
+            "name": "username",
+            "rule": {
+              "selector": "[noun=\"comment_author\"]",
+              "type": "css"
+            }
+          },
+          {
+            "name": "content",
+            "rule": {
+              "selector": "[slot=\"comment\"]",
+              "type": "css"
+            }
+          },
+          {
+            "attribute": "datetime",
+            "name": "timestamp",
+            "rule": {
+              "selector": "time",
+              "type": "css"
+            }
+          },
+          {
+            "name": "likes",
+            "rule": {
+              "selector": "shreddit-comment-action-row faceplate-number",
+              "type": "css"
+            }
+          }
+        ],
+        "item": {
+          "selector": "shreddit-comment",
+          "type": "css"
+        }
+      },
+      "siteName": "Reddit",
+      "videoTime": {
+        "selector": "faceplate-timeago time[datetime]",
+        "type": "css"
+      }
+    },
+    {
+      "container": {
+        "selector": "[data-testid=\"primaryColumn\"] section [aria-label]",
+        "type": "css"
+      },
+      "domain": "x.com",
       "fields": [
         {
           "name": "username",
           "rule": {
-            "selector": "a p",
+            "selector": "[data-testid=\"User-Name\"]",
             "type": "css"
           }
         },
         {
           "name": "content",
           "rule": {
-            "selector": "[data-e2e=\"comment-level-2\"]",
+            "selector": "[data-testid=\"tweetText\"]",
             "type": "css"
           }
         },
         {
           "name": "timestamp",
           "rule": {
-            "selector": "[class*=\"DivCommentSubContentWrapper\"] span:first-child",
+            "selector": "time",
+            "type": "css"
+          },
+          "attribute": "datetime"
+        },
+        {
+          "name": "likes",
+          "rule": {
+            "selector": "[data-testid=\"like\"] [data-testid=\"app-text-transition-container\"]",
+            "type": "css"
+          }
+        }
+      ],
+      "id": "x",
+      "item": {
+        "selector": "article[data-testid=\"tweet\"]",
+        "type": "css"
+      },
+      "lastUpdated": 1769582316633,
+      "postContent": {
+        "selector": "article:first-child [data-testid=\"tweetText\"]",
+        "type": "css"
+      },
+      "postTime": {
+        "selector": "article:first-child time[datetime]",
+        "type": "css"
+      },
+      "siteName": "X (Twitter)",
+      "videoTime": {
+        "selector": "article:first-child time[datetime]",
+        "type": "css"
+      }
+    },
+    {
+      "container": {
+        "selector": "[class*=\"DivCommentListContainer\"]",
+        "type": "css"
+      },
+      "domain": "tiktok.com",
+      "fields": [
+        {
+          "name": "username",
+          "rule": {
+            "selector": "[data-e2e=\"comment-username-1\"]",
+            "type": "css"
+          }
+        },
+        {
+          "name": "content",
+          "rule": {
+            "selector": "[data-e2e=\"comment-level-1\"]",
+            "type": "css"
+          }
+        },
+        {
+          "name": "timestamp",
+          "rule": {
+            "selector": "[data-e2e=\"comment-time-1\"]",
             "type": "css"
           }
         },
         {
           "name": "likes",
           "rule": {
-            "selector": "[class*=\"DivLikeContainer\"] span",
+            "selector": "[data-e2e=\"comment-like-count\"]",
             "type": "css"
           }
         }
       ],
-      "expandBtn": {
-        "selector": "[class*=\"DivViewRepliesContainer\"] button",
+      "id": "tiktok",
+      "item": {
+        "selector": "[class*=\"DivCommentItemContainer\"]",
+        "type": "css"
+      },
+      "lastUpdated": 1769582316633,
+      "postContent": {
+        "selector": "[data-e2e=\"browse-video-desc\"]",
+        "type": "css"
+      },
+      "replies": {
+        "container": {
+          "selector": "[class*=\"DivReplyContainer\"]",
+          "type": "css"
+        },
+        "expandBtn": {
+          "selector": "[data-e2e=\"view-more-1\"]",
+          "type": "css"
+        },
+        "fields": [
+          {
+            "name": "username",
+            "rule": {
+              "selector": "[data-e2e=\"comment-username-2\"]",
+              "type": "css"
+            }
+          },
+          {
+            "name": "content",
+            "rule": {
+              "selector": "[data-e2e=\"comment-level-2\"]",
+              "type": "css"
+            }
+          },
+          {
+            "name": "timestamp",
+            "rule": {
+              "selector": "[data-e2e=\"comment-time-2\"]",
+              "type": "css"
+            }
+          },
+          {
+            "name": "likes",
+            "rule": {
+              "selector": "[data-e2e=\"comment-like-count\"]",
+              "type": "css"
+            }
+          }
+        ],
+        "item": {
+          "selector": "[class*=\"DivContentContainer\"]",
+          "type": "css"
+        }
+      },
+      "siteName": "TikTok",
+      "videoTime": {
+        "selector": "[data-e2e=\"browser-nickname\"] span:last-child",
         "type": "css"
       }
-    },
-    "postContent": {
-      "selector": "[data-e2e=\"video-desc\"]",
-      "type": "css"
-    },
-    "videoTime": {
-      "selector": "[class*=\"DivCreatorInfoContainer\"] span:last-child",
-      "type": "css"
     }
-  }
-]
+  ]
+}

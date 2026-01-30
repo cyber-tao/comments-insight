@@ -2,6 +2,26 @@ import React from 'react';
 import { CrawlingConfig, SelectorRule, FieldSelector, ReplyConfig } from '../../types';
 import { useTranslation } from 'react-i18next';
 
+const STANDARD_FIELDS = ['username', 'content', 'timestamp', 'likes'] as const;
+
+const normalizeFields = (fields: FieldSelector[]): FieldSelector[] => {
+  const existingNames = new Set(fields.map((f) => f.name));
+  const normalized = [...fields];
+
+  for (const name of STANDARD_FIELDS) {
+    if (!existingNames.has(name)) {
+      normalized.push({
+        name,
+        rule: { selector: '', type: 'css' },
+      });
+    }
+  }
+
+  return normalized.sort(
+    (a, b) => STANDARD_FIELDS.indexOf(a.name as any) - STANDARD_FIELDS.indexOf(b.name as any),
+  );
+};
+
 interface Props {
   config: CrawlingConfig;
   onChange: (config: CrawlingConfig) => void;
@@ -142,7 +162,7 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
             <label className="text-sm font-medium text-gray-700 block mb-2">
               {t('options.crawlingConfigs.fieldsExtraction')}
             </label>
-            <FieldEditor fields={config.fields} onChange={handleFieldsChange} />
+            <FieldEditor fields={normalizeFields(config.fields)} onChange={handleFieldsChange} />
           </div>
         </div>
       </section>
@@ -206,7 +226,7 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
                 {t('options.crawlingConfigs.replyFields')}
               </label>
               <FieldEditor
-                fields={config.replies.fields}
+                fields={normalizeFields(config.replies.fields)}
                 onChange={(f) => handleRepliesChange({ ...config.replies!, fields: f })}
               />
             </div>
