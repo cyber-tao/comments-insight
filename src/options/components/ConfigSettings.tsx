@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Settings, CrawlingConfig, SelectorRule, FieldSelector, ReplyConfig } from '../../types';
 import { useTranslation } from 'react-i18next';
 import { CrawlingConfigEditor } from './CrawlingConfigEditor';
+import { API } from '@/config/constants';
 
 interface Props {
   settings: Settings;
@@ -81,9 +82,6 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
   const [syncing, setSyncing] = useState(false);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [isRemoteSync, setIsRemoteSync] = useState(false);
-
-  const SYNC_REMOTE_URL =
-    'https://raw.githubusercontent.com/cyber-tao/comments-insight/refs/heads/master/src/config/default_rules.json';
 
   // Safely access configs (it might be undefined if loaded from old initialized storage)
   const configs = useMemo(() => settings.crawlingConfigs || [], [settings.crawlingConfigs]);
@@ -575,7 +573,7 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
     setSyncDialogOpen(false);
     try {
       setSyncing(true);
-      const response = await fetch(SYNC_REMOTE_URL);
+      const response = await fetch(API.CRAWLING_CONFIGS_RAW_URL);
       if (!response.ok) {
         throw new Error(`Failed to fetch: ${response.statusText}`);
       }
@@ -855,10 +853,11 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
                                   </div>
                                   <div className="grid grid-cols-2 gap-3">
                                     <label
-                                      className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${conflict.choices[field] === 'current'
-                                        ? 'border-blue-400 bg-blue-50'
-                                        : 'border-gray-200 hover:bg-gray-50'
-                                        }`}
+                                      className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${
+                                        conflict.choices[field] === 'current'
+                                          ? 'border-blue-400 bg-blue-50'
+                                          : 'border-gray-200 hover:bg-gray-50'
+                                      }`}
                                     >
                                       <input
                                         type="radio"
@@ -878,10 +877,11 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
                                       </div>
                                     </label>
                                     <label
-                                      className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${conflict.choices[field] === 'incoming'
-                                        ? 'border-green-400 bg-green-50'
-                                        : 'border-gray-200 hover:bg-gray-50'
-                                        }`}
+                                      className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${
+                                        conflict.choices[field] === 'incoming'
+                                          ? 'border-green-400 bg-green-50'
+                                          : 'border-gray-200 hover:bg-gray-50'
+                                      }`}
                                     >
                                       <input
                                         type="radio"
@@ -945,8 +945,8 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
                 {t('options.crawlingConfigs.syncDialogSourceUrl')}
               </div>
               <div className="text-xs text-blue-600 break-all bg-gray-50 p-2 rounded border">
-                <a href={SYNC_REMOTE_URL} target="_blank" rel="noopener noreferrer">
-                  {SYNC_REMOTE_URL}
+                <a href={API.CRAWLING_CONFIGS_URL} target="_blank" rel="noopener noreferrer">
+                  {API.CRAWLING_CONFIGS_URL}
                 </a>
               </div>
             </div>

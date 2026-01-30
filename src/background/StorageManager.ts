@@ -499,9 +499,7 @@ export class StorageManager {
     let added = 0;
     let updated = 0;
     try {
-      const response = await fetch(
-        'https://raw.githubusercontent.com/cyber-tao/comments-insight/refs/heads/master/src/config/default_rules.json',
-      );
+      const response = await fetch(API.CRAWLING_CONFIGS_RAW_URL);
       if (!response.ok) {
         throw new Error(`Failed to fetch remote config: ${response.statusText}`);
       }
