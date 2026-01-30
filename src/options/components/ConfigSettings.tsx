@@ -124,14 +124,7 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
       return;
     }
     setExportError(null);
-    const payload = {
-      metadata: {
-        exportedAt: Date.now(),
-        total: selectedConfigs.length,
-      },
-      configs: selectedConfigs,
-    };
-    const json = JSON.stringify(payload, null, 2);
+    const json = JSON.stringify(selectedConfigs, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -202,10 +195,7 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
     reader.onload = () => {
       try {
         const data = reader.result as string;
-        const parsed = JSON.parse(data) as unknown;
-        const rawConfigs = Array.isArray(parsed)
-          ? parsed
-          : (parsed as { configs?: unknown }).configs;
+        const rawConfigs = JSON.parse(data) as unknown;
         if (!Array.isArray(rawConfigs)) {
           setImportError(t('options.crawlingConfigs.importInvalidFile'));
           setImportOpen(true);
@@ -865,11 +855,10 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
                                   </div>
                                   <div className="grid grid-cols-2 gap-3">
                                     <label
-                                      className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${
-                                        conflict.choices[field] === 'current'
-                                          ? 'border-blue-400 bg-blue-50'
-                                          : 'border-gray-200 hover:bg-gray-50'
-                                      }`}
+                                      className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${conflict.choices[field] === 'current'
+                                        ? 'border-blue-400 bg-blue-50'
+                                        : 'border-gray-200 hover:bg-gray-50'
+                                        }`}
                                     >
                                       <input
                                         type="radio"
@@ -889,11 +878,10 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
                                       </div>
                                     </label>
                                     <label
-                                      className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${
-                                        conflict.choices[field] === 'incoming'
-                                          ? 'border-green-400 bg-green-50'
-                                          : 'border-gray-200 hover:bg-gray-50'
-                                      }`}
+                                      className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${conflict.choices[field] === 'incoming'
+                                        ? 'border-green-400 bg-green-50'
+                                        : 'border-gray-200 hover:bg-gray-50'
+                                        }`}
                                     >
                                       <input
                                         type="radio"
