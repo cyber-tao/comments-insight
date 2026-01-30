@@ -1182,12 +1182,12 @@ export class StorageManager {
         const result = await chrome.storage.local.get(baseKey);
         const item = result[baseKey] as
           | {
-            id: string;
-            extractedAt: number;
-            url: string;
-            title: string;
-            platform: string;
-          }
+              id: string;
+              extractedAt: number;
+              url: string;
+              title: string;
+              platform: string;
+            }
           | undefined;
 
         if (item) {

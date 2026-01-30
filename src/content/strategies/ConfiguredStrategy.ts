@@ -11,7 +11,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
   constructor(
     private pageController: PageController,
     private config: CrawlingConfig,
-  ) { }
+  ) {}
 
   cleanup(): void {
     // No specific resources to cleanup for this strategy
@@ -67,7 +67,6 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     const processedElements = new WeakSet<HTMLElement>();
 
     onProgress?.(EXTRACTION_PROGRESS.MIN + 5, 'Extracting comments', 'extracting', 0, maxComments);
-
 
     while (allComments.length < maxComments) {
       this.checkAborted();
@@ -196,12 +195,21 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
         // 1. Check for expand button
         if (replyConfig.expandBtn) {
-          const expandBtn = querySelectorDeep(element, replyConfig.expandBtn.selector) as HTMLElement;
+          const expandBtn = querySelectorDeep(
+            element,
+            replyConfig.expandBtn.selector,
+          ) as HTMLElement;
           if (expandBtn) {
             Logger.info('[ReplyDebug] Found expand button', {
               selector: replyConfig.expandBtn.selector,
               text: expandBtn.textContent || '',
             });
+
+            // Get current reply count before clicking
+            const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
+            const currentReplyCount = replyContainer
+              ? querySelectorAllDeep(replyContainer, replyConfig.item.selector).length
+              : 0;
 
             // Scroll into view to trigger lazy loading and ensure clickability
             expandBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -210,10 +218,10 @@ export class ConfiguredStrategy implements ExtractionStrategy {
             // Click to expand
             try {
               expandBtn.click();
-              Logger.info('[ReplyDebug] Clicked expand button');
+              Logger.info('[ReplyDebug] Clicked expand button', { currentReplyCount });
 
-              // Smart wait: Poll for replies to appear
-              await this.waitForReplies(element, replyConfig);
+              // Smart wait: Poll for reply count to INCREASE
+              await this.waitForReplies(element, replyConfig, currentReplyCount);
             } catch (e: any) {
               Logger.error('[ReplyDebug] Failed to click expand button', {
                 error: e.message || String(e),
@@ -298,13 +306,20 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       const expandBtn = querySelectorDeep(element, replyConfig.expandBtn.selector) as HTMLElement;
       if (expandBtn) {
         try {
+          // Get current reply count before clicking
+          const nestedContainer = querySelectorDeep(element, replyConfig.container.selector);
+          const currentNestedCount = nestedContainer
+            ? querySelectorAllDeep(nestedContainer, replyConfig.item.selector).length
+            : 0;
+
           Logger.info('[ReplyDebug] Found nested expand button', {
             selector: replyConfig.expandBtn.selector,
+            currentNestedCount,
           });
           expandBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
           await this.delay(TIMING.SCROLL_INTO_VIEW_WAIT_MS);
           expandBtn.click();
-          await this.waitForReplies(element, replyConfig);
+          await this.waitForReplies(element, replyConfig, currentNestedCount);
         } catch (e: any) {
           Logger.error('[ReplyDebug] Failed to click nested expand button', {
             error: e.message || String(e),
@@ -370,15 +385,23 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     return Math.abs(hash).toString(36);
   }
 
-  private async waitForReplies(element: HTMLElement, replyConfig: ReplyConfig): Promise<void> {
+  private async waitForReplies(
+    element: HTMLElement,
+    replyConfig: ReplyConfig,
+    initialCount: number = 0,
+  ): Promise<void> {
     const startTime = Date.now();
 
     while (Date.now() - startTime < TIMING.REPLY_POLL_TIMEOUT_MS) {
       const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
       if (replyContainer) {
         const items = querySelectorAllDeep(replyContainer, replyConfig.item.selector);
-        if (items.length > 0) {
-          // Found items!
+        // Wait for reply count to INCREASE from initial count
+        if (items.length > initialCount) {
+          Logger.info('[ReplyDebug] Reply count increased', {
+            from: initialCount,
+            to: items.length,
+          });
           // Add a tiny extra delay for render stability
           await this.delay(TIMING.RENDER_STABILITY_WAIT_MS);
           return;
@@ -387,7 +410,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       await this.delay(TIMING.REPLY_POLL_INTERVAL_MS);
     }
 
-    Logger.debug('[ReplyDebug] Timed out waiting for replies to appear');
+    Logger.debug('[ReplyDebug] Timed out waiting for replies to increase', { initialCount });
   }
 
   private delay(ms: number): Promise<void> {

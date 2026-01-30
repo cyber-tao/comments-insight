@@ -42,7 +42,7 @@ export type ConfigGenerationCallback = (progress: number, message: string) => vo
 export class AIStrategy implements ExtractionStrategy {
   private aiPort: chrome.runtime.Port | null = null;
 
-  constructor(private pageController: PageController) { }
+  constructor(private pageController: PageController) {}
 
   /**
    * 清理资源，断开端口连接

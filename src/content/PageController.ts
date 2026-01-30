@@ -7,7 +7,7 @@ import { Logger } from '../utils/logger';
  * PageController handles page interactions like scrolling and clicking
  */
 export class PageController {
-  constructor(private domAnalyzer?: DOMAnalyzer) { }
+  constructor(private domAnalyzer?: DOMAnalyzer) {}
   /**
    * Scroll to bottom smoothly to trigger lazy loading
    */
@@ -71,7 +71,8 @@ export class PageController {
       const viewportHeight = window.innerHeight;
 
       if (containerBottom > viewportHeight) {
-        const scrollTarget = window.scrollY + Math.min(SCROLL.CONTAINER_SCROLL_STEP, containerBottom - viewportHeight);
+        const scrollTarget =
+          window.scrollY + Math.min(SCROLL.CONTAINER_SCROLL_STEP, containerBottom - viewportHeight);
         window.scrollTo({
           top: scrollTarget,
           behavior: 'smooth',

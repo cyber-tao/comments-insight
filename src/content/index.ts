@@ -316,7 +316,10 @@ async function getPostInfo(): Promise<{
   let videoTime: string | undefined;
   let postContent: string | undefined;
 
-  const queryElement = (selectorRule: { selector: string; type: 'css' | 'xpath' }): Element | null => {
+  const queryElement = (selectorRule: {
+    selector: string;
+    type: 'css' | 'xpath';
+  }): Element | null => {
     if (selectorRule.type === 'xpath') {
       const results = queryXPathAll(document, selectorRule.selector);
       return results.length > 0 ? results[0] : null;
