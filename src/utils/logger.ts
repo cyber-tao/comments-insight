@@ -141,7 +141,7 @@ export class Logger {
     if (this.isDevelopment) {
       this.config.minLevel = LogLevel.DEBUG;
       this.config.enableConsole = true;
-      this.config.enableStorage = true;
+      this.config.enableStorage = false;
     } else {
       this.config.minLevel = LogLevel.ERROR;
       this.config.enableConsole = true;
