@@ -217,3 +217,97 @@ code {
 .animate-pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
 }
+
+/* Markdown prose styles for dark mode */
+.dark .prose {
+  --tw-prose-body: var(--text-secondary);
+  --tw-prose-headings: var(--text-primary);
+  --tw-prose-lead: var(--text-tertiary);
+  --tw-prose-links: var(--text-link);
+  --tw-prose-bold: var(--text-primary);
+  --tw-prose-counters: var(--text-tertiary);
+  --tw-prose-bullets: var(--text-tertiary);
+  --tw-prose-hr: var(--border-primary);
+  --tw-prose-quotes: var(--text-primary);
+  --tw-prose-quote-borders: var(--border-secondary);
+  --tw-prose-captions: var(--text-tertiary);
+  --tw-prose-code: var(--text-primary);
+  --tw-prose-pre-code: #e5e7eb;
+  --tw-prose-pre-bg: #1e293b;
+  --tw-prose-th-borders: var(--border-secondary);
+  --tw-prose-td-borders: var(--border-primary);
+}
+
+.dark .prose strong {
+  color: var(--text-primary);
+}
+
+.dark .prose a {
+  color: var(--text-link);
+}
+
+.dark .prose a:hover {
+  color: var(--text-link-hover);
+}
+
+.dark .prose code {
+  color: var(--text-primary);
+  background-color: var(--bg-tertiary);
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+}
+
+.dark .prose pre {
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+}
+
+.dark .prose pre code {
+  background-color: transparent;
+  padding: 0;
+}
+
+.dark .prose table {
+  border-color: var(--border-primary);
+}
+
+.dark .prose thead {
+  border-bottom-color: var(--border-secondary);
+}
+
+.dark .prose thead th {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-secondary);
+}
+
+.dark .prose tbody tr {
+  border-bottom-color: var(--border-primary);
+}
+
+.dark .prose tbody td {
+  color: var(--text-secondary);
+}
+
+.dark .prose blockquote {
+  color: var(--text-primary);
+  border-left-color: var(--border-secondary);
+}
+
+.dark .prose h1,
+.dark .prose h2,
+.dark .prose h3,
+.dark .prose h4,
+.dark .prose h5,
+.dark .prose h6 {
+  color: var(--text-primary);
+}
+
+.dark .prose ul,
+.dark .prose ol {
+  color: var(--text-secondary);
+}
+
+.dark .prose li {
+  color: var(--text-secondary);
+}

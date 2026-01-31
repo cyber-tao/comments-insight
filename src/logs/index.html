@@ -244,29 +244,6 @@
       label {
         color: var(--text-secondary);
       }
-      .theme-toggle {
-        margin-left: auto;
-        display: flex;
-        gap: 8px;
-      }
-      .theme-btn {
-        padding: 8px 12px;
-        border-radius: 8px;
-        background: var(--bg-tertiary);
-        color: var(--text-secondary);
-        border: 1px solid var(--border-primary);
-        cursor: pointer;
-        font-size: 14px;
-        transition: all 0.2s;
-      }
-      .theme-btn:hover {
-        background: var(--bg-hover);
-      }
-      .theme-btn.active {
-        background: var(--accent-primary);
-        color: white;
-        border-color: var(--accent-primary);
-      }
     </style>
   </head>
   <body>
@@ -286,11 +263,6 @@
             <option value="ERROR">ERROR</option>
           </select>
         </label>
-        <div class="theme-toggle">
-          <button class="theme-btn" data-theme="light">☀️</button>
-          <button class="theme-btn" data-theme="dark">🌙</button>
-          <button class="theme-btn active" data-theme="system">💻</button>
-        </div>
       </div>
 
       <div class="filters">
@@ -317,68 +289,6 @@
       </div>
     </div>
 
-    <script>
-      (function() {
-        const STORAGE_KEY = 'logs_theme';
-        
-        function getSystemTheme() {
-          return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        }
-        
-        function applyTheme(theme) {
-          let effectiveTheme = theme;
-          if (theme === 'system') {
-            effectiveTheme = getSystemTheme();
-          }
-          
-          if (effectiveTheme === 'dark') {
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
-          }
-          
-          document.querySelectorAll('.theme-btn').forEach(btn => {
-            btn.classList.remove('active');
-            if (btn.dataset.theme === theme) {
-              btn.classList.add('active');
-            }
-          });
-        }
-        
-        function loadTheme() {
-          chrome.storage.local.get(['settings'], (result) => {
-            const theme = result?.settings?.theme || 'system';
-            applyTheme(theme);
-          });
-        }
-        
-        function saveTheme(theme) {
-          chrome.storage.local.get(['settings'], (result) => {
-            const settings = result?.settings || {};
-            settings.theme = theme;
-            chrome.storage.local.set({ settings });
-          });
-        }
-        
-        document.querySelectorAll('.theme-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const theme = btn.dataset.theme;
-            applyTheme(theme);
-            saveTheme(theme);
-          });
-        });
-        
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-          chrome.storage.local.get(['settings'], (result) => {
-            if (result?.settings?.theme === 'system') {
-              applyTheme('system');
-            }
-          });
-        });
-        
-        loadTheme();
-      })();
-    </script>
-    <script type="module" src="./logs.ts"></script>
+    <script type="module" src="./index.tsx"></script>
   </body>
 </html>

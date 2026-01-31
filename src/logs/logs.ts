@@ -1,6 +1,65 @@
-import { LOG_PREFIX, STORAGE, LOG_LEVELS } from '@/config/constants';
+import { LOG_PREFIX, STORAGE, LOG_LEVELS, THEME } from '@/config/constants';
 import { Logger, LogLevel } from '@/utils/logger';
+import { Settings } from '@/types';
 import i18n from '../utils/i18n';
+
+// Theme management
+type ThemeMode = 'light' | 'dark' | 'system';
+
+function getSystemTheme(): 'light' | 'dark' {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function applyTheme(theme: ThemeMode) {
+  let effectiveTheme: 'light' | 'dark';
+  if (theme === 'system') {
+    effectiveTheme = getSystemTheme();
+  } else {
+    effectiveTheme = theme;
+  }
+
+  if (effectiveTheme === 'dark') {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+}
+
+async function loadTheme() {
+  try {
+    const result = await chrome.storage.local.get(['settings']);
+    const settings = result?.settings as Settings | undefined;
+    const theme = settings?.theme || THEME.DEFAULT;
+    applyTheme(theme);
+  } catch (error) {
+    Logger.error('[Logs] Failed to load theme', { error });
+    applyTheme(THEME.DEFAULT);
+  }
+}
+
+// Listen for theme changes from settings
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.settings) {
+    const newSettings = changes.settings.newValue as Settings | undefined;
+    const newTheme = newSettings?.theme;
+    if (newTheme) {
+      applyTheme(newTheme);
+    }
+  }
+});
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', async () => {
+  try {
+    const result = await chrome.storage.local.get(['settings']);
+    const settings = result?.settings as Settings | undefined;
+    if (settings?.theme === 'system') {
+      applyTheme('system');
+    }
+  } catch (error) {
+    Logger.error('[Logs] Failed to handle system theme change', { error });
+  }
+});
 
 // AI Logs and System Logs Viewer
 
@@ -427,6 +486,9 @@ async function exportLogs() {
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', async () => {
+  // Load theme first
+  await loadTheme();
+
   // Add event listeners to control buttons
   document.getElementById('refreshBtn')?.addEventListener('click', loadLogs);
   document.getElementById('exportBtn')?.addEventListener('click', exportLogs);

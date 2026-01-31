@@ -542,7 +542,7 @@ const History: React.FC = () => {
                   >
                     {selectedItem.analysis ? (
                       <div
-                        className="prose prose-sm md:prose-base max-w-none"
+                        className="prose prose-sm md:prose-base dark:prose-invert max-w-none"
                         style={{ color: 'var(--text-secondary)' }}
                       >
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
