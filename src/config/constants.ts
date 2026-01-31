@@ -120,7 +120,7 @@ export const INJECTION = {
 
 export const API = {
   DEFAULT_URL: 'https://api.openai.com/v1',
-  EXAMPLE_COMPLETIONS_URL: 'https://api.openai.com/v1/chat/completions',
+  EXAMPLE_COMPLETIONS_URL: 'https://api.openai.com/v1',
   CRAWLING_CONFIGS_RAW_URL:
     'https://raw.githubusercontent.com/cyber-tao/comments-insight/refs/heads/master/src/config/default_rules.json',
   CRAWLING_CONFIGS_URL:
