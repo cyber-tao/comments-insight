@@ -161,6 +161,7 @@ export interface Settings {
   aiTimeout: number; // Timeout in milliseconds
   analyzerPromptTemplate: string;
   language: string; // Language code (e.g., 'zh-CN', 'en-US')
+  theme: 'light' | 'dark' | 'system'; // Theme setting
   normalizeTimestamps: boolean;
   exportPostContentInMarkdown: boolean;
   selectorRetryAttempts: number;

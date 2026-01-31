@@ -105,11 +105,18 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
 
   return (
     <>
-      <section className="mb-8 bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-semibold mb-4">{t('options.aiModel')}</h2>
+      <section className="mb-8 theme-card p-6">
+        <h2 className="text-xl font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
+          {t('options.aiModel')}
+        </h2>
 
         <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">{t('options.apiUrl')}</label>
+          <label
+            className="block text-sm font-medium mb-2"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            {t('options.apiUrl')}
+          </label>
           <input
             type="text"
             value={settings.aiModel.apiUrl}
@@ -119,13 +126,18 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 aiModel: { ...settings.aiModel, apiUrl: e.target.value },
               })
             }
-            className="w-full px-3 py-2 border rounded"
+            className="w-full theme-input"
             placeholder={API.EXAMPLE_COMPLETIONS_URL}
           />
         </div>
 
         <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">{t('options.apiKey')}</label>
+          <label
+            className="block text-sm font-medium mb-2"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            {t('options.apiKey')}
+          </label>
           <div className="flex gap-2">
             <input
               type={showApiKey ? 'text' : 'password'}
@@ -136,22 +148,29 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   aiModel: { ...settings.aiModel, apiKey: e.target.value },
                 })
               }
-              className="flex-1 px-3 py-2 border rounded"
+              className="flex-1 theme-input"
               placeholder={t('options.apiKeyPlaceholder')}
             />
             <button
               type="button"
               onClick={() => setShowApiKey(!showApiKey)}
-              className="px-3 py-2 border rounded hover:bg-gray-100"
+              className="px-3 py-2 rounded-lg theme-button-secondary"
             >
               {showApiKey ? '🙈' : '👁️'}
             </button>
           </div>
-          <p className="text-xs text-gray-500 mt-1">{t('options.apiKeySecurityNote')}</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+            {t('options.apiKeySecurityNote')}
+          </p>
         </div>
 
         <div className="mb-4">
-          <label className="block text-sm font-medium mb-2">{t('options.model')}</label>
+          <label
+            className="block text-sm font-medium mb-2"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            {t('options.model')}
+          </label>
           {availableModels.length > 0 ? (
             <select
               value={settings.aiModel.model}
@@ -161,7 +180,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   aiModel: { ...settings.aiModel, model: e.target.value },
                 })
               }
-              className="w-full px-3 py-2 border rounded"
+              className="w-full theme-input"
             >
               {availableModels.map((model) => (
                 <option key={model} value={model}>
@@ -179,7 +198,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   aiModel: { ...settings.aiModel, model: e.target.value },
                 })
               }
-              className="w-full px-3 py-2 border rounded"
+              className="w-full theme-input"
               placeholder={t('options.defaultModelName')}
             />
           )}
@@ -187,7 +206,10 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
 
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: 'var(--text-secondary)' }}
+            >
               {t('options.contextWindowSize')}
             </label>
             <input
@@ -202,12 +224,17 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   },
                 })
               }
-              className="w-full px-3 py-2 border rounded"
+              className="w-full theme-input"
               min="1"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">{t('options.maxOutputTokens')}</label>
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {t('options.maxOutputTokens')}
+            </label>
             <input
               type="number"
               value={settings.aiModel.maxOutputTokens || 4096}
@@ -220,7 +247,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   },
                 })
               }
-              className="w-full px-3 py-2 border rounded"
+              className="w-full theme-input"
               min="1"
             />
           </div>
@@ -228,7 +255,12 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
 
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium mb-2">{t('options.temperature')}</label>
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {t('options.temperature')}
+            </label>
             <input
               type="number"
               step="0.1"
@@ -242,13 +274,18 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   },
                 })
               }
-              className="w-full px-3 py-2 border rounded"
+              className="w-full theme-input"
               min={UI_LIMITS.TEMPERATURE_MIN}
               max={UI_LIMITS.TEMPERATURE_MAX}
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">{t('options.topP')}</label>
+            <label
+              className="block text-sm font-medium mb-2"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {t('options.topP')}
+            </label>
             <input
               type="number"
               step="0.1"
@@ -262,7 +299,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   },
                 })
               }
-              className="w-full px-3 py-2 border rounded"
+              className="w-full theme-input"
               min={UI_LIMITS.TOP_P_MIN}
               max={UI_LIMITS.TOP_P_MAX}
             />
@@ -274,7 +311,8 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             type="button"
             onClick={handleFetchModels}
             disabled={loadingModels || testingModel}
-            className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600 disabled:bg-gray-400"
+            className="px-4 py-2 rounded-lg text-white font-medium transition-all disabled:opacity-50"
+            style={{ backgroundColor: '#8b5cf6' }}
           >
             {loadingModels ? t('common.loading') : '🔄 ' + t('options.fetchModels')}
           </button>
@@ -282,18 +320,20 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             type="button"
             onClick={handleTestModel}
             disabled={testingModel || loadingModels}
-            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400"
+            className="px-4 py-2 rounded-lg text-white font-medium transition-all disabled:opacity-50"
+            style={{ backgroundColor: 'var(--accent-secondary)' }}
           >
             {testingModel ? t('options.testing') : '🧪 ' + t('options.testModel')}
           </button>
         </div>
       </section>
 
-      {/* Prompt Template Section */}
-      <section className="mb-8 bg-white p-6 rounded-lg shadow">
+      <section className="mb-8 theme-card p-6">
         <div className="mb-4">
           <div className="flex justify-between items-center mb-2">
-            <label className="block text-sm font-medium">{t('options.promptTemplate')}</label>
+            <label className="block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+              {t('options.promptTemplate')}
+            </label>
             <button
               type="button"
               onClick={() =>
@@ -302,7 +342,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   analyzerPromptTemplate: DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
                 })
               }
-              className="text-xs text-blue-600 hover:text-blue-800 underline"
+              className="text-xs underline theme-link"
             >
               {t('options.resetTemplate')}
             </button>
@@ -312,7 +352,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             onChange={(e) =>
               onSettingsChange({ ...settings, analyzerPromptTemplate: e.target.value })
             }
-            className="w-full px-3 py-2 border rounded font-mono text-sm"
+            className="w-full theme-input font-mono text-sm"
             rows={UI_LIMITS.PROMPT_TEXTAREA_ROWS}
           />
 
@@ -320,14 +360,20 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             <button
               type="button"
               onClick={() => setShowPlaceholders(!showPlaceholders)}
-              className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              className="text-sm theme-link flex items-center gap-1"
             >
               <span>{showPlaceholders ? '▼' : '▶'}</span>
               <span>{t('options.availablePlaceholders')}</span>
             </button>
 
             {showPlaceholders && (
-              <div className="mt-3 p-4 bg-gray-50 rounded border border-gray-200">
+              <div
+                className="mt-3 p-4 rounded-lg"
+                style={{
+                  backgroundColor: 'var(--bg-tertiary)',
+                  border: '1px solid var(--border-primary)',
+                }}
+              >
                 <div className="space-y-3">
                   <PlaceholderItem
                     code="{comments_data}"
@@ -366,11 +412,21 @@ interface PlaceholderItemProps {
 const PlaceholderItem: React.FC<PlaceholderItemProps> = ({ code, required, t, descKey }) => (
   <div>
     <code
-      className={`text-sm font-mono px-2 py-1 rounded ${required ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}
+      className="text-sm font-mono px-2 py-1 rounded"
+      style={{
+        backgroundColor: required ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+        color: required ? 'var(--accent-primary)' : 'var(--accent-secondary)',
+      }}
     >
       {code}
     </code>
-    {required && <span className="text-red-600 text-xs ml-2">*{t('options.required')}</span>}
-    <p className="text-sm text-gray-700 mt-1">{t(`options.${descKey}`)}</p>
+    {required && (
+      <span className="text-xs ml-2" style={{ color: 'var(--accent-danger)' }}>
+        *{t('options.required')}
+      </span>
+    )}
+    <p className="text-sm mt-1" style={{ color: 'var(--text-tertiary)' }}>
+      {t(`options.${descKey}`)}
+    </p>
   </div>
 );

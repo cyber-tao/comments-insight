@@ -7,6 +7,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { exportCommentsAsCSV, exportAnalysisAsMarkdown } from '../utils/export';
 import i18n from '../utils/i18n';
+import { useTheme } from '@/hooks/useTheme';
+import { Logger } from '@/utils/logger';
 
 const History: React.FC = () => {
   const { t } = useTranslation();
@@ -18,13 +20,13 @@ const History: React.FC = () => {
   const [sortBy, setSortBy] = useState<'time' | 'likes' | 'replies'>('likes');
   const [exportPostContentInMarkdown, setExportPostContentInMarkdown] = useState(false);
 
-  // Comment view search and pagination
   const [commentSearchTerm, setCommentSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [commentsPerPage, setCommentsPerPage] = useState(PAGINATION.DEFAULT_PER_PAGE);
 
+  useTheme();
+
   useEffect(() => {
-    // Load language from settings
     chrome.runtime.sendMessage({ type: MESSAGES.GET_SETTINGS }, (response) => {
       if (response?.settings?.language) {
         i18n.changeLanguage(response.settings.language);
@@ -35,7 +37,6 @@ const History: React.FC = () => {
     loadHistory();
   }, []);
 
-  // Handle URL parameters for deep linking
   useEffect(() => {
     if (history.length === 0) return;
 
@@ -207,7 +208,6 @@ const History: React.FC = () => {
     return filterRecursive(comments);
   }, []);
 
-  // Get filtered and sorted comments
   const getProcessedComments = (): Comment[] => {
     if (!selectedItem) return [];
     const filtered = filterComments(selectedItem.comments, commentSearchTerm);
@@ -225,12 +225,10 @@ const History: React.FC = () => {
   const totalComments = getProcessedComments().length;
   const totalPages = Math.ceil(totalComments / commentsPerPage);
 
-  // Reset pagination when search changes
   React.useEffect(() => {
     setCurrentPage(1);
   }, [commentSearchTerm, selectedItem]);
 
-  // Track expanded replies
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
 
   const toggleReplies = (commentId: string) => {
@@ -245,42 +243,72 @@ const History: React.FC = () => {
     });
   };
 
-  /* Recursive function to render nested comments */
   const renderCommentTree = (comments: Comment[], depth = 0) => {
     return (
-      <div className={`${depth > 0 ? 'ml-4 border-l-2 border-gray-200 pl-3' : ''}`}>
+      <div
+        className={`${depth > 0 ? 'ml-4 pl-4' : ''}`}
+        style={depth > 0 ? { borderLeft: '2px solid var(--border-primary)' } : {}}
+      >
         {comments.map((comment) => {
           const hasReplies = comment.replies && comment.replies.length > 0;
           const isExpanded = expandedReplies.has(comment.id);
 
           return (
-            <div key={comment.id} className="mb-4">
-              <div className="bg-gray-50 p-3 rounded">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="font-medium text-gray-800">{comment.username}</span>
-                  <span className="text-xs text-gray-500">
-                    {formatCommentTimestamp(comment.timestamp)}
-                  </span>
-                  <span className="text-xs text-gray-500">👍 {comment.likes}</span>
+            <div key={comment.id} className="mb-4 animate-fade-in">
+              <div
+                className="p-4 rounded-xl transition-all hover:shadow-md"
+                style={{
+                  backgroundColor: 'var(--bg-tertiary)',
+                  border: '1px solid var(--border-primary)',
+                }}
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm"
+                    style={{ background: 'var(--gradient-primary)' }}
+                  >
+                    {comment.username.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1">
+                    <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      {comment.username}
+                    </span>
+                    <div
+                      className="flex items-center gap-3 text-xs"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      <span>📅 {formatCommentTimestamp(comment.timestamp)}</span>
+                      <span className="flex items-center gap-1">
+                        <span className="text-red-500">❤️</span> {comment.likes}
+                      </span>
+                    </div>
+                  </div>
                   {hasReplies && (
                     <button
                       onClick={() => toggleReplies(comment.id)}
-                      className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer flex items-center gap-1"
+                      className="px-3 py-1 rounded-full text-xs font-medium transition-all hover:scale-105"
+                      style={{
+                        backgroundColor: isExpanded ? 'var(--accent-primary)' : 'var(--bg-card)',
+                        color: isExpanded ? 'white' : 'var(--text-secondary)',
+                        border: isExpanded ? 'none' : '1px solid var(--border-primary)',
+                      }}
                     >
-                      <span>{isExpanded ? '▼' : '▶'}</span>
-                      <span>
-                        💬{' '}
-                        {comment.replies.length === 1
-                          ? t('history.reply', { count: comment.replies.length })
-                          : t('history.replies', { count: comment.replies.length })}
-                      </span>
+                      {isExpanded ? '▼' : '▶'} 💬{' '}
+                      {comment.replies.length === 1
+                        ? t('history.reply', { count: comment.replies.length })
+                        : t('history.replies', { count: comment.replies.length })}
                     </button>
                   )}
                 </div>
-                <p className="text-gray-700 whitespace-pre-wrap">{comment.content}</p>
+                <p
+                  className="whitespace-pre-wrap leading-relaxed"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  {comment.content}
+                </p>
               </div>
               {hasReplies && isExpanded && (
-                <div className="mt-2">{renderCommentTree(comment.replies, depth + 1)}</div>
+                <div className="mt-3">{renderCommentTree(comment.replies, depth + 1)}</div>
               )}
             </div>
           );
@@ -290,16 +318,27 @@ const History: React.FC = () => {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Sidebar - History List */}
-      <div className="w-1/3 bg-white border-r flex flex-col">
-        <div className="p-4 border-b">
+    <div className="flex h-screen" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+      <div
+        className="w-1/3 flex flex-col"
+        style={{
+          backgroundColor: 'var(--bg-card)',
+          borderRight: '1px solid var(--border-primary)',
+        }}
+      >
+        <div className="p-5" style={{ borderBottom: '1px solid var(--border-primary)' }}>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-bold">{t('history.title')}</h2>
+            <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+              {t('history.title')}
+            </h2>
             {history.length > 0 && (
               <button
                 onClick={handleClearAll}
-                className="px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600"
+                className="px-3 py-1.5 text-sm rounded-lg transition-colors font-medium"
+                style={{
+                  backgroundColor: 'var(--accent-danger)',
+                  color: 'white',
+                }}
               >
                 🗑️ {t('history.clearAll')}
               </button>
@@ -312,11 +351,12 @@ const History: React.FC = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
               placeholder={t('history.searchPlaceholder')}
-              className="flex-1 px-3 py-2 border rounded"
+              className="flex-1 theme-input"
             />
             <button
               onClick={handleSearch}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              className="px-4 py-2 rounded-lg text-white font-medium transition-all hover:scale-105"
+              style={{ background: 'var(--gradient-primary)' }}
             >
               🔍
             </button>
@@ -325,38 +365,56 @@ const History: React.FC = () => {
 
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="p-4 text-center text-gray-500">{t('common.loading')}</div>
+            <div className="p-6 text-center" style={{ color: 'var(--text-muted)' }}>
+              <div className="animate-pulse">⏳ {t('common.loading')}</div>
+            </div>
           ) : history.length === 0 ? (
-            <div className="p-4 text-center text-gray-500">{t('history.noHistory')}</div>
+            <div className="p-6 text-center" style={{ color: 'var(--text-muted)' }}>
+              <p className="text-4xl mb-2">📭</p>
+              <p>{t('history.noHistory')}</p>
+            </div>
           ) : (
-            <div className="divide-y">
+            <div>
               {history.map((item) => (
                 <div
                   key={item.id}
                   onClick={() => setSelectedItem(item)}
-                  className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
-                    selectedItem?.id === item.id ? 'bg-blue-50' : ''
-                  }`}
+                  className="p-4 cursor-pointer transition-all"
+                  style={{
+                    backgroundColor:
+                      selectedItem?.id === item.id ? 'var(--bg-selected)' : 'transparent',
+                    borderBottom: '1px solid var(--border-primary)',
+                  }}
                 >
-                  <div className="flex items-start gap-2 mb-2">
+                  <div className="flex items-start gap-3 mb-2">
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-medium text-gray-800 truncate">{item.title}</h3>
-                      <p className="text-xs text-gray-500">{formatDate(item.extractedAt)}</p>
+                      <h3
+                        className="font-semibold truncate mb-1"
+                        style={{ color: 'var(--text-primary)' }}
+                      >
+                        {item.title}
+                      </h3>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                        {formatDate(item.extractedAt)}
+                      </p>
                     </div>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDelete(item.id);
                       }}
-                      className="text-red-500 hover:text-red-700 text-sm"
+                      className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                      style={{ color: 'var(--accent-danger)' }}
                     >
                       🗑️
                     </button>
                   </div>
-                  <div className="flex gap-4 text-xs text-gray-500">
-                    <span>💬 {t('history.commentsWithCount', { count: item.commentsCount })}</span>
+                  <div className="flex gap-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <span className="flex items-center gap-1">
+                      💬 {t('history.commentsWithCount', { count: item.commentsCount })}
+                    </span>
                     {item.analysis && (
-                      <span>
+                      <span className="flex items-center gap-1">
                         🔥 {t('history.tokensWithCount', { count: item.analysis.tokensUsed })}
                       </span>
                     )}
@@ -368,78 +426,106 @@ const History: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Content - Details */}
       <div className="flex-1 flex flex-col">
         {selectedItem ? (
           <>
-            {/* Header */}
-            <div className="bg-white border-b p-4">
-              <div className="mb-2">
+            <div
+              className="p-5"
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                borderBottom: '1px solid var(--border-primary)',
+              }}
+            >
+              <div className="mb-3">
                 <a
                   href={selectedItem.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xl font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                  className="text-xl font-bold theme-link hover:underline"
                 >
                   {selectedItem.title}
                 </a>
               </div>
-              <div className="flex gap-4 text-sm text-gray-600">
-                <span>{selectedItem.platform}</span>
+              <div className="flex gap-4 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                <span
+                  className="px-2 py-1 rounded-full text-xs font-medium"
+                  style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                >
+                  {selectedItem.platform}
+                </span>
                 <span>📅 {formatDate(selectedItem.extractedAt)}</span>
                 <span>
                   💬 {t('history.commentsWithCount', { count: selectedItem.commentsCount })}
                 </span>
               </div>
               {selectedItem.postContent && (
-                <details className="mt-3 text-sm text-gray-700">
-                  <summary className="cursor-pointer text-gray-600">
-                    {t('history.postContent')}
+                <details className="mt-4 text-sm">
+                  <summary
+                    className="cursor-pointer font-medium"
+                    style={{ color: 'var(--text-secondary)' }}
+                  >
+                    📝 {t('history.postContent')}
                   </summary>
-                  <div className="mt-2 whitespace-pre-wrap">{selectedItem.postContent}</div>
+                  <div
+                    className="mt-2 p-3 rounded-lg whitespace-pre-wrap"
+                    style={{
+                      backgroundColor: 'var(--bg-tertiary)',
+                      color: 'var(--text-secondary)',
+                    }}
+                  >
+                    {selectedItem.postContent}
+                  </div>
                 </details>
               )}
             </div>
 
-            {/* View Mode Tabs */}
-            <div className="bg-white border-b px-4">
-              <div className="flex gap-4">
+            <div
+              className="px-5"
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                borderBottom: '1px solid var(--border-primary)',
+              }}
+            >
+              <div className="flex gap-1">
                 <button
                   onClick={() => setViewMode('analysis')}
-                  className={`px-4 py-2 border-b-2 transition-colors ${
-                    viewMode === 'analysis'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-800'
+                  className={`px-5 py-3 font-medium text-sm transition-all border-b-2 ${
+                    viewMode === 'analysis' ? 'border-blue-500 text-blue-500' : 'border-transparent'
                   }`}
+                  style={{
+                    color: viewMode === 'analysis' ? undefined : 'var(--text-tertiary)',
+                  }}
                 >
                   📊 {t('history.analysis')}
                 </button>
                 <button
                   onClick={() => setViewMode('comments')}
-                  className={`px-4 py-2 border-b-2 transition-colors ${
-                    viewMode === 'comments'
-                      ? 'border-blue-500 text-blue-600'
-                      : 'border-transparent text-gray-600 hover:text-gray-800'
+                  className={`px-5 py-3 font-medium text-sm transition-all border-b-2 ${
+                    viewMode === 'comments' ? 'border-blue-500 text-blue-500' : 'border-transparent'
                   }`}
+                  style={{
+                    color: viewMode === 'comments' ? undefined : 'var(--text-tertiary)',
+                  }}
                 >
                   💬 {t('history.comments')}
                 </button>
               </div>
             </div>
 
-            {/* Content */}
             <div className="flex-1 overflow-y-auto p-6">
               {viewMode === 'analysis' ? (
-                <div>
-                  {/* Analysis View Header with Export Button */}
-                  <div className="mb-4 flex justify-between items-center">
-                    <h3 className="text-lg font-semibold">{t('history.analysis')}</h3>
+                <div className="animate-fade-in">
+                  <div className="mb-6 flex justify-between items-center">
+                    <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      {t('history.analysis')}
+                    </h3>
                     {selectedItem.analysis && (
                       <button
                         onClick={() =>
                           exportAnalysisAsMarkdown(selectedItem, exportPostContentInMarkdown)
                         }
-                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 text-sm flex items-center gap-2 transition-colors shadow-sm"
+                        className="px-4 py-2 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-all hover:scale-105 shadow-md"
+                        style={{ background: 'var(--gradient-primary)' }}
                         title={t('history.exportMarkdownTooltip')}
                       >
                         <span>📝</span>
@@ -448,29 +534,39 @@ const History: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Analysis Content */}
-                  <div className="prose prose-sm md:prose-base max-w-none prose-table:border-collapse prose-th:border prose-th:border-gray-300 prose-th:bg-gray-100 prose-th:p-2 prose-td:border prose-td:border-gray-300 prose-td:p-2">
+                  <div
+                    className="theme-card p-6"
+                    style={{
+                      backgroundColor: 'var(--bg-card)',
+                    }}
+                  >
                     {selectedItem.analysis ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {selectedItem.analysis.markdown}
-                      </ReactMarkdown>
+                      <div
+                        className="prose prose-sm md:prose-base max-w-none"
+                        style={{ color: 'var(--text-secondary)' }}
+                      >
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {selectedItem.analysis.markdown}
+                        </ReactMarkdown>
+                      </div>
                     ) : (
-                      <div className="text-center text-gray-500 py-8">
-                        {t('history.noAnalysis')}
+                      <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
+                        <p className="text-4xl mb-3">🔍</p>
+                        <p>{t('history.noAnalysis')}</p>
                       </div>
                     )}
                   </div>
                 </div>
               ) : (
-                <div>
-                  {/* Comments View Header with Export Button */}
-                  <div className="mb-4 flex justify-between items-center">
-                    <h3 className="text-lg font-semibold">
+                <div className="animate-fade-in">
+                  <div className="mb-6 flex justify-between items-center">
+                    <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
                       {t('history.allComments')} ({selectedItem.comments.length})
                     </h3>
                     <button
                       onClick={() => exportCommentsAsCSV(selectedItem.comments, selectedItem.title)}
-                      className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 text-sm flex items-center gap-2 transition-colors shadow-sm"
+                      className="px-4 py-2 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-all hover:scale-105 shadow-md"
+                      style={{ backgroundColor: 'var(--accent-secondary)' }}
                       title={t('history.exportCsvTooltip')}
                     >
                       <span>📄</span>
@@ -478,26 +574,33 @@ const History: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Search and Filter Bar */}
-                  <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-                    <div className="flex gap-4 items-center mb-3">
-                      <div className="flex-1">
+                  <div
+                    className="mb-6 p-4 rounded-xl"
+                    style={{
+                      backgroundColor: 'var(--bg-card)',
+                      border: '1px solid var(--border-primary)',
+                    }}
+                  >
+                    <div className="flex gap-4 items-center mb-4 flex-wrap">
+                      <div className="flex-1 min-w-64">
                         <input
                           type="text"
                           value={commentSearchTerm}
                           onChange={(e) => setCommentSearchTerm(e.target.value)}
                           placeholder={t('history.searchComments')}
-                          className="w-full px-3 py-2 border rounded-lg text-sm"
+                          className="w-full theme-input"
                         />
                       </div>
                       <div className="flex items-center gap-2">
-                        <label className="text-sm text-gray-600">{t('history.sortBy')}:</label>
+                        <label className="text-sm" style={{ color: 'var(--text-muted)' }}>
+                          {t('history.sortBy')}:
+                        </label>
                         <select
                           value={sortBy}
                           onChange={(e) =>
                             setSortBy(e.target.value as 'time' | 'likes' | 'replies')
                           }
-                          className="px-3 py-2 border rounded text-sm"
+                          className="theme-input text-sm"
                         >
                           <option value="time">{t('history.sortByTime')}</option>
                           <option value="likes">{t('history.sortByLikes')}</option>
@@ -505,7 +608,7 @@ const History: React.FC = () => {
                         </select>
                       </div>
                       <div className="flex items-center gap-2">
-                        <label className="text-sm text-gray-600">
+                        <label className="text-sm" style={{ color: 'var(--text-muted)' }}>
                           {t('history.commentsPerPage')}:
                         </label>
                         <select
@@ -514,7 +617,7 @@ const History: React.FC = () => {
                             setCommentsPerPage(Number(e.target.value));
                             setCurrentPage(1);
                           }}
-                          className="px-2 py-2 border rounded text-sm"
+                          className="theme-input text-sm"
                         >
                           {PAGINATION.OPTIONS.map((n) => (
                             <option key={n} value={n}>
@@ -525,9 +628,8 @@ const History: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Search Results Info */}
                     {commentSearchTerm && (
-                      <div className="text-sm text-gray-600">
+                      <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
                         {t('history.searchResults', {
                           count: totalComments,
                           total: selectedItem.comments.length,
@@ -536,10 +638,15 @@ const History: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Pagination Controls */}
                   {totalPages > 1 && (
-                    <div className="mb-4 flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                      <div className="text-sm text-gray-600">
+                    <div
+                      className="mb-6 flex justify-between items-center p-4 rounded-xl"
+                      style={{
+                        backgroundColor: 'var(--bg-card)',
+                        border: '1px solid var(--border-primary)',
+                      }}
+                    >
+                      <div className="text-sm" style={{ color: 'var(--text-muted)' }}>
                         {t('history.showingComments', {
                           start: (currentPage - 1) * commentsPerPage + 1,
                           end: Math.min(currentPage * commentsPerPage, totalComments),
@@ -550,17 +657,28 @@ const History: React.FC = () => {
                         <button
                           onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                           disabled={currentPage === 1}
-                          className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                          className="px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                          style={{
+                            backgroundColor: 'var(--bg-tertiary)',
+                            color: 'var(--text-secondary)',
+                          }}
                         >
                           ← {t('common.previous')}
                         </button>
-                        <span className="px-3 py-1 text-sm font-medium">
+                        <span
+                          className="px-4 py-2 text-sm font-semibold"
+                          style={{ color: 'var(--text-primary)' }}
+                        >
                           {currentPage} / {totalPages}
                         </span>
                         <button
                           onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                           disabled={currentPage === totalPages}
-                          className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                          className="px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                          style={{
+                            backgroundColor: 'var(--bg-tertiary)',
+                            color: 'var(--text-secondary)',
+                          }}
                         >
                           {t('common.next')} →
                         </button>
@@ -568,33 +686,51 @@ const History: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Comment List */}
                   {totalComments === 0 ? (
-                    <div className="text-center text-gray-500 py-8">
-                      {commentSearchTerm ? t('history.noCommentsFound') : t('history.noComments')}
+                    <div className="text-center py-12" style={{ color: 'var(--text-muted)' }}>
+                      <p className="text-4xl mb-3">🔍</p>
+                      <p>
+                        {commentSearchTerm ? t('history.noCommentsFound') : t('history.noComments')}
+                      </p>
                     </div>
                   ) : (
                     renderCommentTree(paginatedComments)
                   )}
 
-                  {/* Bottom Pagination */}
                   {totalPages > 1 && (
-                    <div className="mt-4 flex justify-center">
-                      <div className="flex gap-2 items-center p-3 bg-gray-50 rounded-lg">
+                    <div className="mt-6 flex justify-center">
+                      <div
+                        className="flex gap-2 items-center p-3 rounded-xl"
+                        style={{
+                          backgroundColor: 'var(--bg-card)',
+                          border: '1px solid var(--border-primary)',
+                        }}
+                      >
                         <button
                           onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
                           disabled={currentPage === 1}
-                          className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                          className="px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                          style={{
+                            backgroundColor: 'var(--bg-tertiary)',
+                            color: 'var(--text-secondary)',
+                          }}
                         >
                           ← {t('common.previous')}
                         </button>
-                        <span className="px-3 py-1 text-sm font-medium">
+                        <span
+                          className="px-4 py-2 text-sm font-semibold"
+                          style={{ color: 'var(--text-primary)' }}
+                        >
                           {currentPage} / {totalPages}
                         </span>
                         <button
                           onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
                           disabled={currentPage === totalPages}
-                          className="px-3 py-1 border rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+                          className="px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
+                          style={{
+                            backgroundColor: 'var(--bg-tertiary)',
+                            color: 'var(--text-secondary)',
+                          }}
                         >
                           {t('common.next')} →
                         </button>
@@ -606,10 +742,13 @@ const History: React.FC = () => {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-500">
+          <div
+            className="flex-1 flex items-center justify-center"
+            style={{ color: 'var(--text-muted)' }}
+          >
             <div className="text-center">
-              <p className="text-xl mb-2">📜</p>
-              <p>{t('history.selectItem')}</p>
+              <p className="text-6xl mb-4">📜</p>
+              <p className="text-lg">{t('history.selectItem')}</p>
             </div>
           </div>
         )}
@@ -619,4 +758,3 @@ const History: React.FC = () => {
 };
 
 export default History;
-import { Logger } from '@/utils/logger';

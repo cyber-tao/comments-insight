@@ -12,6 +12,19 @@ export const RETRY = {
  * 2. Create the locale file in src/locales/
  * 3. Import and register it in src/utils/i18n.ts
  */
+export const THEME = {
+  LIGHT: 'light' as const,
+  DARK: 'dark' as const,
+  SYSTEM: 'system' as const,
+  OPTIONS: [
+    { value: 'light', labelKey: 'options.themeLight' },
+    { value: 'dark', labelKey: 'options.themeDark' },
+    { value: 'system', labelKey: 'options.themeSystem' },
+  ] as const,
+  DEFAULT: 'system' as const,
+  STORAGE_KEY: 'theme' as const,
+};
+
 export const LANGUAGES = {
   /** Supported languages with display names */
   SUPPORTED: [

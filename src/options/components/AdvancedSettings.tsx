@@ -15,12 +15,18 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
   const { t } = useTranslation();
 
   return (
-    <section className="mb-8 bg-white p-6 rounded-lg shadow">
-      <h2 className="text-xl font-semibold mb-4">{t('options.advancedSettings')}</h2>
+    <section className="mb-8 theme-card p-6">
+      <h2 className="text-xl font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
+        {t('options.advancedSettings')}
+      </h2>
       <div className="space-y-8 animate-fade-in">
-        {/* AI Timeout */}
         <div>
-          <label className="block text-sm font-medium mb-2">{t('options.aiTimeout')}</label>
+          <label
+            className="block text-sm font-medium mb-2"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            {t('options.aiTimeout')}
+          </label>
           <input
             type="number"
             value={(settings.aiTimeout || AI.DEFAULT_TIMEOUT) / TIMEOUT.MS_PER_SEC}
@@ -30,22 +36,28 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                 aiTimeout: parseInt(e.target.value) * TIMEOUT.MS_PER_SEC,
               })
             }
-            className="w-full px-3 py-2 border rounded"
+            className="w-full theme-input"
             min={TIMEOUT.MIN_AI_SECONDS}
             max={TIMEOUT.MAX_AI_SECONDS}
           />
         </div>
 
-        {/* DOM Analysis Configuration */}
         <div>
-          <h3 className="text-md font-semibold mb-2">{t('options.domAnalysisConfig')}</h3>
-          <p className="text-sm text-gray-600 mb-4">{t('options.domAnalysisHint')}</p>
+          <h3 className="text-md font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+            {t('options.domAnalysisConfig')}
+          </h3>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+            {t('options.domAnalysisHint')}
+          </p>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label
+                className="block text-sm font-medium mb-2"
+                style={{ color: 'var(--text-secondary)' }}
+              >
                 {t('options.initialDepth')}
-                <span className="text-xs text-gray-500 ml-2">
+                <span className="text-xs ml-2" style={{ color: 'var(--text-muted)' }}>
                   {t('options.recommended')}: {DOM_ANALYSIS_DEFAULTS.initialDepth}
                 </span>
               </label>
@@ -68,17 +80,22 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                     },
                   })
                 }
-                className="w-full px-3 py-2 border rounded"
+                className="w-full theme-input"
                 min={UI_LIMITS.INITIAL_DEPTH_MIN}
                 max={UI_LIMITS.INITIAL_DEPTH_MAX}
               />
-              <p className="text-xs text-gray-500 mt-1">{t('options.initialDepthHint')}</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                {t('options.initialDepthHint')}
+              </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label
+                className="block text-sm font-medium mb-2"
+                style={{ color: 'var(--text-secondary)' }}
+              >
                 {t('options.expandDepth')}
-                <span className="text-xs text-gray-500 ml-2">
+                <span className="text-xs ml-2" style={{ color: 'var(--text-muted)' }}>
                   {t('options.recommended')}: {DOM_ANALYSIS_DEFAULTS.expandDepth}
                 </span>
               </label>
@@ -99,17 +116,22 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                     },
                   })
                 }
-                className="w-full px-3 py-2 border rounded"
+                className="w-full theme-input"
                 min={UI_LIMITS.EXPAND_DEPTH_MIN}
                 max={UI_LIMITS.EXPAND_DEPTH_MAX}
               />
-              <p className="text-xs text-gray-500 mt-1">{t('options.expandDepthHint')}</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                {t('options.expandDepthHint')}
+              </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label
+                className="block text-sm font-medium mb-2"
+                style={{ color: 'var(--text-secondary)' }}
+              >
                 {t('options.maxDepth')}
-                <span className="text-xs text-gray-500 ml-2">
+                <span className="text-xs ml-2" style={{ color: 'var(--text-muted)' }}>
                   {t('options.recommended')}: {DOM_ANALYSIS_DEFAULTS.maxDepth}
                 </span>
               </label>
@@ -131,16 +153,17 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                     },
                   })
                 }
-                className="w-full px-3 py-2 border rounded"
+                className="w-full theme-input"
                 min={UI_LIMITS.MAX_DEPTH_MIN}
                 max={UI_LIMITS.MAX_DEPTH_MAX}
               />
-              <p className="text-xs text-gray-500 mt-1">{t('options.maxDepthHint')}</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                {t('options.maxDepthHint')}
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Developer Mode */}
         <div>
           <div className="mb-4 flex items-center">
             <input
@@ -148,13 +171,20 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
               id="developerMode"
               checked={settings.developerMode || false}
               onChange={(e) => onSettingsChange({ ...settings, developerMode: e.target.checked })}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
+              style={{ borderColor: 'var(--border-primary)' }}
             />
-            <label htmlFor="developerMode" className="ml-2 block text-sm text-gray-900">
+            <label
+              htmlFor="developerMode"
+              className="ml-2 block text-sm"
+              style={{ color: 'var(--text-primary)' }}
+            >
               {t('options.developerMode')}
             </label>
           </div>
-          <p className="text-xs text-gray-500 ml-6">{t('options.developerModeHint')}</p>
+          <p className="text-xs ml-6" style={{ color: 'var(--text-muted)' }}>
+            {t('options.developerModeHint')}
+          </p>
         </div>
       </div>
     </section>

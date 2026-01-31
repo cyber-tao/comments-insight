@@ -25,30 +25,48 @@ export const PageStatus: React.FC<PageStatusProps> = ({ pageInfo, pageStatus }) 
   };
 
   return (
-    <div className="p-4 bg-white border-b">
+    <div
+      className="p-4"
+      style={{
+        backgroundColor: 'var(--bg-card)',
+        borderBottom: '1px solid var(--border-primary)',
+      }}
+    >
       <div className="flex justify-between items-start mb-2">
-        <h2 className="text-sm font-semibold text-gray-700">{t('popup.currentPage')}</h2>
+        <h2 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
+          {t('popup.currentPage')}
+        </h2>
       </div>
       {pageInfo ? (
         <div className="space-y-2">
           <div className="text-sm mb-2">
-            <span className="font-medium text-gray-800 line-clamp-2">{pageInfo.title}</span>
+            <span className="font-medium line-clamp-2" style={{ color: 'var(--text-primary)' }}>
+              {pageInfo.title}
+            </span>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">{t('popup.platform')}:</span>
-            <span className="font-medium">{pageInfo.domain}</span>
+            <span style={{ color: 'var(--text-muted)' }}>{t('popup.platform')}:</span>
+            <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+              {pageInfo.domain}
+            </span>
           </div>
 
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">{t('popup.status')}:</span>
+            <span style={{ color: 'var(--text-muted)' }}>{t('popup.status')}:</span>
             <span
-              className={`px-2 py-1 rounded text-xs font-medium ${
-                pageStatus.analyzed
-                  ? 'bg-green-100 text-green-700'
+              className="px-2 py-1 rounded text-xs font-medium"
+              style={{
+                backgroundColor: pageStatus.analyzed
+                  ? 'rgba(16, 185, 129, 0.2)'
                   : pageStatus.extracted
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'bg-gray-100 text-gray-700'
-              }`}
+                    ? 'rgba(59, 130, 246, 0.2)'
+                    : 'var(--bg-tertiary)',
+                color: pageStatus.analyzed
+                  ? 'var(--accent-secondary)'
+                  : pageStatus.extracted
+                    ? 'var(--accent-primary)'
+                    : 'var(--text-muted)',
+              }}
             >
               {pageStatus.analyzed
                 ? t('popup.analyzed')
@@ -60,24 +78,32 @@ export const PageStatus: React.FC<PageStatusProps> = ({ pageInfo, pageStatus }) 
           {pageStatus.extracted && (
             <>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">{t('popup.commentsCount')}:</span>
-                <span className="font-medium">{pageStatus.commentsCount}</span>
+                <span style={{ color: 'var(--text-muted)' }}>{t('popup.commentsCount')}:</span>
+                <span className="font-medium" style={{ color: 'var(--text-primary)' }}>
+                  {pageStatus.commentsCount}
+                </span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-600">{t('popup.extractedAt')}:</span>
-                <span className="text-gray-500 text-xs">{formatDate(pageStatus.extractedAt!)}</span>
+                <span style={{ color: 'var(--text-muted)' }}>{t('popup.extractedAt')}:</span>
+                <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  {formatDate(pageStatus.extractedAt!)}
+                </span>
               </div>
               {pageStatus.analyzed && pageStatus.analyzedAt && (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">{t('popup.analyzedAt')}:</span>
-                  <span className="text-gray-500 text-xs">{formatDate(pageStatus.analyzedAt)}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{t('popup.analyzedAt')}:</span>
+                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    {formatDate(pageStatus.analyzedAt)}
+                  </span>
                 </div>
               )}
             </>
           )}
         </div>
       ) : (
-        <div className="text-sm text-gray-500 text-center py-2">{t('popup.invalidPage')}</div>
+        <div className="text-sm text-center py-2" style={{ color: 'var(--text-muted)' }}>
+          {t('popup.invalidPage')}
+        </div>
       )}
     </div>
   );

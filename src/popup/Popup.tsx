@@ -5,6 +5,7 @@ import { PATHS, MESSAGES } from '@/config/constants';
 import { Logger } from '@/utils/logger';
 import { useTask } from './hooks/useTask';
 import { usePageInfo } from './hooks/usePageInfo';
+import { useTheme } from '@/hooks/useTheme';
 import { Header } from './components/Header';
 import { PageStatus } from './components/PageStatus';
 import { ActionButtons } from './components/ActionButtons';
@@ -17,6 +18,7 @@ const Popup: React.FC = () => {
   const [developerMode, setDeveloperMode] = useState(false);
 
   const { pageInfo, pageStatus, loading, loadPageInfo, refreshPageStatus } = usePageInfo();
+  useTheme();
 
   const {
     currentTask,
@@ -127,14 +129,14 @@ const Popup: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="w-96 p-6 bg-gradient-to-br from-blue-50 to-purple-50">
-        <div className="text-center text-gray-600">{t('common.loading')}</div>
+      <div className="w-96 p-6" style={{ background: 'var(--gradient-primary)' }}>
+        <div className="text-center text-white">{t('common.loading')}</div>
       </div>
     );
   }
 
   return (
-    <div className="w-96 bg-gradient-to-br from-blue-50 to-purple-50">
+    <div className="w-96" style={{ backgroundColor: 'var(--bg-secondary)' }}>
       <Header
         version={version}
         aiModelName={aiModelName}

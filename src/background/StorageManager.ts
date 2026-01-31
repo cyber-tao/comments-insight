@@ -3,6 +3,7 @@ import {
   API,
   AI,
   LANGUAGES,
+  THEME,
   RETRY,
   STORAGE,
   SECURITY,
@@ -77,6 +78,7 @@ Generate a comprehensive analysis report in Markdown format.
 ## Post Content Summary
 [Summarize the original post content or video description to capture the author's intent]`,
   language: LANGUAGES.DEFAULT,
+  theme: THEME.DEFAULT,
   selectorRetryAttempts: RETRY.SELECTOR_ATTEMPTS,
   selectorCache: [],
   crawlingConfigs: DEFAULT_CRAWLING_RULES.map((config) => ({

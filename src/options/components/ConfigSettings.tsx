@@ -666,46 +666,75 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
   }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+    <div
+      className="p-6 rounded-lg shadow-sm"
+      style={{
+        backgroundColor: 'var(--bg-card)',
+        border: '1px solid var(--border-primary)',
+      }}
+    >
       <div className="flex justify-between items-center mb-2">
         <div>
-          <h2 className="text-xl font-semibold text-gray-800">
+          <h2 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
             {t('options.crawlingConfigs.title')}
           </h2>
-          <p className="text-sm text-gray-500 mt-1">{t('options.crawlingConfigs.subtitle')}</p>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+            {t('options.crawlingConfigs.subtitle')}
+          </p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={handleSyncDialogOpen}
             disabled={syncing}
-            className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 text-sm font-medium disabled:opacity-50"
+            className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 text-white"
+            style={{ backgroundColor: '#8b5cf6' }}
           >
             {syncing
               ? t('options.crawlingConfigs.syncing')
               : t('options.crawlingConfigs.syncRemote')}
           </button>
-          <label className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium cursor-pointer">
+          <label
+            className="px-4 py-2 rounded-md text-sm font-medium cursor-pointer text-white"
+            style={{ backgroundColor: 'var(--accent-secondary)' }}
+          >
             {t('options.crawlingConfigs.importConfig')}
             <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
           </label>
           <button
             onClick={handleExportSelected}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+            className="px-4 py-2 rounded-md text-sm font-medium text-white"
+            style={{ backgroundColor: 'var(--accent-primary)' }}
           >
             {t('options.crawlingConfigs.exportConfig')}
           </button>
           <button
             onClick={handleAdd}
-            className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 text-sm font-medium"
+            className="px-4 py-2 border rounded-md text-sm font-medium"
+            style={{
+              backgroundColor: 'var(--bg-primary)',
+              color: 'var(--text-primary)',
+              borderColor: 'var(--border-primary)',
+            }}
           >
             {t('options.crawlingConfigs.newConfig')}
           </button>
         </div>
       </div>
-      {exportError && <div className="mb-4 text-sm text-red-600">{exportError}</div>}
+      {exportError && (
+        <div className="mb-4 text-sm" style={{ color: 'var(--accent-danger)' }}>
+          {exportError}
+        </div>
+      )}
 
       {configs.length === 0 ? (
-        <div className="text-center py-10 bg-gray-50 rounded border border-dashed text-gray-500">
+        <div
+          className="text-center py-10 rounded border border-dashed"
+          style={{
+            backgroundColor: 'var(--bg-tertiary)',
+            color: 'var(--text-muted)',
+            borderColor: 'var(--border-secondary)',
+          }}
+        >
           {t('options.crawlingConfigs.noConfigs')}
         </div>
       ) : (
@@ -713,7 +742,11 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
           {configs.map((config) => (
             <div
               key={config.id}
-              className="flex items-center justify-between p-4 border rounded hover:border-blue-300 transition-colors bg-gray-50"
+              className="flex items-center justify-between p-4 border rounded transition-colors"
+              style={{
+                backgroundColor: 'var(--bg-tertiary)',
+                borderColor: 'var(--border-primary)',
+              }}
             >
               <div className="flex items-start gap-3">
                 <input
@@ -725,8 +758,10 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
                   }
                 />
                 <div>
-                  <h3 className="font-semibold text-gray-900">{config.domain}</h3>
-                  <div className="text-xs text-gray-500 mt-1">
+                  <h3 className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    {config.domain}
+                  </h3>
+                  <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                     {t('options.crawlingConfigs.updated')}:{' '}
                     {new Date(config.lastUpdated).toLocaleDateString()}
                   </div>
@@ -735,13 +770,15 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
               <div className="flex gap-2">
                 <button
                   onClick={() => handleEdit(config)}
-                  className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                  className="p-2 rounded theme-button-secondary"
+                  style={{ color: 'var(--accent-primary)' }}
                 >
                   {t('options.crawlingConfigs.edit')}
                 </button>
                 <button
                   onClick={() => handleDelete(config.id)}
-                  className="p-2 text-red-600 hover:bg-red-50 rounded"
+                  className="p-2 rounded theme-button-secondary"
+                  style={{ color: 'var(--accent-danger)' }}
                 >
                   {t('options.crawlingConfigs.delete')}
                 </button>
@@ -753,42 +790,62 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
 
       {importOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-5xl p-6">
+          <div
+            className="rounded-lg shadow-lg w-full max-w-5xl p-6"
+            style={{ backgroundColor: 'var(--bg-card)' }}
+          >
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold">
+                <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
                   {isRemoteSync
                     ? t('options.crawlingConfigs.syncPreviewTitle')
                     : t('options.crawlingConfigs.importTitle')}
                 </h3>
                 {!isRemoteSync && importFileName && (
-                  <div className="text-xs text-gray-500 mt-1">{importFileName}</div>
+                  <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                    {importFileName}
+                  </div>
                 )}
               </div>
               <button
                 onClick={closeImport}
-                className="text-gray-400 hover:text-gray-600"
+                className="hover:opacity-80 transition-opacity"
+                style={{ color: 'var(--text-muted)' }}
                 aria-label={t('common.cancel')}
               >
                 ×
               </button>
             </div>
-            {importError && <div className="text-sm text-red-600 mb-3">{importError}</div>}
+            {importError && (
+              <div className="text-sm mb-3" style={{ color: 'var(--accent-danger)' }}>
+                {importError}
+              </div>
+            )}
             {!importError && importConflicts.length === 0 && importAdditions.length === 0 && (
-              <div className="text-sm text-gray-500 mb-4">
+              <div className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
                 {t('options.crawlingConfigs.importEmpty')}
               </div>
             )}
             {!importError && (importConflicts.length > 0 || importAdditions.length > 0) && (
               <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
                 {importAdditions.length > 0 && (
-                  <div className="border rounded p-4">
-                    <div className="text-sm font-semibold text-gray-700 mb-2">
+                  <div
+                    className="border rounded p-4"
+                    style={{ borderColor: 'var(--border-primary)' }}
+                  >
+                    <div
+                      className="text-sm font-semibold mb-2"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
                       {t('options.crawlingConfigs.importNewConfigs')}
                     </div>
                     <div className="grid gap-2">
                       {importAdditions.map((config) => (
-                        <div key={config.id} className="text-sm text-gray-800">
+                        <div
+                          key={config.id}
+                          className="text-sm"
+                          style={{ color: 'var(--text-primary)' }}
+                        >
                           {config.domain}
                         </div>
                       ))}
@@ -797,13 +854,34 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
                 )}
 
                 {importConflicts.length > 0 && (
-                  <div className="border border-orange-200 rounded-lg bg-orange-50/50">
-                    <div className="flex items-center justify-between p-4 border-b border-orange-200 bg-orange-100/50 rounded-t-lg">
+                  <div
+                    className="border rounded-lg"
+                    style={{
+                      borderColor: 'var(--accent-warning)',
+                      backgroundColor: 'var(--bg-tertiary)',
+                    }}
+                  >
+                    <div
+                      className="flex items-center justify-between p-4 border-b rounded-t-lg"
+                      style={{
+                        borderColor: 'var(--accent-warning)',
+                        backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                      }}
+                    >
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-orange-800">
+                        <span
+                          className="text-sm font-semibold"
+                          style={{ color: 'var(--accent-warning)' }}
+                        >
                           {t('options.crawlingConfigs.importConflicts')}
                         </span>
-                        <span className="px-2 py-0.5 text-xs font-medium bg-orange-200 text-orange-800 rounded-full">
+                        <span
+                          className="px-2 py-0.5 text-xs font-medium rounded-full"
+                          style={{
+                            backgroundColor: 'rgba(251, 191, 36, 0.2)',
+                            color: 'var(--accent-warning)',
+                          }}
+                        >
                           {importConflicts.length}
                         </span>
                       </div>
@@ -811,14 +889,24 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
                         <button
                           type="button"
                           onClick={() => setAllChoices('current')}
-                          className="px-3 py-1.5 text-xs font-medium rounded border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                          className="px-3 py-1.5 text-xs font-medium rounded border transition-colors"
+                          style={{
+                            borderColor: 'var(--border-primary)',
+                            backgroundColor: 'var(--bg-card)',
+                            color: 'var(--text-secondary)',
+                          }}
                         >
                           {t('options.crawlingConfigs.mergeKeepAllCurrent')}
                         </button>
                         <button
                           type="button"
                           onClick={() => setAllChoices('incoming')}
-                          className="px-3 py-1.5 text-xs font-medium rounded border border-green-300 bg-green-50 text-green-700 hover:bg-green-100"
+                          className="px-3 py-1.5 text-xs font-medium rounded border transition-colors"
+                          style={{
+                            borderColor: 'var(--accent-secondary)',
+                            backgroundColor: 'rgba(52, 211, 153, 0.1)',
+                            color: 'var(--accent-secondary)',
+                          }}
                         >
                           {t('options.crawlingConfigs.mergeUseAllIncoming')}
                         </button>
@@ -828,36 +916,65 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
                       {importConflicts.map((conflict, conflictIndex) => (
                         <div
                           key={conflict.existing.domain}
-                          className="border border-gray-200 rounded-lg bg-white shadow-sm"
+                          className="border rounded-lg shadow-sm"
+                          style={{
+                            borderColor: 'var(--border-primary)',
+                            backgroundColor: 'var(--bg-card)',
+                          }}
                         >
-                          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 rounded-t-lg">
-                            <span className="text-sm font-semibold text-gray-800">
+                          <div
+                            className="px-4 py-3 border-b rounded-t-lg"
+                            style={{
+                              backgroundColor: 'var(--bg-tertiary)',
+                              borderColor: 'var(--border-primary)',
+                            }}
+                          >
+                            <span
+                              className="text-sm font-semibold"
+                              style={{ color: 'var(--text-primary)' }}
+                            >
                               {conflict.existing.domain}
                             </span>
-                            <span className="ml-2 text-xs text-gray-500">
+                            <span className="ml-2 text-xs" style={{ color: 'var(--text-muted)' }}>
                               ({conflict.diffFields.length}{' '}
                               {conflict.diffFields.length === 1 ? 'field' : 'fields'})
                             </span>
                           </div>
                           {conflict.diffFields.length === 0 && (
-                            <div className="p-4 text-xs text-gray-500">
+                            <div className="p-4 text-xs" style={{ color: 'var(--text-muted)' }}>
                               {t('options.crawlingConfigs.importNoDifferences')}
                             </div>
                           )}
                           {conflict.diffFields.length > 0 && (
-                            <div className="divide-y divide-gray-100">
+                            <div
+                              className="divide-y"
+                              style={{ borderColor: 'var(--border-secondary)' }}
+                            >
                               {conflict.diffFields.map((field) => (
-                                <div key={field} className="p-3">
-                                  <div className="text-xs font-medium text-gray-500 mb-2">
+                                <div
+                                  key={field}
+                                  className="p-3"
+                                  style={{ borderBottom: '1px solid var(--border-secondary)' }}
+                                >
+                                  <div
+                                    className="text-xs font-medium mb-2"
+                                    style={{ color: 'var(--text-muted)' }}
+                                  >
                                     {getFieldLabel(field)}
                                   </div>
                                   <div className="grid grid-cols-2 gap-3">
                                     <label
-                                      className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${
-                                        conflict.choices[field] === 'current'
-                                          ? 'border-blue-400 bg-blue-50'
-                                          : 'border-gray-200 hover:bg-gray-50'
-                                      }`}
+                                      className="flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors"
+                                      style={{
+                                        borderColor:
+                                          conflict.choices[field] === 'current'
+                                            ? 'var(--accent-primary)'
+                                            : 'var(--border-primary)',
+                                        backgroundColor:
+                                          conflict.choices[field] === 'current'
+                                            ? 'rgba(59, 130, 246, 0.1)'
+                                            : 'transparent',
+                                      }}
                                     >
                                       <input
                                         type="radio"
@@ -867,21 +984,36 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
                                         className="mt-0.5"
                                       />
                                       <div className="flex-1 min-w-0">
-                                        <div className="text-xs font-medium text-gray-600 mb-1">
+                                        <div
+                                          className="text-xs font-medium mb-1"
+                                          style={{ color: 'var(--text-secondary)' }}
+                                        >
                                           {t('options.crawlingConfigs.mergeKeepCurrent')}
                                         </div>
-                                        <div className="text-xs text-gray-700 break-all font-mono bg-gray-100 px-1.5 py-0.5 rounded">
+                                        <div
+                                          className="text-xs break-all font-mono px-1.5 py-0.5 rounded"
+                                          style={{
+                                            backgroundColor: 'var(--bg-tertiary)',
+                                            color: 'var(--text-primary)',
+                                          }}
+                                        >
                                           {formatFieldValue(conflict.existing, field) ||
                                             t('options.crawlingConfigs.valueEmpty')}
                                         </div>
                                       </div>
                                     </label>
                                     <label
-                                      className={`flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors ${
-                                        conflict.choices[field] === 'incoming'
-                                          ? 'border-green-400 bg-green-50'
-                                          : 'border-gray-200 hover:bg-gray-50'
-                                      }`}
+                                      className="flex items-start gap-2 p-2 rounded border cursor-pointer transition-colors"
+                                      style={{
+                                        borderColor:
+                                          conflict.choices[field] === 'incoming'
+                                            ? 'var(--accent-secondary)'
+                                            : 'var(--border-primary)',
+                                        backgroundColor:
+                                          conflict.choices[field] === 'incoming'
+                                            ? 'rgba(16, 185, 129, 0.1)'
+                                            : 'transparent',
+                                      }}
                                     >
                                       <input
                                         type="radio"
@@ -891,10 +1023,19 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
                                         className="mt-0.5"
                                       />
                                       <div className="flex-1 min-w-0">
-                                        <div className="text-xs font-medium text-green-700 mb-1">
+                                        <div
+                                          className="text-xs font-medium mb-1"
+                                          style={{ color: 'var(--accent-secondary)' }}
+                                        >
                                           {t('options.crawlingConfigs.mergeUseIncoming')}
                                         </div>
-                                        <div className="text-xs text-gray-700 break-all font-mono bg-green-100 px-1.5 py-0.5 rounded">
+                                        <div
+                                          className="text-xs break-all font-mono px-1.5 py-0.5 rounded"
+                                          style={{
+                                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                            color: 'var(--text-primary)',
+                                          }}
+                                        >
                                           {formatFieldValue(conflict.incoming, field) ||
                                             t('options.crawlingConfigs.valueEmpty')}
                                         </div>
@@ -933,19 +1074,33 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
 
       {syncDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold mb-4">
+          <div
+            className="rounded-lg shadow-lg w-full max-w-md p-6"
+            style={{ backgroundColor: 'var(--bg-card)' }}
+          >
+            <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
               {t('options.crawlingConfigs.syncDialogTitle')}
             </h3>
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm mb-4" style={{ color: 'var(--text-secondary)' }}>
               {t('options.crawlingConfigs.syncDialogDescription')}
             </p>
             <div className="mb-4">
-              <div className="text-xs font-medium text-gray-500 mb-1">
+              <div className="text-xs font-medium mb-1" style={{ color: 'var(--text-muted)' }}>
                 {t('options.crawlingConfigs.syncDialogSourceUrl')}
               </div>
-              <div className="text-xs text-blue-600 break-all bg-gray-50 p-2 rounded border">
-                <a href={API.CRAWLING_CONFIGS_URL} target="_blank" rel="noopener noreferrer">
+              <div
+                className="text-xs break-all p-2 rounded border"
+                style={{
+                  backgroundColor: 'var(--bg-tertiary)',
+                  borderColor: 'var(--border-primary)',
+                }}
+              >
+                <a
+                  href={API.CRAWLING_CONFIGS_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="theme-link"
+                >
                   {API.CRAWLING_CONFIGS_URL}
                 </a>
               </div>
@@ -953,13 +1108,14 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
             <div className="flex justify-end gap-2">
               <button
                 onClick={handleSyncDialogClose}
-                className="px-4 py-2 text-sm rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
+                className="px-4 py-2 text-sm rounded theme-button-secondary"
               >
                 {t('common.cancel')}
               </button>
               <button
                 onClick={handleSyncRemoteConfirm}
-                className="px-4 py-2 text-sm rounded bg-purple-600 text-white hover:bg-purple-700"
+                className="px-4 py-2 text-sm rounded text-white"
+                style={{ backgroundColor: '#8b5cf6' }}
               >
                 {t('options.crawlingConfigs.syncDialogConfirm')}
               </button>

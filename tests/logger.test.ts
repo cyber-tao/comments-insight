@@ -92,12 +92,10 @@ describe('Logger', () => {
 
   describe('logging', () => {
     beforeEach(async () => {
-      // Initialize as dev to enable all logs and storage
       mockChrome.runtime.getManifest.mockReturnValue({ version: '0.0.0' });
-      mockStorageGet.mockResolvedValue({});
+      mockStorageGet.mockResolvedValue({ settings: { developerMode: true } });
       await Logger.initialize();
 
-      // Clear mocks to remove initialization logs
       vi.clearAllMocks();
     });
 

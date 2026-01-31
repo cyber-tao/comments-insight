@@ -36,19 +36,21 @@ const SelectorInput: React.FC<{
   className?: string;
 }> = ({ label, rule, onChange, className }) => (
   <div className={`flex flex-col gap-1 ${className}`}>
-    <label className="text-sm font-medium text-gray-700">{label}</label>
+    <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+      {label}
+    </label>
     <div className="flex gap-2">
       <input
         type="text"
         value={rule.selector}
         onChange={(e) => onChange({ ...rule, selector: e.target.value })}
-        className="flex-1 p-2 border rounded text-sm font-mono bg-slate-50"
+        className="flex-1 p-2 border rounded text-sm font-mono theme-input"
         placeholder=".class or #id"
       />
       <select
         value={rule.type}
         onChange={(e) => onChange({ ...rule, type: e.target.value as 'css' | 'xpath' })}
-        className="p-2 border rounded text-sm"
+        className="p-2 border rounded text-sm theme-input"
       >
         <option value="css">CSS</option>
         <option value="xpath">XPath</option>
@@ -72,11 +74,16 @@ const FieldEditor: React.FC<{
   };
 
   return (
-    <div className="space-y-3 pl-4 border-l-2 border-gray-100">
+    <div className="space-y-3 pl-4 border-l-2" style={{ borderColor: 'var(--border-secondary)' }}>
       {fields.map((field, idx) => (
         <div key={field.name} className="grid grid-cols-12 gap-2 items-start">
           <div className="col-span-2 pt-2">
-            <span className="text-xs font-semibold uppercase text-gray-500">{field.name}</span>
+            <span
+              className="text-xs font-semibold uppercase"
+              style={{ color: 'var(--text-muted)' }}
+            >
+              {field.name}
+            </span>
           </div>
           <div className="col-span-7">
             <SelectorInput label="" rule={field.rule} onChange={(r) => updateRule(idx, r)} />
@@ -86,7 +93,7 @@ const FieldEditor: React.FC<{
               type="text"
               value={field.attribute || ''}
               onChange={(e) => updateField(idx, { attribute: e.target.value })}
-              className="w-full p-2 border rounded text-sm font-mono mt-0.5"
+              className="w-full p-2 border rounded text-sm font-mono mt-0.5 theme-input"
               placeholder="Attribute (opt)"
             />
           </div>
@@ -107,18 +114,32 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
     onChange({ ...config, replies });
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm border space-y-6">
-      <div className="flex justify-between items-center border-b pb-4">
-        <h3 className="text-lg font-semibold">
+    <div
+      className="p-6 rounded-lg shadow-sm border space-y-6"
+      style={{
+        backgroundColor: 'var(--bg-card)',
+        borderColor: 'var(--border-primary)',
+      }}
+    >
+      <div
+        className="flex justify-between items-center border-b pb-4"
+        style={{ borderColor: 'var(--border-primary)' }}
+      >
+        <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
           {t('options.crawlingConfigs.editing', { domain: config.domain })}
         </h3>
         <div className="space-x-2">
-          <button onClick={onCancel} className="px-3 py-1 text-gray-600 hover:bg-gray-100 rounded">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1 rounded theme-button-secondary"
+            style={{ color: 'var(--text-secondary)' }}
+          >
             {t('options.crawlingConfigs.cancel')}
           </button>
           <button
             onClick={onSave}
-            className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+            className="px-3 py-1 rounded text-white"
+            style={{ backgroundColor: 'var(--accent-primary)' }}
           >
             {t('options.crawlingConfigs.saveChanges')}
           </button>
@@ -128,23 +149,34 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
       {/* Main List Config */}
       <section className="space-y-4">
         <div>
-          <label className="text-sm font-medium text-gray-700 block mb-1">
+          <label
+            className="text-sm font-medium block mb-1"
+            style={{ color: 'var(--text-secondary)' }}
+          >
             {t('options.crawlingConfigs.domain')}
           </label>
           <input
             type="text"
             value={config.domain}
             onChange={(e) => onChange({ ...config, domain: e.target.value })}
-            className="w-full p-2 border rounded text-sm font-mono bg-slate-50"
+            className="w-full p-2 border rounded text-sm font-mono theme-input"
             placeholder={t('options.crawlingConfigs.domainHint')}
           />
         </div>
 
-        <h4 className="font-medium text-gray-900 flex items-center gap-2 mt-4">
-          <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs">
+        <h4 className="font-medium flex items-center gap-2 mt-4">
+          <span
+            className="w-6 h-6 rounded-full flex items-center justify-center text-xs"
+            style={{
+              backgroundColor: 'rgba(59, 130, 246, 0.2)',
+              color: 'var(--accent-primary)',
+            }}
+          >
             1
           </span>
-          {t('options.crawlingConfigs.commentSection')}
+          <span style={{ color: 'var(--text-primary)' }}>
+            {t('options.crawlingConfigs.commentSection')}
+          </span>
         </h4>
         <div className="pl-8 space-y-4">
           <SelectorInput
@@ -159,7 +191,10 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
           />
 
           <div className="mt-4">
-            <label className="text-sm font-medium text-gray-700 block mb-2">
+            <label
+              className="text-sm font-medium block mb-2"
+              style={{ color: 'var(--text-secondary)' }}
+            >
               {t('options.crawlingConfigs.fieldsExtraction')}
             </label>
             <FieldEditor fields={normalizeFields(config.fields)} onChange={handleFieldsChange} />
@@ -168,15 +203,29 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
       </section>
 
       {/* Replies Config */}
-      <section className="space-y-4 pt-4 border-t">
+      <section
+        className="space-y-4 pt-4 border-t"
+        style={{ borderColor: 'var(--border-secondary)' }}
+      >
         <div className="flex items-center justify-between">
-          <h4 className="font-medium text-gray-900 flex items-center gap-2">
-            <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs">
+          <h4 className="font-medium flex items-center gap-2">
+            <span
+              className="w-6 h-6 rounded-full flex items-center justify-center text-xs"
+              style={{
+                backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                color: 'var(--accent-secondary)', // Using secondary or indigo-like color
+              }}
+            >
               2
             </span>
-            {t('options.crawlingConfigs.repliesSection')}
+            <span style={{ color: 'var(--text-primary)' }}>
+              {t('options.crawlingConfigs.repliesSection')}
+            </span>
           </h4>
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <label
+            className="flex items-center gap-2 text-sm cursor-pointer theme-checkbox-label"
+            style={{ color: 'var(--text-secondary)' }}
+          >
             <input
               type="checkbox"
               checked={!!config.replies}
@@ -202,7 +251,10 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
         </div>
 
         {config.replies && (
-          <div className="pl-8 space-y-4 border-l-2 border-indigo-50 ml-3">
+          <div
+            className="pl-8 space-y-4 border-l-2 ml-3"
+            style={{ borderColor: 'var(--border-secondary)' }}
+          >
             <SelectorInput
               label={t('options.crawlingConfigs.replyToggle')}
               rule={config.replies.expandBtn || { selector: '', type: 'css' }}
@@ -222,7 +274,10 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
             />
 
             <div className="mt-4">
-              <label className="text-sm font-medium text-gray-700 block mb-2">
+              <label
+                className="text-sm font-medium block mb-2"
+                style={{ color: 'var(--text-secondary)' }}
+              >
                 {t('options.crawlingConfigs.replyFields')}
               </label>
               <FieldEditor
@@ -235,15 +290,28 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
       </section>
 
       {/* Video/Post Time Config */}
-      <section className="space-y-4 pt-4 border-t">
-        <h4 className="font-medium text-gray-900 flex items-center gap-2">
-          <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs">
+      <section
+        className="space-y-4 pt-4 border-t"
+        style={{ borderColor: 'var(--border-secondary)' }}
+      >
+        <h4 className="font-medium flex items-center gap-2">
+          <span
+            className="w-6 h-6 rounded-full flex items-center justify-center text-xs"
+            style={{
+              backgroundColor: 'rgba(16, 185, 129, 0.2)',
+              color: 'var(--accent-secondary)',
+            }}
+          >
             3
           </span>
-          {t('options.crawlingConfigs.videoTimeSection')}
+          <span style={{ color: 'var(--text-primary)' }}>
+            {t('options.crawlingConfigs.videoTimeSection')}
+          </span>
         </h4>
         <div className="pl-8 space-y-2">
-          <p className="text-xs text-gray-500">{t('options.crawlingConfigs.videoTimeHint')}</p>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            {t('options.crawlingConfigs.videoTimeHint')}
+          </p>
           <SelectorInput
             label={t('options.crawlingConfigs.videoTimeSelector')}
             rule={config.videoTime || { selector: '', type: 'css' }}
@@ -253,15 +321,28 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
       </section>
 
       {/* Post Content Config */}
-      <section className="space-y-4 pt-4 border-t">
-        <h4 className="font-medium text-gray-900 flex items-center gap-2">
-          <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs">
+      <section
+        className="space-y-4 pt-4 border-t"
+        style={{ borderColor: 'var(--border-secondary)' }}
+      >
+        <h4 className="font-medium flex items-center gap-2">
+          <span
+            className="w-6 h-6 rounded-full flex items-center justify-center text-xs"
+            style={{
+              backgroundColor: 'rgba(16, 185, 129, 0.2)',
+              color: 'var(--accent-secondary)',
+            }}
+          >
             4
           </span>
-          {t('options.crawlingConfigs.postContentSection')}
+          <span style={{ color: 'var(--text-primary)' }}>
+            {t('options.crawlingConfigs.postContentSection')}
+          </span>
         </h4>
         <div className="pl-8 space-y-2">
-          <p className="text-xs text-gray-500">{t('options.crawlingConfigs.postContentHint')}</p>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            {t('options.crawlingConfigs.postContentHint')}
+          </p>
           <SelectorInput
             label={t('options.crawlingConfigs.postContentSelector')}
             rule={config.postContent || { selector: '', type: 'css' }}
