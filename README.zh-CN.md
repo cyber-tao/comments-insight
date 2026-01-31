@@ -10,7 +10,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.2-000000)](https://crxjs.dev/vite-plugin/)
+[![Version](https://img.shields.io/badge/Version-0.3.1-green.svg)](https://github.com/yourusername/comments-insight) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.2-000000)](https://crxjs.dev/vite-plugin/)
 
 </div>
 
@@ -69,6 +69,7 @@
   - 使用 `lz-string` 进行高效本地压缩存储。
   - 支持搜索、过滤和排序（时间、点赞数、回复数）。
 - 🌐 **多语言支持**: 现已支持 English, 中文 (简体), 日本語, Français (法语), 及 Español (西班牙语)。
+- 🎨 **主题支持**: 支持亮色、暗色和跟随系统三种主题模式，自动切换。
 - 🛠️ **开发者模式**: 可开启 AI 日志详细视图和选择器测试工具。
 
 ## 🔑 API 密钥安全说明
@@ -93,11 +94,15 @@ src/
   options/               # 选项页: 设置与配置管理
   history/               # 历史记录页: 数据可视化
   logs/                  # 调试日志查看器
-  config/                # 常量定义、默认爬虫规则、分析参数
-  components/            # 共用 UI 组件
+  config/                # 常量定义、默认爬虫规则（5个平台）、分析参数
+  components/            # 共用 UI 组件（Toast 等）
+  hooks/                 # 共享 React Hooks（useTheme、useToast）
   utils/                 # 工具类: 提示词、日志、导出、错误处理等
   types/                 # TypeScript 类型定义
+  locales/               # i18n 翻译文件（5种语言）
+  styles/                # 全局 CSS（含 Tailwind）
 vite.config.ts          # 构建配置
+vitest.config.ts        # 测试配置
 ```
 
 ## 🚀 快速开始
@@ -138,22 +143,30 @@ vite.config.ts          # 构建配置
 
 ## 🧰 技术栈
 
-- **框架**: React 19, Vite 6
-- **语言**: TypeScript 5.9
-- **样式**: TailwindCSS
-- **扩展协议**: Manifest V3, CRXJS
-- **核心库**: `i18next`, `react-markdown`, `lz-string`
-- **测试**: Vitest 及其 [E2E 测试](docs/e2e-testing.md)
+- **框架**: React 19.2, Vite 6.4
+- **语言**: TypeScript 5.9（严格模式）
+- **样式**: TailwindCSS 3.4（支持暗色模式）
+- **扩展协议**: Manifest V3, CRXJS 2.2
+- **国际化**: i18next 25.6 + react-i18next 16.5
+- **Markdown**: react-markdown 10.1 + remark-gfm 4.0
+- **存储**: lz-string 1.5 压缩存储
+- **测试**: Vitest 4.0 单元测试 + [E2E 测试](docs/e2e-testing.md)（Puppeteer 24.34）
+- **代码质量**: ESLint 9.39 + Prettier 3.6
 
 ## 🛠️ 开发命令
 
-- `npm run dev`: 启动开发服务器
-- `npm run build`: 正式打包构建
+- `npm run dev`: 启动开发服务器（支持 HMR）
+- `npm run build`: 正式打包构建（TypeScript 检查 + Vite 构建）
+- `npm run preview`: 预览生产构建
+- `npm run package`: 构建并打包发布（生成 .zip）
 - `npm run typecheck`: 执行 TypeScript 类型检查
 - `npm run lint`: 执行代码检查
+- `npm run lint:fix`: 执行代码检查并自动修复
 - `npm run format`: 使用 Prettier 格式化代码
 - `npm run test`: 运行单元测试
 - `npm run test:coverage`: 运行测试并生成覆盖率报告
+- `npm run audit`: 检查依赖安全性和过期包
+- `npm run audit:fix`: 自动修复依赖安全问题
 
 ## 🤝 贡献指南
 

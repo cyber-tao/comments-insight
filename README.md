@@ -10,7 +10,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.2-000000)](https://crxjs.dev/vite-plugin/)
+[![Version](https://img.shields.io/badge/Version-0.3.1-green.svg)](https://github.com/yourusername/comments-insight) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.2-000000)](https://crxjs.dev/vite-plugin/)
 
 </div>
 
@@ -69,6 +69,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
   - Compressed storage (`lz-string`) for efficient local saving.
   - Searchable history with filtering and sorting (by Time, Likes, Replies).
 - 🌐 **i18n**: Multi-language support: English, Chinese (简体中文), Japanese (日本語), French (Français), and Spanish (Español).
+- 🎨 **Theme Support**: Light, Dark, and System modes with automatic theme switching.
 - 🛠️ **Developer Mode**: Toggle advanced features like AI Logs and Selector Testing tools.
 
 ## 🔑 API Key Security Note
@@ -93,11 +94,15 @@ src/
   options/               # Options Page: Settings & Config Management
   history/               # History Page: Data visualization
   logs/                  # Debug Logs Viewer
-  config/                # Constants, default scrapers, analysis parameters
-  components/            # Shared UI components
+  config/                # Constants, default scrapers (5 platforms), analysis parameters
+  components/            # Shared UI components (Toast, etc.)
+  hooks/                 # Shared React Hooks (useTheme, useToast)
   utils/                 # Helpers: Prompts, Logger, Export, ErrorHandler, etc.
   types/                 # TypeScript definitions
+  locales/               # i18n translation files (5 languages)
+  styles/                # Global CSS with Tailwind
 vite.config.ts          # Build config
+vitest.config.ts        # Test config
 ```
 
 ## 🚀 Quick Start
@@ -138,22 +143,30 @@ vite.config.ts          # Build config
 
 ## 🧰 Tech Stack
 
-- **Framework**: React 19, Vite 6
-- **Language**: TypeScript 5.9
-- **Styling**: TailwindCSS
-- **Extension**: Manifest V3, CRXJS
-- **Utils**: `i18next`, `react-markdown`, `lz-string`
-- **Testing**: Vitest with unit and [E2E tests](docs/e2e-testing.md)
+- **Framework**: React 19.2, Vite 6.4
+- **Language**: TypeScript 5.9 (strict mode)
+- **Styling**: TailwindCSS 3.4 with dark mode support
+- **Extension**: Manifest V3, CRXJS 2.2
+- **i18n**: i18next 25.6 + react-i18next 16.5
+- **Markdown**: react-markdown 10.1 + remark-gfm 4.0
+- **Storage**: lz-string 1.5 for compression
+- **Testing**: Vitest 4.0 with unit and [E2E tests](docs/e2e-testing.md) (Puppeteer 24.34)
+- **Code Quality**: ESLint 9.39 + Prettier 3.6
 
 ## 🛠️ Commands
 
-- `npm run dev`: Start dev server
-- `npm run build`: Production build
+- `npm run dev`: Start dev server with HMR
+- `npm run build`: Production build (TypeScript check + Vite build)
+- `npm run preview`: Preview production build
+- `npm run package`: Build and package for distribution (.zip)
 - `npm run typecheck`: Run TypeScript checks
 - `npm run lint`: Run ESLint
+- `npm run lint:fix`: Run ESLint with auto-fix
 - `npm run format`: Format code with Prettier
 - `npm run test`: Run unit tests
 - `npm run test:coverage`: Run tests with coverage report
+- `npm run audit`: Check dependency security and outdated packages
+- `npm run audit:fix`: Auto-fix dependency security issues
 
 ## 🤝 Contributing
 
