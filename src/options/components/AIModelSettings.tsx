@@ -61,6 +61,13 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
       if (response?.models && response.models.length > 0) {
         setAvailableModels(response.models);
         toast.success(t('options.modelsFound', { count: response.models.length }));
+
+        if (!response.models.includes(config.model) || response.models.length === 1) {
+          onSettingsChange({
+            ...settings,
+            aiModel: { ...settings.aiModel, model: response.models[0] },
+          });
+        }
       } else {
         toast.info(t('options.noModelsFound'));
       }
