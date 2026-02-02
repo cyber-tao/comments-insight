@@ -206,7 +206,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 })
               }
               className="w-full theme-input"
-              placeholder={t('options.defaultModelName')}
+              placeholder={t('options.modelPlaceholder')}
             />
           )}
         </div>

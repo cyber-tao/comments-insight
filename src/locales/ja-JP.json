@@ -165,7 +165,7 @@
     "placeholder_total_comments": "分析されるコメントの総数（すべてのネストされた返信を含む）。これによりAIはエンゲージメントの規模を理解し、分析を適切に調整できます。",
     "apiKeyPlaceholder": "sk-...",
     "apiKeySecurityNote": "APIキーはローカルに保存されます（可逆的な暗号化/難読化）。マルウェアや他の拡張機能に対して安全とはみなさないでください。",
-    "defaultModelName": "gpt-4",
+    "modelPlaceholder": "まずAPIを設定してモデルリストを取得してください",
     "loadSettingsError": "設定の読み込みに失敗しました: {{message}}",
     "loadSettingsInvalid": "設定の読み込みに失敗しました: 無効な応答",
     "exportError": "設定のエクスポートに失敗しました",

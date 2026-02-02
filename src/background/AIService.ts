@@ -394,20 +394,20 @@ export class AIService {
       });
 
       if (!response.ok) {
-        Logger.warn('[AIService] Failed to fetch models, using defaults', {
+        Logger.warn('[AIService] Failed to fetch models', {
           status: response.status,
         });
-        return this.getDefaultModels();
+        return [];
       }
 
       const data = (await response.json()) as { data?: Array<{ id: string }> };
       const models = data.data?.map((model) => model.id) || [];
 
       Logger.info('[AIService] Available models fetched', { count: models.length });
-      return models.length > 0 ? models : this.getDefaultModels();
+      return models;
     } catch (error) {
       Logger.error('[AIService] Failed to get models', { error });
-      return this.getDefaultModels();
+      return [];
     }
   }
 
@@ -1013,13 +1013,5 @@ export class AIService {
 
   private estimateTextTokens(text: string): number {
     return Tokenizer.estimateTokens(text);
-  }
-
-  /**
-   * Get default model list
-   * @returns Default model names
-   */
-  private getDefaultModels(): string[] {
-    return [...AI_CONST.DEFAULT_MODELS];
   }
 }

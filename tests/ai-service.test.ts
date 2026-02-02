@@ -302,7 +302,7 @@ describe('AIService', () => {
       expect(models).toContain('gpt-4o-mini');
     });
 
-    it('should return default models on API error', async () => {
+    it('should return empty array on API error', async () => {
       mockFetch.mockResolvedValue({
         ok: false,
         status: 500,
@@ -313,10 +313,10 @@ describe('AIService', () => {
         'test-api-key',
       );
 
-      expect(models.length).toBeGreaterThan(0);
+      expect(models.length).toBe(0);
     });
 
-    it('should return default models on network error', async () => {
+    it('should return empty array on network error', async () => {
       mockFetch.mockRejectedValue(new Error('Network error'));
 
       const models = await aiService.getAvailableModels(
@@ -324,7 +324,7 @@ describe('AIService', () => {
         'test-api-key',
       );
 
-      expect(models.length).toBeGreaterThan(0);
+      expect(models.length).toBe(0);
     });
 
     it('should strip trailing slash and /chat/completions from URL', async () => {

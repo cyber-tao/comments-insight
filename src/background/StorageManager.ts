@@ -41,9 +41,9 @@ interface HistorySortedIndex {
 const DEFAULT_SETTINGS: Settings = {
   maxComments: DEFAULTS.MAX_COMMENTS,
   aiModel: {
-    apiUrl: API.DEFAULT_URL,
+    apiUrl: '',
     apiKey: '',
-    model: AI.DEFAULT_MODELS[0],
+    model: '',
     contextWindowSize: AI.DEFAULT_CONTEXT_WINDOW,
     maxOutputTokens: AI.DEFAULT_MAX_OUTPUT_TOKENS,
     temperature: AI.DEFAULT_TEMPERATURE,

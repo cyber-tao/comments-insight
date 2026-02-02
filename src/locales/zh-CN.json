@@ -144,7 +144,7 @@
     "placeholder_total_comments": "被分析的评论总数（包括所有嵌套回复）。",
     "apiKeyPlaceholder": "sk-...",
     "apiKeySecurityNote": "API Key 仅存储在本地。请不要将其视为完全安全。",
-    "defaultModelName": "gpt-4",
+    "modelPlaceholder": "请先配置API并获取模型列表",
     "loadSettingsError": "加载设置失败：{{message}}",
     "loadSettingsInvalid": "加载设置失败：响应无效",
     "exportError": "导出设置失败",

@@ -165,7 +165,7 @@
     "placeholder_total_comments": "El conteo total de comentarios analizados (incluyendo todas las respuestas anidadas). Esto ayuda a la IA a entender la escala de engagement y ajustar su análisis en consecuencia.",
     "apiKeyPlaceholder": "sk-...",
     "apiKeySecurityNote": "La clave API se guarda localmente (cifrado/ofuscación reversible). No la consideres segura frente a malware u otras extensiones.",
-    "defaultModelName": "gpt-4",
+    "modelPlaceholder": "Por favor, configure la API y obtenga la lista de modelos primero",
     "loadSettingsError": "Error al cargar la configuración: {{message}}",
     "loadSettingsInvalid": "Error al cargar la configuración: Respuesta inválida",
     "exportError": "Error al exportar la configuración",

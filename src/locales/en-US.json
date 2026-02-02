@@ -145,7 +145,7 @@
     "placeholder_total_comments": "The total count of comments being analyzed (including all nested replies).",
     "apiKeyPlaceholder": "sk-...",
     "apiKeySecurityNote": "Stored locally with reversible encryption. Do not treat this as secure.",
-    "defaultModelName": "gpt-4",
+    "modelPlaceholder": "Please configure API and fetch models first",
     "loadSettingsError": "Failed to load settings: {{message}}",
     "loadSettingsInvalid": "Failed to load settings: Invalid response",
     "exportError": "Failed to export settings",
