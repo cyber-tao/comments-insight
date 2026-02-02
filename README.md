@@ -156,12 +156,38 @@ Visit the Chrome Web Store to install the extension with one click.
 
 ## 🧭 Usage
 
-1. **Configure AI**: Open Extension Options, enter your API Key/URL (supports standard OpenAI-compatible endpoints).
-2. **Navigate**: Go to a post or video page with comments (e.g., YouTube, Reddit, Bilibili).
-3. **Extract**: Click the extension icon. If a config exists, click "Extract Comments". If not, click "Generate Config" to let AI find selectors.
-4. **Monitor**: Watch the progress bar in the popup.
-5. **Analyze**: Once extracted, click "Analyze Comments" to generate a report.
-6. **View**: Click "View History" to see detailed comments and the analysis report.
+### Getting Started with OpenRouter (Free Option)
+
+OpenRouter provides access to various AI models, including free options. Here's how to set it up:
+
+1. **Get API Key**:
+   - Visit [OpenRouter](https://openrouter.ai/)
+   - Sign up or log in to your account
+   - Go to [Keys](https://openrouter.ai/keys) page
+   - Click "Create API Key" and copy your API key
+
+2. **Configure Extension**:
+   - Click the extension icon and select "Options" (or right-click the icon → Options)
+   - In the **AI Model Settings** section:
+     - **API URL**: Enter `https://openrouter.ai/api/v1`
+     - **API Key**: Paste your OpenRouter API key (settings are saved automatically)
+     - **Model**: Select a model from the dropdown list
+       - 💡 **Tip**: Models ending with `:free` are completely free to use (e.g., `z-ai/glm-4.5-air:free`, `stepfun/step-3.5-flash:free`)
+       - Browse all free models at [OpenRouter Free Models Collection](https://openrouter.ai/collections/free-models)
+
+3. **Verify Configuration**:
+   - Scroll down to the **Test AI Connection** section
+   - Click "Test Connection" button
+   - You should see a success message confirming the API is working
+   - If you see an error, double-check your API key and URL
+
+### Using the Extension
+
+1. **Navigate**: Go to a post or video page with comments (e.g., YouTube, Reddit, Bilibili).
+2. **Extract**: Click the extension icon. If a config exists, click "Extract Comments". If not, click "Generate Config" to let AI find selectors.
+3. **Monitor**: Watch the progress bar in the popup.
+4. **Analyze**: Once extracted, click "Analyze Comments" to generate a report.
+5. **View**: Click "View History" to see detailed comments and the analysis report.
 
 ## ⚙️ Configuration
 
