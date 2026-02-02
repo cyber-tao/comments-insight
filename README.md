@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/banners/banner-1400x560.jpg" alt="Comments Insight Banner" width="100%" />
+  <img src="images/banners/banner-1400x560.jpg" alt="Comments Insight Banner" width="100%" />
 </div>
 
 <div align="center">
@@ -41,13 +41,14 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 ## 📸 Screenshots
 
 <div align="center">
-  <img src="public/screenshots/popup.jpg" alt="Extension Popup" width="200" />
-  <img src="public/screenshots/analysis.jpg" alt="AI Analysis Report" width="600" />
+  <img src="images/screenshots/popup.jpg" alt="Extension Popup" width="200" />
+  <img src="images/screenshots/analysis.jpg" alt="AI Analysis Report" width="600" />
 </div>
 
 <div align="center">
-  <img src="public/screenshots/options-1.jpg" alt="Options Settings" width="400" />
-  <img src="public/screenshots/options-2.jpg" alt="Scraper Configuration" width="400" />
+  <img src="images/screenshots/options-1.jpg" alt="Options Settings" width="400" />
+  <img src="images/screenshots/options-2.jpg" alt="Scraper Configuration" width="400" />
+  <img src="images/screenshots/options-3.jpg" alt="AI Configuration" width="400" />
 </div>
 
 ## ✨ Features
