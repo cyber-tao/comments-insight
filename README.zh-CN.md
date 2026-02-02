@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/banners/banner-1400x560.jpg" alt="Comments Insight Banner" width="100%" />
+  <img src="images/banners/banner-1400x560.jpg" alt="Comments Insight Banner" width="100%" />
 </div>
 
 <div align="center">
@@ -10,6 +10,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
+[![Chrome 网上应用店](https://img.shields.io/badge/Chrome%20网上应用店-安装-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap)
 [![Version](https://img.shields.io/badge/Version-0.3.2-green.svg)](https://github.com/yourusername/comments-insight) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.2-000000)](https://crxjs.dev/vite-plugin/)
 
 </div>
@@ -40,15 +41,35 @@
 
 ## 📸 演示截图
 
-<div align="center">
-  <img src="public/screenshots/popup.jpg" alt="扩展程序弹窗" width="200" />
-  <img src="public/screenshots/analysis.jpg" alt="AI 分析报告" width="600" />
-</div>
+<table>
+  <tr>
+    <td width="50%">
+      <img src="images/screenshots/popup.jpg" alt="扩展程序弹窗" />
+      <p align="center"><em>扩展程序弹窗</em></p>
+    </td>
+    <td width="50%">
+      <img src="images/screenshots/analysis.jpg" alt="AI 分析报告" />
+      <p align="center"><em>AI 分析报告</em></p>
+    </td>
+  </tr>
+</table>
 
-<div align="center">
-  <img src="public/screenshots/options-1.jpg" alt="设置选项" width="400" />
-  <img src="public/screenshots/options-2.jpg" alt="爬虫配置" width="400" />
-</div>
+<table>
+  <tr>
+    <td width="33.3%">
+      <img src="images/screenshots/options-1.jpg" alt="设置选项" />
+      <p align="center"><em>设置选项</em></p>
+    </td>
+    <td width="33.3%">
+      <img src="images/screenshots/options-2.jpg" alt="爬虫配置" />
+      <p align="center"><em>爬虫配置</em></p>
+    </td>
+    <td width="33.3%">
+      <img src="images/screenshots/options-3.jpg" alt="AI 配置" />
+      <p align="center"><em>AI 配置</em></p>
+    </td>
+  </tr>
+</table>
 
 ## ✨ 核心功能
 
@@ -106,6 +127,14 @@ vitest.config.ts        # 测试配置
 ```
 
 ## 🚀 快速开始
+
+### 从 Chrome 网上应用店安装
+
+**[📦 从 Chrome 网上应用店安装 →](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap)**
+
+访问 Chrome 网上应用店，一键安装扩展程序。
+
+### 从源码构建
 
 1. **环境准备**: Node.js 18+, Chrome 浏览器。
 2. **安装依赖**:

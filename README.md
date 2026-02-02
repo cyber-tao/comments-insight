@@ -10,6 +10,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap)
 [![Version](https://img.shields.io/badge/Version-0.3.2-green.svg)](https://github.com/yourusername/comments-insight) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.2-000000)](https://crxjs.dev/vite-plugin/)
 
 </div>
@@ -40,16 +41,35 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
 ## 📸 Screenshots
 
-<div align="center">
-  <img src="images/screenshots/popup.jpg" alt="Extension Popup" width="200" />
-  <img src="images/screenshots/analysis.jpg" alt="AI Analysis Report" width="600" />
-</div>
+<table>
+  <tr>
+    <td width="50%">
+      <img src="images/screenshots/popup.jpg" alt="Extension Popup" />
+      <p align="center"><em>Extension Popup</em></p>
+    </td>
+    <td width="50%">
+      <img src="images/screenshots/analysis.jpg" alt="AI Analysis Report" />
+      <p align="center"><em>AI Analysis Report</em></p>
+    </td>
+  </tr>
+</table>
 
-<div align="center">
-  <img src="images/screenshots/options-1.jpg" alt="Options Settings" width="400" />
-  <img src="images/screenshots/options-2.jpg" alt="Scraper Configuration" width="400" />
-  <img src="images/screenshots/options-3.jpg" alt="AI Configuration" width="400" />
-</div>
+<table>
+  <tr>
+    <td width="33.3%">
+      <img src="images/screenshots/options-1.jpg" alt="Options Settings" />
+      <p align="center"><em>Options Settings</em></p>
+    </td>
+    <td width="33.3%">
+      <img src="images/screenshots/options-2.jpg" alt="Scraper Configuration" />
+      <p align="center"><em>Scraper Configuration</em></p>
+    </td>
+    <td width="33.3%">
+      <img src="images/screenshots/options-3.jpg" alt="AI Configuration" />
+      <p align="center"><em>AI Configuration</em></p>
+    </td>
+  </tr>
+</table>
 
 ## ✨ Features
 
@@ -107,6 +127,14 @@ vitest.config.ts        # Test config
 ```
 
 ## 🚀 Quick Start
+
+### Install from Chrome Web Store
+
+**[📦 Install from Chrome Web Store →](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap)**
+
+Visit the Chrome Web Store to install the extension with one click.
+
+### Build from Source
 
 1. **Prerequisites**: Node.js 18+, Chrome.
 2. **Install dependencies**:
