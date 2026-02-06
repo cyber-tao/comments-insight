@@ -10,8 +10,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-[![Chrome 网上应用店](https://img.shields.io/badge/Chrome%20网上应用店-安装-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap)
-[![Version](https://img.shields.io/badge/Version-0.3.2-green.svg)](https://github.com/yourusername/comments-insight) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.2-000000)](https://crxjs.dev/vite-plugin/)
+[![Chrome 网上应用店](https://img.shields.io/badge/Chrome%20网上应用店-安装-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.2-000000)](https://crxjs.dev/vite-plugin/)
 
 </div>
 
@@ -19,19 +18,25 @@
 
 ## 📚 目录
 
-- [概览](#-概览)
-- [演示截图](#-演示截图)
-- [核心功能](#-核心功能)
-- [架构设计](#-架构设计)
-- [项目结构](#-项目结构)
-- [快速开始](#-快速开始)
-- [使用方法](#-使用方法)
-- [配置说明](#-配置说明)
-- [技术栈](#-技术栈)
-- [开发命令](#-开发命令)
-- [常见问题 (FAQ)](#-常见问题-faq)
-- [贡献指南](#-贡献指南)
-- [开源协议](#-开源协议)
+- [评论洞察 (Comments Insight)](#评论洞察-comments-insight)
+  - [📚 目录](#-目录)
+  - [🔎 概览](#-概览)
+  - [📸 演示截图](#-演示截图)
+  - [✨ 核心功能](#-核心功能)
+  - [🔑 API 密钥安全说明](#-api-密钥安全说明)
+  - [🧱 架构设计](#-架构设计)
+  - [📦 项目结构](#-项目结构)
+  - [🚀 快速开始](#-快速开始)
+    - [从 Chrome 网上应用店安装](#从-chrome-网上应用店安装)
+    - [从源码构建](#从源码构建)
+  - [🧭 使用方法](#-使用方法)
+    - [使用 OpenRouter 开始（免费选项）](#使用-openrouter-开始免费选项)
+    - [使用扩展](#使用扩展)
+  - [⚙️ 配置说明](#️-配置说明)
+  - [� 技术栈](#-技术栈)
+  - [🛠️ 开发命令](#️-开发命令)
+  - [🤝 贡献指南](#-贡献指南)
+  - [📝 开源协议](#-开源协议)
 
 ## 🔎 概览
 
