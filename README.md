@@ -10,8 +10,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap)
-[![Version](https://img.shields.io/badge/Version-0.3.2-green.svg)](https://github.com/yourusername/comments-insight) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.2-000000)](https://crxjs.dev/vite-plugin/)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.2-000000)](https://crxjs.dev/vite-plugin/)
 
 </div>
 
@@ -19,19 +18,25 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
 ## 📚 Table of Contents
 
-- [Overview](#-overview)
-- [Screenshots](#-screenshots)
-- [Features](#-features)
-- [Architecture](#-architecture)
-- [Project Structure](#-project-structure)
-- [Quick Start](#-quick-start)
-- [Usage](#-usage)
-- [Configuration](#-configuration)
-- [Tech Stack](#-tech-stack)
-- [Commands](#-commands)
-- [FAQ](#-faq)
-- [Contributing](#-contributing)
-- [License](#-license)
+- [Comments Insight](#comments-insight)
+  - [📚 Table of Contents](#-table-of-contents)
+  - [🔎 Overview](#-overview)
+  - [📸 Screenshots](#-screenshots)
+  - [✨ Features](#-features)
+  - [🔑 API Key Security Note](#-api-key-security-note)
+  - [🧱 Architecture](#-architecture)
+  - [📦 Project Structure](#-project-structure)
+  - [🚀 Quick Start](#-quick-start)
+    - [Install from Chrome Web Store](#install-from-chrome-web-store)
+    - [Build from Source](#build-from-source)
+  - [🧭 Usage](#-usage)
+    - [Getting Started with OpenRouter (Free Option)](#getting-started-with-openrouter-free-option)
+    - [Using the Extension](#using-the-extension)
+  - [⚙️ Configuration](#️-configuration)
+  - [🧰 Tech Stack](#-tech-stack)
+  - [🛠️ Commands](#️-commands)
+  - [🤝 Contributing](#-contributing)
+  - [📝 License](#-license)
 
 ## 🔎 Overview
 
