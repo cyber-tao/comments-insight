@@ -1,6 +1,6 @@
 import { SimplifiedNode } from '../../types';
 import { DOMSimplifier } from '../DOMSimplifier';
-import { AI } from '@/config/constants';
+import { AI, TOKENIZER } from '@/config/constants';
 
 export class Chunker {
   /**
@@ -25,8 +25,7 @@ export class Chunker {
     let currentBatch: SimplifiedNode[] = [];
     let currentSize = 0;
 
-    // Estimate 4 chars per token roughly
-    const maxChars = maxTokens * 4;
+    const maxChars = maxTokens * TOKENIZER.CHARS_PER_TOKEN;
     const simplifier = new DOMSimplifier();
 
     // Calculate wrapper overhead (open tag + close tag)

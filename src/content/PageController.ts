@@ -15,33 +15,32 @@ export class PageController {
     let totalHeight = document.documentElement.scrollHeight;
     const viewportHeight = window.innerHeight;
     let currentScroll = window.scrollY;
+    const startTime = Date.now();
 
-    // Scroll in steps to trigger lazy loading
-    // We scroll slightly less than a viewport to ensure overlap
     const step = Math.floor(viewportHeight * SCROLL.SCROLL_STEP_RATIO);
 
     while (currentScroll < totalHeight) {
       if (!isExtractionActive()) return;
-      // Calculate next position
+      if (Date.now() - startTime > SCROLL.MAX_SCROLL_TIMEOUT_MS) {
+        Logger.warn('[PageController] scrollToBottom timed out');
+        break;
+      }
+
       const nextScroll = Math.min(currentScroll + step, totalHeight);
 
-      if (nextScroll === currentScroll) break; // Already at bottom
+      if (nextScroll === currentScroll) break;
 
       window.scrollTo(0, nextScroll);
       currentScroll = nextScroll;
 
-      // Small pause to allow browser to register scroll event and trigger IO observers
       await this.wait(TIMING.SCROLL_PAUSE_MS);
 
-      // Update total height in case content expanded
       const newTotalHeight = document.documentElement.scrollHeight;
       if (newTotalHeight > totalHeight) {
-        // Content grew, we update totalHeight to continue scrolling
         totalHeight = newTotalHeight;
       }
     }
 
-    // Ensure we are really at the bottom
     window.scrollTo(0, document.documentElement.scrollHeight);
   }
 
@@ -104,27 +103,29 @@ export class PageController {
    */
   async scrollToLoadMore(maxScrolls: number = SCROLL.DEFAULT_MAX_SCROLLS): Promise<void> {
     let scrollCount = 0;
+    const startTime = Date.now();
 
     while (scrollCount < maxScrolls) {
       if (!isExtractionActive()) return;
+      if (Date.now() - startTime > SCROLL.MAX_SCROLL_TIMEOUT_MS) {
+        Logger.warn('[PageController] scrollToLoadMore timed out');
+        break;
+      }
+
       const previousHeight = document.documentElement.scrollHeight;
 
-      // Scroll to bottom
       window.scrollTo(0, document.documentElement.scrollHeight);
 
-      // Wait for content to load
       await this.wait(TIMING.PAGE_INIT_DELAY_MS);
 
       const newHeight = document.documentElement.scrollHeight;
 
-      // Stop if no new content loaded
       if (newHeight === previousHeight) {
         Logger.info('[PageController] No more content to load');
         break;
       }
 
       scrollCount++;
-      // Logger.debug('[PageController] Scrolled', { scrollCount, maxScrolls });
     }
     if (scrollCount > 0) {
       Logger.info('[PageController] Finished scrolling', { scrollCount });
@@ -148,8 +149,8 @@ export class PageController {
       try {
         (button as HTMLElement).click();
         await this.wait(TIMING.SCROLL_BASE_DELAY_MS);
-      } catch (_error) {
-        // Logger.warn('[PageController] Failed to click button', { error });
+      } catch {
+        // Expected: some expand buttons may not be clickable
       }
     }
   }

@@ -2,7 +2,7 @@ import { Task, Platform, ProgressStage } from '../types';
 import { NotificationService } from './NotificationService';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
-import { ERROR_KEYS, LIMITS, RETRY, STORAGE, TIMING } from '@/config/constants';
+import { ERROR_KEYS, LIMITS, RETRY, STORAGE, TASK, TIMING } from '@/config/constants';
 import i18n from '@/utils/i18n';
 
 /**
@@ -71,6 +71,7 @@ export class TaskManager {
   private executors: Map<string, TaskExecutor> = new Map();
   private readonly enablePersistence: boolean;
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
+  private isProcessing = false;
 
   constructor(options?: { enablePersistence?: boolean }) {
     this.enablePersistence = options?.enablePersistence === true;
@@ -346,6 +347,11 @@ export class TaskManager {
       return;
     }
 
+    if (task.status !== 'running') {
+      Logger.warn(`[TaskManager] Cannot complete task ${taskId} in ${task.status} state`);
+      return;
+    }
+
     this.clearAbortController(taskId);
 
     task.status = 'completed';
@@ -363,11 +369,11 @@ export class TaskManager {
       commentsCount: result?.commentsCount,
     });
 
-    // Show completion notification
     NotificationService.showTaskCompleted(task.type, `Task completed`, result?.commentsCount);
 
     this.currentTaskId = null;
     this.notifyTaskUpdate(task);
+    this.autoCleanFinishedTasks();
     this.schedulePersist();
     this.processQueue();
   }
@@ -384,6 +390,11 @@ export class TaskManager {
       return;
     }
 
+    if (task.status === 'completed' || task.status === 'failed') {
+      Logger.warn(`[TaskManager] Cannot fail task ${taskId} in ${task.status} state`);
+      return;
+    }
+
     this.clearAbortController(taskId);
 
     task.status = 'failed';
@@ -392,11 +403,11 @@ export class TaskManager {
 
     Logger.error(`[TaskManager] Task failed: ${taskId}`, { error });
 
-    // Show failure notification
     NotificationService.showTaskFailed(task.type, error);
 
     this.currentTaskId = null;
     this.notifyTaskUpdate(task);
+    this.autoCleanFinishedTasks();
     this.schedulePersist();
     this.processQueue();
   }
@@ -485,6 +496,27 @@ export class TaskManager {
     this.schedulePersist();
   }
 
+  private autoCleanFinishedTasks(): void {
+    const finishedTasks = this.getAllTasks().filter(
+      (task) => task.status === 'completed' || task.status === 'failed',
+    );
+
+    if (finishedTasks.length <= TASK.MAX_FINISHED_TASKS) {
+      return;
+    }
+
+    const sorted = finishedTasks.sort((a, b) => (a.endTime || 0) - (b.endTime || 0));
+    const toRemove = sorted.slice(0, finishedTasks.length - TASK.MAX_FINISHED_TASKS);
+
+    for (const task of toRemove) {
+      this.tasks.delete(task.id);
+      this.executors.delete(task.id);
+      this.abortControllers.delete(task.id);
+    }
+
+    Logger.info(`[TaskManager] Auto-cleaned ${toRemove.length} old finished tasks`);
+  }
+
   /**
    * Generate a unique task ID
    * @returns Unique task ID
@@ -499,23 +531,29 @@ export class TaskManager {
    * Process the task queue
    */
   private processQueue(): void {
-    if (this.currentTaskId !== null || this.queue.length === 0) {
+    if (this.isProcessing || this.currentTaskId !== null || this.queue.length === 0) {
       return;
     }
 
+    this.isProcessing = true;
+
     const nextIndex = this.queue.findIndex((id) => this.executors.has(id));
     if (nextIndex === -1) {
+      this.isProcessing = false;
       return;
     }
 
     const nextTaskId = this.queue.splice(nextIndex, 1)[0];
     const executor = this.executors.get(nextTaskId);
     if (!executor) {
+      this.isProcessing = false;
       return;
     }
 
     this.startTask(nextTaskId)
       .then(async () => {
+        this.isProcessing = false;
+
         const task = this.tasks.get(nextTaskId);
         if (!task) {
           return;
@@ -544,6 +582,7 @@ export class TaskManager {
         }
       })
       .catch((error) => {
+        this.isProcessing = false;
         Logger.error(`[TaskManager] Failed to start task ${nextTaskId}`, { error });
         this.failTask(nextTaskId, error instanceof Error ? error.message : String(error));
       });

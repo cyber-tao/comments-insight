@@ -8,6 +8,7 @@ import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
 import {
   EXTRACTION_PROGRESS,
+  CONFIG_GENERATION_PROGRESS,
   MESSAGES,
   AI,
   TIMING,
@@ -232,8 +233,8 @@ export class AIStrategy implements ExtractionStrategy {
       }
 
       const currentProgress = Math.min(
-        90,
-        EXTRACTION_PROGRESS.MIN + (allComments.length / maxComments) * 70,
+        EXTRACTION_PROGRESS.NORMALIZING,
+        EXTRACTION_PROGRESS.MIN + (allComments.length / maxComments) * EXTRACTION_PROGRESS.RANGE,
       );
 
       // 2.1 Scroll first to load more content before extraction
@@ -610,7 +611,7 @@ export class AIStrategy implements ExtractionStrategy {
     await this.pageController.scrollToBottom();
     await this.delay(TIMING.SCROLL_DELAY_MS);
 
-    onProgress?.(30, 'analyzing page structure');
+    onProgress?.(CONFIG_GENERATION_PROGRESS.ANALYZING, 'analyzing page structure');
 
     const detectMaxNodes = Math.max(
       DOM.DETECT_MAX_NODES_BASE,
@@ -624,7 +625,7 @@ export class AIStrategy implements ExtractionStrategy {
     });
     const domStr = DOMSimplifier.toStringFormat(simplified);
 
-    onProgress?.(50, 'generating config via AI');
+    onProgress?.(CONFIG_GENERATION_PROGRESS.GENERATING, 'generating config via AI');
 
     const prompt =
       PROMPT_GENERATE_CRAWLING_CONFIG +
@@ -648,7 +649,7 @@ export class AIStrategy implements ExtractionStrategy {
       );
     }
 
-    onProgress?.(80, 'saving config');
+    onProgress?.(CONFIG_GENERATION_PROGRESS.SAVING, 'saving config');
 
     const normalizedDomain = hostname.startsWith('www.') ? hostname.slice(4) : hostname;
     config.domain = normalizedDomain;

@@ -106,6 +106,126 @@ export class AIService {
     });
   }
 
+  private validateAndBuildUrl(config: AIConfig): string {
+    if (!config.apiUrl) {
+      throw createAIError(ErrorCode.INVALID_API_URL, 'API URL is required', {
+        hasUrl: !!config.apiUrl,
+      });
+    }
+    if (!config.model) {
+      throw createAIError(ErrorCode.INVALID_MODEL, 'Model is required', {
+        hasModel: !!config.model,
+      });
+    }
+    let apiUrl = config.apiUrl.trim();
+    if (!apiUrl.endsWith('/chat/completions')) {
+      apiUrl = apiUrl.replace(new RegExp('/$'), '') + '/chat/completions';
+    }
+    return apiUrl;
+  }
+
+  private classifyHTTPError(status: number, errorText: string, model: string): never {
+    if (status === 429) {
+      throw createAIError(ErrorCode.AI_RATE_LIMIT, 'Rate limit exceeded', {
+        status,
+        response: errorText,
+      });
+    }
+    if (status === 400) {
+      if (
+        errorText.includes('max_tokens') ||
+        errorText.includes('context length') ||
+        errorText.includes('maximum context')
+      ) {
+        throw createAIError(
+          ErrorCode.INVALID_CONFIG,
+          `Context limit exceeded. Please reduce 'Context Length' in settings or use a larger model. API Error: ${errorText}`,
+          { status, response: errorText },
+          false,
+        );
+      }
+      throw createAIError(
+        ErrorCode.API_ERROR,
+        `API Bad Request (400): ${errorText}`,
+        { status, response: errorText },
+        false,
+      );
+    }
+    if (status === 404) {
+      throw createAIError(ErrorCode.AI_MODEL_NOT_FOUND, `Model '${model}' not found`, {
+        status,
+        model,
+      });
+    }
+    if (status === 401 || status === 403) {
+      throw createAIError(ErrorCode.MISSING_API_KEY, 'Invalid API key or unauthorized', {
+        status,
+      });
+    }
+    throw createAIError(ErrorCode.API_ERROR, `API error (${status}): ${errorText}`, {
+      status,
+      response: errorText,
+    });
+  }
+
+  private classifyCallError(
+    error: unknown,
+    signal: AbortSignal | undefined,
+    effectiveTimeout: number,
+    prompt: string,
+  ): never {
+    if (error instanceof Error && (error.name === 'AbortError' || error.message === 'Timeout')) {
+      if (signal?.aborted) {
+        throw createAIError(ErrorCode.TASK_CANCELLED, 'Request aborted by user', {});
+      }
+      throw createAIError(
+        ErrorCode.AI_TIMEOUT,
+        `AI Request timed out after ${effectiveTimeout}ms`,
+        {},
+        false,
+      );
+    }
+
+    if (error instanceof ExtensionError) {
+      if (
+        error.retryable ||
+        [ErrorCode.AI_RATE_LIMIT, ErrorCode.AI_TIMEOUT, ErrorCode.API_ERROR].includes(error.code)
+      ) {
+        Logger.debug(`[AIService] Encountered retryable error: ${error.code}`, {
+          message: error.message,
+        });
+      }
+      this.logToFile(this.determineLogType(prompt), {
+        prompt,
+        response: error.message,
+        timestamp: Date.now(),
+      });
+      throw error;
+    }
+
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw createNetworkError('Network request failed', {
+        originalError: error.message,
+      });
+    }
+
+    Logger.error('[AIService] AI call failed', { error });
+    this.logToFile(this.determineLogType(prompt), {
+      prompt,
+      response: error instanceof Error ? error.message : String(error),
+      timestamp: Date.now(),
+    });
+    throw error;
+  }
+
+  private determineLogType(prompt: string): 'extraction' | 'analysis' {
+    return prompt.includes('extract comments') ||
+      prompt.includes('DOM Structure') ||
+      prompt.includes('time normalization')
+      ? 'extraction'
+      : 'analysis';
+  }
+
   /**
    * Makes a request to the AI API with retry logic and error handling.
    *
@@ -137,17 +257,16 @@ export class AIService {
       async () => {
         let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const controller = new AbortController();
+        const onParentAbort = () => controller.abort();
 
-        // Handle parent signal
         if (signal) {
           if (signal.aborted) {
             controller.abort();
           } else {
-            signal.addEventListener('abort', () => controller.abort());
+            signal.addEventListener('abort', onParentAbort);
           }
         }
 
-        // Set timeout
         timeoutId = setTimeout(() => {
           controller.abort(new Error('Timeout'));
         }, effectiveTimeout);
@@ -157,24 +276,7 @@ export class AIService {
             throw createAIError(ErrorCode.TASK_CANCELLED, 'Request aborted', {});
           }
 
-          // Validate configuration
-          if (!config.apiUrl) {
-            throw createAIError(ErrorCode.INVALID_API_URL, 'API URL is required', {
-              hasUrl: !!config.apiUrl,
-            });
-          }
-
-          if (!config.model) {
-            throw createAIError(ErrorCode.INVALID_MODEL, 'Model is required', {
-              hasModel: !!config.model,
-            });
-          }
-
-          // Ensure API URL ends with /chat/completions
-          let apiUrl = config.apiUrl.trim();
-          if (!apiUrl.endsWith('/chat/completions')) {
-            apiUrl = apiUrl.replace(new RegExp('/$'), '') + '/chat/completions';
-          }
+          const apiUrl = this.validateAndBuildUrl(config);
 
           Logger.info('[AIService] Calling AI API', {
             url: apiUrl,
@@ -209,59 +311,15 @@ export class AIService {
 
           if (!response.ok) {
             const errorText = await response.text();
-
-            // Determine specific error type
-            if (response.status === 429) {
-              throw createAIError(ErrorCode.AI_RATE_LIMIT, 'Rate limit exceeded', {
-                status: response.status,
-                response: errorText,
-              });
-            } else if (response.status === 400) {
-              if (
-                errorText.includes('max_tokens') ||
-                errorText.includes('context length') ||
-                errorText.includes('maximum context')
-              ) {
-                throw createAIError(
-                  ErrorCode.INVALID_CONFIG,
-                  `Context limit exceeded. Please reduce 'Context Length' in settings or use a larger model. API Error: ${errorText}`,
-                  { status: response.status, response: errorText },
-                  false, // Not retryable
-                );
-              }
-              throw createAIError(
-                ErrorCode.API_ERROR,
-                `API Bad Request (400): ${errorText}`,
-                { status: response.status, response: errorText },
-                false,
-              );
-            } else if (response.status === 404) {
-              throw createAIError(
-                ErrorCode.AI_MODEL_NOT_FOUND,
-                `Model '${config.model}' not found`,
-                { status: response.status, model: config.model },
-              );
-            } else if (response.status === 401 || response.status === 403) {
-              throw createAIError(ErrorCode.MISSING_API_KEY, 'Invalid API key or unauthorized', {
-                status: response.status,
-              });
-            } else {
-              throw createAIError(
-                ErrorCode.API_ERROR,
-                `API error (${response.status}): ${errorText}`,
-                { status: response.status, response: errorText },
-              );
-            }
+            this.classifyHTTPError(response.status, errorText, config.model);
           }
 
           const data = await response.json();
 
-          // Extract response content and token usage
           let content = data.choices?.[0]?.message?.content || '';
           const tokensUsed = data.usage?.total_tokens || 0;
           const finishReason = data.choices?.[0]?.finish_reason || 'unknown';
 
-          // Remove <think> tags if present (for thinking models)
           content = this.removeThinkTags(content);
 
           Logger.info('[AIService] AI response received', {
@@ -270,93 +328,22 @@ export class AIService {
             contentLength: content.length,
           });
 
-          // Record token usage
           this.storageManager.recordTokenUsage(tokensUsed).catch((err: unknown) => {
             Logger.warn('[AIService] Failed to record tokens', { err });
           });
 
-          // Log the interaction for debugging
-          const logType =
-            prompt.includes('extract comments') ||
-            prompt.includes('DOM Structure') ||
-            prompt.includes('time normalization')
-              ? 'extraction'
-              : 'analysis';
-          this.logToFile(logType, {
+          this.logToFile(this.determineLogType(prompt), {
             prompt,
             response: content,
             timestamp: Date.now(),
           });
 
-          return {
-            content,
-            tokensUsed,
-            finishReason,
-          };
+          return { content, tokensUsed, finishReason };
         } catch (error) {
-          if (
-            error instanceof Error &&
-            (error.name === 'AbortError' || error.message === 'Timeout')
-          ) {
-            if (signal?.aborted) {
-              throw createAIError(ErrorCode.TASK_CANCELLED, 'Request aborted by user', {});
-            }
-            throw createAIError(
-              ErrorCode.AI_TIMEOUT,
-              `AI Request timed out after ${effectiveTimeout}ms`,
-              {},
-              false,
-            );
-          }
-
-          if (error instanceof ExtensionError) {
-            // Log retry intent for debugging
-            if (
-              error.retryable ||
-              [ErrorCode.AI_RATE_LIMIT, ErrorCode.AI_TIMEOUT, ErrorCode.API_ERROR].includes(
-                error.code,
-              )
-            ) {
-              Logger.debug(`[AIService] Encountered retryable error: ${error.code}`, {
-                message: error.message,
-              });
-            }
-            const logType =
-              prompt.includes('extract comments') ||
-              prompt.includes('DOM Structure') ||
-              prompt.includes('time normalization')
-                ? 'extraction'
-                : 'analysis';
-            this.logToFile(logType, {
-              prompt,
-              response: error.message,
-              timestamp: Date.now(),
-            });
-            throw error;
-          }
-
-          // Handle network errors
-          if (error instanceof TypeError && error.message.includes('fetch')) {
-            throw createNetworkError('Network request failed', {
-              originalError: error.message,
-            });
-          }
-
-          Logger.error('[AIService] AI call failed', { error });
-          const logType =
-            prompt.includes('extract comments') ||
-            prompt.includes('DOM Structure') ||
-            prompt.includes('time normalization')
-              ? 'extraction'
-              : 'analysis';
-          this.logToFile(logType, {
-            prompt,
-            response: error instanceof Error ? error.message : String(error),
-            timestamp: Date.now(),
-          });
-          throw error;
+          this.classifyCallError(error, signal, effectiveTimeout, prompt);
         } finally {
           if (timeoutId) clearTimeout(timeoutId);
+          if (signal) signal.removeEventListener('abort', onParentAbort);
         }
       },
       'AIService.callAI',

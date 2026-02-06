@@ -4,6 +4,7 @@ import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
 import { LIMITS, MESSAGES, TEXT } from '@/config/constants';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
+import { resolveTabId } from '../../utils/tab-helpers';
 
 export interface ModelsResponse {
   models: string[];
@@ -36,13 +37,7 @@ export async function handleEnsureContentScript(
   context: HandlerContext,
 ): Promise<{ success: boolean; tabId?: number; error?: string }> {
   try {
-    let tabId = message.payload?.tabId ?? context.sender?.tab?.id;
-
-    if (!tabId) {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      tabId = activeTab?.id;
-    }
-
+    const tabId = await resolveTabId(message.payload?.tabId, context.sender?.tab?.id);
     if (!tabId) {
       return { success: false, error: 'No tab ID available' };
     }
@@ -118,12 +113,7 @@ export async function handleTestSelector(
   }
 
   try {
-    let tabId = payloadTabId ?? context.sender?.tab?.id;
-    if (!tabId) {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      tabId = activeTab?.id;
-    }
-
+    const tabId = await resolveTabId(payloadTabId, context.sender?.tab?.id);
     if (!tabId) {
       return { success: false, error: 'No tab ID available' };
     }

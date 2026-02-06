@@ -124,6 +124,15 @@ export class StorageManager {
   /** In-memory cache for sorted index to avoid repeated storage reads */
   private sortedIndexCache: HistorySortedIndex | null = null;
 
+  private async getFromStorage<T>(key: string): Promise<T | undefined> {
+    const result = await chrome.storage.local.get(key);
+    return result[key] as T | undefined;
+  }
+
+  private async setToStorage(key: string, value: unknown): Promise<void> {
+    await chrome.storage.local.set({ [key]: value });
+  }
+
   private async ensureEncryptionReady(): Promise<void> {
     if (this.encryptionEnabled) {
       return;
@@ -220,8 +229,7 @@ export class StorageManager {
 
   private async getAiLogIndex(): Promise<string[]> {
     try {
-      const result = await chrome.storage.local.get(StorageManager.AI_LOG_INDEX_KEY);
-      const index = result[StorageManager.AI_LOG_INDEX_KEY] as string[] | undefined;
+      const index = await this.getFromStorage<string[]>(StorageManager.AI_LOG_INDEX_KEY);
       return Array.isArray(index) ? index : [];
     } catch {
       return [];
@@ -230,7 +238,7 @@ export class StorageManager {
 
   private async setAiLogIndex(index: string[]): Promise<void> {
     try {
-      await chrome.storage.local.set({ [StorageManager.AI_LOG_INDEX_KEY]: index });
+      await this.setToStorage(StorageManager.AI_LOG_INDEX_KEY, index);
     } catch {
       return;
     }
@@ -337,33 +345,15 @@ export class StorageManager {
     try {
       await this.ensureEncryptionReady();
       Logger.debug('[StorageManager] Getting settings from storage');
-      const result = await chrome.storage.local.get(StorageManager.SETTINGS_KEY);
-      const settings = result[StorageManager.SETTINGS_KEY];
+      const settings = await this.getFromStorage<Settings>(StorageManager.SETTINGS_KEY);
 
       if (!settings) {
         Logger.info('[StorageManager] No settings found, using defaults');
-        // Return default settings if none exist
         await this.saveSettings(DEFAULT_SETTINGS);
         return DEFAULT_SETTINGS;
       }
 
-      // Merge with defaults to ensure all fields exist
-      const merged = {
-        ...DEFAULT_SETTINGS,
-        ...settings,
-      } as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig };
-
-      // Deep merge crawlingConfigs: default configs + stored configs, stored takes precedence
-      const defaultConfigs = DEFAULT_SETTINGS.crawlingConfigs || [];
-      const storedConfigs = (settings as Partial<Settings>).crawlingConfigs || [];
-      const configMap = new Map<string, CrawlingConfig>();
-      for (const config of defaultConfigs) {
-        configMap.set(config.domain, config);
-      }
-      for (const config of storedConfigs) {
-        configMap.set(config.domain, config);
-      }
-      merged.crawlingConfigs = Array.from(configMap.values());
+      const merged = this.mergeSettingsWithDefaults(settings as Partial<Settings>);
 
       const normalizedModel = this.normalizeAIModel(merged);
       merged.aiModel = {
@@ -382,6 +372,28 @@ export class StorageManager {
       await ErrorHandler.handleError(error as Error, 'StorageManager.getSettings');
       return DEFAULT_SETTINGS;
     }
+  }
+
+  private mergeSettingsWithDefaults(
+    stored: Partial<Settings>,
+  ): Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig } {
+    const merged = {
+      ...DEFAULT_SETTINGS,
+      ...stored,
+    } as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig };
+
+    const defaultConfigs = DEFAULT_SETTINGS.crawlingConfigs || [];
+    const storedConfigs = stored.crawlingConfigs || [];
+    const configMap = new Map<string, CrawlingConfig>();
+    for (const config of defaultConfigs) {
+      configMap.set(config.domain, config);
+    }
+    for (const config of storedConfigs) {
+      configMap.set(config.domain, config);
+    }
+    merged.crawlingConfigs = Array.from(configMap.values());
+
+    return merged;
   }
 
   /**
@@ -648,19 +660,17 @@ export class StorageManager {
 
       await chrome.storage.local.set(toSet);
 
-      // Update history index
       await this.updateHistoryIndex(item.id);
 
-      // Update sorted index for pagination
-      await this.addToSortedIndex(item);
-
-      // Update URL index
+      const indexUpdates: Promise<void>[] = [this.addToSortedIndex(item)];
       if (typeof item.url === 'string' && item.url.length > 0) {
-        await this.addToHistoryUrlIndex(item.url, item.id);
+        indexUpdates.push(this.addToHistoryUrlIndex(item.url, item.id));
       }
+      await Promise.all(indexUpdates);
 
       Logger.info('[StorageManager] History item saved', { id: item.id });
     } catch (error) {
+      this.sortedIndexCache = null;
       Logger.error('[StorageManager] Failed to save history', { error });
       throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save history', {
         historyId: item.id,
@@ -733,16 +743,9 @@ export class StorageManager {
   async getHistory(): Promise<HistoryItem[]> {
     try {
       const index = await this.getHistoryIndex();
-      const items: HistoryItem[] = [];
+      const results = await Promise.all(index.map((id) => this.getHistoryItem(id)));
+      const items = results.filter((item): item is HistoryItem => item !== null);
 
-      for (const id of index) {
-        const item = await this.getHistoryItem(id);
-        if (item) {
-          items.push(item);
-        }
-      }
-
-      // Sort by extractedAt (newest first)
       return items.sort((a, b) => b.extractedAt - a.extractedAt);
     } catch (error) {
       Logger.error('[StorageManager] Failed to get history', { error });
@@ -775,17 +778,9 @@ export class StorageManager {
       const start = page * pageSize;
       const end = Math.min(start + pageSize, total);
 
-      // Get IDs for this page from the sorted index
       const pageEntries = sortedIndex.entries.slice(start, end);
-      const items: HistoryItem[] = [];
-
-      // Fetch full items for this page only
-      for (const entry of pageEntries) {
-        const item = await this.getHistoryItem(entry.id);
-        if (item) {
-          items.push(item);
-        }
-      }
+      const results = await Promise.all(pageEntries.map((entry) => this.getHistoryItem(entry.id)));
+      const items = results.filter((item): item is HistoryItem => item !== null);
 
       Logger.debug('[StorageManager] History page retrieved', {
         page,
@@ -986,14 +981,18 @@ export class StorageManager {
       }
 
       await chrome.storage.local.remove(keysToRemove);
-      await this.removeFromHistoryIndex(id);
-      await this.removeFromSortedIndex(id);
 
+      const indexRemovals: Promise<void>[] = [
+        this.removeFromHistoryIndex(id),
+        this.removeFromSortedIndex(id),
+      ];
       if (storedItem?.url) {
-        await this.removeFromHistoryUrlIndex(storedItem.url, id);
+        indexRemovals.push(this.removeFromHistoryUrlIndex(storedItem.url, id));
       }
+      await Promise.all(indexRemovals);
       Logger.info('[StorageManager] History item deleted', { id });
     } catch (error) {
+      this.sortedIndexCache = null;
       Logger.error('[StorageManager] Failed to delete history item', { id, error });
       throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to delete history', {
         historyId: id,
@@ -1030,8 +1029,7 @@ export class StorageManager {
    */
   private async getHistoryIndex(): Promise<string[]> {
     try {
-      const result = await chrome.storage.local.get(StorageManager.HISTORY_INDEX_KEY);
-      return (result[StorageManager.HISTORY_INDEX_KEY] as string[] | undefined) || [];
+      return (await this.getFromStorage<string[]>(StorageManager.HISTORY_INDEX_KEY)) || [];
     } catch (error) {
       Logger.error('[StorageManager] Failed to get history index', { error });
       return [];
@@ -1096,11 +1094,11 @@ export class StorageManager {
 
   private async getHistoryUrlIndex(): Promise<Record<string, string[]>> {
     try {
-      const result = await chrome.storage.local.get(StorageManager.HISTORY_URL_INDEX_KEY);
-      const index = result[StorageManager.HISTORY_URL_INDEX_KEY] as
-        | Record<string, string[]>
-        | undefined;
-      return index || {};
+      return (
+        (await this.getFromStorage<Record<string, string[]>>(
+          StorageManager.HISTORY_URL_INDEX_KEY,
+        )) || {}
+      );
     } catch (error) {
       Logger.error('[StorageManager] Failed to get history url index', { error });
       return {};
@@ -1109,7 +1107,7 @@ export class StorageManager {
 
   private async setHistoryUrlIndex(index: Record<string, string[]>): Promise<void> {
     try {
-      await chrome.storage.local.set({ [StorageManager.HISTORY_URL_INDEX_KEY]: index });
+      await this.setToStorage(StorageManager.HISTORY_URL_INDEX_KEY, index);
     } catch (error) {
       Logger.error('[StorageManager] Failed to set history url index', { error });
     }
