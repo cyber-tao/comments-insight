@@ -127,7 +127,10 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       if (allComments.length >= maxComments) break;
 
       onProgress?.(
-        Math.min(90, EXTRACTION_PROGRESS.MIN + (allComments.length / maxComments) * 70),
+        Math.min(
+          EXTRACTION_PROGRESS.NORMALIZING,
+          EXTRACTION_PROGRESS.MIN + (allComments.length / maxComments) * EXTRACTION_PROGRESS.RANGE,
+        ),
         `extracting:${allComments.length}:${maxComments}`,
         'extracting',
         allComments.length,
@@ -169,7 +172,6 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       // ... fields extraction ...
 
       // Log basic extraction just to be sure we are looking at the right element
-      // Logger.debug('[ReplyDebug] Examining comment', { username: username?.slice(0, 20) });
 
       // ... (existing code) ...
 
@@ -234,8 +236,6 @@ export class ConfiguredStrategy implements ExtractionStrategy {
                 error: e instanceof Error ? e.message : String(e),
               });
             }
-          } else {
-            // Logger.debug('[ReplyDebug] Expand button NOT found', { selector: replyConfig.expandBtn.selector });
           }
         }
 
@@ -257,8 +257,6 @@ export class ConfiguredStrategy implements ExtractionStrategy {
             }
           }
         } else {
-          // If we clicked a button but still no container found, that's suspicious but maybe it takes longer or structure is different
-          // Logger.debug('[ReplyDebug] Reply container NOT found', { selector: replyConfig.container.selector });
         }
       }
 

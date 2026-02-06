@@ -2,10 +2,12 @@ import { Message, Comment, Task, TaskResolver } from '../../types';
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
-import { REGEX, MESSAGES, DEFAULTS, EXTRACTION_PROGRESS, DATE_TIME } from '@/config/constants';
+import { MESSAGES, DEFAULTS, EXTRACTION_PROGRESS, DATE_TIME } from '@/config/constants';
 import { getDomain } from '../../utils/url';
 import { Tokenizer } from '../../utils/tokenizer';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
+import { resolveTabId } from '../../utils/tab-helpers';
+import { cleanAndParseJsonObject, cleanAndParseJsonArray } from '../../utils/json-parser';
 
 interface ScraperAnalysisResult {
   selectors: Record<string, string>;
@@ -91,20 +93,7 @@ export async function handleStartExtraction(
     finalMaxComments = settings.maxComments || DEFAULTS.MAX_COMMENTS;
   }
 
-  // Get tab ID - prefer payload tabId, then sender tab, then active tab
-  let tabId = payloadTabId || context.sender?.tab?.id;
-
-  // If no tab ID (e.g., message from popup), get the active tab
-  if (!tabId) {
-    try {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      tabId = activeTab?.id;
-    } catch (error) {
-      Logger.error('[ExtractionHandler] Failed to get active tab', { error });
-      throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
-    }
-  }
-
+  const tabId = await resolveTabId(payloadTabId, context.sender?.tab?.id);
   if (!tabId) {
     throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
   }
@@ -154,7 +143,9 @@ export async function handleStartExtraction(
             type: MESSAGES.CANCEL_EXTRACTION,
             payload: { taskId },
           })
-          .catch(() => {});
+          .catch((err) => {
+            Logger.warn('[ExtractionHandler] Failed to send cancel to content script', { err });
+          });
 
         reject(new ExtensionError(ErrorCode.TASK_CANCELLED, 'Task cancelled by user'));
       });
@@ -233,7 +224,11 @@ export async function handleExtractionCompleted(
           commentsCount: normalizedComments.length,
           comments: normalizedComments,
         };
-        await context.storageManager.saveHistory(historyItem);
+        try {
+          await context.storageManager.saveHistory(historyItem);
+        } catch (saveError) {
+          Logger.error('[ExtractionHandler] Failed to save extraction history', { saveError });
+        }
       }
     }
 
@@ -242,7 +237,7 @@ export async function handleExtractionCompleted(
       commentsCount: comments?.length || 0,
     });
   } else {
-    pending.reject(new Error(error || 'Extraction failed'));
+    pending.reject(new ExtensionError(ErrorCode.EXTRACTION_FAILED, error || 'Extraction failed'));
   }
 
   return { success: true };
@@ -260,18 +255,7 @@ export async function handleStartConfigGeneration(
 
   const domain = getDomain(url) || 'unknown';
 
-  let tabId = payloadTabId || context.sender?.tab?.id;
-
-  if (!tabId) {
-    try {
-      const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      tabId = activeTab?.id;
-    } catch (error) {
-      Logger.error('[ExtractionHandler] Failed to get active tab', { error });
-      throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
-    }
-  }
-
+  const tabId = await resolveTabId(payloadTabId, context.sender?.tab?.id);
   if (!tabId) {
     throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
   }
@@ -313,7 +297,9 @@ export async function handleStartConfigGeneration(
             type: MESSAGES.CANCEL_EXTRACTION,
             payload: { taskId },
           })
-          .catch(() => {});
+          .catch((err) => {
+            Logger.warn('[ExtractionHandler] Failed to send cancel to content script', { err });
+          });
 
         reject(new ExtensionError(ErrorCode.TASK_CANCELLED, 'Task cancelled by user'));
       });
@@ -340,7 +326,9 @@ export async function handleConfigGenerationCompleted(
   if (success) {
     pending.resolve({ tokensUsed: 0, commentsCount: 0 });
   } else {
-    pending.reject(new Error(error || 'Config generation failed'));
+    pending.reject(
+      new ExtensionError(ErrorCode.EXTRACTION_FAILED, error || 'Config generation failed'),
+    );
   }
 
   return { success: true };
@@ -376,19 +364,7 @@ export async function handleAIAnalyzeStructure(
     };
 
     try {
-      let jsonText = response.content.trim();
-      if (jsonText.startsWith('```')) {
-        jsonText = jsonText
-          .replace(REGEX.MD_CODE_JSON_START, '')
-          .replace(REGEX.MD_CODE_ANY_END, '')
-          .trim();
-      }
-      const jsonStart = jsonText.indexOf('{');
-      const jsonEnd = jsonText.lastIndexOf('}');
-      if (jsonStart !== -1 && jsonEnd !== -1) {
-        jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
-      }
-      const data = JSON.parse(jsonText);
+      const data = cleanAndParseJsonObject<ScraperAnalysisResult>(response.content);
       if (data.selectors && typeof data.selectors === 'object') {
         aggregated.selectors = { ...aggregated.selectors, ...data.selectors };
       }
@@ -432,21 +408,7 @@ export async function handleGenerateCrawlingConfig(
       timeout: settings.aiTimeout,
     });
 
-    let jsonText = response.content.trim();
-    if (jsonText.includes('```')) {
-      jsonText = jsonText
-        .replace(REGEX.MD_CODE_JSON_START, '')
-        .replace(REGEX.MD_CODE_ANY_END, '')
-        .trim();
-    }
-
-    const jsonStart = jsonText.indexOf('{');
-    const jsonEnd = jsonText.lastIndexOf('}');
-    if (jsonStart !== -1 && jsonEnd !== -1) {
-      jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
-    }
-
-    const config = JSON.parse(jsonText);
+    const config = cleanAndParseJsonObject(response.content);
     return { config };
   } catch (error) {
     Logger.error('[ExtractionHandler] Config generation failed', { error });
@@ -532,26 +494,30 @@ export async function handleStartAnalysis(
 
     context.taskManager.updateTaskProgress(taskId, 75);
 
-    if (historyId) {
-      const historyItem = await context.storageManager.getHistoryItem(historyId);
-      if (historyItem) {
-        historyItem.analysis = result;
-        historyItem.analyzedAt = Date.now();
-        await context.storageManager.saveHistory(historyItem);
+    try {
+      if (historyId) {
+        const historyItem = await context.storageManager.getHistoryItem(historyId);
+        if (historyItem) {
+          historyItem.analysis = result;
+          historyItem.analyzedAt = Date.now();
+          await context.storageManager.saveHistory(historyItem);
+        }
+      } else {
+        await context.storageManager.saveHistory({
+          id: `history_${Date.now()}`,
+          url: task.url,
+          title: `Analysis ${new Date().toLocaleString()}`,
+          platform: task.platform || 'unknown',
+          postContent: metadata?.postContent,
+          extractedAt: Date.now(),
+          commentsCount: comments.length,
+          comments,
+          analysis: result,
+          analyzedAt: Date.now(),
+        });
       }
-    } else {
-      await context.storageManager.saveHistory({
-        id: `history_${Date.now()}`,
-        url: task.url,
-        title: `Analysis ${new Date().toLocaleString()}`,
-        platform: task.platform || 'unknown',
-        postContent: metadata?.postContent,
-        extractedAt: Date.now(),
-        commentsCount: comments.length,
-        comments,
-        analysis: result,
-        analyzedAt: Date.now(),
-      });
+    } catch (saveError) {
+      Logger.error('[ExtractionHandler] Failed to save analysis history', { saveError });
     }
 
     return {
@@ -591,32 +557,13 @@ export async function handleAIExtractContent(
           timeout: settings.aiTimeout,
         });
 
-        let jsonText = response.content.trim();
-        // Clean markdown
-        if (jsonText.includes('```')) {
-          jsonText = jsonText
-            .replace(REGEX.MD_CODE_JSON_START, '')
-            .replace(REGEX.MD_CODE_ANY_END, '')
-            .trim();
-        }
-
-        // Find JSON array
-        const jsonStart = jsonText.indexOf('[');
-        const jsonEnd = jsonText.lastIndexOf(']');
-        if (jsonStart !== -1 && jsonEnd !== -1) {
-          jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
-          const chunkComments = JSON.parse(jsonText);
-          if (Array.isArray(chunkComments)) {
-            // Assign a temp ID if missing
-            chunkComments.forEach((c: Partial<Comment>, idx: number) => {
-              if (!c.id) c.id = `ai_${Date.now()}_${i}_${idx}`;
-              // Basic normalization
-              if (!c.likes) c.likes = 0;
-              if (!c.replies) c.replies = [];
-            });
-            allComments.push(...chunkComments);
-          }
-        }
+        const chunkComments = cleanAndParseJsonArray<Partial<Comment>>(response.content);
+        chunkComments.forEach((c, idx) => {
+          if (!c.id) c.id = `ai_${Date.now()}_${i}_${idx}`;
+          if (!c.likes) c.likes = 0;
+          if (!c.replies) c.replies = [];
+        });
+        allComments.push(...(chunkComments as Comment[]));
       } catch (e) {
         Logger.warn('[ExtractionHandler] Failed to extract from chunk', { index: i, error: e });
         // Continue to next chunk

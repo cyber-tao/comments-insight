@@ -1,6 +1,6 @@
 // Content Script for Comments Insight Extension
 import { PageController } from './PageController';
-import { MESSAGES, DOM, SCRAPER_GENERATION, LIMITS, REGEX } from '@/config/constants';
+import { MESSAGES, DOM, SCRAPER_GENERATION, LIMITS, REGEX, DEFAULTS } from '@/config/constants';
 import { Comment, SimplifiedNode } from '@/types';
 import { CommentExtractor } from './CommentExtractor';
 import { Logger } from '@/utils/logger';
@@ -106,13 +106,12 @@ if (!globalAny.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED) {
   });
 
   // Expose test hook via window message
-  // Expose test hook via window message
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
     if (event.data && event.data.type === 'COMMENTS_INSIGHT_TEST_TRIGGER') {
       Logger.info('[Content] 🚀 TEST TRIGGER RECEIVED', event.data);
 
-      const maxComments = event.data.maxComments || 10;
+      const maxComments = event.data.maxComments || DEFAULTS.TEST_MAX_COMMENTS;
       const taskId = 'test-' + Date.now();
 
       handleStartExtraction({ taskId, maxComments }, (response) => {

@@ -1,6 +1,7 @@
 import { Message } from '../../types';
 import { HandlerContext, TaskStatusResponse, SuccessResponse } from './types';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
+import { Logger } from '../../utils/logger';
 import { MESSAGES } from '@/config/constants';
 
 export function handleGetTaskStatus(
@@ -38,8 +39,8 @@ export function handleCancelTask(
           type: MESSAGES.CANCEL_EXTRACTION,
           payload: { taskId },
         })
-        .catch(() => {
-          return;
+        .catch((err) => {
+          Logger.warn('[TaskHandler] Failed to send cancel to content script', { err });
         });
     }
   }

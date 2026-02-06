@@ -1,49 +1,49 @@
 /**
- * 处理器类型定义
- * 定义消息处理器的函数签名和相关类型
+ * Handler type definitions
+ * Defines function signatures and related types for message handlers
  */
 
 import type { Message, MessageType } from './messages';
 
 /**
- * 带有关联 ID 的端口消息
- * 用于长连接消息的请求-响应模式
+ * Port message with correlation ID
+ * Used for request-response pattern over long-lived connections
  */
 export interface PortMessage {
-  /** 消息类型 */
+  /** Message type */
   type: MessageType;
-  /** 用于关联请求和响应的唯一标识符 */
+  /** Unique identifier for correlating requests and responses */
   id: string;
-  /** 消息载荷 */
+  /** Message payload */
   payload?: unknown;
 }
 
 /**
- * 端口消息响应
+ * Port message response
  */
 export interface PortMessageResponse {
-  /** 关联 ID，与请求中的 id 对应 */
+  /** Correlation ID matching the request */
   id: string;
-  /** 响应数据 */
+  /** Response data */
   response: unknown;
 }
 
 /**
- * 端口消息错误响应
+ * Port message error response
  */
 export interface PortMessageErrorResponse {
-  /** 关联 ID */
+  /** Correlation ID */
   id: string;
-  /** 错误响应 */
+  /** Error response */
   response: {
     error: string;
   };
 }
 
 /**
- * 消息处理器函数类型
- * @template T - 消息类型
- * @template R - 返回类型
+ * Message handler function type
+ * @template T - Message type
+ * @template R - Return type
  */
 export type MessageHandler<T extends Message = Message, R = unknown> = (
   message: T,
@@ -51,12 +51,12 @@ export type MessageHandler<T extends Message = Message, R = unknown> = (
 ) => Promise<R>;
 
 /**
- * 端口消息处理器函数类型
+ * Port message handler function type
  */
 export type PortMessageHandler = (port: chrome.runtime.Port, message: PortMessage) => Promise<void>;
 
 /**
- * 提取结果类型
+ * Extraction result type
  */
 export interface ExtractionResult {
   tokensUsed: number;
@@ -64,7 +64,7 @@ export interface ExtractionResult {
 }
 
 /**
- * Promise 解析器类型
+ * Promise resolver type for async task completion
  */
 export interface TaskResolver<T = ExtractionResult> {
   resolve: (value: T) => void;

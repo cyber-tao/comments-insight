@@ -290,8 +290,8 @@ export class DOMSimplifier {
 
         let value = attr.value;
         // Truncate long values to save tokens
-        if (value.length > 200) {
-          value = value.substring(0, 200) + '...';
+        if (value.length > DOM.ATTRIBUTE_MAX_LENGTH) {
+          value = value.substring(0, DOM.ATTRIBUTE_MAX_LENGTH) + '...';
         }
 
         attrs[attr.name] = value;
