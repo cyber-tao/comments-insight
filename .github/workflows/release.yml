@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
@@ -33,15 +33,25 @@ jobs:
           npm run typecheck
           npm run lint
 
-      - name: Build and Package
-        run: npm run package
+      - name: Build
+        run: npm run build
+
+      - name: Generate CRX
+        run: npx -y crx3 dist -o "comments-insight-${{ github.ref_name }}.crx"
+
+      - name: Package ZIP
+        run: node scripts/package.js
 
       - name: Build Changelog
         id: build_changelog
-        uses: mikepenz/release-changelog-builder-action@v4
+        uses: mikepenz/release-changelog-builder-action@v6
         with:
-          configuration: |
+          mode: "HYBRID"
+          configurationJson: |
             {
+              "template": "#{{CHANGELOG}}\n\n**Full Changelog**: #{{RELEASE_DIFF}}",
+              "pr_template": "- #{{TITLE}} by @#{{AUTHOR}} in ##{{NUMBER}}",
+              "commit_template": "- #{{TITLE}}",
               "categories": [
                 {
                   "title": "## 🚀 Features",
@@ -52,16 +62,31 @@ jobs:
                   "labels": ["fix", "bug"]
                 },
                 {
-                  "title": "## 🧪 Tests",
-                  "labels": ["test"]
+                  "title": "## ♻️ Refactoring",
+                  "labels": ["refactor"]
+                },
+                {
+                  "title": "## 📝 Documentation",
+                  "labels": ["docs"]
                 },
                 {
                   "title": "## 📦 Dependencies",
-                  "labels": ["deps", "dependency"]
+                  "labels": ["deps", "dependency", "dependencies"]
                 },
                 {
-                  "title": "## 🛠️ Chore",
-                  "labels": ["chore"]
+                  "title": "## 🛠️ Maintenance",
+                  "labels": ["chore", "ci", "build", "style", "perf", "test", "revert"]
+                },
+                {
+                  "title": "## 📋 Other",
+                  "labels": []
+                }
+              ],
+              "label_extractor": [
+                {
+                  "pattern": "^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\\([^)]*\\))?(!)?: .+",
+                  "on_property": "title",
+                  "target": "$1"
                 }
               ]
             }
@@ -72,7 +97,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           body: ${{ steps.build_changelog.outputs.changelog }}
-          files: dist/extension.zip
+          files: |
+            dist/extension.zip
+            comments-insight-${{ github.ref_name }}.crx
           draft: false
           prerelease: false
         env:
