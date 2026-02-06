@@ -19,6 +19,7 @@ import {
   LANGUAGES,
   LIMITS,
   DATE_TIME,
+  TEXT,
 } from '@/config/constants';
 import type { StorageManager } from './StorageManager';
 import { Tokenizer } from '../utils/tokenizer';
@@ -81,8 +82,8 @@ export class AIService {
     Logger.debug(`[AI_LOG_${type.toUpperCase()}]`, {
       timestamp: data.timestamp,
       type,
-      prompt: data.prompt.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + '...', // Corrected: Removed unnecessary backticks around string literal
-      response: data.response.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + '...', // Corrected: Removed unnecessary backticks around string literal
+      prompt: data.prompt.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + TEXT.PREVIEW_SUFFIX,
+      response: data.response.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + TEXT.PREVIEW_SUFFIX,
       promptLength: data.prompt.length,
       responseLength: data.response.length,
     });
@@ -782,16 +783,14 @@ export class AIService {
           availableTokens,
         });
 
-        // Reserve space for metadata (username, timestamp etc) - approx 100 tokens
-        const metadataReserve = 100;
+        const metadataReserve = AI_CONST.METADATA_RESERVE_TOKENS;
         const maxContentTokens = Math.max(0, availableTokens - metadataReserve);
 
-        // Approximate char count (assuming 2 chars per token to be safe for mixed en/zh)
-        const maxChars = maxContentTokens * 2;
+        const maxChars = maxContentTokens * AI_CONST.CHARS_PER_TOKEN_RATIO;
 
         if (comment.content && comment.content.length > maxChars) {
           const originalLength = comment.content.length;
-          comment.content = comment.content.substring(0, maxChars) + '... [Truncated]';
+          comment.content = comment.content.substring(0, maxChars) + TEXT.TRUNCATED_SUFFIX;
           commentTokens = this.estimateTokensForComment(comment); // Re-calculate
 
           Logger.info('[AIService] Comment truncated', {
@@ -803,11 +802,9 @@ export class AIService {
       }
 
       if (currentTokens + commentTokens > availableTokens && currentBatch.length > 0) {
-        if (currentBatch.length > 0) {
-          batches.push(currentBatch);
-          currentBatch = [];
-          currentTokens = 0;
-        }
+        batches.push(currentBatch);
+        currentBatch = [];
+        currentTokens = 0;
       }
 
       currentBatch.push(comment);

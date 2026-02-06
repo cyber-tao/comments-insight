@@ -127,8 +127,9 @@ export class ExtensionError extends Error {
     this.timestamp = Date.now();
     this.retryable = retryable;
 
-    if (typeof (Error as any).captureStackTrace === 'function') {
-      (Error as any).captureStackTrace(this, ExtensionError);
+    const ErrorWithStack = Error as { captureStackTrace?: (target: object, ctor: unknown) => void };
+    if (typeof ErrorWithStack.captureStackTrace === 'function') {
+      ErrorWithStack.captureStackTrace(this, ExtensionError);
     }
   }
 

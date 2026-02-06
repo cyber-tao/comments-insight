@@ -3,7 +3,14 @@ import { Comment, Platform, CrawlingConfig, FieldSelector, ReplyConfig } from '.
 import { PageController } from '../PageController';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
-import { EXTRACTION_PROGRESS, TIMING, DOM } from '@/config/constants';
+import {
+  EXTRACTION_PROGRESS,
+  TIMING,
+  DOM,
+  LIKES,
+  ANALYSIS_FORMAT,
+  REGEX,
+} from '@/config/constants';
 import { isExtractionActive } from '../extractionState';
 import { querySelectorAllDeep, querySelectorDeep } from '@/utils/dom-query';
 
@@ -170,7 +177,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         this.extractField(
           element,
           this.config.fields.find((f) => f.name === 'timestamp'),
-        ) || 'N/A';
+        ) || ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
       const likesStr =
         this.extractField(
           element,
@@ -181,7 +188,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
       const comment: Comment = {
         id: '',
-        username: username || 'Unknown',
+        username: username || ANALYSIS_FORMAT.UNKNOWN_USERNAME,
         content: content || '',
         timestamp,
         likes: this.parseLikes(likesStr),
@@ -222,9 +229,9 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
               // Smart wait: Poll for reply count to INCREASE
               await this.waitForReplies(element, replyConfig, currentReplyCount);
-            } catch (e: any) {
+            } catch (e: unknown) {
               Logger.error('[ReplyDebug] Failed to click expand button', {
-                error: e.message || String(e),
+                error: e instanceof Error ? e.message : String(e),
               });
             }
           } else {
@@ -256,8 +263,10 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       }
 
       return comment;
-    } catch (e: any) {
-      Logger.error('[ReplyDebug] Error extracting comment', { error: e.message || String(e) });
+    } catch (e: unknown) {
+      Logger.error('[ReplyDebug] Error extracting comment', {
+        error: e instanceof Error ? e.message : String(e),
+      });
       return null;
     }
   }
@@ -281,7 +290,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       this.extractField(
         element,
         replyConfig.fields.find((f) => f.name === 'timestamp'),
-      ) || 'N/A';
+      ) || ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
     const likesStr =
       this.extractField(
         element,
@@ -292,7 +301,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
     const comment: Comment = {
       id: '',
-      username: username || 'Unknown',
+      username: username || ANALYSIS_FORMAT.UNKNOWN_USERNAME,
       content: content || '',
       timestamp,
       likes: this.parseLikes(likesStr),
@@ -320,9 +329,9 @@ export class ConfiguredStrategy implements ExtractionStrategy {
           await this.delay(TIMING.SCROLL_INTO_VIEW_WAIT_MS);
           expandBtn.click();
           await this.waitForReplies(element, replyConfig, currentNestedCount);
-        } catch (e: any) {
+        } catch (e: unknown) {
           Logger.error('[ReplyDebug] Failed to click nested expand button', {
-            error: e.message || String(e),
+            error: e instanceof Error ? e.message : String(e),
           });
         }
       }
@@ -365,10 +374,10 @@ export class ConfiguredStrategy implements ExtractionStrategy {
   }
 
   private parseLikes(likesStr: string): number {
-    const clean = likesStr.replace(/[^0-9kKmM\.]/g, '').toLowerCase();
+    const clean = likesStr.replace(REGEX.LIKES_SANITIZE, '').toLowerCase();
     let multiplier = 1;
-    if (clean.includes('k')) multiplier = 1000;
-    if (clean.includes('m')) multiplier = 1000000;
+    if (clean.includes('k')) multiplier = LIKES.MULTIPLIER_K;
+    if (clean.includes('m')) multiplier = LIKES.MULTIPLIER_M;
 
     const val = parseFloat(clean);
     return isNaN(val) ? 0 : Math.floor(val * multiplier);

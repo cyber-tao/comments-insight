@@ -35,7 +35,7 @@ export function useTheme() {
         applyTheme(theme);
       }
     });
-  }, []);
+  }, [applyTheme, theme]);
 
   useEffect(() => {
     if (theme !== 'system') return;

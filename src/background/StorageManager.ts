@@ -112,7 +112,7 @@ export class StorageManager {
   private static readonly HISTORY_KEY = STORAGE.HISTORY_KEY;
   private static readonly HISTORY_INDEX_KEY = STORAGE.HISTORY_INDEX_KEY;
   private static readonly HISTORY_URL_INDEX_KEY = STORAGE.HISTORY_URL_INDEX_KEY;
-  private static readonly HISTORY_SORTED_INDEX_KEY = 'history_sorted_index';
+  private static readonly HISTORY_SORTED_INDEX_KEY = STORAGE.HISTORY_SORTED_INDEX_KEY;
   private static readonly ENCRYPTION_SALT_KEY = STORAGE.ENCRYPTION_SALT_KEY;
   private static readonly ENCRYPTION_SECRET_KEY = STORAGE.ENCRYPTION_SECRET_KEY;
   private static readonly TOKEN_STATS_KEY = STORAGE.TOKEN_STATS_KEY;
@@ -286,7 +286,7 @@ export class StorageManager {
         iterations: SECURITY.PBKDF2_ITERATIONS,
       },
       keyMaterial,
-      { name: 'AES-GCM', length: 256 },
+      { name: 'AES-GCM', length: SECURITY.AES_KEY_LENGTH },
       false,
       ['encrypt', 'decrypt'],
     );
@@ -305,14 +305,14 @@ export class StorageManager {
     combined.set(iv, 0);
     combined.set(new Uint8Array(ciphertext), iv.byteLength);
     const base64 = btoa(String.fromCharCode(...combined));
-    return `enc:${base64}`;
+    return `${SECURITY.ENCRYPTION_PREFIX}${base64}`;
   }
 
   private async decrypt(text: string): Promise<string> {
-    if (!text.startsWith('enc:')) return text;
+    if (!text.startsWith(SECURITY.ENCRYPTION_PREFIX)) return text;
     if (!this.encryptionKey) return '';
     try {
-      const base64 = text.slice(4);
+      const base64 = text.slice(SECURITY.ENCRYPTION_PREFIX.length);
       const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
       const iv = bytes.slice(0, SECURITY.IV_LENGTH);
       const data = bytes.slice(SECURITY.IV_LENGTH);

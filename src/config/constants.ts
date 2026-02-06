@@ -49,6 +49,8 @@ export const SECURITY = {
   SALT_LENGTH: 16,
   IV_LENGTH: 12,
   SECRET_LENGTH: 32,
+  AES_KEY_LENGTH: 256,
+  ENCRYPTION_PREFIX: 'enc:',
   PBKDF2_ITERATIONS: 100_000,
   PBKDF2_HASH: 'SHA-256' as const,
 };
@@ -72,6 +74,8 @@ export const AI = {
   INPUT_TOKEN_BUFFER: 2000,
   MIN_AVAILABLE_TOKENS: 1000,
   CONFIDENCE_HIGH_THRESHOLD: 0.9,
+  METADATA_RESERVE_TOKENS: 100,
+  CHARS_PER_TOKEN_RATIO: 2,
 };
 
 export const ANALYSIS_FORMAT = {
@@ -147,6 +151,7 @@ export const STORAGE = {
   AI_LOG_INDEX_KEY: 'ai_log_index',
   TASK_STATE_KEY: 'task_state',
   SELECTOR_TESTER_STATE_KEY: 'selector_tester_state',
+  HISTORY_SORTED_INDEX_KEY: 'history_sorted_index',
 };
 
 export const SCRAPER_GENERATION = {
@@ -162,6 +167,11 @@ export const LOG_LEVELS = ['DEBUG', 'INFO', 'WARN', 'ERROR'] as const;
 
 export const HOST = {
   WWW_PREFIX: 'www.',
+};
+
+export const LIKES = {
+  MULTIPLIER_K: 1000,
+  MULTIPLIER_M: 1000000,
 };
 
 export const REGEX = {
@@ -226,6 +236,8 @@ export const TEXT = {
   API_KEY_PLACEHOLDER: 'sk-',
   CONTENT_SCRIPT_INJECT_FAILED: 'Failed to inject content script. Please refresh the page.',
   MODEL_TEST_HINT: 'Please verify API URL, API key, and network connectivity.',
+  TRUNCATED_SUFFIX: '... [Truncated]',
+  PREVIEW_SUFFIX: '...',
 };
 
 /**
