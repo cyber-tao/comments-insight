@@ -1,5 +1,11 @@
-import React from 'react';
-import { CrawlingConfig, SelectorRule, FieldSelector, ReplyConfig } from '../../types';
+import * as React from 'react';
+import {
+  CrawlingConfig,
+  SelectorRule,
+  FieldSelector,
+  FieldValidationStatus,
+  ReplyConfig,
+} from '../../types';
 import { useTranslation } from 'react-i18next';
 
 const STANDARD_FIELDS = ['username', 'content', 'timestamp', 'likes'] as const;
@@ -29,15 +35,38 @@ interface Props {
   onSave: () => void;
 }
 
+const ValidationIndicator: React.FC<{
+  status?: FieldValidationStatus;
+}> = ({ status }) => {
+  if (!status) return null;
+  if (status === 'success') {
+    return (
+      <span className="text-green-500 text-sm font-bold" title="Matched">
+        &#10003;
+      </span>
+    );
+  }
+  return (
+    <span className="text-red-500 text-sm font-bold" title="Not matched">
+      &#10007;
+    </span>
+  );
+};
+
 const SelectorInput: React.FC<{
   label: string;
   rule: SelectorRule;
   onChange: (rule: SelectorRule) => void;
   className?: string;
-}> = ({ label, rule, onChange, className }) => (
+  validationStatus?: FieldValidationStatus;
+}> = ({ label, rule, onChange, className, validationStatus }) => (
   <div className={`flex flex-col gap-1 ${className}`}>
-    <label className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+    <label
+      className="text-sm font-medium flex items-center gap-1.5"
+      style={{ color: 'var(--text-secondary)' }}
+    >
       {label}
+      <ValidationIndicator status={validationStatus} />
     </label>
     <div className="flex gap-2">
       <input
@@ -62,7 +91,8 @@ const SelectorInput: React.FC<{
 const FieldEditor: React.FC<{
   fields: FieldSelector[];
   onChange: (fields: FieldSelector[]) => void;
-}> = ({ fields, onChange }) => {
+  fieldValidation?: Record<string, FieldValidationStatus>;
+}> = ({ fields, onChange, fieldValidation }) => {
   const updateField = (index: number, updates: Partial<FieldSelector>) => {
     const newFields = [...fields];
     newFields[index] = { ...newFields[index], ...updates };
@@ -77,13 +107,14 @@ const FieldEditor: React.FC<{
     <div className="space-y-3 pl-4 border-l-2" style={{ borderColor: 'var(--border-secondary)' }}>
       {fields.map((field, idx) => (
         <div key={field.name} className="grid grid-cols-12 gap-2 items-start">
-          <div className="col-span-2 pt-2">
+          <div className="col-span-2 pt-2 flex items-center gap-1">
             <span
               className="text-xs font-semibold uppercase"
               style={{ color: 'var(--text-muted)' }}
             >
               {field.name}
             </span>
+            <ValidationIndicator status={fieldValidation?.[field.name]} />
           </div>
           <div className="col-span-7">
             <SelectorInput label="" rule={field.rule} onChange={(r) => updateRule(idx, r)} />
@@ -105,6 +136,7 @@ const FieldEditor: React.FC<{
 
 export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCancel, onSave }) => {
   const { t } = useTranslation();
+  const fv = config.fieldValidation;
 
   const handleContainerChange = (rule: SelectorRule) => onChange({ ...config, container: rule });
   const handleItemChange = (rule: SelectorRule) => onChange({ ...config, item: rule });
@@ -183,11 +215,13 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
             label={t('options.crawlingConfigs.containerSelector')}
             rule={config.container}
             onChange={handleContainerChange}
+            validationStatus={fv?.['container']}
           />
           <SelectorInput
             label={t('options.crawlingConfigs.itemSelector')}
             rule={config.item}
             onChange={handleItemChange}
+            validationStatus={fv?.['item']}
           />
 
           <div className="mt-4">
@@ -197,7 +231,11 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
             >
               {t('options.crawlingConfigs.fieldsExtraction')}
             </label>
-            <FieldEditor fields={normalizeFields(config.fields)} onChange={handleFieldsChange} />
+            <FieldEditor
+              fields={normalizeFields(config.fields)}
+              onChange={handleFieldsChange}
+              fieldValidation={fv}
+            />
           </div>
         </div>
       </section>
@@ -259,18 +297,21 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
               label={t('options.crawlingConfigs.replyToggle')}
               rule={config.replies.expandBtn || { selector: '', type: 'css' }}
               onChange={(r) => handleRepliesChange({ ...config.replies!, expandBtn: r })}
+              validationStatus={fv?.['replies.expandBtn']}
             />
 
             <SelectorInput
               label={t('options.crawlingConfigs.replyContainer')}
               rule={config.replies.container}
               onChange={(r) => handleRepliesChange({ ...config.replies!, container: r })}
+              validationStatus={fv?.['replies.container']}
             />
 
             <SelectorInput
               label={t('options.crawlingConfigs.replyItem')}
               rule={config.replies.item}
               onChange={(r) => handleRepliesChange({ ...config.replies!, item: r })}
+              validationStatus={fv?.['replies.item']}
             />
 
             <div className="mt-4">
@@ -316,6 +357,7 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
             label={t('options.crawlingConfigs.videoTimeSelector')}
             rule={config.videoTime || { selector: '', type: 'css' }}
             onChange={(r) => onChange({ ...config, videoTime: r.selector ? r : undefined })}
+            validationStatus={fv?.['videoTime']}
           />
         </div>
       </section>
@@ -347,6 +389,7 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
             label={t('options.crawlingConfigs.postContentSelector')}
             rule={config.postContent || { selector: '', type: 'css' }}
             onChange={(r) => onChange({ ...config, postContent: r.selector ? r : undefined })}
+            validationStatus={fv?.['postContent']}
           />
         </div>
       </section>

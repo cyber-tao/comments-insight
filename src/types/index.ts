@@ -135,6 +135,8 @@ export interface ReplyConfig {
   expandBtn?: SelectorRule;
 }
 
+export type FieldValidationStatus = 'success' | 'failed';
+
 export interface CrawlingConfig {
   id: string;
   domain: string;
@@ -147,6 +149,7 @@ export interface CrawlingConfig {
   postContent?: SelectorRule;
   postTime?: SelectorRule;
   lastUpdated: number;
+  fieldValidation?: Record<string, FieldValidationStatus>;
 }
 
 export interface DOMAnalysisConfig {

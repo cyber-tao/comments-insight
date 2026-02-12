@@ -6,7 +6,7 @@ import i18n from '@/utils/i18n';
 
 interface BasicSettingsProps {
   settings: Settings;
-  onSettingsChange: (settings: Settings) => void;
+  onSettingsChange: (settings: Partial<Settings>) => void;
   onThemeChange?: (theme: 'light' | 'dark' | 'system') => void;
 }
 

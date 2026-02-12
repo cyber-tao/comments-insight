@@ -121,6 +121,9 @@ export class MessageRouter {
         case MESSAGES.SYNC_CRAWLING_CONFIGS:
           return await settingsHandlers.handleSyncCrawlingConfigs(message, context);
 
+        case MESSAGES.UPDATE_FIELD_VALIDATION:
+          return await settingsHandlers.handleUpdateFieldValidation(message, context);
+
         case MESSAGES.GET_HISTORY:
           return await historyHandlers.handleGetHistory(message, context);
 

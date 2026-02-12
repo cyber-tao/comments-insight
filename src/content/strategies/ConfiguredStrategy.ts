@@ -1,20 +1,31 @@
 import { ExtractionStrategy, ProgressCallback } from './ExtractionStrategy';
-import { Comment, Platform, CrawlingConfig, FieldSelector, ReplyConfig } from '../../types';
+import {
+  Comment,
+  Platform,
+  CrawlingConfig,
+  FieldSelector,
+  FieldValidationStatus,
+  ReplyConfig,
+} from '../../types';
 import { PageController } from '../PageController';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
 import {
   EXTRACTION_PROGRESS,
+  MESSAGES,
   TIMING,
   DOM,
   LIKES,
   ANALYSIS_FORMAT,
   REGEX,
 } from '@/config/constants';
+import { sendMessage } from '@/utils/chrome-message';
 import { isExtractionActive } from '../extractionState';
 import { querySelectorAllDeep, querySelectorDeep } from '@/utils/dom-query';
 
 export class ConfiguredStrategy implements ExtractionStrategy {
+  private validationRecorded = false;
+
   constructor(
     private pageController: PageController,
     private config: CrawlingConfig,
@@ -74,6 +85,8 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     const processedElements = new WeakSet<HTMLElement>();
 
     onProgress?.(EXTRACTION_PROGRESS.MIN + 5, 'Extracting comments', 'extracting', 0, maxComments);
+
+    this.recordFieldValidation(container);
 
     while (allComments.length < maxComments) {
       this.checkAborted();
@@ -251,6 +264,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
               replyItem as HTMLElement,
               platform,
               replyConfig,
+              0,
             );
             if (reply) {
               comment.replies.push(reply);
@@ -273,8 +287,13 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     element: HTMLElement,
     platform: Platform,
     replyConfig: ReplyConfig,
+    depth: number = 0,
   ): Promise<Comment | null> {
-    // ... extraction logic ...
+    if (depth >= DOM.MAX_REPLY_DEPTH) {
+      Logger.warn('[ConfiguredStrategy] Max reply depth reached', { depth });
+      return null;
+    }
+
     const username = this.extractField(
       element,
       replyConfig.fields.find((f) => f.name === 'username'),
@@ -346,6 +365,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
           replyItem as HTMLElement,
           platform,
           replyConfig,
+          depth + 1,
         );
         if (reply) {
           comment.replies.push(reply);
@@ -354,6 +374,59 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     }
 
     return comment;
+  }
+
+  private recordFieldValidation(container: Element): void {
+    if (this.validationRecorded) return;
+    this.validationRecorded = true;
+
+    const validation: Record<string, FieldValidationStatus> = {};
+
+    validation['container'] = container ? 'success' : 'failed';
+
+    const firstItem = querySelectorDeep(container, this.config.item.selector);
+    validation['item'] = firstItem ? 'success' : 'failed';
+
+    if (firstItem) {
+      for (const field of this.config.fields) {
+        const result = querySelectorDeep(firstItem, field.rule.selector);
+        validation[field.name] = result ? 'success' : 'failed';
+      }
+    }
+
+    if (this.config.replies) {
+      const replyConfig = this.config.replies;
+      if (firstItem) {
+        const replyContainer = querySelectorDeep(firstItem, replyConfig.container.selector);
+        validation['replies.container'] = replyContainer ? 'success' : 'failed';
+        if (replyContainer) {
+          const replyItem = querySelectorDeep(replyContainer, replyConfig.item.selector);
+          validation['replies.item'] = replyItem ? 'success' : 'failed';
+        }
+        if (replyConfig.expandBtn?.selector) {
+          const expandBtn = querySelectorDeep(firstItem, replyConfig.expandBtn.selector);
+          validation['replies.expandBtn'] = expandBtn ? 'success' : 'failed';
+        }
+      }
+    }
+
+    if (this.config.videoTime?.selector) {
+      const el = querySelectorDeep(document, this.config.videoTime.selector);
+      validation['videoTime'] = el ? 'success' : 'failed';
+    }
+    if (this.config.postContent?.selector) {
+      const el = querySelectorDeep(document, this.config.postContent.selector);
+      validation['postContent'] = el ? 'success' : 'failed';
+    }
+
+    sendMessage({
+      type: MESSAGES.UPDATE_FIELD_VALIDATION,
+      payload: { domain: this.config.domain, fieldValidation: validation },
+    }).catch((err) => {
+      Logger.warn('[ConfiguredStrategy] Failed to save field validation', { error: err });
+    });
+
+    Logger.info('[ConfiguredStrategy] Field validation recorded', { validation });
   }
 
   private extractField(context: HTMLElement, field?: FieldSelector): string | null {

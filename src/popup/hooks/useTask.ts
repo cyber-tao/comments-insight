@@ -21,6 +21,7 @@ export function useTask(options: UseTaskOptions = {}) {
   const [currentTask, setCurrentTask] = useState<CurrentTask | null>(null);
   const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isUnmountedRef = useRef(false);
+  const isStartingRef = useRef(false);
 
   useEffect(() => {
     isUnmountedRef.current = false;
@@ -138,14 +139,16 @@ export function useTask(options: UseTaskOptions = {}) {
   };
 
   const startExtraction = async (url: string): Promise<string | null> => {
-    if (currentTask && currentTask.status === 'running') {
+    if (isStartingRef.current || (currentTask && currentTask.status === 'running')) {
       return null;
     }
 
+    isStartingRef.current = true;
     try {
       await ensureContentScript();
     } catch (_error) {
       Logger.error('[useTask] Failed to inject content script');
+      isStartingRef.current = false;
       return null;
     }
 
@@ -176,18 +179,22 @@ export function useTask(options: UseTaskOptions = {}) {
       Logger.error('[useTask] Failed to start extraction', { error: message });
       setCurrentTask(null);
       return null;
+    } finally {
+      isStartingRef.current = false;
     }
   };
 
   const startConfigGeneration = async (url: string): Promise<string | null> => {
-    if (currentTask && currentTask.status === 'running') {
+    if (isStartingRef.current || (currentTask && currentTask.status === 'running')) {
       return null;
     }
 
+    isStartingRef.current = true;
     try {
       await ensureContentScript();
     } catch (_error) {
       Logger.error('[useTask] Failed to inject content script');
+      isStartingRef.current = false;
       return null;
     }
 
@@ -218,6 +225,8 @@ export function useTask(options: UseTaskOptions = {}) {
       Logger.error('[useTask] Failed to start config generation', { error: message });
       setCurrentTask(null);
       return null;
+    } finally {
+      isStartingRef.current = false;
     }
   };
 
@@ -226,9 +235,11 @@ export function useTask(options: UseTaskOptions = {}) {
     comments: unknown[],
     metadata: { url?: string; platform?: string; title?: string },
   ): Promise<string | null> => {
-    if (currentTask && currentTask.status === 'running') {
+    if (isStartingRef.current || (currentTask && currentTask.status === 'running')) {
       return null;
     }
+
+    isStartingRef.current = true;
 
     try {
       const response = await chrome.runtime.sendMessage({
@@ -255,6 +266,8 @@ export function useTask(options: UseTaskOptions = {}) {
       Logger.error('[useTask] Failed to start analysis', { error });
       setCurrentTask(null);
       return null;
+    } finally {
+      isStartingRef.current = false;
     }
   };
 

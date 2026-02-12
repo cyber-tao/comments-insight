@@ -26,7 +26,7 @@ export class Chunker {
     let currentSize = 0;
 
     const maxChars = maxTokens * TOKENIZER.CHARS_PER_TOKEN;
-    const simplifier = new DOMSimplifier();
+    const simplifier = DOMSimplifier.getInstance();
 
     // Calculate wrapper overhead (open tag + close tag)
     // We create a temporary node without children to measure overhead

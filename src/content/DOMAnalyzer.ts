@@ -30,9 +30,7 @@ export class DOMAnalyzer {
    * @param maxDepth - Maximum depth to analyze
    * @returns Root DOM node
    */
-  async analyzeLayerByLayer(
-    maxDepth: number = DOM_ANALYSIS_DEFAULTS.initialDepth,
-  ): Promise<DOMNode> {
+  analyzeLayerByLayer(maxDepth: number = DOM_ANALYSIS_DEFAULTS.initialDepth): DOMNode {
     const root = document.body;
     return this.analyzeNode(root, 0, maxDepth);
   }
