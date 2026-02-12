@@ -66,7 +66,7 @@ async function runWithConcurrencyLimit<T>(
  * ```
  */
 export class AIService {
-  private currentLanguage: string = LANGUAGES.DEFAULT;
+  // Language is passed through method parameters to avoid race conditions
 
   /**
    * Creates a new AIService instance.
@@ -449,7 +449,7 @@ export class AIService {
     signal?: AbortSignal,
     timeout?: number,
   ): Promise<AnalysisResult> {
-    this.currentLanguage = language || LANGUAGES.DEFAULT;
+    const resolvedLanguage = language || LANGUAGES.DEFAULT;
     // Split comments if they exceed token limit
     const commentBatches = this.splitCommentsForAnalysis(comments, config);
 
@@ -464,6 +464,7 @@ export class AIService {
         metadata,
         signal,
         timeout,
+        resolvedLanguage,
       );
     } else {
       // Multiple batches - analyze with concurrency limit
@@ -476,6 +477,7 @@ export class AIService {
             metadata,
             signal,
             timeout,
+            resolvedLanguage,
           );
           return { ok: true as const, result };
         } catch (error) {
@@ -619,6 +621,7 @@ export class AIService {
     },
     signal?: AbortSignal,
     timeout?: number,
+    language: string = LANGUAGES.DEFAULT,
   ): Promise<AnalysisResult> {
     const serialized = this.serializeCommentsDense(comments);
     const prompt = this.buildAnalysisPromptWrapper(
@@ -626,6 +629,7 @@ export class AIService {
       promptTemplate,
       metadata,
       serialized.total,
+      language,
     );
 
     const response = await this.callAI({
@@ -882,6 +886,7 @@ export class AIService {
       postContent?: string;
     },
     totalComments: number = 0,
+    language: string = LANGUAGES.DEFAULT,
   ): string {
     return buildAnalysisPrompt(commentsData, template, {
       datetime: new Date().toISOString(),
@@ -891,7 +896,7 @@ export class AIService {
       title: metadata?.title || 'Untitled',
       postContent: metadata?.postContent || 'N/A',
       totalComments,
-      language: this.currentLanguage,
+      language,
     });
   }
 

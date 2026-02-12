@@ -7,7 +7,7 @@ import { Settings } from '@/types';
 
 interface AIModelSettingsProps {
   settings: Settings;
-  onSettingsChange: (settings: Settings) => void;
+  onSettingsChange: (settings: Partial<Settings>) => void;
   toast: {
     success: (message: string) => void;
     error: (message: string) => void;

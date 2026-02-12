@@ -91,9 +91,9 @@ export function useSettings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings, isInitialLoad]);
 
-  const handleSettingsChange = useCallback((newSettings: Settings) => {
+  const handleSettingsChange = useCallback((newSettings: Partial<Settings>) => {
     isUserChangeRef.current = true;
-    setSettings(newSettings);
+    setSettings((prev) => (prev ? { ...prev, ...newSettings } : prev));
   }, []);
 
   const handleExport = useCallback(async () => {
@@ -128,8 +128,12 @@ export function useSettings() {
         try {
           const data = event.target?.result as string;
           const imported = JSON.parse(data);
+          if (typeof imported !== 'object' || imported === null || Array.isArray(imported)) {
+            toast.error(t('options.importError'));
+            return;
+          }
           setSettings((prev) => {
-            if (!prev) return imported;
+            if (!prev) return prev;
             return {
               ...prev,
               ...imported,

@@ -225,11 +225,12 @@ const History: React.FC = () => {
   const totalComments = getProcessedComments().length;
   const totalPages = Math.ceil(totalComments / commentsPerPage);
 
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
+
   React.useEffect(() => {
     setCurrentPage(1);
+    setExpandedReplies(new Set());
   }, [commentSearchTerm, selectedItem]);
-
-  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
 
   const toggleReplies = (commentId: string) => {
     setExpandedReplies((prev) => {

@@ -5,7 +5,7 @@ import { Settings } from '@/types';
 
 interface AdvancedSettingsProps {
   settings: Settings;
-  onSettingsChange: (settings: Settings) => void;
+  onSettingsChange: (settings: Partial<Settings>) => void;
 }
 
 export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({

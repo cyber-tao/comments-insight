@@ -13,14 +13,6 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    rules: {
-      '@typescript-eslint/no-unused-vars': [
-        'warn',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
-      ],
-    },
-  },
-  {
     files: ['**/*.{ts,tsx}'],
     plugins: {
       react: reactPlugin,
@@ -58,9 +50,9 @@ export default tseslint.config(
       'react/react-in-jsx-scope': 'off',
       'react/jsx-uses-react': 'off',
       'no-useless-escape': 'off',
-      'no-useless-catch': 'off',
-      'no-empty': 'off',
-      'prefer-const': 'off',
+      'no-useless-catch': 'warn',
+      'no-empty': 'warn',
+      'prefer-const': 'warn',
     },
   },
 );

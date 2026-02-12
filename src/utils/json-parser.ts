@@ -1,4 +1,5 @@
 import { REGEX } from '@/config/constants';
+import { ExtensionError, ErrorCode } from '@/utils/errors';
 
 export function cleanAndParseJsonObject<T = unknown>(raw: string): T {
   let text = raw.trim();
@@ -10,7 +11,14 @@ export function cleanAndParseJsonObject<T = unknown>(raw: string): T {
   if (jsonStart !== -1 && jsonEnd !== -1) {
     text = text.substring(jsonStart, jsonEnd + 1);
   }
-  return JSON.parse(text) as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch (e) {
+    throw new ExtensionError(
+      ErrorCode.AI_INVALID_RESPONSE,
+      `Failed to parse JSON object: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }
 
 export function cleanAndParseJsonArray<T = unknown>(raw: string): T[] {
@@ -23,5 +31,12 @@ export function cleanAndParseJsonArray<T = unknown>(raw: string): T[] {
   if (jsonStart !== -1 && jsonEnd !== -1) {
     text = text.substring(jsonStart, jsonEnd + 1);
   }
-  return JSON.parse(text) as T[];
+  try {
+    return JSON.parse(text) as T[];
+  } catch (e) {
+    throw new ExtensionError(
+      ErrorCode.AI_INVALID_RESPONSE,
+      `Failed to parse JSON array: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
 }

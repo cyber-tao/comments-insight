@@ -72,3 +72,23 @@ export async function handleSyncCrawlingConfigs(
   const result = await context.storageManager.syncCrawlingConfigs();
   return { success: true, ...result };
 }
+
+export async function handleUpdateFieldValidation(
+  message: Extract<Message, { type: 'UPDATE_FIELD_VALIDATION' }>,
+  context: HandlerContext,
+): Promise<SuccessResponse> {
+  const { domain, fieldValidation } = message.payload;
+
+  if (!domain || !fieldValidation) {
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Domain and fieldValidation are required');
+  }
+
+  const config = await context.storageManager.getCrawlingConfig(domain);
+  if (config) {
+    config.fieldValidation = fieldValidation;
+    await context.storageManager.saveCrawlingConfig(config);
+    Logger.debug('[SettingsHandler] Field validation updated', { domain });
+  }
+
+  return { success: true };
+}
