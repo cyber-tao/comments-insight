@@ -479,21 +479,50 @@ export class AIStrategy implements ExtractionStrategy {
 
   private async callAIviaPort<T>(message: any): Promise<T> {
     return new Promise((resolve, reject) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+
       try {
         const port = this.getAIPort();
         const id = Math.random().toString(36).slice(2);
 
+        const finalize = (callback: () => void): void => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          if (timer) {
+            clearTimeout(timer);
+            timer = null;
+          }
+          port.onMessage.removeListener(listener);
+          port.onDisconnect.removeListener(disconnectListener);
+          callback();
+        };
+
         // Create a listener for this specific message ID
         const listener = (msg: any) => {
           if (msg.id === id) {
-            port.onMessage.removeListener(listener);
-            resolve(msg.response as T);
+            finalize(() => resolve(msg.response as T));
           }
         };
 
+        const disconnectListener = (): void => {
+          const messageText =
+            chrome.runtime.lastError?.message || '[AIStrategy] AI Bridge Port disconnected';
+          finalize(() => reject(new Error(messageText)));
+        };
+
         port.onMessage.addListener(listener);
+        port.onDisconnect.addListener(disconnectListener);
+        timer = setTimeout(() => {
+          finalize(() => reject(new Error('AI Bridge response timeout')));
+        }, AI.DEFAULT_TIMEOUT);
         port.postMessage({ ...message, id });
       } catch (err) {
+        if (timer) {
+          clearTimeout(timer);
+        }
         reject(err);
       }
     });

@@ -765,7 +765,8 @@ export class AIService {
     );
 
     for (const comment of comments) {
-      let commentTokens = this.estimateTokensForComment(comment);
+      let commentForBatch = comment;
+      let commentTokens = this.estimateTokensForComment(commentForBatch);
 
       // Handle huge single comment
       if (commentTokens > availableTokens) {
@@ -781,12 +782,15 @@ export class AIService {
 
         if (comment.content && comment.content.length > maxChars) {
           const originalLength = comment.content.length;
-          comment.content = comment.content.substring(0, maxChars) + TEXT.TRUNCATED_SUFFIX;
-          commentTokens = this.estimateTokensForComment(comment); // Re-calculate
+          commentForBatch = {
+            ...comment,
+            content: comment.content.substring(0, maxChars) + TEXT.TRUNCATED_SUFFIX,
+          };
+          commentTokens = this.estimateTokensForComment(commentForBatch); // Re-calculate
 
           Logger.info('[AIService] Comment truncated', {
             originalLength,
-            newLength: comment.content.length,
+            newLength: commentForBatch.content.length,
             newTokens: commentTokens,
           });
         }
@@ -798,7 +802,7 @@ export class AIService {
         currentTokens = 0;
       }
 
-      currentBatch.push(comment);
+      currentBatch.push(commentForBatch);
       currentTokens += commentTokens;
     }
 

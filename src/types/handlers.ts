@@ -61,6 +61,7 @@ export type PortMessageHandler = (port: chrome.runtime.Port, message: PortMessag
 export interface ExtractionResult {
   tokensUsed: number;
   commentsCount: number;
+  title?: string;
 }
 
 /**
