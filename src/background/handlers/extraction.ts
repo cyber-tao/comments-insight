@@ -235,6 +235,7 @@ export async function handleExtractionCompleted(
     pending.resolve({
       tokensUsed: 0,
       commentsCount: comments?.length || 0,
+      title: postInfo?.title || postInfo?.url,
     });
   } else {
     pending.reject(new ExtensionError(ErrorCode.EXTRACTION_FAILED, error || 'Extraction failed'));
@@ -523,6 +524,7 @@ export async function handleStartAnalysis(
     return {
       tokensUsed: result.tokensUsed,
       commentsCount: comments.length,
+      title,
     };
   });
 

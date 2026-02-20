@@ -1,6 +1,6 @@
 {
   "name": "comments-insight",
-  "version": "0.3.5",
+  "version": "0.3.7",
   "description": "AI-powered comment extraction and analysis Chrome extension",
   "type": "module",
   "scripts": {

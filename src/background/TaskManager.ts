@@ -13,6 +13,8 @@ export interface TaskResult {
   tokensUsed?: number;
   /** Number of comments extracted or analyzed */
   commentsCount?: number;
+  /** Preferred title for notifications */
+  title?: string;
 }
 
 /**
@@ -369,7 +371,8 @@ export class TaskManager {
       commentsCount: result?.commentsCount,
     });
 
-    NotificationService.showTaskCompleted(task.type, `Task completed`, result?.commentsCount);
+    const notificationTitle = result?.title?.trim() || task.url;
+    NotificationService.showTaskCompleted(task.type, notificationTitle, result?.commentsCount);
 
     this.currentTaskId = null;
     this.notifyTaskUpdate(task);

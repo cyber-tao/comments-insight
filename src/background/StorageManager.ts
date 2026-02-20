@@ -12,6 +12,7 @@ import {
   DOM_ANALYSIS_DEFAULTS,
 } from '@/config/constants';
 import DEFAULT_CRAWLING_RULES from '@/config/default_rules.json';
+import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
 import LZString from 'lz-string';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
@@ -52,31 +53,7 @@ const DEFAULT_SETTINGS: Settings = {
   aiTimeout: AI.DEFAULT_TIMEOUT,
   normalizeTimestamps: false,
   exportPostContentInMarkdown: false,
-  analyzerPromptTemplate: `You are a professional social media analyst. Analyze the following comments and provide insights.
-
-## Post Information:
-- **Title**: {title}
-- **Platform**: {platform}
-- **URL**: {url}
-- **Published**: {post_time}
-
-## Post Content (Original):
-{post_content}
-
-## Comments Data (Dense Format):
-{comments_data}
-
-## Analysis Requirements:
-1. Sentiment Analysis: Categorize comments as positive, negative, or neutral
-2. Hot Comments: Identify top comments by engagement and explain why they're popular
-3. Key Insights: Extract main themes, concerns, and trends
-4. Summary Statistics: Provide overall metrics
-
-## Output Format:
-Generate a comprehensive analysis report in Markdown format.
-
-## Post Content Summary
-[Summarize the original post content or video description to capture the author's intent]`,
+  analyzerPromptTemplate: DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
   language: LANGUAGES.DEFAULT,
   theme: THEME.DEFAULT,
   selectorRetryAttempts: RETRY.SELECTOR_ATTEMPTS,
@@ -123,6 +100,10 @@ export class StorageManager {
 
   /** In-memory cache for sorted index to avoid repeated storage reads */
   private sortedIndexCache: HistorySortedIndex | null = null;
+
+  private normalizeCrawlingDomain(domain: string): string {
+    return domain.trim().toLowerCase();
+  }
 
   private async getFromStorage<T>(key: string): Promise<T | undefined> {
     const result = await chrome.storage.local.get(key);
@@ -386,10 +367,16 @@ export class StorageManager {
     const storedConfigs = stored.crawlingConfigs || [];
     const configMap = new Map<string, CrawlingConfig>();
     for (const config of defaultConfigs) {
-      configMap.set(config.domain, config);
+      configMap.set(this.normalizeCrawlingDomain(config.domain), {
+        ...config,
+        domain: this.normalizeCrawlingDomain(config.domain),
+      });
     }
     for (const config of storedConfigs) {
-      configMap.set(config.domain, config);
+      configMap.set(this.normalizeCrawlingDomain(config.domain), {
+        ...config,
+        domain: this.normalizeCrawlingDomain(config.domain),
+      });
     }
     merged.crawlingConfigs = Array.from(configMap.values());
 
@@ -486,14 +473,20 @@ export class StorageManager {
       await this.ensureEncryptionReady();
       const settings = await this.getSettings();
       const configs = settings.crawlingConfigs || [];
+      const normalizedDomain = this.normalizeCrawlingDomain(domain);
 
       // 1. Exact match
-      const exact = configs.find((c) => c.domain === domain);
+      const exact = configs.find(
+        (c) => this.normalizeCrawlingDomain(c.domain) === normalizedDomain,
+      );
       if (exact) return exact;
 
       // 2. Suffix match (e.g. m.youtube.com -> youtube.com)
       // Sort keys by length desc to match longest suffix (most specific)
-      const matches = configs.filter((c) => domain.endsWith(c.domain));
+      const matches = configs.filter((c) => {
+        const configDomain = this.normalizeCrawlingDomain(c.domain);
+        return normalizedDomain === configDomain || normalizedDomain.endsWith(`.${configDomain}`);
+      });
       if (matches.length > 0) {
         // Return the one with the longest domain string (best match)
         return matches.sort((a, b) => b.domain.length - a.domain.length)[0];
@@ -525,12 +518,27 @@ export class StorageManager {
 
       const merged = [...currentConfigs];
       for (const remote of remoteConfigs) {
-        const index = merged.findIndex((c) => c.id === remote.id);
+        const normalizedRemoteDomain = this.normalizeCrawlingDomain(remote.domain);
+        const normalizedRemoteConfig: CrawlingConfig = {
+          ...remote,
+          domain: normalizedRemoteDomain,
+          lastUpdated: Date.now(),
+        };
+
+        const indexByDomain = merged.findIndex(
+          (c) => this.normalizeCrawlingDomain(c.domain) === normalizedRemoteDomain,
+        );
+        const indexById = merged.findIndex((c) => c.id === remote.id);
+        const index = indexByDomain >= 0 ? indexByDomain : indexById;
+
         if (index >= 0) {
-          merged[index] = { ...merged[index], ...remote, lastUpdated: Date.now() };
+          merged[index] = {
+            ...merged[index],
+            ...normalizedRemoteConfig,
+          };
           updated++;
         } else {
-          merged.push({ ...remote, lastUpdated: Date.now() });
+          merged.push(normalizedRemoteConfig);
           added++;
         }
       }
@@ -552,16 +560,23 @@ export class StorageManager {
       await this.ensureEncryptionReady();
       const settings = await this.getSettings();
       const configs = settings.crawlingConfigs || [];
+      const normalizedDomain = this.normalizeCrawlingDomain(config.domain);
+      const normalizedConfig: CrawlingConfig = {
+        ...config,
+        domain: normalizedDomain,
+      };
 
-      const index = configs.findIndex((c) => c.domain === config.domain);
+      const index = configs.findIndex(
+        (c) => this.normalizeCrawlingDomain(c.domain) === normalizedDomain,
+      );
       if (index >= 0) {
-        configs[index] = config;
+        configs[index] = normalizedConfig;
       } else {
-        configs.push(config);
+        configs.push(normalizedConfig);
       }
 
       await this.saveSettings({ crawlingConfigs: configs });
-      Logger.info('[StorageManager] Crawling config saved', { domain: config.domain });
+      Logger.info('[StorageManager] Crawling config saved', { domain: normalizedDomain });
     } catch (error) {
       Logger.error('[StorageManager] Failed to save crawling config', { error });
       throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save crawling config');
