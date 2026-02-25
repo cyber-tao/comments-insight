@@ -1,5 +1,6 @@
 import { ICONS, TEXT, RETRY } from '@/config/constants';
 import i18n from './i18n';
+import { Logger } from './logger';
 
 // interface ErrorConstructorWithCapture removed
 
@@ -197,22 +198,11 @@ export class ErrorHandler {
   static async handleError(error: Error | ExtensionError, context: string): Promise<void> {
     const extensionError = this.normalizeError(error);
 
-    // Log error - use dynamic import to avoid circular dependency
-    try {
-      const { Logger } = await import('./logger.js');
-      Logger.error(`[${context}] ${extensionError.code}: ${extensionError.message}`, {
-        code: extensionError.code,
-        details: extensionError.details,
-        stack: extensionError.stack,
-      });
-    } catch (_importError) {
-      // Fallback to console if logger import fails
-      // Should be rare, but safe to leave console here as last resort
-      console.error(
-        `[${context}] ${extensionError.code}: ${extensionError.message}`,
-        extensionError,
-      );
-    }
+    Logger.error(`[${context}] ${extensionError.code}: ${extensionError.message}`, {
+      code: extensionError.code,
+      details: extensionError.details,
+      stack: extensionError.stack,
+    });
 
     // Show user notification for critical errors
     if (this.isCriticalError(extensionError.code)) {
@@ -238,59 +228,42 @@ export class ErrorHandler {
 
     for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
       try {
-        try {
-          const { Logger } = await import('./logger.js');
-          Logger.debug(`[${context}] Attempt ${attempt}/${retryConfig.maxAttempts}`);
-        } catch {}
-
+        Logger.debug(`[${context}] Attempt ${attempt}/${retryConfig.maxAttempts}`);
         return await fn();
       } catch (error) {
         lastError = this.normalizeError(error as Error);
 
-        try {
-          const { Logger } = await import('./logger.js');
-          Logger.warn(`[${context}] Attempt ${attempt} failed: ${lastError.message}`, {
+        Logger.warn(`[${context}] Attempt ${attempt} failed: ${lastError.message}`, {
+          code: lastError.code,
+          attempt,
+          maxAttempts: retryConfig.maxAttempts,
+        });
+
+        if (!this.isRetryable(lastError, retryConfig)) {
+          Logger.error(`[${context}] Error is not retryable, giving up`, {
             code: lastError.code,
-            attempt,
-            maxAttempts: retryConfig.maxAttempts,
           });
-
-          if (!this.isRetryable(lastError, retryConfig)) {
-            Logger.error(`[${context}] Error is not retryable, giving up`, {
-              code: lastError.code,
-            });
-            if (retryConfig.fallback) {
-              Logger.info(`[${context}] Executing fallback`);
-              return (await retryConfig.fallback()) as T;
-            }
-            throw lastError;
+          if (retryConfig.fallback) {
+            Logger.info(`[${context}] Executing fallback`);
+            return (await retryConfig.fallback()) as T;
           }
-
-          if (attempt === retryConfig.maxAttempts) {
-            Logger.error(`[${context}] Max retry attempts reached, giving up`, {
-              attempts: attempt,
-            });
-            if (retryConfig.fallback) {
-              Logger.info(`[${context}] Executing fallback`);
-              return (await retryConfig.fallback()) as T;
-            }
-            throw lastError;
-          }
-
-          retryConfig.onRetry?.(attempt, lastError);
-
-          Logger.debug(`[${context}] Waiting ${delay}ms before retry...`);
-        } catch (_importError) {
-          console.warn(`[${context}] Attempt ${attempt} failed:`, lastError);
-
-          if (!this.isRetryable(lastError, retryConfig) || attempt === retryConfig.maxAttempts) {
-            if (retryConfig.fallback) {
-              return (await retryConfig.fallback()) as T;
-            }
-            throw lastError;
-          }
-          retryConfig.onRetry?.(attempt, lastError);
+          throw lastError;
         }
+
+        if (attempt === retryConfig.maxAttempts) {
+          Logger.error(`[${context}] Max retry attempts reached, giving up`, {
+            attempts: attempt,
+          });
+          if (retryConfig.fallback) {
+            Logger.info(`[${context}] Executing fallback`);
+            return (await retryConfig.fallback()) as T;
+          }
+          throw lastError;
+        }
+
+        retryConfig.onRetry?.(attempt, lastError);
+
+        Logger.debug(`[${context}] Waiting ${delay}ms before retry...`);
 
         await this.sleep(delay);
         delay = Math.min(delay * retryConfig.backoffMultiplier, retryConfig.maxDelay);
@@ -441,12 +414,7 @@ export class ErrorHandler {
         priority: 2,
       });
     } catch (notificationError) {
-      try {
-        const { Logger } = await import('./logger.js');
-        Logger.error('[ErrorHandler] Failed to show notification:', { error: notificationError });
-      } catch {
-        console.error('[ErrorHandler] Failed to show notification:', notificationError);
-      }
+      Logger.error('[ErrorHandler] Failed to show notification:', { error: notificationError });
     }
   }
 

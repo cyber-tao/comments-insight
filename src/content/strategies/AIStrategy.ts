@@ -6,6 +6,7 @@ import { Chunker } from '../utils/Chunker';
 import { Tokenizer } from '@/utils/tokenizer';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
+import { PortMessage, PortMessageResponse } from '../../types/handlers';
 import {
   EXTRACTION_PROGRESS,
   CONFIG_GENERATION_PROGRESS,
@@ -402,7 +403,9 @@ export class AIStrategy implements ExtractionStrategy {
 
         try {
           // Use Port for long-running AI request to avoid message timeout
-          const response = await this.callAIviaPort<any>({
+          const response = await this.callAIviaPort<{
+            data?: { selectors?: { commentContainer?: string }; confidence?: number };
+          }>({
             type: MESSAGES.AI_ANALYZE_STRUCTURE,
             payload: { prompt },
           });
@@ -446,7 +449,7 @@ export class AIStrategy implements ExtractionStrategy {
   private async extractFromChunks(chunks: string[]): Promise<Comment[]> {
     try {
       // Use Port for long-running AI extraction to avoid message timeout
-      const response = await this.callAIviaPort<any>({
+      const response = await this.callAIviaPort<{ comments?: Comment[]; error?: string }>({
         type: MESSAGES.AI_EXTRACT_CONTENT,
         payload: {
           chunks,
@@ -477,7 +480,7 @@ export class AIStrategy implements ExtractionStrategy {
     return this.aiPort;
   }
 
-  private async callAIviaPort<T>(message: any): Promise<T> {
+  private async callAIviaPort<T>(message: Omit<PortMessage, 'id'>): Promise<T> {
     return new Promise((resolve, reject) => {
       let settled = false;
       let timer: ReturnType<typeof setTimeout> | null = null;
@@ -501,7 +504,7 @@ export class AIStrategy implements ExtractionStrategy {
         };
 
         // Create a listener for this specific message ID
-        const listener = (msg: any) => {
+        const listener = (msg: PortMessageResponse) => {
           if (msg.id === id) {
             finalize(() => resolve(msg.response as T));
           }
@@ -592,13 +595,13 @@ export class AIStrategy implements ExtractionStrategy {
       PROMPT_GENERATE_CRAWLING_CONFIG +
       `\n\nDOM Structure (Container: ${sectionSelector}):\n\`\`\`html\n${domStr}\n\`\`\``;
 
-    const response = await this.callAIviaPort<any>({
+    const response = await this.callAIviaPort<{ config?: CrawlingConfig; error?: string }>({
       type: MESSAGES.GENERATE_CRAWLING_CONFIG,
       payload: { prompt },
     });
 
     if (response && response.config) {
-      const config: any = response.config;
+      const config = response.config;
 
       if (config.container && config.item && config.fields) {
         const normalizedDomain = hostname.startsWith('www.') ? hostname.slice(4) : hostname;
@@ -660,7 +663,7 @@ export class AIStrategy implements ExtractionStrategy {
       PROMPT_GENERATE_CRAWLING_CONFIG +
       `\n\nPage URL: ${window.location.href}\nDomain: ${hostname}\n\nDOM Structure:\n\`\`\`html\n${domStr}\n\`\`\``;
 
-    const response = await this.callAIviaPort<any>({
+    const response = await this.callAIviaPort<{ config?: CrawlingConfig; error?: string }>({
       type: MESSAGES.GENERATE_CRAWLING_CONFIG,
       payload: { prompt },
     });
@@ -669,7 +672,7 @@ export class AIStrategy implements ExtractionStrategy {
       throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, 'AI failed to generate config');
     }
 
-    const config: any = response.config;
+    const config = response.config;
 
     if (!config.container || !config.item || !config.fields) {
       throw new ExtensionError(

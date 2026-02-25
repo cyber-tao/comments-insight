@@ -1,4 +1,4 @@
-import { Message, Comment, Task, TaskResolver } from '../../types';
+import { Message, Comment, Task, TaskResolver, CrawlingConfig } from '../../types';
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
@@ -390,7 +390,7 @@ export async function handleAIAnalyzeStructure(
 export async function handleGenerateCrawlingConfig(
   message: Extract<Message, { type: 'GENERATE_CRAWLING_CONFIG' }>,
   context: HandlerContext,
-): Promise<{ config: any; error?: string }> {
+): Promise<{ config: CrawlingConfig | null; error?: string }> {
   const { prompt } = message.payload || {};
 
   if (!prompt) {
@@ -409,7 +409,7 @@ export async function handleGenerateCrawlingConfig(
       timeout: settings.aiTimeout,
     });
 
-    const config = cleanAndParseJsonObject(response.content);
+    const config = cleanAndParseJsonObject<CrawlingConfig>(response.content);
     return { config };
   } catch (error) {
     Logger.error('[ExtractionHandler] Config generation failed', { error });

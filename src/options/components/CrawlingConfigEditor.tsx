@@ -24,7 +24,9 @@ const normalizeFields = (fields: FieldSelector[]): FieldSelector[] => {
   }
 
   return normalized.sort(
-    (a, b) => STANDARD_FIELDS.indexOf(a.name as any) - STANDARD_FIELDS.indexOf(b.name as any),
+    (a, b) =>
+      STANDARD_FIELDS.indexOf(a.name as (typeof STANDARD_FIELDS)[number]) -
+      STANDARD_FIELDS.indexOf(b.name as (typeof STANDARD_FIELDS)[number]),
   );
 };
 

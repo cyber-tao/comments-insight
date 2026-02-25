@@ -363,7 +363,7 @@ export class AIService {
   async getAvailableModels(apiUrl: string, apiKey: string): Promise<string[]> {
     try {
       // Ensure API URL is base URL (v1)
-      let baseUrl = apiUrl
+      const baseUrl = apiUrl
         .trim()
         .replace(new RegExp('/$'), '')
         .replace(new RegExp('/chat/completions$'), '');

@@ -42,7 +42,11 @@ interface SelectorTestResponse {
   error?: string;
 }
 
-const globalAny = globalThis as any;
+interface GlobalWithInsight {
+  __COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED?: boolean;
+}
+
+const globalInsight = globalThis as GlobalWithInsight;
 
 let domAnalyzer: DOMAnalyzer | null = null;
 let pageController: PageController | null = null;
@@ -58,8 +62,8 @@ const getTools = () => {
 // Track current extraction task
 let currentTaskId: string | null = null;
 
-if (!globalAny.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED) {
-  globalAny.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED = true;
+if (!globalInsight.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED) {
+  globalInsight.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED = true;
 
   Logger.debug('Comments Insight Content Script loaded');
   Logger.debug('[Content] Page loaded', { href: window.location.href });

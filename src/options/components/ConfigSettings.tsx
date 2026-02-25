@@ -3,6 +3,7 @@ import { Settings, CrawlingConfig, SelectorRule, FieldSelector, ReplyConfig } fr
 import { useTranslation } from 'react-i18next';
 import { CrawlingConfigEditor } from './CrawlingConfigEditor';
 import { API } from '@/config/constants';
+import { Logger } from '../../utils/logger';
 
 interface Props {
   settings: Settings;
@@ -629,7 +630,7 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
       setIsRemoteSync(true);
       setImportOpen(true);
     } catch (error) {
-      console.error('Failed to sync configs:', error);
+      Logger.error('Failed to sync configs:', { error });
       alert(t('options.crawlingConfigs.syncError'));
     } finally {
       setSyncing(false);

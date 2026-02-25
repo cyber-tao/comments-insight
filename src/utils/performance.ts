@@ -135,6 +135,16 @@ class PerformanceMonitor {
 
 export const performanceMonitor = new PerformanceMonitor();
 
+interface PerformanceMemory {
+  usedJSHeapSize: number;
+  totalJSHeapSize: number;
+  jsHeapSizeLimit: number;
+}
+
+interface PerformanceWithMemory extends Performance {
+  memory?: PerformanceMemory;
+}
+
 /**
  * Memory monitoring utilities (development only)
  */
@@ -201,8 +211,9 @@ class MemoryMonitor {
       return;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const memory = (performance as any).memory;
+    const memory = (performance as PerformanceWithMemory).memory;
+    if (!memory) return;
+
     const usedMB = Math.round(memory.usedJSHeapSize / MEMORY.BYTES_PER_MB);
     const totalMB = Math.round(memory.totalJSHeapSize / MEMORY.BYTES_PER_MB);
     const limitMB = Math.round(memory.jsHeapSizeLimit / MEMORY.BYTES_PER_MB);
@@ -233,8 +244,9 @@ class MemoryMonitor {
       return null;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const memory = (performance as any).memory;
+    const memory = (performance as PerformanceWithMemory).memory;
+    if (!memory) return null;
+
     return {
       used: memory.usedJSHeapSize,
       total: memory.totalJSHeapSize,
