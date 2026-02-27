@@ -45,7 +45,7 @@ export type ConfigGenerationCallback = (progress: number, message: string) => vo
 export class AIStrategy implements ExtractionStrategy {
   private aiPort: chrome.runtime.Port | null = null;
 
-  constructor(private pageController: PageController) { }
+  constructor(private pageController: PageController) {}
 
   /**
    * 清理资源，断开端口连接
@@ -602,7 +602,10 @@ export class AIStrategy implements ExtractionStrategy {
         PROMPT_GENERATE_CRAWLING_META_CONFIG +
         `\n\nPage URL: ${window.location.href}\nDomain: ${hostname}\n\nDOM Structure:\n\`\`\`html\n${shallowDomStr}\n\`\`\``;
 
-      onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING + 5, 'Asking AI for post metadata schemas...');
+      onProgress?.(
+        EXTRACTION_PROGRESS.CONFIG_ANALYZING + 5,
+        'Asking AI for post metadata schemas...',
+      );
       const response = await this.callAIviaPort<{ config?: any; error?: string }>({
         type: MESSAGES.GENERATE_CRAWLING_CONFIG,
         payload: { prompt: metaPrompt },
@@ -619,9 +622,17 @@ export class AIStrategy implements ExtractionStrategy {
     // Phase 2: Detecting Section Selector if missing
     let sectionSelector = knownSectionSelector;
     if (!sectionSelector) {
-      onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING + 10, 'Locating primary comment section...');
-      const tokenChunks = AI.DEFAULT_CONTEXT_WINDOW - AI.DEFAULT_MAX_OUTPUT_TOKENS - AI.INPUT_TOKEN_BUFFER;
-      sectionSelector = await this.detectCommentSection(domConfig.maxDepth, detectMaxNodes, tokenChunks);
+      onProgress?.(
+        EXTRACTION_PROGRESS.CONFIG_ANALYZING + 10,
+        'Locating primary comment section...',
+      );
+      const tokenChunks =
+        AI.DEFAULT_CONTEXT_WINDOW - AI.DEFAULT_MAX_OUTPUT_TOKENS - AI.INPUT_TOKEN_BUFFER;
+      sectionSelector = await this.detectCommentSection(
+        domConfig.maxDepth,
+        detectMaxNodes,
+        tokenChunks,
+      );
     }
 
     if (!sectionSelector) {
@@ -630,11 +641,17 @@ export class AIStrategy implements ExtractionStrategy {
 
     const sectionElement = document.querySelector(sectionSelector);
     if (!sectionElement) {
-      throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, `Comment section element not found: ${sectionSelector}`);
+      throw new ExtensionError(
+        ErrorCode.DOM_ANALYSIS_FAILED,
+        `Comment section element not found: ${sectionSelector}`,
+      );
     }
 
     // Phase 3: Detailed Comments Config Generation
-    onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING + 15, 'Extracting detailed comment DOM structure...');
+    onProgress?.(
+      EXTRACTION_PROGRESS.CONFIG_ANALYZING + 15,
+      'Extracting detailed comment DOM structure...',
+    );
     const deepSimplified = DOMSimplifier.simplifyForAI(sectionElement, {
       maxDepth: domConfig.maxDepth,
       includeText: true,
@@ -646,19 +663,28 @@ export class AIStrategy implements ExtractionStrategy {
       PROMPT_GENERATE_CRAWLING_CONFIG +
       `\n\nPage URL: ${window.location.href}\nDomain: ${hostname}\n\nDOM Structure (Container: ${sectionSelector}):\n\`\`\`html\n${deepDomStr}\n\`\`\``;
 
-    onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING + 20, 'Asking AI for comment fields schemas...');
+    onProgress?.(
+      EXTRACTION_PROGRESS.CONFIG_ANALYZING + 20,
+      'Asking AI for comment fields schemas...',
+    );
     const response = await this.callAIviaPort<{ config?: CrawlingConfig; error?: string }>({
       type: MESSAGES.GENERATE_CRAWLING_CONFIG,
       payload: { prompt },
     });
 
     if (!response || !response.config) {
-      throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, 'AI failed to generate comment fields config');
+      throw new ExtensionError(
+        ErrorCode.DOM_ANALYSIS_FAILED,
+        'AI failed to generate comment fields config',
+      );
     }
 
     const config = response.config;
     if (!config.container || !config.item || !config.fields) {
-      throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, 'Generated config missing required fields (container, item, fields)');
+      throw new ExtensionError(
+        ErrorCode.DOM_ANALYSIS_FAILED,
+        'Generated config missing required fields (container, item, fields)',
+      );
     }
 
     // Combine with meta config
@@ -666,16 +692,31 @@ export class AIStrategy implements ExtractionStrategy {
     if (metaConfig.postContent) config.postContent = metaConfig.postContent;
 
     // Phase 4: Self-Correction / Validation
-    onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING + 30, 'Verifying AI-generated schema on live page...');
+    onProgress?.(
+      EXTRACTION_PROGRESS.CONFIG_ANALYZING + 30,
+      'Verifying AI-generated schema on live page...',
+    );
     try {
       const items = document.querySelectorAll(config.item.selector);
       if (!items || items.length === 0) {
-        Logger.warn('[AIStrategy] Self-correction failed: Generated config item selector found NO elements.', { selector: config.item.selector });
-        throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, 'Generated configuration is invalid (hallucination detected: zero matched elements).');
+        Logger.warn(
+          '[AIStrategy] Self-correction failed: Generated config item selector found NO elements.',
+          { selector: config.item.selector },
+        );
+        throw new ExtensionError(
+          ErrorCode.DOM_ANALYSIS_FAILED,
+          'Generated configuration is invalid (hallucination detected: zero matched elements).',
+        );
       }
-      Logger.info(`[AIStrategy] Self-correction passed: Found ${items.length} items using AI generated selector.`);
+      Logger.info(
+        `[AIStrategy] Self-correction passed: Found ${items.length} items using AI generated selector.`,
+      );
     } catch (err) {
-      throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, 'Invalid CSS selector syntax from AI: ' + (err instanceof Error ? err.message : String(err)));
+      throw new ExtensionError(
+        ErrorCode.DOM_ANALYSIS_FAILED,
+        'Invalid CSS selector syntax from AI: ' +
+          (err instanceof Error ? err.message : String(err)),
+      );
     }
 
     return config;
@@ -684,7 +725,7 @@ export class AIStrategy implements ExtractionStrategy {
   private async saveGeneratedConfig(
     hostname: string,
     config: CrawlingConfig,
-    onProgress?: ProgressCallback | ConfigGenerationCallback
+    onProgress?: ProgressCallback | ConfigGenerationCallback,
   ) {
     onProgress?.(CONFIG_GENERATION_PROGRESS.SAVING, 'Saving verified configuration...');
     const normalizedDomain = hostname.startsWith('www.') ? hostname.slice(4) : hostname;
@@ -696,7 +737,9 @@ export class AIStrategy implements ExtractionStrategy {
       type: MESSAGES.SAVE_CRAWLING_CONFIG,
       payload: { config },
     });
-    Logger.info('[AIStrategy] Successfully generated, verified, and saved crawling config!', { config });
+    Logger.info('[AIStrategy] Successfully generated, verified, and saved crawling config!', {
+      config,
+    });
   }
 
   private delay(ms: number): Promise<void> {
@@ -719,7 +762,10 @@ export class AIStrategy implements ExtractionStrategy {
       Logger.warn('[AIStrategy] Failed to load settings, using defaults', { error: e });
     }
 
-    onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING, 'Scrolling to load dynamically rendered content...');
+    onProgress?.(
+      EXTRACTION_PROGRESS.CONFIG_ANALYZING,
+      'Scrolling to load dynamically rendered content...',
+    );
 
     await this.pageController.scrollToBottom();
     // Use delay for now, PageController scroll update will augment this later
@@ -730,7 +776,12 @@ export class AIStrategy implements ExtractionStrategy {
       domConfig.maxDepth * DOM.DETECT_MAX_NODES_FACTOR,
     );
 
-    const config = await this.generateIntelligentConfig(hostname, domConfig, detectMaxNodes, onProgress);
+    const config = await this.generateIntelligentConfig(
+      hostname,
+      domConfig,
+      detectMaxNodes,
+      onProgress,
+    );
     if (config) {
       await this.saveGeneratedConfig(hostname, config, onProgress);
       onProgress?.(100, 'Configuration Generation Complete!');

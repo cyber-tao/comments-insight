@@ -34,7 +34,7 @@ async function runWithConcurrencyLimit<T>(
 }
 
 export class AIService {
-  constructor(private readonly storageManager: StorageManager) { }
+  constructor(private readonly storageManager: StorageManager) {}
 
   private validateAndBuildUrl(config: AIConfig): string {
     if (!config.apiUrl) {
@@ -145,7 +145,13 @@ export class AIService {
 
           return { content, tokensUsed, finishReason };
         } catch (error) {
-          AIErrorHandler.classifyCallError(this.storageManager, error, signal, effectiveTimeout, prompt);
+          AIErrorHandler.classifyCallError(
+            this.storageManager,
+            error,
+            signal,
+            effectiveTimeout,
+            prompt,
+          );
         } finally {
           if (timeoutId) clearTimeout(timeoutId);
           if (signal) signal.removeEventListener('abort', onParentAbort);

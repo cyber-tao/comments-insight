@@ -7,7 +7,7 @@ import { Logger } from '../utils/logger';
  * PageController handles page interactions like scrolling and clicking
  */
 export class PageController {
-  constructor(private domAnalyzer?: DOMAnalyzer) { }
+  constructor(private domAnalyzer?: DOMAnalyzer) {}
   /**
    * Scroll to bottom smoothly to trigger lazy loading
    */
@@ -45,19 +45,19 @@ export class PageController {
   }
 
   /**
-   * Waits for DOM changes recursively within the target element. 
+   * Waits for DOM changes recursively within the target element.
    * Useful to wait for network-bound lazy loaded content to appear.
    * Resolves true if content changed, false if it timed out.
    */
   async waitForDOMChanges(
     target: Node = document.body,
-    timeoutMs: number = TIMING.SCROLL_DELAY_MS
+    timeoutMs: number = TIMING.SCROLL_DELAY_MS,
   ): Promise<boolean> {
     return new Promise((resolve) => {
       let timer: ReturnType<typeof setTimeout>;
       const observer = new MutationObserver((mutations) => {
-        const hasMeaningfulChange = mutations.some(m =>
-          m.addedNodes.length > 0 || m.type === 'characterData'
+        const hasMeaningfulChange = mutations.some(
+          (m) => m.addedNodes.length > 0 || m.type === 'characterData',
         );
         if (hasMeaningfulChange) {
           observer.disconnect();
@@ -125,7 +125,9 @@ export class PageController {
     // Use MutationObserver for intelligent waiting rather than static delay
     const contentMutated = await this.waitForDOMChanges(container, TIMING.SCROLL_DELAY_MS);
     if (!contentMutated) {
-      Logger.debug('[PageController] No DOM changes detected after scroll, relying on static properties');
+      Logger.debug(
+        '[PageController] No DOM changes detected after scroll, relying on static properties',
+      );
     }
 
     const afterScrollHeight = container.scrollHeight;
