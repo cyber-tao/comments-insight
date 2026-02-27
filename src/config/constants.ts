@@ -225,7 +225,6 @@ export const TEXT = {
   VIEW_RESULTS: 'View Results',
   DISMISS: 'Dismiss',
   ERROR_TITLE: 'Comments Insight Error',
-  NOTIFICATION_AUTOCLEAR_MS: 10000,
   TASK_ALREADY_RUNNING: 'Task is already in progress. Please wait for it to complete.',
   COPY_SUCCESS: 'Copied to clipboard!',
   COPY_FAILED: 'Failed to copy to clipboard',
@@ -335,6 +334,11 @@ export const TASK = {
 };
 
 export const TIMING = {
+  MS_PER_MINUTE: 60 * 1000,
+  MS_PER_HOUR: 60 * 60 * 1000,
+  MS_PER_DAY: 24 * 60 * 60 * 1000,
+  TOAST_DEFAULT_DURATION_MS: 3000,
+  NOTIFICATION_AUTOCLEAR_MS: 10000,
   MICRO_WAIT_MS: 100,
   SCROLL_PAUSE_MS: 150,
   SHORT_WAIT_MS: 200,

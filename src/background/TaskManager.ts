@@ -2,7 +2,7 @@ import { Task, Platform, ProgressStage } from '../types';
 import { NotificationService } from './NotificationService';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
-import { ERROR_KEYS, LIMITS, RETRY, STORAGE, TASK, TIMING } from '@/config/constants';
+import { ERROR_KEYS, LIMITS, RETRY, STORAGE, TASK, TIMING, TIMEOUT } from '@/config/constants';
 import i18n from '@/utils/i18n';
 
 /**
@@ -311,7 +311,7 @@ export class TaskManager {
     if (progressPercent > 5 && progressPercent < 100) {
       const rate = progressPercent / elapsed;
       const remaining = (100 - progressPercent) / rate;
-      estimatedTimeRemaining = Math.ceil(remaining / 1000); // Convert to seconds
+      estimatedTimeRemaining = Math.ceil(remaining / TIMEOUT.MS_PER_SEC); // Convert to seconds
     }
 
     // Update task

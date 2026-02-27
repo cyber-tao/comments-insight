@@ -1,7 +1,7 @@
 /**
  * NotificationService handles browser notifications
  */
-import { ICONS, PATHS, TEXT, LIMITS } from '@/config/constants';
+import { ICONS, PATHS, TEXT, LIMITS, TIMING } from '@/config/constants';
 import { Logger } from '@/utils/logger';
 
 export class NotificationService {
@@ -32,7 +32,7 @@ export class NotificationService {
       // Auto-clear after 10 seconds if not interacted with
       setTimeout(() => {
         chrome.notifications.clear(notificationId);
-      }, TEXT.NOTIFICATION_AUTOCLEAR_MS);
+      }, TIMING.NOTIFICATION_AUTOCLEAR_MS);
     } catch (error) {
       Logger.error('[NotificationService] Failed to show notification', { error });
     }
