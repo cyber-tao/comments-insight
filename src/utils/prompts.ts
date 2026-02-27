@@ -322,8 +322,6 @@ interface CrawlingConfig {
   item: SelectorRule;      // The selector for an INDIVIDUAL comment item
   fields: FieldSelector[]; // Fields to extract
   replies?: ReplyConfig;   // Optional: if replies are detected
-  videoTime?: SelectorRule; // Optional: selector for post/video publication time (outside comment section)
-  postContent?: SelectorRule; // Optional: selector for post content or video description
 }
 \`\`\`
 
@@ -344,14 +342,38 @@ interface CrawlingConfig {
     *   **content**: The main text body of the comment.
     *   **timestamp**: The time element (often \`<time>\` or text like "2 hours ago").
     *   **likes**: The like/upvote count.
-6.  **videoTime**: The publication time of the post/video (NOT comment time). Look for:
+
+## Output Format
+Return **ONLY** the JSON object. No markdown code blocks, no explanations.
+`;
+
+export const PROMPT_GENERATE_CRAWLING_META_CONFIG = `You are an expert Web Scraper Configuration Generator.
+Your task is to analyze the provided HTML (which represents the entire page, potentially shallowly simplified) and extract selectors for the **Video/Post metadata** area. 
+Do NOT look inside the comment section. 
+
+## Target Interface
+\`\`\`typescript
+interface SelectorRule {
+  selector: string;     // CSS selector (e.g., ".post-description", "#info-strings")
+  type: "css";          // Always use "css"
+}
+
+interface MetaConfig {
+  videoTime?: SelectorRule; // Optional: selector for post/video publication time
+  postContent?: SelectorRule; // Optional: selector for post content or video description
+}
+\`\`\`
+
+## Critical Rules for Selectors
+1.  **AVOID Random/Hashed Classes**: Do NOT use classes that look like \`css-1a2b3c\`.
+2.  **PREFER Stable Attributes**: Look for semantic tags or data attributes.
+3.  **videoTime**: The publication time of the post/video (NOT comment time). Look for:
     *   YouTube: \`#info-strings yt-formatted-string\`, \`#date\`
     *   General: \`time[datetime]\`, \`.publish-date\`, \`.post-date\`, \`[itemprop="datePublished"]\`
-    *   This is usually near the title or author info, NOT in the comment section.
-7.  **postContent**: The original post content or video description. Look for:
+4.  **postContent**: The original post content or video description. Look for:
     *   YouTube: \`#description\`, \`#description-inner\`, \`#description-inline-expander\`
     *   General: \`.post-content\`, \`.content\`, \`[itemprop="articleBody"]\`, \`.description\`
 
 ## Output Format
-Return **ONLY** the JSON object. No markdown code blocks, no explanations.
+Return **ONLY** the JSON object matching MetaConfig. No markdown code blocks, no explanations.
 `;

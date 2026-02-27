@@ -21,6 +21,7 @@ import {
   PROMPT_DETECT_COMMENTS_SECTION,
   PROMPT_EXTRACT_COMMENTS_FROM_HTML,
   PROMPT_GENERATE_CRAWLING_CONFIG,
+  PROMPT_GENERATE_CRAWLING_META_CONFIG,
 } from '@/utils/prompts';
 import { sendMessage } from '@/utils/chrome-message';
 import { isExtractionActive } from '../extractionState';
@@ -44,7 +45,7 @@ export type ConfigGenerationCallback = (progress: number, message: string) => vo
 export class AIStrategy implements ExtractionStrategy {
   private aiPort: chrome.runtime.Port | null = null;
 
-  constructor(private pageController: PageController) {}
+  constructor(private pageController: PageController) { }
 
   /**
    * 清理资源，断开端口连接
@@ -190,11 +191,15 @@ export class AIStrategy implements ExtractionStrategy {
     // We found the container. Now let's try to generate the full config for future use.
     // We do this in parallel or just before starting the loop.
     // To be safe, we do it now. If it fails, we continue with Legacy loop.
-    this.generateAndSaveConfig(sectionSelector, hostname, domConfig.maxDepth, detectMaxNodes).catch(
-      (err) => {
+    this.generateIntelligentConfig(hostname, domConfig, detectMaxNodes, onProgress, sectionSelector)
+      .then(async (config) => {
+        if (config) {
+          await this.saveGeneratedConfig(hostname, config, onProgress);
+        }
+      })
+      .catch((err) => {
         Logger.warn('[AIStrategy] Background config generation failed', { error: err });
-      },
-    );
+      });
     // ---------------------------------
 
     // Locate the element
@@ -573,49 +578,125 @@ export class AIStrategy implements ExtractionStrategy {
     return null;
   }
 
-  private async generateAndSaveConfig(
-    sectionSelector: string,
+  private async generateIntelligentConfig(
     hostname: string,
-    maxDepth: number,
-    maxNodes: number,
-  ): Promise<void> {
-    Logger.info('[AIStrategy] Attempting to generate crawling config via AI...');
+    domConfig: { maxDepth: number },
+    detectMaxNodes: number,
+    onProgress?: ProgressCallback | ConfigGenerationCallback,
+    knownSectionSelector?: string | null,
+  ): Promise<CrawlingConfig | null> {
+    Logger.info('[AIStrategy] Starting intelligent config generation');
+    onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING, 'Analyzing page macro structure...');
+
+    // Phase 1: Meta Config Generation (Shallow DOM)
+    let metaConfig: any = {};
+    try {
+      const shallowSimplified = DOMSimplifier.simplifyForAI(document.body, {
+        maxDepth: Math.max(DOM.DETECT_MIN_DEPTH, Math.floor(domConfig.maxDepth / 2)),
+        includeText: true,
+        maxNodes: detectMaxNodes,
+      });
+      const shallowDomStr = DOMSimplifier.toStringFormat(shallowSimplified);
+
+      const metaPrompt =
+        PROMPT_GENERATE_CRAWLING_META_CONFIG +
+        `\n\nPage URL: ${window.location.href}\nDomain: ${hostname}\n\nDOM Structure:\n\`\`\`html\n${shallowDomStr}\n\`\`\``;
+
+      onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING + 5, 'Asking AI for post metadata schemas...');
+      const response = await this.callAIviaPort<{ config?: any; error?: string }>({
+        type: MESSAGES.GENERATE_CRAWLING_CONFIG,
+        payload: { prompt: metaPrompt },
+      });
+
+      if (response && response.config) {
+        metaConfig = response.config;
+        Logger.info('[AIStrategy] Obtained meta config', { metaConfig });
+      }
+    } catch (err) {
+      Logger.warn('[AIStrategy] Failed to generate meta config, ignoring', { error: err });
+    }
+
+    // Phase 2: Detecting Section Selector if missing
+    let sectionSelector = knownSectionSelector;
+    if (!sectionSelector) {
+      onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING + 10, 'Locating primary comment section...');
+      const tokenChunks = AI.DEFAULT_CONTEXT_WINDOW - AI.DEFAULT_MAX_OUTPUT_TOKENS - AI.INPUT_TOKEN_BUFFER;
+      sectionSelector = await this.detectCommentSection(domConfig.maxDepth, detectMaxNodes, tokenChunks);
+    }
+
+    if (!sectionSelector) {
+      throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, 'Could not detect comment container');
+    }
 
     const sectionElement = document.querySelector(sectionSelector);
-    if (!sectionElement) return;
+    if (!sectionElement) {
+      throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, `Comment section element not found: ${sectionSelector}`);
+    }
 
-    const simplified = DOMSimplifier.simplifyForAI(sectionElement, {
-      maxDepth: maxDepth || DOM_ANALYSIS_DEFAULTS.initialDepth,
+    // Phase 3: Detailed Comments Config Generation
+    onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING + 15, 'Extracting detailed comment DOM structure...');
+    const deepSimplified = DOMSimplifier.simplifyForAI(sectionElement, {
+      maxDepth: domConfig.maxDepth,
       includeText: true,
-      maxNodes: maxNodes || DOM.SIMPLIFY_MAX_NODES,
+      maxNodes: DOM.SIMPLIFY_MAX_NODES,
     });
-    const domStr = DOMSimplifier.toStringFormat(simplified);
+    const deepDomStr = DOMSimplifier.toStringFormat(deepSimplified);
 
     const prompt =
       PROMPT_GENERATE_CRAWLING_CONFIG +
-      `\n\nDOM Structure (Container: ${sectionSelector}):\n\`\`\`html\n${domStr}\n\`\`\``;
+      `\n\nPage URL: ${window.location.href}\nDomain: ${hostname}\n\nDOM Structure (Container: ${sectionSelector}):\n\`\`\`html\n${deepDomStr}\n\`\`\``;
 
+    onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING + 20, 'Asking AI for comment fields schemas...');
     const response = await this.callAIviaPort<{ config?: CrawlingConfig; error?: string }>({
       type: MESSAGES.GENERATE_CRAWLING_CONFIG,
       payload: { prompt },
     });
 
-    if (response && response.config) {
-      const config = response.config;
-
-      if (config.container && config.item && config.fields) {
-        const normalizedDomain = hostname.startsWith('www.') ? hostname.slice(4) : hostname;
-        config.domain = normalizedDomain;
-        config.id = normalizedDomain + '_' + Date.now();
-        config.lastUpdated = Date.now();
-
-        await sendMessage({
-          type: MESSAGES.SAVE_CRAWLING_CONFIG,
-          payload: { config },
-        });
-        Logger.info('[AIStrategy] Automatically generated and saved crawling config!', { config });
-      }
+    if (!response || !response.config) {
+      throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, 'AI failed to generate comment fields config');
     }
+
+    const config = response.config;
+    if (!config.container || !config.item || !config.fields) {
+      throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, 'Generated config missing required fields (container, item, fields)');
+    }
+
+    // Combine with meta config
+    if (metaConfig.videoTime) config.videoTime = metaConfig.videoTime;
+    if (metaConfig.postContent) config.postContent = metaConfig.postContent;
+
+    // Phase 4: Self-Correction / Validation
+    onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING + 30, 'Verifying AI-generated schema on live page...');
+    try {
+      const items = document.querySelectorAll(config.item.selector);
+      if (!items || items.length === 0) {
+        Logger.warn('[AIStrategy] Self-correction failed: Generated config item selector found NO elements.', { selector: config.item.selector });
+        throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, 'Generated configuration is invalid (hallucination detected: zero matched elements).');
+      }
+      Logger.info(`[AIStrategy] Self-correction passed: Found ${items.length} items using AI generated selector.`);
+    } catch (err) {
+      throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, 'Invalid CSS selector syntax from AI: ' + (err instanceof Error ? err.message : String(err)));
+    }
+
+    return config;
+  }
+
+  private async saveGeneratedConfig(
+    hostname: string,
+    config: CrawlingConfig,
+    onProgress?: ProgressCallback | ConfigGenerationCallback
+  ) {
+    onProgress?.(CONFIG_GENERATION_PROGRESS.SAVING, 'Saving verified configuration...');
+    const normalizedDomain = hostname.startsWith('www.') ? hostname.slice(4) : hostname;
+    config.domain = normalizedDomain;
+    config.id = normalizedDomain + '_' + Date.now();
+    config.lastUpdated = Date.now();
+
+    await sendMessage({
+      type: MESSAGES.SAVE_CRAWLING_CONFIG,
+      payload: { config },
+    });
+    Logger.info('[AIStrategy] Successfully generated, verified, and saved crawling config!', { config });
   }
 
   private delay(ms: number): Promise<void> {
@@ -623,8 +704,8 @@ export class AIStrategy implements ExtractionStrategy {
   }
 
   async generateConfig(onProgress?: ConfigGenerationCallback): Promise<boolean> {
-    Logger.info('[AIStrategy] Starting config generation');
-    onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'initializing');
+    Logger.info('[AIStrategy] Starting manual config generation');
+    onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'Initializing configuration generator...');
 
     const hostname = getCurrentHostname();
     let domConfig = DOM_ANALYSIS_DEFAULTS;
@@ -638,64 +719,24 @@ export class AIStrategy implements ExtractionStrategy {
       Logger.warn('[AIStrategy] Failed to load settings, using defaults', { error: e });
     }
 
-    onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING, 'scrolling to load content');
+    onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING, 'Scrolling to load dynamically rendered content...');
 
     await this.pageController.scrollToBottom();
+    // Use delay for now, PageController scroll update will augment this later
     await this.delay(TIMING.SCROLL_DELAY_MS);
-
-    onProgress?.(CONFIG_GENERATION_PROGRESS.ANALYZING, 'analyzing page structure');
 
     const detectMaxNodes = Math.max(
       DOM.DETECT_MAX_NODES_BASE,
       domConfig.maxDepth * DOM.DETECT_MAX_NODES_FACTOR,
     );
 
-    const simplified = DOMSimplifier.simplifyForAI(document.body, {
-      maxDepth: domConfig.maxDepth,
-      includeText: true,
-      maxNodes: detectMaxNodes,
-    });
-    const domStr = DOMSimplifier.toStringFormat(simplified);
-
-    onProgress?.(CONFIG_GENERATION_PROGRESS.GENERATING, 'generating config via AI');
-
-    const prompt =
-      PROMPT_GENERATE_CRAWLING_CONFIG +
-      `\n\nPage URL: ${window.location.href}\nDomain: ${hostname}\n\nDOM Structure:\n\`\`\`html\n${domStr}\n\`\`\``;
-
-    const response = await this.callAIviaPort<{ config?: CrawlingConfig; error?: string }>({
-      type: MESSAGES.GENERATE_CRAWLING_CONFIG,
-      payload: { prompt },
-    });
-
-    if (!response || !response.config) {
-      throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, 'AI failed to generate config');
+    const config = await this.generateIntelligentConfig(hostname, domConfig, detectMaxNodes, onProgress);
+    if (config) {
+      await this.saveGeneratedConfig(hostname, config, onProgress);
+      onProgress?.(100, 'Configuration Generation Complete!');
+      return true;
     }
 
-    const config = response.config;
-
-    if (!config.container || !config.item || !config.fields) {
-      throw new ExtensionError(
-        ErrorCode.DOM_ANALYSIS_FAILED,
-        'Generated config missing required fields',
-      );
-    }
-
-    onProgress?.(CONFIG_GENERATION_PROGRESS.SAVING, 'saving config');
-
-    const normalizedDomain = hostname.startsWith('www.') ? hostname.slice(4) : hostname;
-    config.domain = normalizedDomain;
-    config.id = normalizedDomain + '_' + Date.now();
-    config.lastUpdated = Date.now();
-
-    await sendMessage({
-      type: MESSAGES.SAVE_CRAWLING_CONFIG,
-      payload: { config },
-    });
-
-    onProgress?.(100, 'complete');
-    Logger.info('[AIStrategy] Config generation completed', { config });
-
-    return true;
+    return false;
   }
 }

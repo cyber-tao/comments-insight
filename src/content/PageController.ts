@@ -7,7 +7,7 @@ import { Logger } from '../utils/logger';
  * PageController handles page interactions like scrolling and clicking
  */
 export class PageController {
-  constructor(private domAnalyzer?: DOMAnalyzer) {}
+  constructor(private domAnalyzer?: DOMAnalyzer) { }
   /**
    * Scroll to bottom smoothly to trigger lazy loading
    */
@@ -42,6 +42,42 @@ export class PageController {
     }
 
     window.scrollTo(0, document.documentElement.scrollHeight);
+  }
+
+  /**
+   * Waits for DOM changes recursively within the target element. 
+   * Useful to wait for network-bound lazy loaded content to appear.
+   * Resolves true if content changed, false if it timed out.
+   */
+  async waitForDOMChanges(
+    target: Node = document.body,
+    timeoutMs: number = TIMING.SCROLL_DELAY_MS
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      let timer: ReturnType<typeof setTimeout>;
+      const observer = new MutationObserver((mutations) => {
+        const hasMeaningfulChange = mutations.some(m =>
+          m.addedNodes.length > 0 || m.type === 'characterData'
+        );
+        if (hasMeaningfulChange) {
+          observer.disconnect();
+          clearTimeout(timer);
+          // Wait a small buffer to let React/Vue finish settling
+          setTimeout(() => resolve(true), TIMING.MICRO_WAIT_MS || 50);
+        }
+      });
+
+      observer.observe(target, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+
+      timer = setTimeout(() => {
+        observer.disconnect();
+        resolve(false);
+      }, timeoutMs);
+    });
   }
 
   async scrollContainer(container: Element): Promise<{ contentChanged: boolean }> {
@@ -86,7 +122,11 @@ export class PageController {
       }
     }
 
-    await this.wait(TIMING.SCROLL_DELAY_MS);
+    // Use MutationObserver for intelligent waiting rather than static delay
+    const contentMutated = await this.waitForDOMChanges(container, TIMING.SCROLL_DELAY_MS);
+    if (!contentMutated) {
+      Logger.debug('[PageController] No DOM changes detected after scroll, relying on static properties');
+    }
 
     const afterScrollHeight = container.scrollHeight;
     const afterChildCount = container.childElementCount;
