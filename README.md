@@ -80,15 +80,16 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
 - 🧲 **Smart Extraction**:
   - Hybrid approach using Config + AI Discovery for robust selector detection.
-  - Auto-scroll handling and recursive reply expansion (with visibility checks and interaction simulation).
-  - Real-time progress tracking (e.g., "Extracting (55/100)").
+  - **Self-Correcting AI**: Two-phase AI generation (macro for post metadata, micro for comment fields) that instantly validates hallucinated CSS selectors against the live DOM.
+  - **Intelligent DOM Waiting**: Uses `MutationObserver` to precisely detect when lazy-loaded content or nested replies are fully mounted, instead of relying on static delays.
+  - Real-time granular progress tracking (e.g., "Verifying AI-generated schema...", "Extracting (55/100)").
 - 🧠 **AI Analysis**:
   - **Scalable Processing**: Automatically batches large comment sets with concurrency control (up to 3 concurrent requests) to handle long threads efficiently.
   - **Thought Filtering**: Supports reasoning models (like DeepSeek) by automatically stripping `<think>` tags from output for clean reports.
   - Comprehensive reports including Sentiment Distribution, Hot Comments, Top Discussed, and Interaction Analysis.
   - Customizable prompt templates with "Reset to Default" capability.
 - 🧩 **Scraper Config**:
-  - Generate/edit/import/export per-site configs.
+  - Automatically generate/edit/import/export per-site configs.
   - Visual selector validation and caching for performance.
 - 🗂️ **History & Logs**:
   - **Token Tracking**: Locally records token usage stats for better cost management.
@@ -104,10 +105,10 @@ API keys are stored locally (reversible encryption/obfuscation) to avoid acciden
 
 ## 🧱 Architecture
 
-- **Background**: Service Worker orchestrates the Task Queue, AIService (handling concurrency, cleaning output, and token tracking), and Storage management.
-- **Content Scripts**: Handles DOM traversal, interaction simulation (clicking "View Replies"), and data extraction.
-- **Popup**: Main control center for triggering tasks, viewing page status, and monitoring progress.
-- **Options**: Configuration for AI models (OpenAI, Ollama, etc.), Prompts, and Scraper Management.
+- **Background**: Service Worker orchestrates the `TaskManager` (for maintaining long-running tasks), `AIService` (handling concurrency, cleaning output, and token tracking), and a unified `StorageManager` (automatically routing payloads to History, Settings, or Log stores with `lz-string` compression).
+- **Content Scripts**: Handles DOM traversal, `MutationObserver`-powered interactions (clicking "View Replies" and waiting for network-bound changes), and data extraction.
+- **Popup**: Main control center for triggering tasks, viewing page status, and monitoring granular real-time progress.
+- **Options**: Configuration for AI models (OpenAI, Ollama, DeepSeek, etc.), Prompts, and Scraper Management.
 - **History**: Rich interface for browsing extracted data and analysis reports.
 
 ## 📦 Project Structure
