@@ -58,111 +58,120 @@ export class AIService {
     const { prompt, systemPrompt, config, signal, timeout } = request;
     const effectiveTimeout = timeout || AI_CONST.DEFAULT_TIMEOUT;
 
-    return await ErrorHandler.withRetry(
-      async () => {
-        let timeoutId: ReturnType<typeof setTimeout> | undefined;
-        const controller = new AbortController();
-        const onParentAbort = () => controller.abort();
+    const controller = new AbortController();
+    const onParentAbort = (): void => controller.abort();
 
-        if (signal) {
-          if (signal.aborted) {
-            controller.abort();
-          } else {
-            signal.addEventListener('abort', onParentAbort);
-          }
-        }
+    if (signal) {
+      if (signal.aborted) {
+        controller.abort();
+      } else {
+        signal.addEventListener('abort', onParentAbort);
+      }
+    }
 
-        timeoutId = setTimeout(() => {
-          controller.abort(new Error('Timeout'));
-        }, effectiveTimeout);
+    try {
+      return await ErrorHandler.withRetry(
+        async () => {
+          let timeoutId: ReturnType<typeof setTimeout> | undefined;
+          const retryController = new AbortController();
+          const onAbort = (): void => retryController.abort();
+          controller.signal.addEventListener('abort', onAbort);
 
-        try {
-          if (controller.signal.aborted) {
-            throw createAIError(ErrorCode.TASK_CANCELLED, 'Request aborted', {});
-          }
+          timeoutId = setTimeout(() => {
+            retryController.abort(new Error('Timeout'));
+          }, effectiveTimeout);
 
-          const apiUrl = this.validateAndBuildUrl(config);
+          try {
+            if (retryController.signal.aborted) {
+              throw createAIError(ErrorCode.TASK_CANCELLED, 'Request aborted', {});
+            }
 
-          Logger.info('[AIService] Calling AI API', {
-            url: apiUrl,
-            model: config.model,
-            promptLength: prompt.length,
-            timeout: effectiveTimeout,
-          });
+            const apiUrl = this.validateAndBuildUrl(config);
 
-          const headers: Record<string, string> = {
-            'Content-Type': 'application/json',
-          };
-
-          if (typeof config.apiKey === 'string' && config.apiKey.trim().length > 0) {
-            headers.Authorization = `Bearer ${config.apiKey}`;
-          }
-
-          const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({
+            Logger.info('[AIService] Calling AI API', {
+              url: apiUrl,
               model: config.model,
-              messages: [
-                ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-                { role: 'user', content: prompt },
-              ],
-              max_tokens: config.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS,
-              temperature: config.temperature,
-              top_p: config.topP,
-            }),
-            signal: controller.signal,
-          });
+              promptLength: prompt.length,
+              timeout: effectiveTimeout,
+            });
 
-          if (!response.ok) {
-            const errorText = await response.text();
-            AIErrorHandler.classifyHTTPError(response.status, errorText, config.model);
+            const headers: Record<string, string> = {
+              'Content-Type': 'application/json',
+            };
+
+            if (typeof config.apiKey === 'string' && config.apiKey.trim().length > 0) {
+              headers.Authorization = `Bearer ${config.apiKey}`;
+            }
+
+            const response = await fetch(apiUrl, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                model: config.model,
+                messages: [
+                  ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+                  { role: 'user', content: prompt },
+                ],
+                max_tokens: config.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS,
+                temperature: config.temperature,
+                top_p: config.topP,
+              }),
+              signal: retryController.signal,
+            });
+
+            if (!response.ok) {
+              const errorText = await response.text();
+              AIErrorHandler.classifyHTTPError(response.status, errorText, config.model);
+            }
+
+            const data = await response.json();
+
+            let content = data.choices?.[0]?.message?.content || '';
+            const tokensUsed = data.usage?.total_tokens || 0;
+            const finishReason = data.choices?.[0]?.finish_reason || 'unknown';
+
+            content = DataNormalizer.removeThinkTags(content);
+
+            Logger.info('[AIService] AI response received', {
+              tokensUsed,
+              finishReason,
+              contentLength: content.length,
+            });
+
+            this.storageManager.recordTokenUsage(tokensUsed).catch((err: unknown) => {
+              Logger.warn('[AIService] Failed to record tokens', { err });
+            });
+
+            AIErrorHandler.logToFile(this.storageManager, AIErrorHandler.determineLogType(prompt), {
+              prompt,
+              response: content,
+              timestamp: Date.now(),
+            });
+
+            return { content, tokensUsed, finishReason };
+          } catch (error) {
+            AIErrorHandler.classifyCallError(
+              this.storageManager,
+              error,
+              signal,
+              effectiveTimeout,
+              prompt,
+            );
+            throw error;
+          } finally {
+            if (timeoutId) clearTimeout(timeoutId);
+            controller.signal.removeEventListener('abort', onAbort);
           }
-
-          const data = await response.json();
-
-          let content = data.choices?.[0]?.message?.content || '';
-          const tokensUsed = data.usage?.total_tokens || 0;
-          const finishReason = data.choices?.[0]?.finish_reason || 'unknown';
-
-          content = DataNormalizer.removeThinkTags(content);
-
-          Logger.info('[AIService] AI response received', {
-            tokensUsed,
-            finishReason,
-            contentLength: content.length,
-          });
-
-          this.storageManager.recordTokenUsage(tokensUsed).catch((err: unknown) => {
-            Logger.warn('[AIService] Failed to record tokens', { err });
-          });
-
-          AIErrorHandler.logToFile(this.storageManager, AIErrorHandler.determineLogType(prompt), {
-            prompt,
-            response: content,
-            timestamp: Date.now(),
-          });
-
-          return { content, tokensUsed, finishReason };
-        } catch (error) {
-          AIErrorHandler.classifyCallError(
-            this.storageManager,
-            error,
-            signal,
-            effectiveTimeout,
-            prompt,
-          );
-        } finally {
-          if (timeoutId) clearTimeout(timeoutId);
-          if (signal) signal.removeEventListener('abort', onParentAbort);
-        }
-      },
-      'AIService.callAI',
-      {
-        maxAttempts: RETRY.MAX_ATTEMPTS,
-        initialDelay: RETRY.INITIAL_DELAY_MS,
-      },
-    );
+        },
+        'AIService.callAI',
+        {
+          maxAttempts: RETRY.MAX_ATTEMPTS,
+          initialDelay: RETRY.INITIAL_DELAY_MS,
+        },
+      );
+    } finally {
+      if (signal) signal.removeEventListener('abort', onParentAbort);
+    }
   }
 
   async getAvailableModels(apiUrl: string, apiKey: string): Promise<string[]> {

@@ -2,7 +2,13 @@ import { Message, Comment, Task, TaskResolver, CrawlingConfig } from '../../type
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
-import { MESSAGES, DEFAULTS, EXTRACTION_PROGRESS, DATE_TIME } from '@/config/constants';
+import {
+  MESSAGES,
+  DEFAULTS,
+  EXTRACTION_PROGRESS,
+  DATE_TIME,
+  ANALYSIS_FORMAT,
+} from '@/config/constants';
 import { getDomain } from '../../utils/url';
 import { Tokenizer } from '../../utils/tokenizer';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
@@ -454,11 +460,11 @@ export async function handleStartAnalysis(
 
     context.taskManager.updateTaskProgress(taskId, 25);
 
-    let platform = 'Unknown Platform';
-    let url = 'N/A';
-    let title = 'Untitled';
-    let videoTime = 'N/A';
-    let postContent = 'N/A';
+    let platform = ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
+    let url = ANALYSIS_FORMAT.UNKNOWN_URL;
+    let title = ANALYSIS_FORMAT.UNKNOWN_TITLE;
+    let videoTime = ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
+    let postContent = ANALYSIS_FORMAT.UNKNOWN_CONTENT;
 
     if (historyId) {
       const historyItem = await context.storageManager.getHistoryItem(historyId);

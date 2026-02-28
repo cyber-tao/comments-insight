@@ -62,8 +62,7 @@ export class PageController {
         if (hasMeaningfulChange) {
           observer.disconnect();
           clearTimeout(timer);
-          // Wait a small buffer to let React/Vue finish settling
-          setTimeout(() => resolve(true), TIMING.MICRO_WAIT_MS || 50);
+          setTimeout(() => resolve(true), TIMING.MICRO_WAIT_MS);
         }
       });
 

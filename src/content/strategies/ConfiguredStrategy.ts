@@ -22,6 +22,7 @@ import {
 import { sendMessage } from '@/utils/chrome-message';
 import { isExtractionActive } from '../extractionState';
 import { querySelectorAllDeep, querySelectorDeep } from '@/utils/dom-query';
+import { generateCommentHash } from '@/utils/comment-hash';
 
 export class ConfiguredStrategy implements ExtractionStrategy {
   private validationRecorded = false;
@@ -74,14 +75,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
     const allComments: Comment[] = [];
     let noNewCommentsCount = 0;
-    let _scrollCount = 0;
-    // Track elements that have been processed as replies to avoid duplication at top level
-    // Now simplified to just use logic skip, but we still need to track processed *items* to avoid re-clicking expand buttons
-    // The previous logic issue: We iterate all items every scroll. We MUST skip items we already touched.
     const seenHashes = new Set<string>();
-    // Track elements that have been processed as replies to avoid duplication at top level
-    // Now simplified to just use logic skip, but we still need to track processed *items* to avoid re-clicking expand buttons
-    // The previous logic issue: We iterate all items every scroll. We MUST skip items we already touched.
     const processedElements = new WeakSet<HTMLElement>();
 
     onProgress?.(EXTRACTION_PROGRESS.MIN + 5, 'Extracting comments', 'extracting', 0, maxComments);
@@ -121,9 +115,9 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
         const comment = await this.extractCommentFromElement(itemElement as HTMLElement, platform);
         if (comment) {
-          const hash = this.generateHash(comment);
+          const hash = generateCommentHash(comment);
           if (!seenHashes.has(hash)) {
-            comment.id = hash; // Assign hash as ID
+            comment.id = hash;
             seenHashes.add(hash);
             allComments.push(comment);
             added++;
@@ -150,9 +144,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         maxComments,
       );
 
-      // Scroll container to load more items
       const { contentChanged } = await this.pageController.scrollContainer(container);
-      _scrollCount++;
 
       // Re-query container in case of re-render
       const newContainer = querySelectorDeep(document, containerSelector);
@@ -325,7 +317,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       platform,
       replies: [],
     };
-    comment.id = this.generateHash(comment);
+    comment.id = generateCommentHash(comment);
 
     // Recursive Reply Extraction
     if (replyConfig.expandBtn) {
@@ -452,17 +444,6 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
     const val = parseFloat(clean);
     return isNaN(val) ? 0 : Math.floor(val * multiplier);
-  }
-
-  private generateHash(comment: Comment): string {
-    const str = `${comment.username}|${comment.content}|${comment.timestamp}`;
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
-    }
-    return Math.abs(hash).toString(36);
   }
 
   private async waitForReplies(

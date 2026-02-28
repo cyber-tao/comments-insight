@@ -28,17 +28,7 @@ import { isExtractionActive } from '../extractionState';
 import { getCurrentHostname } from '@/utils/url';
 import { CrawlingConfig } from '../../types';
 import { ConfiguredStrategy } from './ConfiguredStrategy';
-
-const SITE_SELECTORS: Record<string, string> = {
-  'youtube.com': '#comments',
-  'reddit.com': 'shreddit-comments',
-  'bilibili.com': '#comment, .comment-list, .comment-container',
-  'twitter.com': '[aria-label="Timeline: Conversation"]',
-  'x.com': '[aria-label="Timeline: Conversation"]',
-  'juejin.cn': '#comment-box',
-  'zhihu.com': '.Comments-container',
-  'github.com': '.js-discussion',
-};
+import { generateCommentHash } from '@/utils/comment-hash';
 
 export type ConfigGenerationCallback = (progress: number, message: string) => void;
 
@@ -187,21 +177,6 @@ export class AIStrategy implements ExtractionStrategy {
     Logger.info('[AIStrategy] Detected comment section', { sectionSelector });
     onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING + 5, 'comment section found', 'detecting', 1, 1);
 
-    // --- NEW: Generate Config Step ---
-    // We found the container. Now let's try to generate the full config for future use.
-    // We do this in parallel or just before starting the loop.
-    // To be safe, we do it now. If it fails, we continue with Legacy loop.
-    this.generateIntelligentConfig(hostname, domConfig, detectMaxNodes, onProgress, sectionSelector)
-      .then(async (config) => {
-        if (config) {
-          await this.saveGeneratedConfig(hostname, config, onProgress);
-        }
-      })
-      .catch((err) => {
-        Logger.warn('[AIStrategy] Background config generation failed', { error: err });
-      });
-    // ---------------------------------
-
     // Locate the element
     let sectionElement = document.querySelector(sectionSelector);
     if (!sectionElement) {
@@ -302,12 +277,11 @@ export class AIStrategy implements ExtractionStrategy {
       // 2.4 Merge & Dedup
       let added = 0;
       for (const comment of newComments) {
-        const hash = this.generateHash(comment);
+        const hash = generateCommentHash(comment);
         if (!seenHashes.has(hash)) {
           seenHashes.add(hash);
-          // Ensure platform is set
           comment.platform = platform;
-          comment.id = comment.id || hash; // Assign hash if ID is missing
+          comment.id = comment.id || hash;
           allComments.push(comment);
           added++;
         }
@@ -330,7 +304,24 @@ export class AIStrategy implements ExtractionStrategy {
 
     onProgress?.(95, 'validating results', 'validating', allComments.length, maxComments);
 
-    return allComments.slice(0, maxComments);
+    const result = allComments.slice(0, maxComments);
+
+    try {
+      const config = await this.generateIntelligentConfig(
+        hostname,
+        domConfig,
+        detectMaxNodes,
+        undefined,
+        sectionSelector,
+      );
+      if (config) {
+        await this.saveGeneratedConfig(hostname, config);
+      }
+    } catch (err) {
+      Logger.warn('[AIStrategy] Post-extraction config generation failed', { error: err });
+    }
+
+    return result;
   }
 
   private async detectCommentSection(
@@ -341,13 +332,13 @@ export class AIStrategy implements ExtractionStrategy {
     try {
       const hostname = getCurrentHostname();
 
-      // 1. Check Cache
+      // 1. Check Cache & Heuristics
       try {
         const settingsResp = await sendMessage<{ settings: Settings }>({
           type: MESSAGES.GET_SETTINGS,
         });
-        const cache = settingsResp?.settings?.selectorCache || [];
-        const cached = cache.find((item) => item.domain === hostname);
+        const selectorCache = settingsResp?.settings?.selectorCache || [];
+        const cached = selectorCache.find((item) => item.domain === hostname);
 
         if (cached && cached.selectors && cached.selectors.commentContainer) {
           const selector = cached.selectors.commentContainer;
@@ -359,17 +350,22 @@ export class AIStrategy implements ExtractionStrategy {
             Logger.warn('[AIStrategy] Cached selector invalid (element not found)', { selector });
           }
         }
+
+        const cacheMap: Record<string, string> = {};
+        for (const item of selectorCache) {
+          if (item.domain && item.selectors?.commentContainer) {
+            cacheMap[item.domain] = item.selectors.commentContainer;
+          }
+        }
+        const heuristicSelector = this.checkHeuristics(hostname, cacheMap);
+        if (heuristicSelector) {
+          Logger.info('[AIStrategy] Using cached heuristic selector', {
+            selector: heuristicSelector,
+          });
+          return heuristicSelector;
+        }
       } catch (err) {
         Logger.warn('[AIStrategy] Failed to check cache', { error: err });
-      }
-
-      // 2. Check Heuristics
-      const heuristicSelector = this.checkHeuristics(hostname);
-      if (heuristicSelector) {
-        Logger.info('[AIStrategy] Using heuristic selector', { selector: heuristicSelector });
-        // Save to cache for future consistency
-        this.cacheSelector(hostname, heuristicSelector);
-        return heuristicSelector;
       }
 
       // 3. AI Detection
@@ -430,7 +426,7 @@ export class AIStrategy implements ExtractionStrategy {
             }
 
             // Early exit if very high confidence
-            if (conf >= AI.CONFIDENCE_HIGH_THRESHOLD) {
+            if (conf >= AI.CONFIDENCE_EARLY_EXIT_THRESHOLD) {
               break;
             }
           }
@@ -452,26 +448,33 @@ export class AIStrategy implements ExtractionStrategy {
   }
 
   private async extractFromChunks(chunks: string[]): Promise<Comment[]> {
-    try {
-      // Use Port for long-running AI extraction to avoid message timeout
-      const response = await this.callAIviaPort<{ comments?: Comment[]; error?: string }>({
-        type: MESSAGES.AI_EXTRACT_CONTENT,
-        payload: {
-          chunks,
-          systemPrompt: PROMPT_EXTRACT_COMMENTS_FROM_HTML,
-        },
-      });
+    const allComments: Comment[] = [];
 
-      if (response?.error) {
-        Logger.warn('[AIStrategy] Chunk extraction error', { error: response.error });
-        return [];
+    for (let i = 0; i < chunks.length; i++) {
+      try {
+        const response = await this.callAIviaPort<{ comments?: Comment[]; error?: string }>({
+          type: MESSAGES.AI_EXTRACT_CONTENT,
+          payload: {
+            chunks: [chunks[i]],
+            systemPrompt: PROMPT_EXTRACT_COMMENTS_FROM_HTML,
+          },
+        });
+
+        if (response?.error) {
+          Logger.warn(`[AIStrategy] Chunk ${i + 1}/${chunks.length} extraction error`, {
+            error: response.error,
+          });
+        } else if (response?.comments?.length) {
+          allComments.push(...response.comments);
+        }
+      } catch (err) {
+        Logger.error(`[AIStrategy] Port call failed for chunk ${i + 1}/${chunks.length}`, {
+          error: err,
+        });
       }
-
-      return response?.comments || [];
-    } catch (err) {
-      Logger.error('[AIStrategy] Port call failed for extraction', { error: err });
-      return [];
     }
+
+    return allComments;
   }
 
   private getAIPort(): chrome.runtime.Port {
@@ -536,18 +539,6 @@ export class AIStrategy implements ExtractionStrategy {
     });
   }
 
-  private generateHash(comment: Comment): string {
-    // Simple hash to dedup
-    const str = `${comment.username}|${comment.content}|${comment.timestamp}`;
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
-    }
-    return Math.abs(hash).toString(36);
-  }
-
   private cacheSelector(hostname: string, selector: string): void {
     sendMessage({
       type: MESSAGES.CACHE_SELECTOR,
@@ -557,21 +548,17 @@ export class AIStrategy implements ExtractionStrategy {
     });
   }
 
-  private checkHeuristics(hostname: string): string | null {
-    // Exact match
-    if (SITE_SELECTORS[hostname]) {
-      const selector = SITE_SELECTORS[hostname];
-      if (document.querySelector(selector)) {
-        return selector;
-      }
+  private checkHeuristics(hostname: string, selectorCache?: Record<string, string>): string | null {
+    if (!selectorCache) return null;
+
+    const cached = selectorCache[hostname];
+    if (cached && document.querySelector(cached)) {
+      return cached;
     }
 
-    // Suffix match (e.g. m.youtube.com matching youtube.com)
-    for (const [domain, selector] of Object.entries(SITE_SELECTORS)) {
-      if (hostname.endsWith(domain)) {
-        if (document.querySelector(selector)) {
-          return selector;
-        }
+    for (const [domain, selector] of Object.entries(selectorCache)) {
+      if (hostname.endsWith(domain) && document.querySelector(selector)) {
+        return selector;
       }
     }
 
