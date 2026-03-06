@@ -1,9 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  performanceMonitor,
-  PerformanceMetrics,
-  AggregatedMetrics,
-} from '../src/utils/performance';
+import { performanceMonitor } from '../src/utils/performance';
 
 describe('PerformanceMonitor', () => {
   beforeEach(() => {

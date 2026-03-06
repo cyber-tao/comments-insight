@@ -2,7 +2,14 @@ import { AIConfig, AIRequest, AIResponse, Comment, AnalysisResult } from '../typ
 import { buildTimestampNormalizationPrompt } from '../utils/prompts';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, createAIError, ErrorCode } from '../utils/errors';
-import { AI as AI_CONST, RETRY, LANGUAGES, TIME_NORMALIZATION, TEXT } from '@/config/constants';
+import {
+  AI as AI_CONST,
+  RETRY,
+  LANGUAGES,
+  TIME_NORMALIZATION,
+  TEXT,
+  ANALYSIS_FORMAT,
+} from '@/config/constants';
 import type { StorageManager } from './StorageManager';
 import { Tokenizer } from '../utils/tokenizer';
 
@@ -34,7 +41,54 @@ async function runWithConcurrencyLimit<T>(
 }
 
 export class AIService {
+  private lastVerifiedConfig: AIConfig | null = null;
+
   constructor(private readonly storageManager: StorageManager) {}
+
+  rememberVerifiedConfig(config: AIConfig): void {
+    if (
+      typeof config.apiKey !== 'string' ||
+      config.apiKey.trim().length === 0 ||
+      !config.apiUrl ||
+      !config.model
+    ) {
+      return;
+    }
+    this.lastVerifiedConfig = { ...config };
+  }
+
+  private resolveConfigForCall(config: AIConfig): AIConfig {
+    if (typeof config.apiKey === 'string' && config.apiKey.trim().length > 0) {
+      return config;
+    }
+
+    if (!this.lastVerifiedConfig) {
+      return config;
+    }
+
+    const currentApiUrl = config.apiUrl.trim();
+    const fallbackApiUrl = this.lastVerifiedConfig.apiUrl.trim();
+    if (!currentApiUrl || currentApiUrl !== fallbackApiUrl) {
+      return config;
+    }
+
+    if (
+      typeof this.lastVerifiedConfig.apiKey !== 'string' ||
+      this.lastVerifiedConfig.apiKey.trim().length === 0
+    ) {
+      return config;
+    }
+
+    Logger.warn('[AIService] Falling back to last verified API key', {
+      model: config.model,
+      apiUrl: currentApiUrl,
+    });
+
+    return {
+      ...config,
+      apiKey: this.lastVerifiedConfig.apiKey,
+    };
+  }
 
   private validateAndBuildUrl(config: AIConfig): string {
     if (!config.apiUrl) {
@@ -58,26 +112,29 @@ export class AIService {
     const { prompt, systemPrompt, config, signal, timeout } = request;
     const effectiveTimeout = timeout || AI_CONST.DEFAULT_TIMEOUT;
 
+    if (signal?.aborted) {
+      throw createAIError(ErrorCode.TASK_CANCELLED, 'Request aborted', {});
+    }
+
     const controller = new AbortController();
     const onParentAbort = (): void => controller.abort();
 
     if (signal) {
-      if (signal.aborted) {
-        controller.abort();
-      } else {
-        signal.addEventListener('abort', onParentAbort);
-      }
+      signal.addEventListener('abort', onParentAbort);
     }
 
     try {
       return await ErrorHandler.withRetry(
         async () => {
-          let timeoutId: ReturnType<typeof setTimeout> | undefined;
           const retryController = new AbortController();
           const onAbort = (): void => retryController.abort();
           controller.signal.addEventListener('abort', onAbort);
 
-          timeoutId = setTimeout(() => {
+          if (controller.signal.aborted) {
+            retryController.abort();
+          }
+
+          const timeoutId = setTimeout(() => {
             retryController.abort(new Error('Timeout'));
           }, effectiveTimeout);
 
@@ -86,42 +143,54 @@ export class AIService {
               throw createAIError(ErrorCode.TASK_CANCELLED, 'Request aborted', {});
             }
 
-            const apiUrl = this.validateAndBuildUrl(config);
+            const resolvedConfig = this.resolveConfigForCall(config);
+            const apiUrl = this.validateAndBuildUrl(resolvedConfig);
+            const resolvedKey =
+              typeof resolvedConfig.apiKey === 'string' ? resolvedConfig.apiKey : '';
+            const hasApiKey = resolvedKey.trim().length > 0;
 
             Logger.info('[AIService] Calling AI API', {
               url: apiUrl,
-              model: config.model,
+              model: resolvedConfig.model,
               promptLength: prompt.length,
               timeout: effectiveTimeout,
+              hasApiKey,
             });
 
             const headers: Record<string, string> = {
               'Content-Type': 'application/json',
             };
 
-            if (typeof config.apiKey === 'string' && config.apiKey.trim().length > 0) {
-              headers.Authorization = `Bearer ${config.apiKey}`;
+            if (hasApiKey) {
+              headers.Authorization = `Bearer ${resolvedConfig.apiKey}`;
             }
+
+            const requestBody = JSON.stringify({
+              model: resolvedConfig.model,
+              messages: [
+                ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
+                { role: 'user', content: prompt },
+              ],
+              max_tokens: resolvedConfig.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS,
+              temperature: resolvedConfig.temperature,
+              top_p: resolvedConfig.topP,
+            });
 
             const response = await fetch(apiUrl, {
               method: 'POST',
               headers,
-              body: JSON.stringify({
-                model: config.model,
-                messages: [
-                  ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-                  { role: 'user', content: prompt },
-                ],
-                max_tokens: config.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS,
-                temperature: config.temperature,
-                top_p: config.topP,
-              }),
+              body: requestBody,
               signal: retryController.signal,
             });
 
             if (!response.ok) {
               const errorText = await response.text();
-              AIErrorHandler.classifyHTTPError(response.status, errorText, config.model);
+              Logger.warn('[AIService] API responded with non-OK status', {
+                status: response.status,
+                model: resolvedConfig.model,
+                url: apiUrl,
+              });
+              AIErrorHandler.classifyHTTPError(response.status, errorText, resolvedConfig.model);
             }
 
             const data = await response.json();
@@ -159,7 +228,7 @@ export class AIService {
             );
             throw error;
           } finally {
-            if (timeoutId) clearTimeout(timeoutId);
+            clearTimeout(timeoutId);
             controller.signal.removeEventListener('abort', onAbort);
           }
         },
@@ -167,6 +236,7 @@ export class AIService {
         {
           maxAttempts: RETRY.MAX_ATTEMPTS,
           initialDelay: RETRY.INITIAL_DELAY_MS,
+          abortSignal: signal,
         },
       );
     } finally {
@@ -229,16 +299,24 @@ export class AIService {
     timeout?: number,
   ): Promise<AnalysisResult> {
     const resolvedLanguage = language || LANGUAGES.DEFAULT;
-    const commentBatches = this.splitCommentsForAnalysis(comments, config);
+    const sanitizedMetadata = this.sanitizeAnalysisMetadata(metadata);
+    const promptOverheadTokens = this.estimateAnalysisPromptOverheadTokens(
+      promptTemplate,
+      sanitizedMetadata,
+      resolvedLanguage,
+    );
+    const commentBatches = this.splitCommentsForAnalysis(comments, config, promptOverheadTokens);
 
-    Logger.info('[AIService] Analyzing comments', { batches: commentBatches.length });
+    Logger.info('[AIService] Analyzing comments', {
+      batches: commentBatches.length,
+    });
 
     if (commentBatches.length === 1) {
       return await this.analyzeSingleBatch(
         commentBatches[0],
         config,
         promptTemplate,
-        metadata,
+        sanitizedMetadata,
         signal,
         timeout,
         resolvedLanguage,
@@ -250,7 +328,7 @@ export class AIService {
             batch,
             config,
             promptTemplate,
-            metadata,
+            sanitizedMetadata,
             signal,
             timeout,
             resolvedLanguage,
@@ -418,6 +496,72 @@ export class AIService {
     };
   }
 
+  private estimateAnalysisPromptOverheadTokens(
+    promptTemplate: string,
+    metadata?: {
+      platform?: string;
+      url?: string;
+      title?: string;
+      datetime?: string;
+      videoTime?: string;
+      postContent?: string;
+    },
+    language: string = LANGUAGES.DEFAULT,
+  ): number {
+    const probePrompt = PromptBuilder.buildAnalysisPromptWrapper(
+      ANALYSIS_FORMAT.COMMENT_HEADER,
+      promptTemplate,
+      metadata,
+      0,
+      language,
+    );
+    return Tokenizer.estimateTokens(probePrompt);
+  }
+
+  private trimAnalysisField(value: string | undefined, maxChars: number): string | undefined {
+    if (typeof value !== 'string') {
+      return value;
+    }
+
+    if (value.length <= maxChars) {
+      return value;
+    }
+
+    return value.slice(0, maxChars) + TEXT.TRUNCATED_SUFFIX;
+  }
+
+  private sanitizeAnalysisMetadata(metadata?: {
+    platform?: string;
+    url?: string;
+    title?: string;
+    datetime?: string;
+    videoTime?: string;
+    postContent?: string;
+  }):
+    | {
+        platform?: string;
+        url?: string;
+        title?: string;
+        datetime?: string;
+        videoTime?: string;
+        postContent?: string;
+      }
+    | undefined {
+    if (!metadata) {
+      return metadata;
+    }
+
+    return {
+      ...metadata,
+      title: this.trimAnalysisField(metadata.title, AI_CONST.ANALYSIS_TITLE_MAX_CHARS),
+      url: this.trimAnalysisField(metadata.url, AI_CONST.ANALYSIS_URL_MAX_CHARS),
+      postContent: this.trimAnalysisField(
+        metadata.postContent,
+        AI_CONST.ANALYSIS_POST_CONTENT_MAX_CHARS,
+      ),
+    };
+  }
+
   private getNormalizationBatchSize(config: AIConfig, referenceTimeISO: string): number {
     const maxOutput = config.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS;
     const basePrompt = buildTimestampNormalizationPrompt('[]', referenceTimeISO);
@@ -430,7 +574,11 @@ export class AIService {
     return Math.max(1, estimated);
   }
 
-  private splitCommentsForAnalysis(comments: Comment[], config: AIConfig): Comment[][] {
+  private splitCommentsForAnalysis(
+    comments: Comment[],
+    config: AIConfig,
+    promptOverheadTokens: number = 0,
+  ): Comment[][] {
     const batches: Comment[][] = [];
     let currentBatch: Comment[] = [];
     let currentTokens = 0;
@@ -438,7 +586,7 @@ export class AIService {
     const maxOutput = config.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS;
     const availableTokens = Math.max(
       AI_CONST.MIN_AVAILABLE_TOKENS,
-      config.contextWindowSize - maxOutput - AI_CONST.INPUT_TOKEN_BUFFER,
+      config.contextWindowSize - maxOutput - AI_CONST.INPUT_TOKEN_BUFFER - promptOverheadTokens,
     );
 
     for (const comment of comments) {

@@ -59,7 +59,7 @@ export function useSettings() {
 
   // Auto-save settings when they change
   useEffect(() => {
-    if (!settings || isInitialLoad || isSavingRef.current) return;
+    if (!settings || isInitialLoad || isSavingRef.current || !isUserChangeRef.current) return;
 
     const saveSettings = async () => {
       isSavingRef.current = true;
@@ -69,17 +69,21 @@ export function useSettings() {
         const { selectorCache: _selectorCache, ...settingsToSave } = settings as Settings & {
           selectorCache?: Settings['selectorCache'];
         };
-        await chrome.runtime.sendMessage({
+        const response = (await chrome.runtime.sendMessage({
           type: MESSAGES.SAVE_SETTINGS,
           payload: { settings: settingsToSave },
-        });
+        })) as { success?: boolean; error?: string };
+
+        if (!response?.success) {
+          throw new Error(response?.error || t('options.savedError'));
+        }
 
         if (isUserChangeRef.current) {
           toast.success(t('options.savedSuccess'));
           isUserChangeRef.current = false;
         }
-      } catch {
-        toast.error(t('options.savedError'));
+      } catch (error) {
+        toast.error(t('options.savedError') + (error instanceof Error ? `: ${error.message}` : ''));
       } finally {
         setSaving(false);
         isSavingRef.current = false;

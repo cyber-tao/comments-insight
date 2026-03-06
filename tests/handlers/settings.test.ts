@@ -16,7 +16,7 @@ describe('Settings Handlers', () => {
     updateSelectorCache: vi.fn(),
     getCrawlingConfig: vi.fn(),
     saveCrawlingConfig: vi.fn(),
-  } as any;
+  } as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
   const context = {
     storageManager: mockStorageManager,
@@ -198,6 +198,17 @@ describe('Settings Handlers', () => {
         'Hostname and selector required',
       );
     });
+
+    it('should throw error when payload is missing', async () => {
+      const message = {
+        type: 'CACHE_SELECTOR' as const,
+        payload: undefined,
+      } as Extract<Message, { type: 'CACHE_SELECTOR' }>;
+
+      await expect(handleCacheSelector(message, context)).rejects.toThrow(
+        'Hostname and selector required',
+      );
+    });
   });
 
   describe('handleGetCrawlingConfig', () => {
@@ -248,6 +259,15 @@ describe('Settings Handlers', () => {
       };
 
       await expect(handleGetCrawlingConfig(message, context)).rejects.toThrow(ExtensionError);
+      await expect(handleGetCrawlingConfig(message, context)).rejects.toThrow('Domain is required');
+    });
+
+    it('should throw error when payload is missing', async () => {
+      const message = {
+        type: 'GET_CRAWLING_CONFIG' as const,
+        payload: undefined,
+      } as Extract<Message, { type: 'GET_CRAWLING_CONFIG' }>;
+
       await expect(handleGetCrawlingConfig(message, context)).rejects.toThrow('Domain is required');
     });
   });

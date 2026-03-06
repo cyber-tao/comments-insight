@@ -262,7 +262,6 @@ export class ConfiguredStrategy implements ExtractionStrategy {
               comment.replies.push(reply);
             }
           }
-        } else {
         }
       }
 

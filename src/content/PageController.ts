@@ -54,7 +54,6 @@ export class PageController {
     timeoutMs: number = TIMING.SCROLL_DELAY_MS,
   ): Promise<boolean> {
     return new Promise((resolve) => {
-      let timer: ReturnType<typeof setTimeout>;
       const observer = new MutationObserver((mutations) => {
         const hasMeaningfulChange = mutations.some(
           (m) => m.addedNodes.length > 0 || m.type === 'characterData',
@@ -72,7 +71,7 @@ export class PageController {
         characterData: true,
       });
 
-      timer = setTimeout(() => {
+      const timer = setTimeout(() => {
         observer.disconnect();
         resolve(false);
       }, timeoutMs);

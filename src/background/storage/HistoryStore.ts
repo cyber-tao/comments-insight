@@ -84,6 +84,7 @@ export class HistoryStore {
     try {
       const ids = await this.getHistoryIndex();
       const keysToRemove: string[] = [];
+      let metadataReadFailures = 0;
 
       for (const id of ids) {
         const baseKey = `${STORAGE.HISTORY_KEY}_${id}`;
@@ -96,7 +97,16 @@ export class HistoryStore {
           for (let i = 0; i < chunks; i++) {
             keysToRemove.push(`${baseKey}_comments_${i}`);
           }
-        } catch {}
+        } catch {
+          metadataReadFailures += 1;
+        }
+      }
+
+      if (metadataReadFailures > 0) {
+        Logger.debug('[HistoryStore] Failed to read history chunks metadata during clear', {
+          metadataReadFailures,
+          totalHistoryItems: ids.length,
+        });
       }
 
       keysToRemove.push(STORAGE.HISTORY_INDEX_KEY);
@@ -119,7 +129,7 @@ export class HistoryStore {
     try {
       const index = await this.getHistoryIndex();
       const results = await Promise.all(index.map((id) => this.getHistoryItem(id)));
-      const items = results.filter((item): item is HistoryItem => item !== null);
+      const items = results.filter((item): item is HistoryItem => item !== undefined);
       return items.sort((a, b) => b.extractedAt - a.extractedAt);
     } catch (error) {
       Logger.error('[HistoryStore] Failed to get history', { error });
@@ -137,7 +147,7 @@ export class HistoryStore {
 
       const pageEntries = sortedIndex.entries.slice(start, end);
       const results = await Promise.all(pageEntries.map((entry) => this.getHistoryItem(entry.id)));
-      const items = results.filter((item): item is HistoryItem => item !== null);
+      const items = results.filter((item): item is HistoryItem => item !== undefined);
 
       return { items, total, page, pageSize, totalPages };
     } catch (error) {
@@ -158,6 +168,31 @@ export class HistoryStore {
       return { entries, total, page, pageSize, totalPages };
     } catch (error) {
       Logger.error('[HistoryStore] Failed to get history metadata page', { error });
+      return { entries: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+  }
+
+  async searchHistoryMetadataPage(query: string, page: number = 0, pageSize: number = 20) {
+    try {
+      const sortedIndex = await this.getOrBuildSortedIndex();
+      const lowerQuery = query.toLowerCase();
+
+      const matchingEntries = sortedIndex.entries.filter(
+        (entry) =>
+          entry.title.toLowerCase().includes(lowerQuery) ||
+          entry.url.toLowerCase().includes(lowerQuery) ||
+          entry.platform.toLowerCase().includes(lowerQuery),
+      );
+
+      const total = matchingEntries.length;
+      const totalPages = Math.ceil(total / pageSize);
+      const start = page * pageSize;
+      const end = Math.min(start + pageSize, total);
+      const entries = matchingEntries.slice(start, end);
+
+      return { entries, total, page, pageSize, totalPages };
+    } catch (error) {
+      Logger.error('[HistoryStore] Failed to search history metadata page', { error });
       return { entries: [], total: 0, page, pageSize, totalPages: 0 };
     }
   }
@@ -219,7 +254,20 @@ export class HistoryStore {
       const decompressed = compressedComments
         ? LZString.decompressFromUTF16(compressedComments)
         : null;
+      if (compressedComments && decompressed === null) {
+        throw new ExtensionError(
+          ErrorCode.STORAGE_READ_ERROR,
+          'Failed to decompress history comments',
+          { id },
+        );
+      }
+
       const comments = decompressed ? JSON.parse(decompressed) : [];
+      if (!Array.isArray(comments)) {
+        throw new ExtensionError(ErrorCode.STORAGE_READ_ERROR, 'Invalid history comments payload', {
+          id,
+        });
+      }
 
       return {
         ...compressedItem,

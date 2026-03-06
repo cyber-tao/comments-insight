@@ -166,6 +166,7 @@ export interface RetryConfig {
   maxDelay: number;
   backoffMultiplier: number;
   retryableErrors: ErrorCode[];
+  abortSignal?: AbortSignal;
   onRetry?: (attempt: number, error: ExtensionError) => void;
   fallback?: () => Promise<unknown>;
 }
@@ -225,12 +226,24 @@ export class ErrorHandler {
     const retryConfig = { ...DEFAULT_RETRY_CONFIG, ...config };
     let lastError: ExtensionError | null = null;
     let delay = retryConfig.initialDelay;
+    const abortSignal = retryConfig.abortSignal;
+
+    const createCancelledError = (): ExtensionError =>
+      new ExtensionError(ErrorCode.TASK_CANCELLED, 'Operation cancelled', {}, false);
+
+    const throwIfAborted = (): void => {
+      if (abortSignal?.aborted) {
+        throw createCancelledError();
+      }
+    };
 
     for (let attempt = 1; attempt <= retryConfig.maxAttempts; attempt++) {
+      throwIfAborted();
       try {
         Logger.debug(`[${context}] Attempt ${attempt}/${retryConfig.maxAttempts}`);
         return await fn();
       } catch (error) {
+        throwIfAborted();
         lastError = this.normalizeError(error as Error);
 
         Logger.warn(`[${context}] Attempt ${attempt} failed: ${lastError.message}`, {
@@ -265,7 +278,7 @@ export class ErrorHandler {
 
         Logger.debug(`[${context}] Waiting ${delay}ms before retry...`);
 
-        await this.sleep(delay);
+        await this.sleep(delay, abortSignal);
         delay = Math.min(delay * retryConfig.backoffMultiplier, retryConfig.maxDelay);
       }
     }
@@ -422,8 +435,30 @@ export class ErrorHandler {
    * Sleep for specified milliseconds
    * @param ms - Milliseconds to sleep
    */
-  private static sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private static sleep(ms: number, signal?: AbortSignal): Promise<void> {
+    if (!signal) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    return new Promise((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new ExtensionError(ErrorCode.TASK_CANCELLED, 'Operation cancelled', {}, false));
+        return;
+      }
+
+      const timeoutId = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+
+      const onAbort = () => {
+        clearTimeout(timeoutId);
+        signal.removeEventListener('abort', onAbort);
+        reject(new ExtensionError(ErrorCode.TASK_CANCELLED, 'Operation cancelled', {}, false));
+      };
+
+      signal.addEventListener('abort', onAbort);
+    });
   }
 }
 

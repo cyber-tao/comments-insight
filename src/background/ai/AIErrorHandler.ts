@@ -37,15 +37,66 @@ export class AIErrorHandler {
         model,
       });
     }
-    if (status === 401 || status === 403) {
+    if (status === 401) {
       throw createAIError(ErrorCode.MISSING_API_KEY, 'Invalid API key or unauthorized', {
         status,
       });
+    }
+
+    if (status === 403) {
+      const preview = errorText.substring(0, 200);
+      const isHtmlResponse = this.looksLikeHtmlResponse(errorText);
+      const looksLikeAuthFailure = this.looksLikeAuthFailure(errorText);
+
+      if (isHtmlResponse) {
+        throw createAIError(
+          ErrorCode.API_ERROR,
+          'AI provider rejected request with HTML 403. This is usually a gateway/WAF block or endpoint mismatch, not a missing API key.',
+          {
+            status,
+            responseType: 'html',
+            responsePreview: preview,
+          },
+          false,
+        );
+      }
+
+      if (looksLikeAuthFailure) {
+        throw createAIError(ErrorCode.MISSING_API_KEY, 'Invalid API key or unauthorized', {
+          status,
+        });
+      }
+
+      throw createAIError(
+        ErrorCode.API_ERROR,
+        `AI provider rejected request (403): ${preview}`,
+        {
+          status,
+          responsePreview: preview,
+        },
+        false,
+      );
     }
     throw createAIError(ErrorCode.API_ERROR, `API error (${status}): ${errorText}`, {
       status,
       response: errorText,
     });
+  }
+
+  private static looksLikeHtmlResponse(errorText: string): boolean {
+    const trimmed = errorText.trim().toLowerCase();
+    return trimmed.startsWith('<!doctype html') || trimmed.startsWith('<html');
+  }
+
+  private static looksLikeAuthFailure(errorText: string): boolean {
+    const lowered = errorText.toLowerCase();
+    return (
+      lowered.includes('invalid api key') ||
+      lowered.includes('unauthorized') ||
+      lowered.includes('authentication') ||
+      lowered.includes('api key is invalid') ||
+      lowered.includes('permission denied')
+    );
   }
 
   static determineLogType(prompt: string): 'extraction' | 'analysis' {

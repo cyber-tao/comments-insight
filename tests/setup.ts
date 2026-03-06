@@ -1,5 +1,7 @@
-// Suppress unhandled rejection warnings in tests
-// These are intentional test cases that verify error handling
-process.on('unhandledRejection', () => {
-  // Intentionally empty - we're testing error handling
+// Fail fast on unhandled rejections so tests don't silently pass with hidden async errors.
+process.on('unhandledRejection', (reason) => {
+  if (reason instanceof Error) {
+    throw reason;
+  }
+  throw new Error(String(reason));
 });

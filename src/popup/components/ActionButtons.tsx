@@ -61,11 +61,16 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
       const countNum = parseInt(count, 10);
       return countNum >= 0 ? `${stageText} ${count}/${max}` : stageText;
     }
-    return t('popup.extracting');
+    return currentTask?.type === 'config' ? t('popup.generatingConfig') : t('popup.extracting');
   };
 
-  const isExtractRunning = currentTask?.status === 'running' && currentTask?.type === 'extract';
-  const isAnalyzeRunning = currentTask?.status === 'running' && currentTask?.type === 'analyze';
+  const isTaskActive = (type: CurrentTask['type']) =>
+    currentTask?.type === type &&
+    (currentTask?.status === 'running' || currentTask?.status === 'pending');
+  const isExtractActive = isTaskActive('extract');
+  const isConfigActive = isTaskActive('config');
+  const isAnalyzeActive = isTaskActive('analyze');
+  const isExtractionFlowActive = isExtractActive || isConfigActive;
 
   return (
     <div className="p-4 space-y-3">
@@ -74,25 +79,23 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
         <div className="flex gap-2">
           <button
             onClick={handleExtractClick}
-            disabled={isExtractRunning}
+            disabled={isExtractionFlowActive}
             className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${
-              isExtractRunning
+              isExtractionFlowActive
                 ? 'cursor-not-allowed opacity-70'
                 : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700'
             }`}
             style={
-              isExtractRunning
+              isExtractionFlowActive
                 ? { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }
                 : {}
             }
           >
-            {isExtractRunning ? (
+            {isExtractionFlowActive ? (
               <>
                 <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
                 <span className="truncate max-w-[180px]">
-                  {isExtractRunning && !pageStatus.hasConfig
-                    ? t('popup.generatingConfig')
-                    : getProgressMessage()}
+                  {isConfigActive ? t('popup.generatingConfig') : getProgressMessage()}
                 </span>
               </>
             ) : pageStatus.extracted ? (
@@ -133,7 +136,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
               </>
             )}
           </button>
-          {isExtractRunning && currentTask && (
+          {isExtractionFlowActive && currentTask && (
             <button
               onClick={() => onCancel(currentTask.id)}
               className="px-3 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-md flex items-center justify-center"
@@ -155,19 +158,19 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
       <div className="flex gap-2">
         <button
           onClick={handleAnalyzeClick}
-          disabled={!pageStatus.extracted || isAnalyzeRunning}
+          disabled={!pageStatus.extracted || isAnalyzeActive}
           className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${
-            !pageStatus.extracted || isAnalyzeRunning
+            !pageStatus.extracted || isAnalyzeActive
               ? 'cursor-not-allowed opacity-70'
               : 'bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700'
           }`}
           style={
-            !pageStatus.extracted || isAnalyzeRunning
+            !pageStatus.extracted || isAnalyzeActive
               ? { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }
               : {}
           }
         >
-          {isAnalyzeRunning ? (
+          {isAnalyzeActive ? (
             <>
               <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
               {t('popup.analyzing')}
@@ -198,7 +201,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
             </>
           )}
         </button>
-        {isAnalyzeRunning && currentTask && (
+        {isAnalyzeActive && currentTask && (
           <button
             onClick={() => onCancel(currentTask.id)}
             className="px-3 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-md flex items-center justify-center"

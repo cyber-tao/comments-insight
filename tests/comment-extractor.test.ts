@@ -35,7 +35,9 @@ describe('CommentExtractor', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    extractor = new CommentExtractor(mockPageController as any);
+    extractor = new CommentExtractor(
+      mockPageController as unknown as ConstructorParameters<typeof CommentExtractor>[0],
+    );
   });
 
   describe('extractWithAI', () => {
@@ -145,7 +147,7 @@ describe('CommentExtractor', () => {
 
     it('should ensure replies array exists', async () => {
       const comments = [
-        mockComment({ replies: undefined as any }),
+        mockComment({ replies: undefined as unknown as [] }),
         mockComment({ replies: [] }),
         mockComment({ replies: [mockComment()] }),
       ];
@@ -157,7 +159,7 @@ describe('CommentExtractor', () => {
     });
 
     it('should handle null likes', async () => {
-      const comments = [mockComment({ likes: null as any })];
+      const comments = [mockComment({ likes: null as unknown as number })];
       mockExecute.mockResolvedValue(comments);
 
       const result = await extractor.extractWithAI(10, 'YouTube');

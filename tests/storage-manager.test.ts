@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StorageManager } from '../src/background/StorageManager';
-import { Settings } from '../src/types';
+import type { Settings, HistoryItem } from '../src/types';
 
 // Mock chrome API
 const mockStorageGet = vi.fn();
@@ -115,7 +115,7 @@ describe('StorageManager', () => {
   });
 
   describe('History Operations', () => {
-    const mockHistoryItem = {
+    const mockHistoryItem: HistoryItem = {
       id: 'test-id',
       title: 'Test',
       url: 'http://test.com',
@@ -126,7 +126,7 @@ describe('StorageManager', () => {
     };
 
     it('should save history item', async () => {
-      await storageManager.saveHistory(mockHistoryItem as any);
+      await storageManager.saveHistory(mockHistoryItem);
 
       expect(mockStorageSet).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -159,6 +159,72 @@ describe('StorageManager', () => {
       const history = await storageManager.getHistory();
       expect(history).toHaveLength(1);
       expect(history[0].id).toBe('1');
+    });
+
+    it('should skip stale index entries when loading history', async () => {
+      mockStorageGet.mockImplementation((key) => {
+        if (key === 'history_index') return { history_index: ['missing', '1'] };
+        if (key === 'history_missing') return {};
+        if (key === 'history_1') {
+          return {
+            history_1: {
+              ...mockHistoryItem,
+              id: '1',
+              comments: '',
+            },
+          };
+        }
+        return {};
+      });
+
+      const history = await storageManager.getHistory();
+
+      expect(history).toHaveLength(1);
+      expect(history[0].id).toBe('1');
+    });
+
+    it('should skip stale sorted-index entries when loading paged history', async () => {
+      mockStorageGet.mockImplementation((key) => {
+        if (key === 'history_sorted_index') {
+          return {
+            history_sorted_index: {
+              entries: [
+                {
+                  id: 'missing',
+                  extractedAt: 2000,
+                  url: 'http://a.com',
+                  title: 'A',
+                  platform: 'A',
+                },
+                {
+                  id: '1',
+                  extractedAt: 1000,
+                  url: 'http://test.com',
+                  title: 'Test',
+                  platform: 'Test',
+                },
+              ],
+              lastUpdated: Date.now(),
+            },
+          };
+        }
+        if (key === 'history_missing') return {};
+        if (key === 'history_1') {
+          return {
+            history_1: {
+              ...mockHistoryItem,
+              id: '1',
+              comments: '',
+            },
+          };
+        }
+        return {};
+      });
+
+      const page = await storageManager.getHistoryPage(0, 20);
+
+      expect(page.items).toHaveLength(1);
+      expect(page.items[0].id).toBe('1');
     });
 
     it('should delete history item', async () => {

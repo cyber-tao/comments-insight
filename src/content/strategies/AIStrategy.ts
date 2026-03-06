@@ -31,6 +31,7 @@ import { ConfiguredStrategy } from './ConfiguredStrategy';
 import { generateCommentHash } from '@/utils/comment-hash';
 
 export type ConfigGenerationCallback = (progress: number, message: string) => void;
+type MetaConfigSubset = Pick<CrawlingConfig, 'videoTime' | 'postContent'>;
 
 export class AIStrategy implements ExtractionStrategy {
   private aiPort: chrome.runtime.Port | null = null;
@@ -576,7 +577,7 @@ export class AIStrategy implements ExtractionStrategy {
     onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING, 'Analyzing page macro structure...');
 
     // Phase 1: Meta Config Generation (Shallow DOM)
-    let metaConfig: any = {};
+    let metaConfig: Partial<MetaConfigSubset> = {};
     try {
       const shallowSimplified = DOMSimplifier.simplifyForAI(document.body, {
         maxDepth: Math.max(DOM.DETECT_MIN_DEPTH, Math.floor(domConfig.maxDepth / 2)),
@@ -593,7 +594,10 @@ export class AIStrategy implements ExtractionStrategy {
         EXTRACTION_PROGRESS.CONFIG_ANALYZING + 5,
         'Asking AI for post metadata schemas...',
       );
-      const response = await this.callAIviaPort<{ config?: any; error?: string }>({
+      const response = await this.callAIviaPort<{
+        config?: Partial<MetaConfigSubset>;
+        error?: string;
+      }>({
         type: MESSAGES.GENERATE_CRAWLING_CONFIG,
         payload: { prompt: metaPrompt },
       });

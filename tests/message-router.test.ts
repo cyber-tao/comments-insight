@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageRouter } from '../src/background/MessageRouter';
 import { MESSAGES } from '../src/config/constants';
 import { ErrorCode } from '../src/utils/errors';
+import type { Message, PortMessage } from '../src/types';
 
 // Mock Logger
 vi.mock('../src/utils/logger', () => ({
@@ -40,7 +41,7 @@ vi.mock('../src/background/handlers/settings', () => ({
 }));
 
 vi.mock('../src/background/handlers/history', () => ({
-  handleGetHistory: vi.fn().mockResolvedValue([]),
+  handleGetHistory: vi.fn().mockResolvedValue({ history: [] }),
   handleGetHistoryByUrl: vi.fn().mockResolvedValue(null),
   handleExportData: vi.fn().mockResolvedValue({ data: '' }),
   handleDeleteHistory: vi.fn().mockResolvedValue({ success: true }),
@@ -76,6 +77,24 @@ const mockStorageManager = {
   saveSettings: vi.fn(),
 };
 
+const createRouter = (): MessageRouter =>
+  new MessageRouter(
+    mockTaskManager as unknown as ConstructorParameters<typeof MessageRouter>[0],
+    mockAIService as unknown as ConstructorParameters<typeof MessageRouter>[1],
+    mockStorageManager as unknown as ConstructorParameters<typeof MessageRouter>[2],
+  );
+
+const createUnknownMessage = (type: string): Message => ({ type }) as unknown as Message;
+
+const createMockPort = (): chrome.runtime.Port =>
+  ({
+    sender: mockSender,
+    postMessage: vi.fn(),
+  }) as unknown as chrome.runtime.Port;
+
+const createUnknownPortMessage = (id: string, type: string): PortMessage =>
+  ({ id, type }) as unknown as PortMessage;
+
 const mockSender: chrome.runtime.MessageSender = {
   id: 'test-extension-id',
   tab: {
@@ -94,11 +113,7 @@ describe('MessageRouter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    router = new MessageRouter(
-      mockTaskManager as any,
-      mockAIService as any,
-      mockStorageManager as any,
-    );
+    router = createRouter();
   });
 
   describe('handleMessage', () => {
@@ -126,7 +141,7 @@ describe('MessageRouter', () => {
     it('should handle GET_HISTORY message', async () => {
       const result = await router.handleMessage({ type: MESSAGES.GET_HISTORY }, mockSender);
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({ history: [] });
     });
 
     it('should handle GET_TASK_STATUS message', async () => {
@@ -167,7 +182,7 @@ describe('MessageRouter', () => {
 
     it('should throw error for unknown message type', async () => {
       await expect(
-        router.handleMessage({ type: 'UNKNOWN_TYPE' } as any, mockSender),
+        router.handleMessage(createUnknownMessage('UNKNOWN_TYPE'), mockSender),
       ).rejects.toMatchObject({
         code: ErrorCode.VALIDATION_ERROR,
       });
@@ -186,12 +201,9 @@ describe('MessageRouter', () => {
 
   describe('handlePortMessage', () => {
     it('should handle port message and send response', async () => {
-      const mockPort = {
-        sender: mockSender,
-        postMessage: vi.fn(),
-      };
+      const mockPort = createMockPort();
 
-      await router.handlePortMessage(mockPort as any, {
+      await router.handlePortMessage(mockPort, {
         id: 'correlation-123',
         type: MESSAGES.PING,
       });
@@ -203,15 +215,12 @@ describe('MessageRouter', () => {
     });
 
     it('should handle port message error and send error response', async () => {
-      const mockPort = {
-        sender: mockSender,
-        postMessage: vi.fn(),
-      };
+      const mockPort = createMockPort();
 
-      await router.handlePortMessage(mockPort as any, {
-        id: 'correlation-456',
-        type: 'UNKNOWN_TYPE' as any,
-      });
+      await router.handlePortMessage(
+        mockPort,
+        createUnknownPortMessage('correlation-456', 'UNKNOWN_TYPE'),
+      );
 
       expect(mockPort.postMessage).toHaveBeenCalledWith({
         id: 'correlation-456',

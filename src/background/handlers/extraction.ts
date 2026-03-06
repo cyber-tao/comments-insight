@@ -8,6 +8,9 @@ import {
   EXTRACTION_PROGRESS,
   DATE_TIME,
   ANALYSIS_FORMAT,
+  STORAGE,
+  TIMEOUT,
+  TEXT,
 } from '@/config/constants';
 import { getDomain } from '../../utils/url';
 import { Tokenizer } from '../../utils/tokenizer';
@@ -31,6 +34,17 @@ interface HistoryItemWithVideoTime {
   title?: string;
   videoTime?: string;
   postContent?: string;
+}
+
+interface StoredVerifiedAIModel {
+  apiUrl?: string;
+  apiKey?: string;
+  model?: string;
+  contextWindowSize?: number;
+  maxOutputTokens?: number;
+  temperature?: number;
+  topP?: number;
+  verifiedAt?: number;
 }
 
 interface StartExtractionResponse {
@@ -65,6 +79,26 @@ interface ExtractionCompletionResponse {
   success: boolean;
 }
 
+interface PendingTaskEntry extends TaskResolver {
+  timeoutId: ReturnType<typeof setTimeout>;
+  cleanup: () => void;
+}
+
+type PendingTaskMap = Map<string, PendingTaskEntry>;
+
+interface WaitForPendingTaskOptions {
+  map: PendingTaskMap;
+  taskId: string;
+  signal: AbortSignal;
+  tabId: number;
+  timeoutMs: number;
+  timeoutMessage: string;
+  cancelWarnLabel: string;
+  timeoutWarnLabel: string;
+}
+
+type PendingTaskResult = { tokensUsed: number; commentsCount: number; title?: string };
+
 export function chunkDomText(
   structure: string,
   maxTokens: number,
@@ -77,8 +111,77 @@ export function chunkDomText(
 }
 
 // Map to hold pending task resolvers
-const pendingExtractionTasks = new Map<string, TaskResolver>();
-const pendingConfigTasks = new Map<string, TaskResolver>();
+const pendingExtractionTasks: PendingTaskMap = new Map();
+const pendingConfigTasks: PendingTaskMap = new Map();
+
+function takePendingTask(map: PendingTaskMap, taskId: string): PendingTaskEntry | undefined {
+  const pending = map.get(taskId);
+  if (!pending) {
+    return undefined;
+  }
+  map.delete(taskId);
+  clearTimeout(pending.timeoutId);
+  pending.cleanup();
+  return pending;
+}
+
+function notifyCancelExtraction(tabId: number, taskId: string, contextLabel: string): void {
+  chrome.tabs
+    .sendMessage(tabId, {
+      type: MESSAGES.CANCEL_EXTRACTION,
+      payload: { taskId },
+    })
+    .catch((err) => {
+      Logger.warn(contextLabel, { err });
+    });
+}
+
+function waitForPendingTaskCompletion({
+  map,
+  taskId,
+  signal,
+  tabId,
+  timeoutMs,
+  timeoutMessage,
+  cancelWarnLabel,
+  timeoutWarnLabel,
+}: WaitForPendingTaskOptions): Promise<PendingTaskResult> {
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => {
+      const pending = takePendingTask(map, taskId);
+      if (!pending) {
+        return;
+      }
+
+      notifyCancelExtraction(tabId, taskId, cancelWarnLabel);
+      pending.reject(new ExtensionError(ErrorCode.TASK_CANCELLED, 'Task cancelled by user'));
+    };
+
+    const timeoutId = setTimeout(() => {
+      const pending = takePendingTask(map, taskId);
+      if (!pending) {
+        return;
+      }
+
+      notifyCancelExtraction(tabId, taskId, timeoutWarnLabel);
+      pending.reject(new ExtensionError(ErrorCode.TIMEOUT_ERROR, timeoutMessage));
+    }, timeoutMs);
+
+    map.set(taskId, {
+      resolve,
+      reject,
+      timeoutId,
+      cleanup: () => signal.removeEventListener('abort', onAbort),
+    });
+
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+
+    signal.addEventListener('abort', onAbort);
+  });
+}
 
 export async function handleStartExtraction(
   message: Extract<Message, { type: 'START_EXTRACTION' }>,
@@ -137,24 +240,15 @@ export async function handleStartExtraction(
       Logger.debug('[ExtractionHandler] Message ack timeout ignored, waiting for completion');
     }
     // Hang here until we receive the completion message
-    return new Promise((resolve, reject) => {
-      pendingExtractionTasks.set(taskId, { resolve, reject });
-
-      // Clean up if task is cancelled from UI
-      signal.addEventListener('abort', () => {
-        pendingExtractionTasks.delete(taskId);
-        // Notify Content Script to stop
-        chrome.tabs
-          .sendMessage(task.tabId!, {
-            type: MESSAGES.CANCEL_EXTRACTION,
-            payload: { taskId },
-          })
-          .catch((err) => {
-            Logger.warn('[ExtractionHandler] Failed to send cancel to content script', { err });
-          });
-
-        reject(new ExtensionError(ErrorCode.TASK_CANCELLED, 'Task cancelled by user'));
-      });
+    return waitForPendingTaskCompletion({
+      map: pendingExtractionTasks,
+      taskId,
+      signal,
+      tabId: task.tabId!,
+      timeoutMs: TIMEOUT.EXTRACTION_TASK_COMPLETION_MS,
+      timeoutMessage: TEXT.EXTRACTION_TASK_TIMEOUT,
+      cancelWarnLabel: '[ExtractionHandler] Failed to send cancel to content script',
+      timeoutWarnLabel: '[ExtractionHandler] Failed to send timeout cancel to content script',
     });
   });
 
@@ -165,15 +259,20 @@ export async function handleExtractionCompleted(
   message: Extract<Message, { type: 'EXTRACTION_COMPLETED' }>,
   context: HandlerContext,
 ): Promise<ExtractionCompletionResponse> {
-  const { taskId, success, comments, postInfo, error } = message.payload;
-  const pending = pendingExtractionTasks.get(taskId);
+  const payload = message.payload;
+  if (!payload?.taskId) {
+    Logger.warn('[ExtractionHandler] Invalid extraction completion payload', {
+      payload,
+    });
+    return { success: false };
+  }
+  const { taskId, success, comments, postInfo, error } = payload;
+  const pending = takePendingTask(pendingExtractionTasks, taskId);
 
   if (!pending) {
     Logger.warn('[ExtractionHandler] Received completion for unknown or finished task', { taskId });
     return { success: false };
   }
-
-  pendingExtractionTasks.delete(taskId);
 
   if (success) {
     if (comments && comments.length > 0) {
@@ -269,7 +368,7 @@ export async function handleStartConfigGeneration(
 
   Logger.info('[ExtractionHandler] Starting config generation', { domain });
 
-  const taskId = context.taskManager.createTask('extract', url, domain, 0, tabId);
+  const taskId = context.taskManager.createTask('config', url, domain, 0, tabId);
 
   context.taskManager.setExecutor(taskId, async (task: Task, signal: AbortSignal) => {
     if (!task.tabId) {
@@ -294,22 +393,16 @@ export async function handleStartConfigGeneration(
       Logger.debug('[ExtractionHandler] Message ack timeout ignored, waiting for completion');
     }
 
-    return new Promise((resolve, reject) => {
-      pendingConfigTasks.set(taskId, { resolve, reject });
-
-      signal.addEventListener('abort', () => {
-        pendingConfigTasks.delete(taskId);
-        chrome.tabs
-          .sendMessage(task.tabId!, {
-            type: MESSAGES.CANCEL_EXTRACTION,
-            payload: { taskId },
-          })
-          .catch((err) => {
-            Logger.warn('[ExtractionHandler] Failed to send cancel to content script', { err });
-          });
-
-        reject(new ExtensionError(ErrorCode.TASK_CANCELLED, 'Task cancelled by user'));
-      });
+    return waitForPendingTaskCompletion({
+      map: pendingConfigTasks,
+      taskId,
+      signal,
+      tabId: task.tabId!,
+      timeoutMs: TIMEOUT.CONFIG_TASK_COMPLETION_MS,
+      timeoutMessage: TEXT.CONFIG_TASK_TIMEOUT,
+      cancelWarnLabel: '[ExtractionHandler] Failed to send config cancel to content script',
+      timeoutWarnLabel:
+        '[ExtractionHandler] Failed to send config timeout cancel to content script',
     });
   });
 
@@ -320,15 +413,18 @@ export async function handleConfigGenerationCompleted(
   message: Extract<Message, { type: 'CONFIG_GENERATION_COMPLETED' }>,
   _context: HandlerContext,
 ): Promise<ExtractionCompletionResponse> {
-  const { taskId, success, error } = message.payload;
-  const pending = pendingConfigTasks.get(taskId);
+  const payload = message.payload;
+  if (!payload?.taskId) {
+    Logger.warn('[ExtractionHandler] Invalid config completion payload', { payload });
+    return { success: false };
+  }
+  const { taskId, success, error } = payload;
+  const pending = takePendingTask(pendingConfigTasks, taskId);
 
   if (!pending) {
     Logger.warn('[ExtractionHandler] Received config completion for unknown task', { taskId });
     return { success: false };
   }
-
-  pendingConfigTasks.delete(taskId);
 
   if (success) {
     pending.resolve({ tokensUsed: 0, commentsCount: 0 });
@@ -457,6 +553,58 @@ export async function handleStartAnalysis(
 
   context.taskManager.setExecutor(taskId, async (task: Task, signal: AbortSignal) => {
     const settings = await context.storageManager.getSettings();
+    let analysisModel = settings.aiModel;
+    const hasPrimaryApiKey =
+      typeof analysisModel?.apiKey === 'string' && analysisModel.apiKey.trim().length > 0;
+
+    if (!hasPrimaryApiKey) {
+      try {
+        const raw = await chrome.storage.local.get(STORAGE.LAST_VERIFIED_AI_MODEL_KEY);
+        const fallback = raw[STORAGE.LAST_VERIFIED_AI_MODEL_KEY] as
+          | StoredVerifiedAIModel
+          | undefined;
+        const fallbackKey =
+          typeof fallback?.apiKey === 'string' && fallback.apiKey.trim().length > 0
+            ? fallback.apiKey
+            : '';
+
+        if (fallbackKey) {
+          const sameApiUrl =
+            typeof fallback?.apiUrl === 'string' &&
+            fallback.apiUrl.trim().length > 0 &&
+            fallback.apiUrl.trim() === (analysisModel.apiUrl || '').trim();
+
+          if (sameApiUrl || !analysisModel.apiUrl) {
+            analysisModel = {
+              ...analysisModel,
+              apiUrl: analysisModel.apiUrl || fallback?.apiUrl || '',
+              model: analysisModel.model || fallback?.model || '',
+              apiKey: fallbackKey,
+              contextWindowSize:
+                analysisModel.contextWindowSize || fallback?.contextWindowSize || 0,
+              maxOutputTokens:
+                analysisModel.maxOutputTokens || fallback?.maxOutputTokens || undefined,
+              temperature:
+                typeof analysisModel.temperature === 'number'
+                  ? analysisModel.temperature
+                  : typeof fallback?.temperature === 'number'
+                    ? fallback.temperature
+                    : analysisModel.temperature,
+              topP:
+                typeof analysisModel.topP === 'number'
+                  ? analysisModel.topP
+                  : typeof fallback?.topP === 'number'
+                    ? fallback.topP
+                    : analysisModel.topP,
+            };
+          }
+        }
+      } catch (fallbackError) {
+        Logger.warn('[ExtractionHandler] Failed to load fallback AI model config', {
+          fallbackError,
+        });
+      }
+    }
 
     context.taskManager.updateTaskProgress(taskId, 25);
 
@@ -485,7 +633,7 @@ export async function handleStartAnalysis(
 
     const result = await context.aiService.analyzeComments(
       comments,
-      settings.aiModel,
+      analysisModel,
       settings.analyzerPromptTemplate,
       settings.language,
       {

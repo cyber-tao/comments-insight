@@ -43,7 +43,9 @@ describe('AIService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    aiService = new AIService(mockStorageManager as any);
+    aiService = new AIService(
+      mockStorageManager as unknown as ConstructorParameters<typeof AIService>[0],
+    );
   });
 
   afterEach(() => {
@@ -132,12 +134,12 @@ describe('AIService', () => {
         prompt: 'Test',
         config,
       });
-
-      await vi.runAllTimersAsync();
-
-      await expect(promise).rejects.toMatchObject({
+      const rejection = expect(promise).rejects.toMatchObject({
         code: ErrorCode.AI_RATE_LIMIT,
       });
+
+      await vi.runAllTimersAsync();
+      await rejection;
     });
 
     it('should handle authentication errors (401)', async () => {
@@ -153,12 +155,12 @@ describe('AIService', () => {
         prompt: 'Test',
         config,
       });
-
-      await vi.runAllTimersAsync();
-
-      await expect(promise).rejects.toMatchObject({
+      const rejection = expect(promise).rejects.toMatchObject({
         code: ErrorCode.MISSING_API_KEY,
       });
+
+      await vi.runAllTimersAsync();
+      await rejection;
     });
 
     it('should handle model not found errors (404)', async () => {
@@ -174,12 +176,12 @@ describe('AIService', () => {
         prompt: 'Test',
         config,
       });
-
-      await vi.runAllTimersAsync();
-
-      await expect(promise).rejects.toMatchObject({
+      const rejection = expect(promise).rejects.toMatchObject({
         code: ErrorCode.AI_MODEL_NOT_FOUND,
       });
+
+      await vi.runAllTimersAsync();
+      await rejection;
     });
 
     it('should throw error when API URL is missing', async () => {
@@ -189,12 +191,12 @@ describe('AIService', () => {
         prompt: 'Test',
         config,
       });
-
-      await vi.runAllTimersAsync();
-
-      await expect(promise).rejects.toMatchObject({
+      const rejection = expect(promise).rejects.toMatchObject({
         code: ErrorCode.INVALID_API_URL,
       });
+
+      await vi.runAllTimersAsync();
+      await rejection;
     });
 
     it('should throw error when model is missing', async () => {
@@ -204,12 +206,12 @@ describe('AIService', () => {
         prompt: 'Test',
         config,
       });
-
-      await vi.runAllTimersAsync();
-
-      await expect(promise).rejects.toMatchObject({
+      const rejection = expect(promise).rejects.toMatchObject({
         code: ErrorCode.INVALID_MODEL,
       });
+
+      await vi.runAllTimersAsync();
+      await rejection;
     });
 
     it('should respect abort signal', async () => {
@@ -223,12 +225,12 @@ describe('AIService', () => {
         config,
         signal: controller.signal,
       });
-
-      await vi.runAllTimersAsync();
-
-      await expect(promise).rejects.toMatchObject({
+      const rejection = expect(promise).rejects.toMatchObject({
         code: ErrorCode.TASK_CANCELLED,
       });
+
+      await vi.runAllTimersAsync();
+      await rejection;
     });
 
     it('should remove think tags from response', async () => {
@@ -464,12 +466,12 @@ describe('AIService', () => {
         undefined,
         controller.signal,
       );
-
-      await vi.runAllTimersAsync();
-
-      await expect(promise).rejects.toMatchObject({
+      const rejection = expect(promise).rejects.toMatchObject({
         code: ErrorCode.TASK_CANCELLED,
       });
+
+      await vi.runAllTimersAsync();
+      await rejection;
     });
   });
 });

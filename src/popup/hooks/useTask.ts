@@ -5,7 +5,7 @@ import { Logger } from '@/utils/logger';
 
 export interface CurrentTask {
   id: string;
-  type: 'extract' | 'analyze';
+  type: 'extract' | 'analyze' | 'config';
   status: 'pending' | 'running' | 'completed' | 'failed';
   progress: number;
   message?: string;
@@ -22,6 +22,8 @@ export function useTask(options: UseTaskOptions = {}) {
   const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isUnmountedRef = useRef(false);
   const isStartingRef = useRef(false);
+  const hasActiveTask = (task: CurrentTask | null): boolean =>
+    task !== null && (task.status === 'running' || task.status === 'pending');
 
   useEffect(() => {
     isUnmountedRef.current = false;
@@ -36,6 +38,11 @@ export function useTask(options: UseTaskOptions = {}) {
 
   const monitorTask = useCallback(
     async (taskId: string) => {
+      if (monitorTimeoutRef.current) {
+        clearTimeout(monitorTimeoutRef.current);
+        monitorTimeoutRef.current = null;
+      }
+
       const checkStatus = async () => {
         if (isUnmountedRef.current) return;
 
@@ -139,7 +146,7 @@ export function useTask(options: UseTaskOptions = {}) {
   };
 
   const startExtraction = async (url: string): Promise<string | null> => {
-    if (isStartingRef.current || (currentTask && currentTask.status === 'running')) {
+    if (isStartingRef.current || hasActiveTask(currentTask)) {
       return null;
     }
 
@@ -161,7 +168,7 @@ export function useTask(options: UseTaskOptions = {}) {
       if (response?.taskId) {
         setCurrentTask({
           id: response.taskId,
-          type: 'extract',
+          type: 'config',
           status: 'running',
           progress: 0,
         });
@@ -185,7 +192,7 @@ export function useTask(options: UseTaskOptions = {}) {
   };
 
   const startConfigGeneration = async (url: string): Promise<string | null> => {
-    if (isStartingRef.current || (currentTask && currentTask.status === 'running')) {
+    if (isStartingRef.current || hasActiveTask(currentTask)) {
       return null;
     }
 
@@ -235,7 +242,7 @@ export function useTask(options: UseTaskOptions = {}) {
     comments: unknown[],
     metadata: { url?: string; platform?: string; title?: string },
   ): Promise<string | null> => {
-    if (isStartingRef.current || (currentTask && currentTask.status === 'running')) {
+    if (isStartingRef.current || hasActiveTask(currentTask)) {
       return null;
     }
 

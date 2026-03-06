@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PAGINATION, MESSAGES, DATE_TIME } from '@/config/constants';
+import { PAGINATION, MESSAGES, DATE_TIME, TIMING } from '@/config/constants';
 import { HistoryItem, Comment } from '../types';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -10,12 +10,38 @@ import i18n from '../utils/i18n';
 import { useTheme } from '@/hooks/useTheme';
 import { Logger } from '@/utils/logger';
 
+interface HistoryListEntry {
+  id: string;
+  extractedAt: number;
+  url: string;
+  title: string;
+  platform: string;
+}
+
+interface HistoryMetadataPageResponse {
+  entries: HistoryListEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+const HISTORY_LIST_ITEM_HEIGHT = 108;
+const HISTORY_LIST_OVERSCAN = 4;
+
 const History: React.FC = () => {
   const { t } = useTranslation();
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [history, setHistory] = useState<HistoryListEntry[]>([]);
   const [selectedItem, setSelectedItem] = useState<HistoryItem | null>(null);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [selectedItemLoading, setSelectedItemLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize] = useState(PAGINATION.DEFAULT_PER_PAGE);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyTotalPages, setHistoryTotalPages] = useState(0);
   const [viewMode, setViewMode] = useState<'comments' | 'analysis'>('analysis');
   const [sortBy, setSortBy] = useState<'time' | 'likes' | 'replies'>('likes');
   const [exportPostContentInMarkdown, setExportPostContentInMarkdown] = useState(false);
@@ -23,6 +49,19 @@ const History: React.FC = () => {
   const [commentSearchTerm, setCommentSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [commentsPerPage, setCommentsPerPage] = useState(PAGINATION.DEFAULT_PER_PAGE);
+  const [reanalyzeTaskId, setReanalyzeTaskId] = useState<string | null>(null);
+  const [reanalyzingHistoryId, setReanalyzingHistoryId] = useState<string | null>(null);
+  const [reanalyzeProgress, setReanalyzeProgress] = useState<number | null>(null);
+  const [reanalyzeError, setReanalyzeError] = useState('');
+  const [isReanalyzing, setIsReanalyzing] = useState(false);
+  const listContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const historyItemCacheRef = React.useRef<Map<string, HistoryItem>>(new Map());
+  const listRequestSeqRef = React.useRef(0);
+  const detailRequestSeqRef = React.useRef(0);
+  const reanalyzePollTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isUnmountedRef = React.useRef(false);
+  const [listViewportHeight, setListViewportHeight] = useState(0);
+  const [listScrollTop, setListScrollTop] = useState(0);
 
   useTheme();
 
@@ -33,64 +72,304 @@ const History: React.FC = () => {
       }
       setExportPostContentInMarkdown(!!response?.settings?.exportPostContentInMarkdown);
     });
+  }, []);
 
-    loadHistory();
+  const clearReanalyzePollTimeout = useCallback(() => {
+    if (reanalyzePollTimeoutRef.current) {
+      clearTimeout(reanalyzePollTimeoutRef.current);
+      reanalyzePollTimeoutRef.current = null;
+    }
   }, []);
 
   useEffect(() => {
-    if (history.length === 0) return;
+    isUnmountedRef.current = false;
+    return () => {
+      isUnmountedRef.current = true;
+      clearReanalyzePollTimeout();
+    };
+  }, [clearReanalyzePollTimeout]);
 
-    const params = new URLSearchParams(window.location.search);
-    const id = params.get('id');
-    const tab = params.get('tab');
+  const fetchHistoryItemById = useCallback(
+    async (id: string, options?: { force?: boolean }): Promise<HistoryItem | null> => {
+      const force = options?.force === true;
+      const cached = historyItemCacheRef.current.get(id);
+      if (cached && !force) {
+        return cached;
+      }
 
-    if (id) {
-      const item = history.find((h) => h.id === id);
-      if (item) {
-        setSelectedItem(item);
-        if (tab === 'analysis' || tab === 'comments') {
-          setViewMode(tab);
+      try {
+        const response = (await chrome.runtime.sendMessage({
+          type: MESSAGES.GET_HISTORY,
+          payload: { id },
+        })) as { item?: HistoryItem | null };
+
+        if (response?.item) {
+          historyItemCacheRef.current.set(id, response.item);
+          return response.item;
         }
-      }
-    }
-  }, [history]);
-
-  const loadHistory = async () => {
-    setLoading(true);
-    try {
-      const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_HISTORY });
-
-      if (chrome.runtime.lastError) {
-        Logger.error('[History] Failed to load history', { error: chrome.runtime.lastError });
-        return;
+      } catch (error) {
+        Logger.error('[History] Failed to load history item', { id, error });
       }
 
-      if (response?.history) {
-        setHistory(response.history);
-      }
-    } catch (error) {
-      Logger.error('[History] Failed to load history', { error });
-    } finally {
-      setLoading(false);
-    }
-  };
+      return null;
+    },
+    [],
+  );
 
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) {
-      loadHistory();
+  const monitorReanalyzeTask = useCallback(
+    (taskId: string, historyId: string) => {
+      clearReanalyzePollTimeout();
+
+      const pollTaskStatus = async () => {
+        if (isUnmountedRef.current) {
+          return;
+        }
+
+        try {
+          const response = (await chrome.runtime.sendMessage({
+            type: MESSAGES.GET_TASK_STATUS,
+            payload: { taskId },
+          })) as {
+            task?: { status?: string; progress?: number; error?: string };
+          };
+
+          if (isUnmountedRef.current) {
+            return;
+          }
+
+          const task = response?.task;
+          if (!task) {
+            throw new Error(t('history.reanalyzeTaskMissing', '分析任务不存在或已结束'));
+          }
+
+          if (task.status === 'running' || task.status === 'pending') {
+            setReanalyzeProgress(typeof task.progress === 'number' ? task.progress : 0);
+            reanalyzePollTimeoutRef.current = setTimeout(() => {
+              void pollTaskStatus();
+            }, TIMING.POLL_TASK_RUNNING_MS);
+            return;
+          }
+
+          if (task.status === 'completed') {
+            historyItemCacheRef.current.delete(historyId);
+            const refreshed = await fetchHistoryItemById(historyId, { force: true });
+            if (!isUnmountedRef.current) {
+              setSelectedItem((current) => (current?.id === historyId ? refreshed : current));
+            }
+
+            setIsReanalyzing(false);
+            setReanalyzeTaskId(null);
+            setReanalyzingHistoryId(null);
+            setReanalyzeProgress(null);
+            clearReanalyzePollTimeout();
+            return;
+          }
+
+          setReanalyzeError(task.error || t('history.reanalyzeFailed', '重新分析失败'));
+          setIsReanalyzing(false);
+          setReanalyzeTaskId(null);
+          setReanalyzingHistoryId(null);
+          setReanalyzeProgress(null);
+          clearReanalyzePollTimeout();
+        } catch (error) {
+          Logger.error('[History] Failed to monitor reanalyze task', { taskId, error });
+          if (!isUnmountedRef.current) {
+            setReanalyzeError(
+              error instanceof Error ? error.message : t('history.reanalyzeFailed', '重新分析失败'),
+            );
+            setIsReanalyzing(false);
+            setReanalyzeTaskId(null);
+            setReanalyzingHistoryId(null);
+            setReanalyzeProgress(null);
+          }
+          clearReanalyzePollTimeout();
+        }
+      };
+
+      void pollTaskStatus();
+    },
+    [clearReanalyzePollTimeout, fetchHistoryItemById, t],
+  );
+
+  const handleReanalyze = useCallback(async () => {
+    if (!selectedItem || isReanalyzing) {
       return;
     }
 
+    setReanalyzeError('');
+    setIsReanalyzing(true);
+    setReanalyzeProgress(0);
+    setReanalyzingHistoryId(selectedItem.id);
+
     try {
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.GET_HISTORY,
-        payload: { query: searchQuery },
-      });
-      if (response?.items) {
-        setHistory(response.items);
+      const response = (await chrome.runtime.sendMessage({
+        type: MESSAGES.START_ANALYSIS,
+        payload: {
+          comments: selectedItem.comments,
+          historyId: selectedItem.id,
+          metadata: {
+            platform: selectedItem.platform,
+            url: selectedItem.url,
+            title: selectedItem.title,
+            videoTime: selectedItem.videoTime,
+            postContent: selectedItem.postContent,
+          },
+        },
+      })) as { taskId?: string };
+
+      if (!response?.taskId) {
+        throw new Error(t('history.reanalyzeStartFailed', '启动重新分析失败'));
       }
+
+      setReanalyzeTaskId(response.taskId);
+      monitorReanalyzeTask(response.taskId, selectedItem.id);
     } catch (error) {
-      Logger.error('[History] Failed to search', { error });
+      Logger.error('[History] Failed to start reanalyze', { error });
+      setReanalyzeError(
+        error instanceof Error ? error.message : t('history.reanalyzeFailed', '重新分析失败'),
+      );
+      setIsReanalyzing(false);
+      setReanalyzeTaskId(null);
+      setReanalyzingHistoryId(null);
+      setReanalyzeProgress(null);
+    }
+  }, [isReanalyzing, monitorReanalyzeTask, selectedItem, t]);
+
+  const selectHistoryItemById = useCallback(
+    async (id: string, preferredTab?: 'analysis' | 'comments') => {
+      const detailRequestSeq = ++detailRequestSeqRef.current;
+      setSelectedHistoryId(id);
+      setSelectedItem((current) => (current?.id === id ? current : null));
+      setSelectedItemLoading(true);
+      try {
+        const item = await fetchHistoryItemById(id);
+        if (detailRequestSeq !== detailRequestSeqRef.current) {
+          return;
+        }
+        setSelectedItem(item);
+        if (preferredTab) {
+          setViewMode(preferredTab);
+        }
+      } finally {
+        if (detailRequestSeq === detailRequestSeqRef.current) {
+          setSelectedItemLoading(false);
+        }
+      }
+    },
+    [fetchHistoryItemById],
+  );
+
+  const handleSelectHistoryItem = useCallback(
+    async (entry: HistoryListEntry, preferredTab?: 'analysis' | 'comments') => {
+      await selectHistoryItemById(entry.id, preferredTab);
+    },
+    [selectHistoryItemById],
+  );
+
+  const loadHistory = useCallback(
+    async (page: number = 1, query: string = '') => {
+      const listRequestSeq = ++listRequestSeqRef.current;
+      setLoading(true);
+      try {
+        const response = (await chrome.runtime.sendMessage({
+          type: MESSAGES.GET_HISTORY,
+          payload: {
+            page: Math.max(0, page - 1),
+            pageSize: historyPageSize,
+            query: query || undefined,
+            metadataOnly: true,
+          },
+        })) as Partial<HistoryMetadataPageResponse>;
+
+        if (chrome.runtime.lastError) {
+          Logger.error('[History] Failed to load history', { error: chrome.runtime.lastError });
+          return;
+        }
+
+        if (listRequestSeq !== listRequestSeqRef.current) {
+          return;
+        }
+
+        const entries = Array.isArray(response?.entries) ? response.entries : [];
+        setHistory(entries);
+        setHistoryTotal(typeof response?.total === 'number' ? response.total : entries.length);
+        setHistoryTotalPages(typeof response?.totalPages === 'number' ? response.totalPages : 0);
+        setHistoryPage(page);
+        setListScrollTop(0);
+        if (listContainerRef.current) {
+          listContainerRef.current.scrollTop = 0;
+        }
+
+        setSelectedHistoryId((previousId) => {
+          if (previousId && !entries.some((entry) => entry.id === previousId)) {
+            const urlSelectedId = new URLSearchParams(window.location.search).get('id');
+            if (urlSelectedId === previousId) {
+              return previousId;
+            }
+            detailRequestSeqRef.current += 1;
+            setSelectedItemLoading(false);
+            setSelectedItem(null);
+            return null;
+          }
+          return previousId;
+        });
+      } catch (error) {
+        Logger.error('[History] Failed to load history', { error });
+      } finally {
+        if (listRequestSeq === listRequestSeqRef.current) {
+          setLoading(false);
+        }
+      }
+    },
+    [historyPageSize],
+  );
+
+  useEffect(() => {
+    void loadHistory(historyPage, activeSearchQuery);
+  }, [historyPage, activeSearchQuery, loadHistory]);
+
+  useEffect(() => {
+    const updateViewportHeight = () => {
+      setListViewportHeight(listContainerRef.current?.clientHeight || 0);
+    };
+
+    updateViewportHeight();
+    window.addEventListener('resize', updateViewportHeight);
+    return () => window.removeEventListener('resize', updateViewportHeight);
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    const tab = params.get('tab');
+    if (!id || selectedHistoryId === id) {
+      return;
+    }
+
+    const target = history.find((entry) => entry.id === id);
+    const preferredTab = tab === 'analysis' || tab === 'comments' ? tab : undefined;
+    if (target) {
+      void handleSelectHistoryItem(target, preferredTab);
+      return;
+    }
+    void selectHistoryItemById(id, preferredTab);
+  }, [history, selectedHistoryId, handleSelectHistoryItem, selectHistoryItemById]);
+
+  const handleSearch = () => {
+    const query = searchQuery.trim();
+    const queryChanged = query !== activeSearchQuery;
+
+    if (queryChanged) {
+      setActiveSearchQuery(query);
+    }
+
+    if (historyPage !== 1) {
+      setHistoryPage(1);
+      return;
+    }
+
+    if (!queryChanged) {
+      void loadHistory(1, query);
     }
   };
 
@@ -102,10 +381,18 @@ const History: React.FC = () => {
         type: MESSAGES.DELETE_HISTORY,
         payload: { id },
       });
-      setHistory(history.filter((item) => item.id !== id));
-      if (selectedItem?.id === id) {
+
+      historyItemCacheRef.current.delete(id);
+      if (selectedHistoryId === id) {
+        detailRequestSeqRef.current += 1;
+        setSelectedItemLoading(false);
+        setSelectedHistoryId(null);
         setSelectedItem(null);
       }
+
+      const isLastItemOnPage = history.length <= 1 && historyPage > 1;
+      const targetPage = isLastItemOnPage ? historyPage - 1 : historyPage;
+      await loadHistory(targetPage, activeSearchQuery);
     } catch (error) {
       Logger.error('[History] Failed to delete', { error });
     }
@@ -120,8 +407,19 @@ const History: React.FC = () => {
       });
 
       if (response?.success) {
+        listRequestSeqRef.current += 1;
+        detailRequestSeqRef.current += 1;
         setHistory([]);
         setSelectedItem(null);
+        setSelectedItemLoading(false);
+        setSelectedHistoryId(null);
+        setHistoryTotal(0);
+        setHistoryTotalPages(0);
+        setHistoryPage(1);
+        setSearchQuery('');
+        setActiveSearchQuery('');
+        historyItemCacheRef.current.clear();
+        setListScrollTop(0);
       }
     } catch (error) {
       Logger.error('[History] Failed to clear all', { error });
@@ -232,6 +530,10 @@ const History: React.FC = () => {
     setExpandedReplies(new Set());
   }, [commentSearchTerm, selectedItem]);
 
+  React.useEffect(() => {
+    setReanalyzeError('');
+  }, [selectedHistoryId]);
+
   const toggleReplies = (commentId: string) => {
     setExpandedReplies((prev) => {
       const newSet = new Set(prev);
@@ -318,6 +620,19 @@ const History: React.FC = () => {
     );
   };
 
+  const visibleListCount = Math.max(
+    1,
+    Math.ceil(listViewportHeight / HISTORY_LIST_ITEM_HEIGHT) + HISTORY_LIST_OVERSCAN * 2,
+  );
+  const listStartIndex = Math.max(
+    0,
+    Math.floor(listScrollTop / HISTORY_LIST_ITEM_HEIGHT) - HISTORY_LIST_OVERSCAN,
+  );
+  const listEndIndex = Math.min(history.length, listStartIndex + visibleListCount);
+  const visibleHistoryEntries = history.slice(listStartIndex, listEndIndex);
+  const listOffsetY = listStartIndex * HISTORY_LIST_ITEM_HEIGHT;
+  const listTotalHeight = history.length * HISTORY_LIST_ITEM_HEIGHT;
+
   return (
     <div className="flex h-screen" style={{ backgroundColor: 'var(--bg-secondary)' }}>
       <div
@@ -362,9 +677,23 @@ const History: React.FC = () => {
               🔍
             </button>
           </div>
+          <div className="mt-3 flex items-center justify-between text-xs">
+            <span style={{ color: 'var(--text-muted)' }}>
+              {t('history.commentsWithCount', { count: historyTotal })}
+            </span>
+            {historyTotalPages > 0 && (
+              <span style={{ color: 'var(--text-muted)' }}>
+                {historyPage} / {historyTotalPages}
+              </span>
+            )}
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
+        <div
+          ref={listContainerRef}
+          className="flex-1 overflow-y-auto"
+          onScroll={(event) => setListScrollTop(event.currentTarget.scrollTop)}
+        >
           {loading ? (
             <div className="p-6 text-center" style={{ color: 'var(--text-muted)' }}>
               <div className="animate-pulse">⏳ {t('common.loading')}</div>
@@ -375,56 +704,86 @@ const History: React.FC = () => {
               <p>{t('history.noHistory')}</p>
             </div>
           ) : (
-            <div>
-              {history.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => setSelectedItem(item)}
-                  className="p-4 cursor-pointer transition-all"
-                  style={{
-                    backgroundColor:
-                      selectedItem?.id === item.id ? 'var(--bg-selected)' : 'transparent',
-                    borderBottom: '1px solid var(--border-primary)',
-                  }}
-                >
-                  <div className="flex items-start gap-3 mb-2">
-                    <div className="flex-1 min-w-0">
-                      <h3
-                        className="font-semibold truncate mb-1"
-                        style={{ color: 'var(--text-primary)' }}
+            <div style={{ height: listTotalHeight, position: 'relative' }}>
+              <div style={{ transform: `translateY(${listOffsetY}px)` }}>
+                {visibleHistoryEntries.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => {
+                      void handleSelectHistoryItem(item);
+                    }}
+                    className="p-4 cursor-pointer transition-all"
+                    style={{
+                      minHeight: HISTORY_LIST_ITEM_HEIGHT,
+                      backgroundColor:
+                        selectedHistoryId === item.id ? 'var(--bg-selected)' : 'transparent',
+                      borderBottom: '1px solid var(--border-primary)',
+                    }}
+                  >
+                    <div className="flex items-start gap-3 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <h3
+                          className="font-semibold truncate mb-1"
+                          style={{ color: 'var(--text-primary)' }}
+                        >
+                          {item.title}
+                        </h3>
+                        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                          {formatDate(item.extractedAt)}
+                        </p>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleDelete(item.id);
+                        }}
+                        className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                        style={{ color: 'var(--accent-danger)' }}
                       >
-                        {item.title}
-                      </h3>
-                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                        {formatDate(item.extractedAt)}
-                      </p>
+                        🗑️
+                      </button>
                     </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(item.id);
-                      }}
-                      className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
-                      style={{ color: 'var(--accent-danger)' }}
-                    >
-                      🗑️
-                    </button>
+                    <div className="flex gap-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+                      <span className="flex items-center gap-1">🌐 {item.platform}</span>
+                    </div>
                   </div>
-                  <div className="flex gap-4 text-xs" style={{ color: 'var(--text-muted)' }}>
-                    <span className="flex items-center gap-1">
-                      💬 {t('history.commentsWithCount', { count: item.commentsCount })}
-                    </span>
-                    {item.analysis && (
-                      <span className="flex items-center gap-1">
-                        🔥 {t('history.tokensWithCount', { count: item.analysis.tokensUsed })}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
+        {historyTotalPages > 1 && (
+          <div
+            className="p-3 flex items-center justify-between"
+            style={{ borderTop: '1px solid var(--border-primary)' }}
+          >
+            <button
+              onClick={() => setHistoryPage((prev) => Math.max(1, prev - 1))}
+              disabled={historyPage <= 1 || loading}
+              className="px-3 py-1 rounded text-sm font-medium transition-all disabled:opacity-50"
+              style={{
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              ← {t('common.previous')}
+            </button>
+            <span className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>
+              {historyPage} / {historyTotalPages}
+            </span>
+            <button
+              onClick={() => setHistoryPage((prev) => Math.min(historyTotalPages, prev + 1))}
+              disabled={historyPage >= historyTotalPages || loading}
+              className="px-3 py-1 rounded text-sm font-medium transition-all disabled:opacity-50"
+              style={{
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              {t('common.next')} →
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 flex flex-col">
@@ -520,20 +879,57 @@ const History: React.FC = () => {
                     <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
                       {t('history.analysis')}
                     </h3>
-                    {selectedItem.analysis && (
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() =>
-                          exportAnalysisAsMarkdown(selectedItem, exportPostContentInMarkdown)
+                        onClick={() => void handleReanalyze()}
+                        disabled={isReanalyzing}
+                        className="px-4 py-2 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-all shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
+                        style={{ backgroundColor: 'var(--accent-secondary)' }}
+                        title={
+                          reanalyzeTaskId
+                            ? `${t('history.reanalyzing', '重新分析中')} #${reanalyzeTaskId}`
+                            : t('history.reanalyzeTooltip', '重新发起分析并覆盖当前结果')
                         }
-                        className="px-4 py-2 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-all hover:scale-105 shadow-md"
-                        style={{ background: 'var(--gradient-primary)' }}
-                        title={t('history.exportMarkdownTooltip')}
                       >
-                        <span>📝</span>
-                        <span>{t('history.exportMarkdown')}</span>
+                        <span>{isReanalyzing ? '⏳' : '🔄'}</span>
+                        <span>
+                          {isReanalyzing
+                            ? `${t('history.reanalyzing', '重新分析中')} ${
+                                reanalyzeProgress !== null
+                                  ? `${Math.round(reanalyzeProgress)}%`
+                                  : ''
+                              }`
+                            : t('history.reanalyze', '重新分析')}
+                        </span>
                       </button>
-                    )}
+                      {selectedItem.analysis && (
+                        <button
+                          onClick={() =>
+                            exportAnalysisAsMarkdown(selectedItem, exportPostContentInMarkdown)
+                          }
+                          className="px-4 py-2 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-all hover:scale-105 shadow-md"
+                          style={{ background: 'var(--gradient-primary)' }}
+                          title={t('history.exportMarkdownTooltip')}
+                        >
+                          <span>📝</span>
+                          <span>{t('history.exportMarkdown')}</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
+                  {reanalyzeError &&
+                    (!reanalyzingHistoryId || reanalyzingHistoryId === selectedItem.id) && (
+                      <div
+                        className="mb-4 p-3 rounded-lg text-sm"
+                        style={{
+                          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                          color: 'var(--accent-danger)',
+                          border: '1px solid rgba(239, 68, 68, 0.25)',
+                        }}
+                      >
+                        {reanalyzeError}
+                      </div>
+                    )}
 
                   <div
                     className="theme-card p-6"
@@ -742,6 +1138,16 @@ const History: React.FC = () => {
               )}
             </div>
           </>
+        ) : selectedItemLoading ? (
+          <div
+            className="flex-1 flex items-center justify-center"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <div className="text-center">
+              <p className="text-4xl mb-4">⏳</p>
+              <p className="text-lg">{t('common.loading')}</p>
+            </div>
+          </div>
         ) : (
           <div
             className="flex-1 flex items-center justify-center"

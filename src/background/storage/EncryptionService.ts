@@ -7,19 +7,25 @@ export class EncryptionService {
   private encryptionInitPromise?: Promise<void>;
 
   async ensureEncryptionReady(): Promise<void> {
-    if (this.encryptionEnabled) return;
+    if (this.encryptionEnabled && this.encryptionKey) return;
     if (!this.encryptionInitPromise) {
-      this.encryptionInitPromise = (async () => {
-        try {
-          const secret = await this.getOrCreateSecret();
-          await this.enableEncryption(secret);
-        } catch (error) {
-          Logger.warn('[EncryptionService] Failed to initialize encryption', { error });
-          this.disableEncryption();
-        }
-      })();
+      this.encryptionInitPromise = this.initializeEncryption();
     }
     await this.encryptionInitPromise;
+    if (!this.encryptionEnabled || !this.encryptionKey) {
+      // Allow subsequent calls to retry initialization if previous attempt failed.
+      this.encryptionInitPromise = undefined;
+    }
+  }
+
+  private async initializeEncryption(): Promise<void> {
+    try {
+      const secret = await this.getOrCreateSecret();
+      await this.enableEncryption(secret);
+    } catch (error) {
+      Logger.warn('[EncryptionService] Failed to initialize encryption', { error });
+      this.disableEncryption();
+    }
   }
 
   private async getOrCreateSecret(): Promise<string> {
@@ -81,6 +87,9 @@ export class EncryptionService {
   }
 
   async encrypt(text: string): Promise<string> {
+    if (!this.encryptionEnabled || !this.encryptionKey) {
+      await this.ensureEncryptionReady();
+    }
     if (!this.encryptionEnabled || !this.encryptionKey) return text;
     const iv = crypto.getRandomValues(new Uint8Array(SECURITY.IV_LENGTH));
     const enc = new TextEncoder();
@@ -98,7 +107,13 @@ export class EncryptionService {
 
   async decrypt(text: string): Promise<string> {
     if (!text.startsWith(SECURITY.ENCRYPTION_PREFIX)) return text;
-    if (!this.encryptionKey) return '';
+    if (!this.encryptionKey) {
+      await this.ensureEncryptionReady();
+    }
+    if (!this.encryptionKey) {
+      Logger.warn('[EncryptionService] Decrypt skipped: encryption key unavailable');
+      return '';
+    }
     try {
       const base64 = text.slice(SECURITY.ENCRYPTION_PREFIX.length);
       const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));

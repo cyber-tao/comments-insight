@@ -531,7 +531,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         outputLevelSelect.value = val;
       }
     }
-  } catch {}
+  } catch (error) {
+    Logger.warn('[Logs] Failed to restore output log level', { error });
+  }
 
   // Load logs
   loadLogs();

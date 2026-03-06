@@ -57,7 +57,7 @@ export interface SimplifiedNode {
 
 export interface Task {
   id: string;
-  type: 'extract' | 'analyze';
+  type: 'extract' | 'analyze' | 'config';
   status: 'pending' | 'running' | 'completed' | 'failed';
   url: string;
   platform?: string;

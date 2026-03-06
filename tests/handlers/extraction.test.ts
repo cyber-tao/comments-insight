@@ -1,10 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   handleStartExtraction,
+  handleStartConfigGeneration,
   handleExtractionProgress,
+  handleExtractionCompleted,
+  handleConfigGenerationCompleted,
   chunkDomText,
 } from '../../src/background/handlers/extraction';
 import { HandlerContext } from '../../src/background/handlers/types';
+import { ErrorCode } from '../../src/utils/errors';
+import { TIMEOUT } from '../../src/config/constants';
 
 vi.mock('../../src/utils/logger', () => ({
   Logger: {
@@ -62,6 +67,10 @@ describe('extraction handlers', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe('handleStartExtraction', () => {
     it('should create task with URL and maxComments from message', async () => {
       const context = createMockContext();
@@ -115,6 +124,71 @@ describe('extraction handlers', () => {
         ),
       ).rejects.toThrow();
     });
+
+    it('should fail executor when extraction completion times out', async () => {
+      vi.useFakeTimers();
+      const context = createMockContext();
+      const message = {
+        type: 'START_EXTRACTION' as const,
+        payload: { url: 'https://example.com', maxComments: 50 },
+      };
+
+      await handleStartExtraction(message, context);
+
+      const setExecutorMock = context.taskManager.setExecutor as unknown as {
+        mock: { calls: unknown[][] };
+      };
+      const executor = setExecutorMock.mock.calls[0][1] as (
+        task: { id: string; tabId?: number },
+        signal: AbortSignal,
+      ) => Promise<unknown>;
+
+      const controller = new AbortController();
+      const running = executor({ id: 'task_123', tabId: 1 }, controller.signal);
+      const rejection = expect(running).rejects.toMatchObject({
+        code: ErrorCode.TIMEOUT_ERROR,
+      });
+
+      await vi.advanceTimersByTimeAsync(TIMEOUT.EXTRACTION_TASK_COMPLETION_MS + 1);
+      await rejection;
+    });
+  });
+
+  describe('handleStartConfigGeneration', () => {
+    it('should fail executor when config generation completion times out', async () => {
+      vi.useFakeTimers();
+      const context = createMockContext();
+      const message = {
+        type: 'START_CONFIG_GENERATION' as const,
+        payload: { url: 'https://example.com' },
+      };
+
+      await handleStartConfigGeneration(message, context);
+      expect(context.taskManager.createTask).toHaveBeenCalledWith(
+        'config',
+        'https://example.com',
+        'example.com',
+        0,
+        1,
+      );
+
+      const setExecutorMock = context.taskManager.setExecutor as unknown as {
+        mock: { calls: unknown[][] };
+      };
+      const executor = setExecutorMock.mock.calls[0][1] as (
+        task: { id: string; tabId?: number },
+        signal: AbortSignal,
+      ) => Promise<unknown>;
+
+      const controller = new AbortController();
+      const running = executor({ id: 'task_123', tabId: 1 }, controller.signal);
+      const rejection = expect(running).rejects.toMatchObject({
+        code: ErrorCode.TIMEOUT_ERROR,
+      });
+
+      await vi.advanceTimersByTimeAsync(TIMEOUT.CONFIG_TASK_COMPLETION_MS + 1);
+      await rejection;
+    });
   });
 
   describe('handleExtractionProgress', () => {
@@ -157,6 +231,33 @@ describe('extraction handlers', () => {
       const result = await handleExtractionProgress(message, context);
 
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('completion payload validation', () => {
+    it('should return false for extraction completion without taskId', async () => {
+      const context = createMockContext();
+      const message = {
+        type: 'EXTRACTION_COMPLETED' as const,
+        payload: { success: true },
+      } as unknown as Extract<import('../../src/types').Message, { type: 'EXTRACTION_COMPLETED' }>;
+
+      const result = await handleExtractionCompleted(message, context);
+      expect(result).toEqual({ success: false });
+    });
+
+    it('should return false for config completion without taskId', async () => {
+      const context = createMockContext();
+      const message = {
+        type: 'CONFIG_GENERATION_COMPLETED' as const,
+        payload: { success: true },
+      } as unknown as Extract<
+        import('../../src/types').Message,
+        { type: 'CONFIG_GENERATION_COMPLETED' }
+      >;
+
+      const result = await handleConfigGenerationCompleted(message, context);
+      expect(result).toEqual({ success: false });
     });
   });
 

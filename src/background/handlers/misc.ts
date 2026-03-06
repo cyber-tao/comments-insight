@@ -2,7 +2,7 @@ import { Message } from '../../types';
 import { HandlerContext, PingResponse } from './types';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
-import { LIMITS, MESSAGES, TEXT } from '@/config/constants';
+import { LIMITS, MESSAGES, STORAGE, TEXT } from '@/config/constants';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
 import { resolveTabId } from '../../utils/tab-helpers';
 
@@ -85,6 +85,37 @@ export async function handleTestModel(
     });
 
     if (response && response.content) {
+      context.aiService.rememberVerifiedConfig(config);
+
+      try {
+        await context.storageManager.saveSettings({
+          aiModel: config,
+        });
+
+        await chrome.storage.local.set({
+          [STORAGE.LAST_VERIFIED_AI_MODEL_KEY]: {
+            apiUrl: config.apiUrl,
+            apiKey: config.apiKey,
+            model: config.model,
+            contextWindowSize: config.contextWindowSize,
+            maxOutputTokens: config.maxOutputTokens,
+            temperature: config.temperature,
+            topP: config.topP,
+            verifiedAt: Date.now(),
+          },
+        });
+      } catch (saveError) {
+        Logger.error('[MiscHandler] Model test succeeded but settings persistence failed', {
+          saveError,
+        });
+        return {
+          success: false,
+          error:
+            'Model call succeeded, but failed to persist AI model settings: ' +
+            (saveError instanceof Error ? saveError.message : 'Unknown error'),
+        };
+      }
+
       return {
         success: true,
         message: 'Model is working correctly',

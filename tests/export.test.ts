@@ -31,8 +31,8 @@ vi.stubGlobal(
   'Blob',
   class MockBlob {
     content: string[];
-    options: any;
-    constructor(content: string[], options: any) {
+    options: Record<string, unknown>;
+    constructor(content: string[], options: Record<string, unknown>) {
       this.content = content;
       this.options = options;
     }

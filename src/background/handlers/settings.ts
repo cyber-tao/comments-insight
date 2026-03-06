@@ -31,7 +31,7 @@ export async function handleCacheSelector(
   message: Extract<Message, { type: 'CACHE_SELECTOR' }>,
   context: HandlerContext,
 ): Promise<SuccessResponse> {
-  const { hostname, selector } = message.payload;
+  const { hostname, selector } = message.payload || {};
 
   if (!hostname || !selector) {
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Hostname and selector required');
@@ -45,7 +45,7 @@ export async function handleGetCrawlingConfig(
   message: Extract<Message, { type: 'GET_CRAWLING_CONFIG' }>,
   context: HandlerContext,
 ): Promise<{ config: CrawlingConfig | null }> {
-  const { domain } = message.payload;
+  const { domain } = message.payload || {};
   if (!domain) {
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Domain is required');
   }
@@ -57,7 +57,7 @@ export async function handleSaveCrawlingConfig(
   message: Extract<Message, { type: 'SAVE_CRAWLING_CONFIG' }>,
   context: HandlerContext,
 ): Promise<SuccessResponse> {
-  const { config } = message.payload;
+  const { config } = message.payload || {};
   if (!config || !config.domain) {
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Valid config with domain is required');
   }
@@ -77,7 +77,7 @@ export async function handleUpdateFieldValidation(
   message: Extract<Message, { type: 'UPDATE_FIELD_VALIDATION' }>,
   context: HandlerContext,
 ): Promise<SuccessResponse> {
-  const { domain, fieldValidation } = message.payload;
+  const { domain, fieldValidation } = message.payload || {};
 
   if (!domain || !fieldValidation) {
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Domain and fieldValidation are required');

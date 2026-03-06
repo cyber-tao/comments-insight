@@ -10,8 +10,28 @@ interface GetHistoryItemResponse {
   item: HistoryItem | null;
 }
 
-interface SearchHistoryResponse {
+interface HistoryMetadataEntry {
+  id: string;
+  extractedAt: number;
+  url: string;
+  title: string;
+  platform: string;
+}
+
+interface PaginatedHistoryResponse {
   items: HistoryItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+interface PaginatedHistoryMetadataResponse {
+  entries: HistoryMetadataEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 interface DeleteHistoryResponse {
@@ -30,18 +50,36 @@ interface ExportSettingsResponse {
 export async function handleGetHistory(
   message: Extract<Message, { type: 'GET_HISTORY' }>,
   context: HandlerContext,
-): Promise<GetHistoryListResponse | GetHistoryItemResponse | SearchHistoryResponse> {
+): Promise<
+  | GetHistoryListResponse
+  | GetHistoryItemResponse
+  | PaginatedHistoryResponse
+  | PaginatedHistoryMetadataResponse
+> {
   const payload = message.payload || {};
-  const { id, query } = payload;
+  const { id, query, page, pageSize, metadataOnly } = payload;
 
   if (id) {
     const item = await context.storageManager.getHistoryItem(id);
     return { item: item || null };
   }
 
+  const safePage = typeof page === 'number' && page >= 0 ? page : 0;
+  const safePageSize = typeof pageSize === 'number' && pageSize > 0 ? pageSize : 20;
+
+  if (metadataOnly) {
+    if (query) {
+      return await context.storageManager.searchHistoryMetadataPage(query, safePage, safePageSize);
+    }
+    return await context.storageManager.getHistoryMetadataPage(safePage, safePageSize);
+  }
+
   if (query) {
-    const items = await context.storageManager.searchHistory(query);
-    return { items };
+    return await context.storageManager.searchHistoryPaginated(query, safePage, safePageSize);
+  }
+
+  if (page !== undefined || pageSize !== undefined) {
+    return await context.storageManager.getHistoryPage(safePage, safePageSize);
   }
 
   const history = await context.storageManager.getHistory();
@@ -52,7 +90,7 @@ export async function handleGetHistoryByUrl(
   message: Extract<Message, { type: 'GET_HISTORY_BY_URL' }>,
   context: HandlerContext,
 ): Promise<GetHistoryItemResponse> {
-  const { url } = message.payload;
+  const { url } = message.payload || {};
 
   if (!url) {
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'URL is required');
@@ -70,7 +108,7 @@ export async function handleDeleteHistory(
   message: Extract<Message, { type: 'DELETE_HISTORY' }>,
   context: HandlerContext,
 ): Promise<DeleteHistoryResponse> {
-  const { id } = message.payload;
+  const { id } = message.payload || {};
 
   if (!id) {
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'History item ID is required');

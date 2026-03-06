@@ -50,7 +50,13 @@ export const TaskProgress: React.FC<TaskProgressProps> = ({ task }) => {
       const countNum = parseInt(count, 10);
       return countNum >= 0 ? `${stageLabel} ${count}/${max}` : stageLabel;
     }
-    return task.type === 'extract' ? t('popup.extracting') : t('popup.analyzing');
+    if (task.type === 'extract') {
+      return t('popup.extracting');
+    }
+    if (task.type === 'analyze') {
+      return t('popup.analyzing');
+    }
+    return t('popup.generatingConfig');
   };
 
   const getStatusColor = () => {
@@ -82,14 +88,18 @@ export const TaskProgress: React.FC<TaskProgressProps> = ({ task }) => {
   }
 
   const estimatedTime = task.detailedProgress?.estimatedTimeRemaining ?? -1;
+  const taskLabel =
+    task.type === 'extract'
+      ? t('popup.extracting')
+      : task.type === 'analyze'
+        ? t('popup.analyzing')
+        : t('popup.generatingConfig');
 
   return (
     <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
       <div className="flex items-center gap-2 mb-2">
         <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
-        <span className="text-sm font-medium text-blue-700">
-          {task.type === 'extract' ? t('popup.extracting') : t('popup.analyzing')}
-        </span>
+        <span className="text-sm font-medium text-blue-700">{taskLabel}</span>
       </div>
       <div className="text-xs text-blue-600 mb-2">{getProgressMessage()}</div>
       {estimatedTime > 0 && (

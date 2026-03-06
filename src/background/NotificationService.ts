@@ -12,7 +12,7 @@ export class NotificationService {
    * @param commentsCount - Number of comments processed
    */
   static async showTaskCompleted(
-    taskType: 'extract' | 'analyze',
+    taskType: 'extract' | 'analyze' | 'config',
     title: string,
     commentsCount?: number,
   ): Promise<void> {
@@ -43,15 +43,17 @@ export class NotificationService {
    * @param taskType - Type of failed task
    * @param error - Error message
    */
-  static async showTaskFailed(taskType: 'extract' | 'analyze', error: string): Promise<void> {
+  static async showTaskFailed(
+    taskType: 'extract' | 'analyze' | 'config',
+    error: string,
+  ): Promise<void> {
     try {
       const notificationId = `task_failed_${Date.now()}`;
       const options = {
         type: 'basic' as const,
         iconUrl: ICONS.ICON_48,
         title: TEXT.TASK_FAILED_TITLE,
-        message:
-          taskType === 'extract' ? `Extraction failed: ${error}` : `Analysis failed: ${error}`,
+        message: this.getFailureMessage(taskType, error),
         requireInteraction: false,
       };
 
@@ -90,7 +92,7 @@ export class NotificationService {
    * Get completion message based on task type
    */
   private static getCompletionMessage(
-    taskType: 'extract' | 'analyze',
+    taskType: 'extract' | 'analyze' | 'config',
     title: string,
     commentsCount?: number,
   ): string {
@@ -103,10 +105,28 @@ export class NotificationService {
       return commentsCount
         ? `Extraction completed for "${truncatedTitle}" (${commentsCount} comments)`
         : `Extraction completed for "${truncatedTitle}"`;
-    } else {
+    }
+    if (taskType === 'analyze') {
       return commentsCount
         ? `Analysis completed for "${truncatedTitle}" (${commentsCount} comments analyzed)`
         : `Analysis completed for "${truncatedTitle}"`;
     }
+    return `Config generation completed for "${truncatedTitle}"`;
+  }
+
+  /**
+   * Get failure message based on task type
+   */
+  private static getFailureMessage(
+    taskType: 'extract' | 'analyze' | 'config',
+    error: string,
+  ): string {
+    if (taskType === 'extract') {
+      return `Extraction failed: ${error}`;
+    }
+    if (taskType === 'analyze') {
+      return `Analysis failed: ${error}`;
+    }
+    return `Config generation failed: ${error}`;
   }
 }

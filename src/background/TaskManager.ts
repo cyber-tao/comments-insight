@@ -125,7 +125,7 @@ export class TaskManager {
 
   /**
    * Create a new task
-   * @param type - Type of task ('extract' or 'analyze')
+   * @param type - Type of task ('extract', 'analyze', or 'config')
    * @param url - URL of the page
    * @param platform - Platform type
    * @returns Task ID
@@ -611,7 +611,8 @@ export class TaskManager {
       const result = await chrome.storage.local.get(STORAGE.TASK_STATE_KEY);
       const state = result[STORAGE.TASK_STATE_KEY] as PersistedTaskState | undefined;
       return state || null;
-    } catch {
+    } catch (error) {
+      Logger.warn('[TaskManager] Failed to load task state', { error });
       return null;
     }
   }

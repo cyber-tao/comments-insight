@@ -23,7 +23,7 @@ export function handleCancelTask(
   message: Extract<Message, { type: 'CANCEL_TASK' }>,
   context: HandlerContext,
 ): SuccessResponse {
-  const { taskId } = message.payload;
+  const { taskId } = message.payload || {};
 
   if (!taskId) {
     throw new ExtensionError(ErrorCode.TASK_NOT_FOUND, 'Task ID is required');
@@ -31,7 +31,7 @@ export function handleCancelTask(
 
   const task = context.taskManager.getTask(taskId);
 
-  if (task?.type === 'extract') {
+  if (task?.type === 'extract' || task?.type === 'config') {
     const tabId = task.tabId;
     if (typeof tabId === 'number') {
       chrome.tabs

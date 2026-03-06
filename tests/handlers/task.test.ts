@@ -8,7 +8,7 @@ describe('Task Handlers', () => {
     getTask: vi.fn(),
     getAllTasks: vi.fn(),
     cancelTask: vi.fn(),
-  } as any;
+  } as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
   const context = {
     taskManager: mockTaskManager,
@@ -32,7 +32,7 @@ describe('Task Handlers', () => {
       tabs: {
         sendMessage: vi.fn(),
       },
-    } as any;
+    } as unknown as typeof chrome;
   });
 
   describe('handleGetTaskStatus', () => {
@@ -144,11 +144,47 @@ describe('Task Handlers', () => {
       expect(mockTaskManager.cancelTask).toHaveBeenCalledWith('task-456');
     });
 
+    it('should cancel config task and send message to content script', () => {
+      const configTask: Task = {
+        ...mockTask,
+        type: 'config',
+        tabId: 2,
+      };
+
+      mockTaskManager.getTask.mockReturnValue(configTask);
+      global.chrome.tabs.sendMessage.mockResolvedValue(undefined);
+
+      const message: Extract<Message, { type: 'CANCEL_TASK' }> = {
+        type: 'CANCEL_TASK',
+        payload: { taskId: 'task-789' },
+      };
+
+      const result = handleCancelTask(message, context);
+
+      expect(result).toEqual({ success: true });
+      expect(mockTaskManager.getTask).toHaveBeenCalledWith('task-789');
+      expect(global.chrome.tabs.sendMessage).toHaveBeenCalledWith(2, {
+        type: 'CANCEL_EXTRACTION',
+        payload: { taskId: 'task-789' },
+      });
+      expect(mockTaskManager.cancelTask).toHaveBeenCalledWith('task-789');
+    });
+
     it('should throw error when taskId is missing', () => {
       const message: Extract<Message, { type: 'CANCEL_TASK' }> = {
         type: 'CANCEL_TASK',
         payload: { taskId: '' },
       };
+
+      expect(() => handleCancelTask(message, context)).toThrow(ExtensionError);
+      expect(() => handleCancelTask(message, context)).toThrow('Task ID is required');
+    });
+
+    it('should throw error when payload is missing', () => {
+      const message = {
+        type: 'CANCEL_TASK' as const,
+        payload: undefined,
+      } as Extract<Message, { type: 'CANCEL_TASK' }>;
 
       expect(() => handleCancelTask(message, context)).toThrow(ExtensionError);
       expect(() => handleCancelTask(message, context)).toThrow('Task ID is required');

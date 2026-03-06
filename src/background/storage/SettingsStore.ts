@@ -92,7 +92,7 @@ export class SettingsStore {
     } as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig };
 
     const defaultConfigs = DEFAULT_SETTINGS.crawlingConfigs || [];
-    const storedConfigs = stored.crawlingConfigs || [];
+    const storedConfigs = Array.isArray(stored.crawlingConfigs) ? stored.crawlingConfigs : [];
     const configMap = new Map<string, CrawlingConfig>();
     for (const config of defaultConfigs) {
       configMap.set(this.normalizeCrawlingDomain(config.domain), {
@@ -101,12 +101,63 @@ export class SettingsStore {
       });
     }
     for (const config of storedConfigs) {
-      configMap.set(this.normalizeCrawlingDomain(config.domain), {
-        ...config,
-        domain: this.normalizeCrawlingDomain(config.domain),
+      if (!config || typeof config !== 'object') {
+        continue;
+      }
+      const rawDomain = (config as Partial<CrawlingConfig>).domain;
+      if (typeof rawDomain !== 'string' || rawDomain.trim().length === 0) {
+        continue;
+      }
+      configMap.set(this.normalizeCrawlingDomain(rawDomain), {
+        ...(config as CrawlingConfig),
+        domain: this.normalizeCrawlingDomain(rawDomain),
       });
     }
     merged.crawlingConfigs = Array.from(configMap.values());
+    merged.selectorCache = Array.isArray(stored.selectorCache) ? stored.selectorCache : [];
+    merged.maxComments =
+      typeof stored.maxComments === 'number' && Number.isFinite(stored.maxComments)
+        ? stored.maxComments
+        : DEFAULT_SETTINGS.maxComments;
+    merged.aiTimeout =
+      typeof stored.aiTimeout === 'number' && Number.isFinite(stored.aiTimeout)
+        ? stored.aiTimeout
+        : DEFAULT_SETTINGS.aiTimeout;
+    merged.analyzerPromptTemplate =
+      typeof stored.analyzerPromptTemplate === 'string'
+        ? stored.analyzerPromptTemplate
+        : DEFAULT_SETTINGS.analyzerPromptTemplate;
+    merged.language =
+      typeof stored.language === 'string' ? stored.language : DEFAULT_SETTINGS.language;
+    merged.theme =
+      stored.theme === 'light' || stored.theme === 'dark' || stored.theme === 'system'
+        ? stored.theme
+        : DEFAULT_SETTINGS.theme;
+    merged.normalizeTimestamps =
+      typeof stored.normalizeTimestamps === 'boolean'
+        ? stored.normalizeTimestamps
+        : DEFAULT_SETTINGS.normalizeTimestamps;
+    merged.exportPostContentInMarkdown =
+      typeof stored.exportPostContentInMarkdown === 'boolean'
+        ? stored.exportPostContentInMarkdown
+        : DEFAULT_SETTINGS.exportPostContentInMarkdown;
+    merged.selectorRetryAttempts =
+      typeof stored.selectorRetryAttempts === 'number' &&
+      Number.isFinite(stored.selectorRetryAttempts)
+        ? stored.selectorRetryAttempts
+        : DEFAULT_SETTINGS.selectorRetryAttempts;
+    merged.developerMode =
+      typeof stored.developerMode === 'boolean'
+        ? stored.developerMode
+        : DEFAULT_SETTINGS.developerMode;
+
+    if (
+      !stored.domAnalysisConfig ||
+      typeof stored.domAnalysisConfig !== 'object' ||
+      Array.isArray(stored.domAnalysisConfig)
+    ) {
+      merged.domAnalysisConfig = DEFAULT_SETTINGS.domAnalysisConfig;
+    }
 
     return merged;
   }

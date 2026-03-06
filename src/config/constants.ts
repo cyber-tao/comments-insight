@@ -76,6 +76,9 @@ export const AI = {
   CONFIDENCE_EARLY_EXIT_THRESHOLD: 0.9,
   METADATA_RESERVE_TOKENS: 100,
   CHARS_PER_TOKEN_RATIO: 2,
+  ANALYSIS_POST_CONTENT_MAX_CHARS: 4000,
+  ANALYSIS_TITLE_MAX_CHARS: 300,
+  ANALYSIS_URL_MAX_CHARS: 2000,
 };
 
 export const ANALYSIS_FORMAT = {
@@ -143,6 +146,7 @@ export const STORAGE = {
   HISTORY_KEY: 'history',
   HISTORY_INDEX_KEY: 'history_index',
   HISTORY_URL_INDEX_KEY: 'history_url_index',
+  LAST_VERIFIED_AI_MODEL_KEY: 'last_verified_ai_model',
   ENCRYPTION_SALT_KEY: 'encryption_salt',
   ENCRYPTION_SECRET_KEY: 'encryption_secret',
   TOKEN_STATS_KEY: 'token_stats',
@@ -235,6 +239,8 @@ export const TEXT = {
   UNTITLED: 'Untitled',
   API_KEY_PLACEHOLDER: 'sk-',
   CONTENT_SCRIPT_INJECT_FAILED: 'Failed to inject content script. Please refresh the page.',
+  EXTRACTION_TASK_TIMEOUT: 'Extraction timed out waiting for completion signal',
+  CONFIG_TASK_TIMEOUT: 'Config generation timed out waiting for completion signal',
   MODEL_TEST_HINT: 'Please verify API URL, API key, and network connectivity.',
   TRUNCATED_SUFFIX: '... [Truncated]',
   PREVIEW_SUFFIX: '...',
@@ -401,6 +407,8 @@ export const TIMEOUT = {
   WAIT_ELEMENT_MS: 10000,
   COMMENTS_SECTION_MS: 5000,
   MESSAGE_RESPONSE_MS: 10000,
+  EXTRACTION_TASK_COMPLETION_MS: 5 * 60 * 1000,
+  CONFIG_TASK_COMPLETION_MS: 3 * 60 * 1000,
   MIN_AI_SECONDS: 30,
   MAX_AI_SECONDS: 600,
   MS_PER_SEC: 1000,

@@ -89,6 +89,10 @@ export class StorageManager {
     return this.historyStore.getHistoryMetadataPage(page, pageSize);
   }
 
+  async searchHistoryMetadataPage(query: string, page: number = 0, pageSize: number = 20) {
+    return this.historyStore.searchHistoryMetadataPage(query, page, pageSize);
+  }
+
   async searchHistoryPaginated(query: string, page: number = 0, pageSize: number = 20) {
     return this.historyStore.searchHistoryPaginated(query, page, pageSize);
   }

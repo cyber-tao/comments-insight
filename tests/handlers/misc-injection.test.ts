@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleEnsureContentScript } from '../../src/background/handlers/misc';
-import type { HandlerContext } from '../../src/background/handlers/types';
+import type { Message } from '../../src/types';
+import { createMockHandlerContext } from '../helpers/handler-context';
 
 vi.mock('../../src/utils/logger', () => ({
   Logger: {
@@ -48,17 +49,11 @@ describe('misc handlers - content script injection', () => {
     });
   });
 
-  const ctx = (overrides: Partial<HandlerContext> = {}): HandlerContext =>
-    ({
-      taskManager: {} as any,
-      aiService: {} as any,
-      storageManager: {} as any,
-      sender: { tab: { id: 1 } },
-      ...overrides,
-    }) as HandlerContext;
-
   it('should inject when ping fails', async () => {
-    const res = await handleEnsureContentScript({ type: 'ENSURE_CONTENT_SCRIPT' } as any, ctx());
+    const res = await handleEnsureContentScript(
+      { type: 'ENSURE_CONTENT_SCRIPT' } as Extract<Message, { type: 'ENSURE_CONTENT_SCRIPT' }>,
+      createMockHandlerContext(),
+    );
 
     expect(res.success).toBe(true);
     expect(mockExecuteScript).toHaveBeenCalledWith({
@@ -70,7 +65,10 @@ describe('misc handlers - content script injection', () => {
   it('should not inject when already injected', async () => {
     injected = true;
 
-    const res = await handleEnsureContentScript({ type: 'ENSURE_CONTENT_SCRIPT' } as any, ctx());
+    const res = await handleEnsureContentScript(
+      { type: 'ENSURE_CONTENT_SCRIPT' } as Extract<Message, { type: 'ENSURE_CONTENT_SCRIPT' }>,
+      createMockHandlerContext(),
+    );
 
     expect(res.success).toBe(true);
     expect(mockExecuteScript).not.toHaveBeenCalled();

@@ -88,7 +88,13 @@ export type TaskMessage =
 export type HistoryMessage =
   | {
       type: 'GET_HISTORY';
-      payload?: { page?: number; limit?: number; query?: string; id?: string };
+      payload?: {
+        page?: number;
+        pageSize?: number;
+        query?: string;
+        id?: string;
+        metadataOnly?: boolean;
+      };
     }
   | { type: 'GET_HISTORY_BY_URL'; payload: { url: string } }
   | { type: 'DELETE_HISTORY'; payload: { id: string } }

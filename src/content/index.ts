@@ -109,24 +109,30 @@ if (!globalInsight.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED) {
     return true;
   });
 
-  // Expose test hook via window message
-  window.addEventListener('message', (event) => {
-    if (event.source !== window) return;
-    if (event.data && event.data.type === 'COMMENTS_INSIGHT_TEST_TRIGGER') {
-      Logger.info('[Content] 🚀 TEST TRIGGER RECEIVED', event.data);
+  // Expose test hook only in unpacked/development runtime
+  const manifest = chrome.runtime.getManifest() as chrome.runtime.Manifest & {
+    update_url?: string;
+  };
+  const isDevelopmentRuntime = !manifest.update_url;
+  if (isDevelopmentRuntime) {
+    window.addEventListener('message', (event) => {
+      if (event.source !== window) return;
+      if (event.data && event.data.type === 'COMMENTS_INSIGHT_TEST_TRIGGER') {
+        Logger.info('[Content] 🚀 TEST TRIGGER RECEIVED', event.data);
 
-      const maxComments = event.data.maxComments || DEFAULTS.TEST_MAX_COMMENTS;
-      const taskId = 'test-' + Date.now();
+        const maxComments = event.data.maxComments || DEFAULTS.TEST_MAX_COMMENTS;
+        const taskId = 'test-' + Date.now();
 
-      handleStartExtraction({ taskId, maxComments }, (response) => {
-        Logger.debug('[Content] Test extraction completed', {
-          success: response.success,
-          commentsCount: response.comments?.length || 0,
-          error: response.error,
+        handleStartExtraction({ taskId, maxComments }, (response) => {
+          Logger.debug('[Content] Test extraction completed', {
+            success: response.success,
+            commentsCount: response.comments?.length || 0,
+            error: response.error,
+          });
         });
-      });
-    }
-  });
+      }
+    });
+  }
 }
 
 /**

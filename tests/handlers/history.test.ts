@@ -6,19 +6,23 @@ import {
   handleClearAllHistory,
   handleExportData,
 } from '../../src/background/handlers/history';
-import { ExtensionError, ErrorCode } from '../../src/utils/errors';
+import { ExtensionError } from '../../src/utils/errors';
 import type { HistoryItem, Message } from '../../src/types';
 
 describe('History Handlers', () => {
   const mockStorageManager = {
     getHistory: vi.fn(),
+    getHistoryPage: vi.fn(),
+    getHistoryMetadataPage: vi.fn(),
     getHistoryItem: vi.fn(),
     searchHistory: vi.fn(),
+    searchHistoryPaginated: vi.fn(),
+    searchHistoryMetadataPage: vi.fn(),
     deleteHistoryItem: vi.fn(),
     clearAllHistory: vi.fn(),
     getLatestHistoryIdByUrl: vi.fn(),
     exportSettings: vi.fn(),
-  } as any;
+  } as unknown as Record<string, ReturnType<typeof vi.fn>>;
 
   const context = {
     storageManager: mockStorageManager,
@@ -92,18 +96,24 @@ describe('History Handlers', () => {
     });
 
     it('should search history when query is provided', async () => {
-      const mockItems: HistoryItem[] = [
-        {
-          id: '1',
-          url: 'https://example.com',
-          title: 'Search Result',
-          platform: 'youtube',
-          extractedAt: Date.now(),
-          commentsCount: 50,
-          comments: [],
-        },
-      ];
-      mockStorageManager.searchHistory.mockResolvedValue(mockItems);
+      const mockResult = {
+        items: [
+          {
+            id: '1',
+            url: 'https://example.com',
+            title: 'Search Result',
+            platform: 'youtube',
+            extractedAt: Date.now(),
+            commentsCount: 50,
+            comments: [],
+          },
+        ],
+        total: 1,
+        page: 0,
+        pageSize: 20,
+        totalPages: 1,
+      };
+      mockStorageManager.searchHistoryPaginated.mockResolvedValue(mockResult);
 
       const message: Extract<Message, { type: 'GET_HISTORY' }> = {
         type: 'GET_HISTORY',
@@ -112,8 +122,124 @@ describe('History Handlers', () => {
 
       const result = await handleGetHistory(message, context);
 
-      expect(result).toEqual({ items: mockItems });
-      expect(mockStorageManager.searchHistory).toHaveBeenCalledWith('search term');
+      expect(result).toEqual(mockResult);
+      expect(mockStorageManager.searchHistoryPaginated).toHaveBeenCalledWith('search term', 0, 20);
+    });
+
+    it('should return metadata page when metadataOnly is true', async () => {
+      const mockResult = {
+        entries: [
+          {
+            id: '1',
+            url: 'https://example.com',
+            title: 'Metadata Item',
+            platform: 'youtube',
+            extractedAt: Date.now(),
+          },
+        ],
+        total: 1,
+        page: 0,
+        pageSize: 20,
+        totalPages: 1,
+      };
+      mockStorageManager.getHistoryMetadataPage.mockResolvedValue(mockResult);
+
+      const message: Extract<Message, { type: 'GET_HISTORY' }> = {
+        type: 'GET_HISTORY',
+        payload: { metadataOnly: true },
+      };
+
+      const result = await handleGetHistory(message, context);
+
+      expect(result).toEqual(mockResult);
+      expect(mockStorageManager.getHistoryMetadataPage).toHaveBeenCalledWith(0, 20);
+      expect(mockStorageManager.getHistoryPage).not.toHaveBeenCalled();
+    });
+
+    it('should search metadata page when metadataOnly and query are provided', async () => {
+      const mockResult = {
+        entries: [
+          {
+            id: '1',
+            url: 'https://example.com/search',
+            title: 'Metadata Search Result',
+            platform: 'youtube',
+            extractedAt: Date.now(),
+          },
+        ],
+        total: 1,
+        page: 0,
+        pageSize: 20,
+        totalPages: 1,
+      };
+      mockStorageManager.searchHistoryMetadataPage.mockResolvedValue(mockResult);
+
+      const message: Extract<Message, { type: 'GET_HISTORY' }> = {
+        type: 'GET_HISTORY',
+        payload: { query: 'search term', metadataOnly: true },
+      };
+
+      const result = await handleGetHistory(message, context);
+
+      expect(result).toEqual(mockResult);
+      expect(mockStorageManager.searchHistoryMetadataPage).toHaveBeenCalledWith(
+        'search term',
+        0,
+        20,
+      );
+      expect(mockStorageManager.searchHistoryPaginated).not.toHaveBeenCalled();
+    });
+
+    it('should return paged history when page parameters are provided', async () => {
+      const mockResult = {
+        items: [
+          {
+            id: '1',
+            url: 'https://example.com',
+            title: 'Paged Item',
+            platform: 'youtube',
+            extractedAt: Date.now(),
+            commentsCount: 30,
+            comments: [],
+          },
+        ],
+        total: 25,
+        page: 1,
+        pageSize: 10,
+        totalPages: 3,
+      };
+      mockStorageManager.getHistoryPage.mockResolvedValue(mockResult);
+
+      const message: Extract<Message, { type: 'GET_HISTORY' }> = {
+        type: 'GET_HISTORY',
+        payload: { page: 1, pageSize: 10 },
+      };
+
+      const result = await handleGetHistory(message, context);
+
+      expect(result).toEqual(mockResult);
+      expect(mockStorageManager.getHistoryPage).toHaveBeenCalledWith(1, 10);
+    });
+
+    it('should fallback to default paging values for invalid page params', async () => {
+      const mockResult = {
+        items: [],
+        total: 0,
+        page: 0,
+        pageSize: 20,
+        totalPages: 0,
+      };
+      mockStorageManager.getHistoryPage.mockResolvedValue(mockResult);
+
+      const message: Extract<Message, { type: 'GET_HISTORY' }> = {
+        type: 'GET_HISTORY',
+        payload: { page: -1, pageSize: 0 },
+      };
+
+      const result = await handleGetHistory(message, context);
+
+      expect(result).toEqual(mockResult);
+      expect(mockStorageManager.getHistoryPage).toHaveBeenCalledWith(0, 20);
     });
   });
 
@@ -172,6 +298,15 @@ describe('History Handlers', () => {
       await expect(handleGetHistoryByUrl(message, context)).rejects.toThrow('URL is required');
     });
 
+    it('should throw error when payload is missing', async () => {
+      const message = {
+        type: 'GET_HISTORY_BY_URL' as const,
+        payload: undefined,
+      } as Extract<Message, { type: 'GET_HISTORY_BY_URL' }>;
+
+      await expect(handleGetHistoryByUrl(message, context)).rejects.toThrow('URL is required');
+    });
+
     it('should return null when history item not found by id', async () => {
       mockStorageManager.getLatestHistoryIdByUrl.mockResolvedValue('123');
       mockStorageManager.getHistoryItem.mockResolvedValue(null);
@@ -209,6 +344,17 @@ describe('History Handlers', () => {
       };
 
       await expect(handleDeleteHistory(message, context)).rejects.toThrow(ExtensionError);
+      await expect(handleDeleteHistory(message, context)).rejects.toThrow(
+        'History item ID is required',
+      );
+    });
+
+    it('should throw error when payload is missing', async () => {
+      const message = {
+        type: 'DELETE_HISTORY' as const,
+        payload: undefined,
+      } as Extract<Message, { type: 'DELETE_HISTORY' }>;
+
       await expect(handleDeleteHistory(message, context)).rejects.toThrow(
         'History item ID is required',
       );

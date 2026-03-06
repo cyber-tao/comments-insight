@@ -64,6 +64,18 @@ describe('NotificationService', () => {
       );
     });
 
+    it('should create notification for config generation completion', async () => {
+      await NotificationService.showTaskCompleted('config', 'Test Post');
+
+      expect(mockNotificationCreate).toHaveBeenCalledWith(
+        expect.stringMatching(/^task_completed_\d+$/),
+        expect.objectContaining({
+          message: expect.stringContaining('Config generation completed'),
+          requireInteraction: true,
+        }),
+      );
+    });
+
     it('should truncate long titles', async () => {
       const longTitle = 'A'.repeat(100);
       await NotificationService.showTaskCompleted('extract', longTitle);
@@ -103,6 +115,18 @@ describe('NotificationService', () => {
       expect(mockNotificationCreate).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
+          requireInteraction: false,
+        }),
+      );
+    });
+
+    it('should create error notification for config generation failure', async () => {
+      await NotificationService.showTaskFailed('config', 'Invalid selectors');
+
+      expect(mockNotificationCreate).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          message: expect.stringContaining('Config generation failed'),
           requireInteraction: false,
         }),
       );

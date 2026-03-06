@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { API, MESSAGES, LIMITS, UI_LIMITS } from '@/config/constants';
+import { API, MESSAGES, UI_LIMITS } from '@/config/constants';
 import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
 import { Settings } from '@/types';
 
@@ -27,17 +27,6 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
   const [showApiKey, setShowApiKey] = useState(false);
   const [testingModel, setTestingModel] = useState(false);
   const [showPlaceholders, setShowPlaceholders] = useState(false);
-
-  const maskApiKey = (key: string): string => {
-    if (!key || key.length < LIMITS.API_KEY_MASK_MIN_LENGTH) return key;
-    const start = key.substring(0, LIMITS.API_KEY_MASK_PREFIX);
-    const end = key.substring(key.length - LIMITS.API_KEY_MASK_SUFFIX);
-    const starCount = Math.min(
-      LIMITS.API_KEY_MASK_MAX_STARS,
-      key.length - LIMITS.API_KEY_MASK_PREFIX - LIMITS.API_KEY_MASK_SUFFIX,
-    );
-    return `${start}${'*'.repeat(starCount)}${end}`;
-  };
 
   const handleFetchModels = async () => {
     const config = settings.aiModel;
@@ -148,7 +137,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           <div className="flex gap-2">
             <input
               type={showApiKey ? 'text' : 'password'}
-              value={showApiKey ? settings.aiModel.apiKey : maskApiKey(settings.aiModel.apiKey)}
+              value={settings.aiModel.apiKey}
               onChange={(e) =>
                 onSettingsChange({
                   ...settings,
