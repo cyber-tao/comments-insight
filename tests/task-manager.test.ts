@@ -1,11 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TaskManager } from '../src/background/TaskManager';
+import { STORAGE } from '../src/config/constants';
 
 const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+const mockStorageGet = vi.fn().mockResolvedValue({});
+const mockStorageSet = vi.fn().mockResolvedValue(undefined);
 
 vi.stubGlobal('chrome', {
   runtime: {
     sendMessage: mockSendMessage,
+  },
+  storage: {
+    local: {
+      get: mockStorageGet,
+      set: mockStorageSet,
+    },
   },
 });
 
@@ -30,7 +39,95 @@ describe('TaskManager', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockStorageGet.mockResolvedValue({});
+    mockStorageSet.mockResolvedValue(undefined);
     taskManager = new TaskManager();
+  });
+
+  describe('initialize', () => {
+    it('should mark persisted running and pending tasks as interrupted', async () => {
+      const now = Date.now();
+      mockStorageGet.mockResolvedValue({
+        [STORAGE.TASK_STATE_KEY]: {
+          tasks: [
+            {
+              id: 'task_running',
+              type: 'extract',
+              status: 'running',
+              url: 'https://example.com/a',
+              platform: 'Generic',
+              progress: 42,
+              startTime: now - 1000,
+              tokensUsed: 0,
+              detailedProgress: {
+                stage: 'extracting',
+                current: 42,
+                total: 100,
+                estimatedTimeRemaining: 5,
+              },
+            },
+            {
+              id: 'task_pending',
+              type: 'analyze',
+              status: 'pending',
+              url: 'https://example.com/b',
+              platform: 'Generic',
+              progress: 0,
+              startTime: now - 500,
+              tokensUsed: 0,
+            },
+          ],
+          queue: ['task_running', 'task_pending'],
+          currentTaskId: 'task_running',
+          savedAt: now - 100,
+        },
+      });
+
+      const persistentTaskManager = new TaskManager({ enablePersistence: true });
+      await persistentTaskManager.initialize();
+
+      const runningTask = persistentTaskManager.getTask('task_running');
+      const pendingTask = persistentTaskManager.getTask('task_pending');
+
+      expect(runningTask?.status).toBe('failed');
+      expect(runningTask?.error).toBeTruthy();
+      expect(runningTask?.message).toBe(runningTask?.error);
+      expect(runningTask?.detailedProgress).toBeUndefined();
+      expect(runningTask?.endTime).toBeTypeOf('number');
+
+      expect(pendingTask?.status).toBe('failed');
+      expect(pendingTask?.error).toBeTruthy();
+
+      expect(mockStorageSet).toHaveBeenCalledWith({
+        [STORAGE.TASK_STATE_KEY]: expect.objectContaining({
+          queue: [],
+          currentTaskId: null,
+        }),
+      });
+    });
+
+    it('should normalize malformed persisted state instead of crashing', async () => {
+      mockStorageGet.mockResolvedValue({
+        [STORAGE.TASK_STATE_KEY]: {
+          tasks: [{ id: 'broken-task' }, null, 'invalid'],
+          queue: ['task_a', 123, null],
+          currentTaskId: 456,
+          savedAt: 'invalid',
+        },
+      });
+
+      const persistentTaskManager = new TaskManager({ enablePersistence: true });
+
+      await expect(persistentTaskManager.initialize()).resolves.toBeUndefined();
+      expect(persistentTaskManager.getAllTasks()).toHaveLength(0);
+      expect(mockStorageSet).toHaveBeenCalledWith({
+        [STORAGE.TASK_STATE_KEY]: expect.objectContaining({
+          tasks: [],
+          queue: [],
+          currentTaskId: null,
+        }),
+      });
+    });
   });
 
   describe('createTask', () => {

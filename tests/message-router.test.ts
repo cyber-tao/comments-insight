@@ -92,6 +92,11 @@ const createMockPort = (): chrome.runtime.Port =>
     postMessage: vi.fn(),
   }) as unknown as chrome.runtime.Port;
 
+const createMockPortWithoutSender = (): chrome.runtime.Port =>
+  ({
+    postMessage: vi.fn(),
+  }) as unknown as chrome.runtime.Port;
+
 const createUnknownPortMessage = (id: string, type: string): PortMessage =>
   ({ id, type }) as unknown as PortMessage;
 
@@ -226,6 +231,38 @@ describe('MessageRouter', () => {
         id: 'correlation-456',
         response: expect.objectContaining({
           error: expect.any(String),
+        }),
+      });
+    });
+
+    it('should reject malformed port messages before routing', async () => {
+      const mockPort = createMockPort();
+
+      await router.handlePortMessage(mockPort, {
+        id: '',
+        type: MESSAGES.PING,
+      } as PortMessage);
+
+      expect(mockPort.postMessage).toHaveBeenCalledWith({
+        id: '',
+        response: expect.objectContaining({
+          error: expect.stringContaining('Invalid port message received'),
+        }),
+      });
+    });
+
+    it('should reject port messages without sender', async () => {
+      const mockPort = createMockPortWithoutSender();
+
+      await router.handlePortMessage(mockPort, {
+        id: 'correlation-789',
+        type: MESSAGES.PING,
+      });
+
+      expect(mockPort.postMessage).toHaveBeenCalledWith({
+        id: 'correlation-789',
+        response: expect.objectContaining({
+          error: expect.stringContaining('Port sender is required'),
         }),
       });
     });

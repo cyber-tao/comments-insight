@@ -42,6 +42,23 @@ interface PersistedTaskState {
   savedAt: number;
 }
 
+function isPersistedTaskCandidate(value: unknown): value is Task {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const task = value as Partial<Task>;
+  return (
+    typeof task.id === 'string' &&
+    typeof task.type === 'string' &&
+    typeof task.status === 'string' &&
+    typeof task.url === 'string' &&
+    typeof task.progress === 'number' &&
+    typeof task.startTime === 'number' &&
+    typeof task.tokensUsed === 'number'
+  );
+}
+
 /**
  * TaskManager handles the creation, execution, and lifecycle of tasks
  * in the Comments Insight extension.
@@ -99,9 +116,7 @@ export class TaskManager {
 
       for (const task of this.tasks.values()) {
         if (task.status === 'pending' || task.status === 'running') {
-          task.status = 'failed';
-          task.error = i18n.t(ERROR_KEYS.TASK_INTERRUPTED_BY_RESTART);
-          task.endTime = now;
+          this.markTaskInterruptedByRestart(task, now);
           changed = true;
         }
       }
@@ -121,6 +136,14 @@ export class TaskManager {
     } catch (error) {
       Logger.warn('[TaskManager] Failed to initialize task state', { error });
     }
+  }
+
+  private markTaskInterruptedByRestart(task: Task, interruptedAt: number): void {
+    task.status = 'failed';
+    task.error = i18n.t(ERROR_KEYS.TASK_INTERRUPTED_BY_RESTART);
+    task.message = task.error;
+    task.detailedProgress = undefined;
+    task.endTime = interruptedAt;
   }
 
   /**
@@ -610,7 +633,23 @@ export class TaskManager {
     try {
       const result = await chrome.storage.local.get(STORAGE.TASK_STATE_KEY);
       const state = result[STORAGE.TASK_STATE_KEY] as PersistedTaskState | undefined;
-      return state || null;
+      if (!state || typeof state !== 'object') {
+        return null;
+      }
+
+      const tasks = Array.isArray(state.tasks) ? state.tasks.filter(isPersistedTaskCandidate) : [];
+      const queue = Array.isArray(state.queue)
+        ? state.queue.filter((taskId): taskId is string => typeof taskId === 'string')
+        : [];
+      const currentTaskId = typeof state.currentTaskId === 'string' ? state.currentTaskId : null;
+      const savedAt = typeof state.savedAt === 'number' ? state.savedAt : Date.now();
+
+      return {
+        tasks,
+        queue,
+        currentTaskId,
+        savedAt,
+      };
     } catch (error) {
       Logger.warn('[TaskManager] Failed to load task state', { error });
       return null;

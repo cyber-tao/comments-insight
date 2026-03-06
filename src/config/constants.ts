@@ -188,6 +188,11 @@ export const REGEX = {
   LIKES_SANITIZE: /[^0-9KMkm.]/g,
 };
 
+export const CHROME_MESSAGE_ERRORS = {
+  TIMEOUT: 'Message timeout',
+  PORT_CLOSED: 'The message port closed before a response was received',
+};
+
 export const MESSAGES = {
   PING: 'PING',
   ENSURE_CONTENT_SCRIPT: 'ENSURE_CONTENT_SCRIPT',
@@ -241,6 +246,7 @@ export const TEXT = {
   CONTENT_SCRIPT_INJECT_FAILED: 'Failed to inject content script. Please refresh the page.',
   EXTRACTION_TASK_TIMEOUT: 'Extraction timed out waiting for completion signal',
   CONFIG_TASK_TIMEOUT: 'Config generation timed out waiting for completion signal',
+  TASK_SOURCE_TAB_CLOSED: 'Task source tab was closed before completion',
   MODEL_TEST_HINT: 'Please verify API URL, API key, and network connectivity.',
   TRUNCATED_SUFFIX: '... [Truncated]',
   PREVIEW_SUFFIX: '...',

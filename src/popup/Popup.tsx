@@ -1,8 +1,10 @@
 import * as React from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PATHS, MESSAGES } from '@/config/constants';
+import { PATHS } from '@/config/constants';
 import { Logger } from '@/utils/logger';
+import i18n from '@/utils/i18n';
+import { ExtensionAPI } from '@/utils/extension-api';
 import { useTask } from './hooks/useTask';
 import { usePageInfo } from './hooks/usePageInfo';
 import { useTheme } from '@/hooks/useTheme';
@@ -31,55 +33,44 @@ const Popup: React.FC = () => {
     onStatusRefresh: refreshPageStatus,
   });
 
-  useEffect(() => {
-    const initialize = async () => {
-      await loadLanguage();
-      const info = await loadPageInfo();
-      await loadVersion();
-      await loadSettings();
-      if (info?.url) {
-        await loadCurrentTask(info.url);
+  const loadBootstrapSettings = useCallback(async () => {
+    try {
+      const settings = await ExtensionAPI.getSettings();
+      if (settings) {
+        if (settings.language) {
+          await i18n.changeLanguage(settings.language);
+        }
+        if (settings.aiModel?.model) {
+          setAIModelName(settings.aiModel.model);
+        }
+        setDeveloperMode(!!settings.developerMode);
       }
-    };
-
-    initialize();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    } catch (error) {
+      Logger.error('[Popup] Failed to load bootstrap settings', { error });
+    }
   }, []);
 
-  const loadSettings = async () => {
-    try {
-      const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_SETTINGS });
-      if (response?.settings) {
-        if (response.settings.aiModel?.model) {
-          setAIModelName(response.settings.aiModel.model);
-        }
-        setDeveloperMode(!!response.settings.developerMode);
-      }
-    } catch (error) {
-      Logger.error('[Popup] Failed to load settings', { error });
-    }
-  };
-
-  const loadLanguage = async () => {
-    try {
-      const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_SETTINGS });
-      if (response?.settings?.language) {
-        const i18nModule = await import('../utils/i18n');
-        i18nModule.default.changeLanguage(response.settings.language);
-      }
-    } catch (error) {
-      Logger.error('[Popup] Failed to load language', { error });
-    }
-  };
-
-  const loadVersion = async () => {
+  const loadVersion = useCallback(async () => {
     try {
       const manifest = chrome.runtime.getManifest();
       setVersion(manifest.version);
     } catch (error) {
       Logger.error('[Popup] Failed to load version', { error });
     }
-  };
+  }, []);
+
+  const initialize = useCallback(async () => {
+    const info = await loadPageInfo();
+    await loadVersion();
+    await loadBootstrapSettings();
+    if (info?.url) {
+      await loadCurrentTask(info.url);
+    }
+  }, [loadBootstrapSettings, loadCurrentTask, loadPageInfo, loadVersion]);
+
+  useEffect(() => {
+    void initialize();
+  }, [initialize]);
 
   const handleExtractComments = async () => {
     if (!pageInfo) return;
@@ -90,13 +81,10 @@ const Popup: React.FC = () => {
     if (!pageStatus.extracted || !pageStatus.historyId) return;
 
     try {
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.GET_HISTORY,
-        payload: { id: pageStatus.historyId },
-      });
+      const item = await ExtensionAPI.getHistoryItem(pageStatus.historyId);
 
-      if (response?.item) {
-        await startAnalysis(pageStatus.historyId, response.item.comments, {
+      if (item) {
+        await startAnalysis(pageStatus.historyId, item.comments, {
           url: pageInfo?.url,
           platform: pageInfo?.domain,
           title: pageInfo?.title,

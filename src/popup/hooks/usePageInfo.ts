@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
-import { MESSAGES } from '@/config/constants';
 import { HistoryItem } from '@/types';
 import { Logger } from '@/utils/logger';
 import { getDomain } from '@/utils/url';
+import { ExtensionAPI } from '@/utils/extension-api';
 
 export interface PageInfo {
   url: string;
@@ -32,22 +32,19 @@ export function usePageInfo() {
   const checkPageStatus = useCallback(
     async (url: string) => {
       try {
-        const response = await chrome.runtime.sendMessage({
-          type: MESSAGES.GET_HISTORY_BY_URL,
-          payload: { url },
-        });
+        const item = await ExtensionAPI.getHistoryByUrl(url);
 
-        if (response?.item) {
-          const item: HistoryItem = response.item;
-          setPageStatus({
+        if (item) {
+          const historyItem: HistoryItem = item;
+          setPageStatus((prev) => ({
             extracted: true,
-            analyzed: !!item.analysis,
-            extractedAt: item.extractedAt,
-            analyzedAt: item.analyzedAt,
-            commentsCount: item.commentsCount,
-            historyId: item.id,
-            hasConfig: pageStatus.hasConfig, // Preserve existing config status
-          });
+            analyzed: !!historyItem.analysis,
+            extractedAt: historyItem.extractedAt,
+            analyzedAt: historyItem.analyzedAt,
+            commentsCount: historyItem.commentsCount,
+            historyId: historyItem.id,
+            hasConfig: prev.hasConfig,
+          }));
         } else {
           setPageStatus((prev) => ({
             ...prev,
@@ -59,16 +56,13 @@ export function usePageInfo() {
         Logger.error('[usePageInfo] Failed to check page status', { error });
       }
     },
-    [pageStatus.hasConfig],
-  ); // Depend on hasConfig to avoid stale closures if needed, though mostly independent
+    [],
+  );
 
   const checkConfigStatus = useCallback(async (domain: string) => {
     try {
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.GET_CRAWLING_CONFIG,
-        payload: { domain },
-      });
-      setPageStatus((prev) => ({ ...prev, hasConfig: !!response?.config }));
+      const config = await ExtensionAPI.getCrawlingConfig(domain);
+      setPageStatus((prev) => ({ ...prev, hasConfig: !!config }));
     } catch (error) {
       Logger.warn('[usePageInfo] Failed to check config status', { error });
       setPageStatus((prev) => ({ ...prev, hasConfig: false }));

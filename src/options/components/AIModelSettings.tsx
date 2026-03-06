@@ -1,9 +1,10 @@
 import * as React from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { API, MESSAGES, UI_LIMITS } from '@/config/constants';
+import { API, UI_LIMITS } from '@/config/constants';
 import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
 import { Settings } from '@/types';
+import { ExtensionAPI } from '@/utils/extension-api';
 
 interface AIModelSettingsProps {
   settings: Settings;
@@ -39,22 +40,16 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
     setLoadingModels(true);
 
     try {
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.GET_AVAILABLE_MODELS,
-        payload: {
-          apiUrl: config.apiUrl,
-          apiKey: config.apiKey,
-        },
-      });
+      const models = await ExtensionAPI.getAvailableModels(config.apiUrl, config.apiKey);
 
-      if (response?.models && response.models.length > 0) {
-        setAvailableModels(response.models);
-        toast.success(t('options.modelsFound', { count: response.models.length }));
+      if (models.length > 0) {
+        setAvailableModels(models);
+        toast.success(t('options.modelsFound', { count: models.length }));
 
-        if (!response.models.includes(config.model) || response.models.length === 1) {
+        if (!models.includes(config.model) || models.length === 1) {
           onSettingsChange({
             ...settings,
-            aiModel: { ...settings.aiModel, model: response.models[0] },
+            aiModel: { ...settings.aiModel, model: models[0] },
           });
         }
       } else {
@@ -78,10 +73,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
     setTestingModel(true);
 
     try {
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.TEST_MODEL,
-        payload: { config },
-      });
+      const response = await ExtensionAPI.testModel(config);
 
       if (response?.success) {
         toast.success(

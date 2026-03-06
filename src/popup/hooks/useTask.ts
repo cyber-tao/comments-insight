@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { MESSAGES, TIMING, TEXT } from '@/config/constants';
-import { Task, TaskProgress } from '@/types';
+import { TIMING } from '@/config/constants';
+import { Comment, Task, TaskProgress } from '@/types';
 import { Logger } from '@/utils/logger';
+import { ExtensionAPI } from '@/utils/extension-api';
 
 export interface CurrentTask {
   id: string;
@@ -18,6 +19,7 @@ interface UseTaskOptions {
 }
 
 export function useTask(options: UseTaskOptions = {}) {
+  const { onTaskComplete, onStatusRefresh } = options;
   const [currentTask, setCurrentTask] = useState<CurrentTask | null>(null);
   const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isUnmountedRef = useRef(false);
@@ -47,15 +49,11 @@ export function useTask(options: UseTaskOptions = {}) {
         if (isUnmountedRef.current) return;
 
         try {
-          const response = await chrome.runtime.sendMessage({
-            type: MESSAGES.GET_TASK_STATUS,
-            payload: { taskId },
-          });
+          const task = await ExtensionAPI.getTaskStatus(taskId);
 
           if (isUnmountedRef.current) return;
 
-          if (response?.task) {
-            const task = response.task;
+          if (task) {
             const updatedTask: CurrentTask = {
               id: task.id,
               type: task.type,
@@ -69,8 +67,8 @@ export function useTask(options: UseTaskOptions = {}) {
             if (task.status === 'running' || task.status === 'pending') {
               monitorTimeoutRef.current = setTimeout(checkStatus, TIMING.POLL_TASK_RUNNING_MS);
             } else if (task.status === 'completed') {
-              await options.onStatusRefresh?.();
-              options.onTaskComplete?.(updatedTask);
+              await onStatusRefresh?.();
+              onTaskComplete?.(updatedTask);
               monitorTimeoutRef.current = setTimeout(() => {
                 if (!isUnmountedRef.current) {
                   setCurrentTask(null);
@@ -89,36 +87,33 @@ export function useTask(options: UseTaskOptions = {}) {
         }
       };
 
-      checkStatus();
+      void checkStatus();
     },
-    [options],
+    [onStatusRefresh, onTaskComplete],
   );
 
   const loadCurrentTask = useCallback(
     async (tabUrl: string) => {
       try {
-        const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_TASK_STATUS });
+        const tasks = await ExtensionAPI.getTasks();
+        const currentUrlTask = tasks.find(
+          (task: Task) =>
+            task.url === tabUrl && (task.status === 'running' || task.status === 'pending'),
+        );
 
-        if (response?.tasks) {
-          const currentUrlTask = response.tasks.find(
-            (task: Task) =>
-              task.url === tabUrl && (task.status === 'running' || task.status === 'pending'),
-          );
+        if (currentUrlTask) {
+          Logger.debug('[useTask] Found current task', { task: currentUrlTask });
+          setCurrentTask({
+            id: currentUrlTask.id,
+            type: currentUrlTask.type,
+            status: currentUrlTask.status,
+            progress: currentUrlTask.progress,
+            message: currentUrlTask.message || currentUrlTask.error,
+            detailedProgress: currentUrlTask.detailedProgress,
+          });
 
-          if (currentUrlTask) {
-            Logger.debug('[useTask] Found current task', { task: currentUrlTask });
-            setCurrentTask({
-              id: currentUrlTask.id,
-              type: currentUrlTask.type,
-              status: currentUrlTask.status,
-              progress: currentUrlTask.progress,
-              message: currentUrlTask.message || currentUrlTask.error,
-              detailedProgress: currentUrlTask.detailedProgress,
-            });
-
-            if (currentUrlTask.status === 'running' || currentUrlTask.status === 'pending') {
-              monitorTask(currentUrlTask.id);
-            }
+          if (currentUrlTask.status === 'running' || currentUrlTask.status === 'pending') {
+            monitorTask(currentUrlTask.id);
           }
         }
       } catch (error) {
@@ -128,22 +123,15 @@ export function useTask(options: UseTaskOptions = {}) {
     [monitorTask],
   );
 
-  const ensureContentScript = async () => {
+  const ensureContentScript = useCallback(async () => {
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const tabId = tabs[0]?.id;
     if (!tabId) {
       throw new Error('No active tab');
     }
 
-    const resp = await chrome.runtime.sendMessage({
-      type: MESSAGES.ENSURE_CONTENT_SCRIPT,
-      payload: { tabId },
-    });
-
-    if (!resp?.success) {
-      throw new Error(TEXT.CONTENT_SCRIPT_INJECT_FAILED);
-    }
-  };
+    await ExtensionAPI.ensureContentScript(tabId);
+  }, []);
 
   const startExtraction = async (url: string): Promise<string | null> => {
     if (isStartingRef.current || hasActiveTask(currentTask)) {
@@ -160,16 +148,13 @@ export function useTask(options: UseTaskOptions = {}) {
     }
 
     try {
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.START_EXTRACTION,
-        payload: { url },
-      });
+      const response = await ExtensionAPI.startExtraction(url);
 
       if (response?.taskId) {
         setCurrentTask({
           id: response.taskId,
-          type: 'config',
-          status: 'running',
+          type: 'extract',
+          status: 'pending',
           progress: 0,
         });
         monitorTask(response.taskId);
@@ -206,16 +191,13 @@ export function useTask(options: UseTaskOptions = {}) {
     }
 
     try {
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.START_CONFIG_GENERATION,
-        payload: { url },
-      });
+      const response = await ExtensionAPI.startConfigGeneration(url);
 
       if (response?.taskId) {
         setCurrentTask({
           id: response.taskId,
-          type: 'extract',
-          status: 'running',
+          type: 'config',
+          status: 'pending',
           progress: 0,
         });
         monitorTask(response.taskId);
@@ -239,7 +221,7 @@ export function useTask(options: UseTaskOptions = {}) {
 
   const startAnalysis = async (
     historyId: string,
-    comments: unknown[],
+    comments: Comment[],
     metadata: { url?: string; platform?: string; title?: string },
   ): Promise<string | null> => {
     if (isStartingRef.current || hasActiveTask(currentTask)) {
@@ -249,20 +231,13 @@ export function useTask(options: UseTaskOptions = {}) {
     isStartingRef.current = true;
 
     try {
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.START_ANALYSIS,
-        payload: {
-          comments,
-          historyId,
-          metadata,
-        },
-      });
+      const response = await ExtensionAPI.startAnalysis({ comments, historyId, metadata });
 
       if (response?.taskId) {
         setCurrentTask({
           id: response.taskId,
           type: 'analyze',
-          status: 'running',
+          status: 'pending',
           progress: 0,
         });
         monitorTask(response.taskId);
@@ -280,10 +255,7 @@ export function useTask(options: UseTaskOptions = {}) {
 
   const cancelTask = async (taskId: string) => {
     try {
-      await chrome.runtime.sendMessage({
-        type: MESSAGES.CANCEL_TASK,
-        payload: { taskId },
-      });
+      await ExtensionAPI.cancelTask(taskId);
     } catch (error) {
       Logger.error('[useTask] Failed to cancel task', { error });
     }

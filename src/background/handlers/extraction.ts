@@ -3,6 +3,7 @@ import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
 import {
+  CHROME_MESSAGE_ERRORS,
   MESSAGES,
   DEFAULTS,
   EXTRACTION_PROGRESS,
@@ -93,6 +94,7 @@ interface WaitForPendingTaskOptions {
   tabId: number;
   timeoutMs: number;
   timeoutMessage: string;
+  tabClosedMessage: string;
   cancelWarnLabel: string;
   timeoutWarnLabel: string;
 }
@@ -136,6 +138,14 @@ function notifyCancelExtraction(tabId: number, taskId: string, contextLabel: str
     });
 }
 
+function isExpectedAsyncAckError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes(CHROME_MESSAGE_ERRORS.TIMEOUT) ||
+    message.includes(CHROME_MESSAGE_ERRORS.PORT_CLOSED)
+  );
+}
+
 function waitForPendingTaskCompletion({
   map,
   taskId,
@@ -143,6 +153,7 @@ function waitForPendingTaskCompletion({
   tabId,
   timeoutMs,
   timeoutMessage,
+  tabClosedMessage,
   cancelWarnLabel,
   timeoutWarnLabel,
 }: WaitForPendingTaskOptions): Promise<PendingTaskResult> {
@@ -155,6 +166,26 @@ function waitForPendingTaskCompletion({
 
       notifyCancelExtraction(tabId, taskId, cancelWarnLabel);
       pending.reject(new ExtensionError(ErrorCode.TASK_CANCELLED, 'Task cancelled by user'));
+    };
+
+    const onTabRemoved = (removedTabId: number): void => {
+      if (removedTabId !== tabId) {
+        return;
+      }
+
+      const pending = takePendingTask(map, taskId);
+      if (!pending) {
+        return;
+      }
+
+      pending.reject(
+        new ExtensionError(
+          ErrorCode.EXTRACTION_FAILED,
+          tabClosedMessage,
+          { taskId, tabId },
+          false,
+        ),
+      );
     };
 
     const timeoutId = setTimeout(() => {
@@ -171,7 +202,10 @@ function waitForPendingTaskCompletion({
       resolve,
       reject,
       timeoutId,
-      cleanup: () => signal.removeEventListener('abort', onAbort),
+      cleanup: () => {
+        signal.removeEventListener('abort', onAbort);
+        chrome.tabs.onRemoved?.removeListener(onTabRemoved);
+      },
     });
 
     if (signal.aborted) {
@@ -180,6 +214,7 @@ function waitForPendingTaskCompletion({
     }
 
     signal.addEventListener('abort', onAbort);
+    chrome.tabs.onRemoved?.addListener(onTabRemoved);
   });
 }
 
@@ -229,12 +264,7 @@ export async function handleStartExtraction(
         payload: { taskId: task.id, maxComments: finalMaxComments },
       });
     } catch (error) {
-      // Ignore message timeout as we wait for explicit completion event
-      const msg = error instanceof Error ? error.message : String(error);
-      if (
-        !msg.includes('Message timeout') &&
-        !msg.includes('The message port closed before a response was received')
-      ) {
+      if (!isExpectedAsyncAckError(error)) {
         throw error;
       }
       Logger.debug('[ExtractionHandler] Message ack timeout ignored, waiting for completion');
@@ -247,6 +277,7 @@ export async function handleStartExtraction(
       tabId: task.tabId!,
       timeoutMs: TIMEOUT.EXTRACTION_TASK_COMPLETION_MS,
       timeoutMessage: TEXT.EXTRACTION_TASK_TIMEOUT,
+      tabClosedMessage: TEXT.TASK_SOURCE_TAB_CLOSED,
       cancelWarnLabel: '[ExtractionHandler] Failed to send cancel to content script',
       timeoutWarnLabel: '[ExtractionHandler] Failed to send timeout cancel to content script',
     });
@@ -383,11 +414,7 @@ export async function handleStartConfigGeneration(
         payload: { taskId: task.id },
       });
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (
-        !msg.includes('Message timeout') &&
-        !msg.includes('The message port closed before a response was received')
-      ) {
+      if (!isExpectedAsyncAckError(error)) {
         throw error;
       }
       Logger.debug('[ExtractionHandler] Message ack timeout ignored, waiting for completion');
@@ -400,6 +427,7 @@ export async function handleStartConfigGeneration(
       tabId: task.tabId!,
       timeoutMs: TIMEOUT.CONFIG_TASK_COMPLETION_MS,
       timeoutMessage: TEXT.CONFIG_TASK_TIMEOUT,
+      tabClosedMessage: TEXT.TASK_SOURCE_TAB_CLOSED,
       cancelWarnLabel: '[ExtractionHandler] Failed to send config cancel to content script',
       timeoutWarnLabel:
         '[ExtractionHandler] Failed to send config timeout cancel to content script',

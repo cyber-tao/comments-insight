@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MESSAGES, TIMING } from '@/config/constants';
+import { TIMING } from '@/config/constants';
 import { Settings } from '@/types';
 import i18n from '@/utils/i18n';
 import { useToast } from '@/hooks/useToast';
 import { Logger } from '@/utils/logger';
+import { ExtensionAPI } from '@/utils/extension-api';
 
 export function useSettings() {
   const { t } = useTranslation();
@@ -14,48 +15,46 @@ export function useSettings() {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const isSavingRef = useRef(false);
   const isUserChangeRef = useRef(false);
+  const tRef = useRef(t);
+  const toastRef = useRef(toast);
+
+  useEffect(() => {
+    tRef.current = t;
+    toastRef.current = toast;
+  }, [t, toast]);
+
+  const loadSettings = useCallback(async () => {
+    try {
+      const settings = await ExtensionAPI.getSettings();
+      Logger.debug('[useSettings] Settings response', { settings });
+
+      if (settings) {
+        setSettings(settings);
+        if (settings.language) {
+          Logger.debug('[useSettings] Setting language to', {
+            language: settings.language,
+          });
+          i18n.changeLanguage(settings.language);
+        }
+        setTimeout(() => setIsInitialLoad(false), TIMING.MICRO_WAIT_MS);
+      } else {
+        Logger.error('[useSettings] No settings in response');
+        toastRef.current.error(tRef.current('options.loadSettingsInvalid'));
+      }
+    } catch (error) {
+      Logger.error('[useSettings] Failed to load settings', { error });
+      toastRef.current.error(
+        tRef.current('options.loadSettingsError', {
+          message: error instanceof Error ? error.message : 'Unknown error',
+        }),
+      );
+    }
+  }, []);
 
   // Load settings on mount
   useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const response = await chrome.runtime.sendMessage({ type: MESSAGES.GET_SETTINGS });
-        Logger.debug('[useSettings] Settings response', { response });
-
-        if (chrome.runtime.lastError) {
-          Logger.error('[useSettings] Runtime error', { error: chrome.runtime.lastError });
-          toast.error(
-            t('options.loadSettingsError', { message: chrome.runtime.lastError.message }),
-          );
-          return;
-        }
-
-        if (response?.settings) {
-          setSettings(response.settings);
-          if (response.settings.language) {
-            Logger.debug('[useSettings] Setting language to', {
-              language: response.settings.language,
-            });
-            i18n.changeLanguage(response.settings.language);
-          }
-          setTimeout(() => setIsInitialLoad(false), TIMING.MICRO_WAIT_MS);
-        } else {
-          Logger.error('[useSettings] No settings in response', { response });
-          toast.error(t('options.loadSettingsInvalid'));
-        }
-      } catch (error) {
-        Logger.error('[useSettings] Failed to load settings', { error });
-        toast.error(
-          t('options.loadSettingsError', {
-            message: error instanceof Error ? error.message : 'Unknown error',
-          }),
-        );
-      }
-    };
-
-    loadSettings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void loadSettings();
+  }, [loadSettings]);
 
   // Auto-save settings when they change
   useEffect(() => {
@@ -69,21 +68,20 @@ export function useSettings() {
         const { selectorCache: _selectorCache, ...settingsToSave } = settings as Settings & {
           selectorCache?: Settings['selectorCache'];
         };
-        const response = (await chrome.runtime.sendMessage({
-          type: MESSAGES.SAVE_SETTINGS,
-          payload: { settings: settingsToSave },
-        })) as { success?: boolean; error?: string };
+        const response = await ExtensionAPI.saveSettings(settingsToSave);
 
         if (!response?.success) {
-          throw new Error(response?.error || t('options.savedError'));
+          throw new Error(response?.error || tRef.current('options.savedError'));
         }
 
         if (isUserChangeRef.current) {
-          toast.success(t('options.savedSuccess'));
+          toastRef.current.success(tRef.current('options.savedSuccess'));
           isUserChangeRef.current = false;
         }
       } catch (error) {
-        toast.error(t('options.savedError') + (error instanceof Error ? `: ${error.message}` : ''));
+        toastRef.current.error(
+          tRef.current('options.savedError') + (error instanceof Error ? `: ${error.message}` : ''),
+        );
       } finally {
         setSaving(false);
         isSavingRef.current = false;
@@ -92,7 +90,6 @@ export function useSettings() {
 
     const timeoutId = setTimeout(saveSettings, TIMING.DEBOUNCE_SAVE_MS);
     return () => clearTimeout(timeoutId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings, isInitialLoad]);
 
   const handleSettingsChange = useCallback((newSettings: Partial<Settings>) => {
@@ -102,25 +99,24 @@ export function useSettings() {
 
   const handleExport = useCallback(async () => {
     try {
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.EXPORT_DATA,
-        payload: { type: 'settings' },
-      });
+      const data = await ExtensionAPI.exportSettings();
 
-      if (response?.data) {
-        const blob = new Blob([response.data], { type: 'application/json' });
+      if (data) {
+        const blob = new Blob([data], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         a.download = `comments-insight-settings-${Date.now()}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        toast.success(t('options.exportSettings') + ' ' + t('common.save'));
+        toastRef.current.success(
+          tRef.current('options.exportSettings') + ' ' + tRef.current('common.save'),
+        );
       }
     } catch (_error) {
-      toast.error(t('options.exportError'));
+      toastRef.current.error(tRef.current('options.exportError'));
     }
-  }, [t, toast]);
+  }, []);
 
   const handleImport = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,7 +129,7 @@ export function useSettings() {
           const data = event.target?.result as string;
           const imported = JSON.parse(data);
           if (typeof imported !== 'object' || imported === null || Array.isArray(imported)) {
-            toast.error(t('options.importError'));
+            toastRef.current.error(tRef.current('options.importError'));
             return;
           }
           setSettings((prev) => {
@@ -145,14 +141,14 @@ export function useSettings() {
               selectorCache: prev.selectorCache,
             };
           });
-          toast.success(t('options.importedSuccess'));
+          toastRef.current.success(tRef.current('options.importedSuccess'));
         } catch (_error) {
-          toast.error(t('options.importError'));
+          toastRef.current.error(tRef.current('options.importError'));
         }
       };
       reader.readAsText(file);
     },
-    [t, toast],
+    [],
   );
 
   return {

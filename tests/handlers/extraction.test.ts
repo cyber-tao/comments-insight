@@ -9,7 +9,15 @@ import {
 } from '../../src/background/handlers/extraction';
 import { HandlerContext } from '../../src/background/handlers/types';
 import { ErrorCode } from '../../src/utils/errors';
-import { TIMEOUT } from '../../src/config/constants';
+import { TIMEOUT, TEXT } from '../../src/config/constants';
+
+const tabRemovedListeners = new Set<(tabId: number, removeInfo: chrome.tabs.TabRemoveInfo) => void>();
+
+async function flushMicrotasks(iterations = 4): Promise<void> {
+  for (let index = 0; index < iterations; index += 1) {
+    await Promise.resolve();
+  }
+}
 
 vi.mock('../../src/utils/logger', () => ({
   Logger: {
@@ -24,6 +32,10 @@ vi.stubGlobal('chrome', {
   tabs: {
     query: vi.fn().mockResolvedValue([{ id: 1 }]),
     sendMessage: vi.fn().mockResolvedValue({ success: true, comments: [] }),
+    onRemoved: {
+      addListener: vi.fn((listener) => tabRemovedListeners.add(listener)),
+      removeListener: vi.fn((listener) => tabRemovedListeners.delete(listener)),
+    },
   },
   runtime: {
     sendMessage: vi.fn(),
@@ -65,6 +77,7 @@ function createMockContext(overrides: Partial<HandlerContext> = {}): HandlerCont
 describe('extraction handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    tabRemovedListeners.clear();
   });
 
   afterEach(() => {
@@ -151,6 +164,38 @@ describe('extraction handlers', () => {
 
       await vi.advanceTimersByTimeAsync(TIMEOUT.EXTRACTION_TASK_COMPLETION_MS + 1);
       await rejection;
+    });
+
+    it('should fail executor when source tab closes before completion', async () => {
+      const context = createMockContext();
+      const message = {
+        type: 'START_EXTRACTION' as const,
+        payload: { url: 'https://example.com', maxComments: 50 },
+      };
+
+      await handleStartExtraction(message, context);
+
+      const setExecutorMock = context.taskManager.setExecutor as unknown as {
+        mock: { calls: unknown[][] };
+      };
+      const executor = setExecutorMock.mock.calls[0][1] as (
+        task: { id: string; tabId?: number },
+        signal: AbortSignal,
+      ) => Promise<unknown>;
+
+      const controller = new AbortController();
+      const running = executor({ id: 'task_123', tabId: 1 }, controller.signal);
+      await flushMicrotasks();
+      expect(tabRemovedListeners.size).toBe(1);
+
+      for (const listener of tabRemovedListeners) {
+        listener(1, { isWindowClosing: false, windowId: 1 });
+      }
+
+      await expect(running).rejects.toMatchObject({
+        code: ErrorCode.EXTRACTION_FAILED,
+        message: TEXT.TASK_SOURCE_TAB_CLOSED,
+      });
     });
   });
 

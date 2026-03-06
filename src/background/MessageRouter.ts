@@ -13,6 +13,39 @@ import * as historyHandlers from './handlers/history';
 import * as taskHandlers from './handlers/task';
 import * as miscHandlers from './handlers/misc';
 
+const KNOWN_MESSAGE_TYPES = new Set<string>(Object.values(MESSAGES));
+
+function isKnownMessageType(type: unknown): type is Message['type'] {
+  return typeof type === 'string' && KNOWN_MESSAGE_TYPES.has(type);
+}
+
+function ensurePortSender(
+  sender: chrome.runtime.MessageSender | undefined,
+): chrome.runtime.MessageSender {
+  if (!sender) {
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Port sender is required');
+  }
+  return sender;
+}
+
+function toMessage(message: PortMessage): Message {
+  if (typeof message.id !== 'string' || message.id.length === 0 || !isKnownMessageType(message.type)) {
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Invalid port message received', {
+      id: message.id,
+      type: message.type,
+    });
+  }
+
+  if (typeof message.payload === 'undefined') {
+    return { type: message.type } as Message;
+  }
+
+  return {
+    type: message.type,
+    payload: message.payload,
+  } as Message;
+}
+
 /**
  * MessageRouter handles all incoming messages and routes them
  * to the appropriate service
@@ -32,8 +65,7 @@ export class MessageRouter {
   async handlePortMessage(port: chrome.runtime.Port, message: PortMessage): Promise<void> {
     const correlationId = message.id;
     try {
-      // Cast to Message for handleMessage - the type field ensures compatibility
-      const response = await this.handleMessage(message as unknown as Message, port.sender!);
+      const response = await this.handleMessage(toMessage(message), ensurePortSender(port.sender));
       port.postMessage({ id: correlationId, response });
     } catch (error) {
       Logger.error('[MessageRouter] Port message handling failed', { error, type: message.type });

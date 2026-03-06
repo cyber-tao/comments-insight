@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { THEME, MESSAGES } from '@/config/constants';
+import { THEME } from '@/config/constants';
+import { ExtensionAPI } from '@/utils/extension-api';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -26,16 +27,30 @@ export function useTheme() {
   }, []);
 
   useEffect(() => {
-    chrome.runtime.sendMessage({ type: MESSAGES.GET_SETTINGS }, (response) => {
-      if (response?.settings?.theme) {
-        const savedTheme = response.settings.theme as ThemeMode;
+    let cancelled = false;
+
+    const loadTheme = async () => {
+      try {
+        const settings = await ExtensionAPI.getSettings();
+        const savedTheme = (settings?.theme as ThemeMode | undefined) || THEME.DEFAULT;
+        if (cancelled) {
+          return;
+        }
         setTheme(savedTheme);
         applyTheme(savedTheme);
-      } else {
-        applyTheme(theme);
+      } catch {
+        if (!cancelled) {
+          applyTheme(THEME.DEFAULT);
+        }
       }
-    });
-  }, [applyTheme, theme]);
+    };
+
+    void loadTheme();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applyTheme]);
 
   useEffect(() => {
     if (theme !== 'system') return;
