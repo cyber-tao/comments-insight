@@ -81,6 +81,20 @@ export function useHistoryData({
 
   const selectHistoryItemById = useCallback(
     async (id: string, preferredTab?: 'analysis' | 'comments') => {
+      const url = new URL(window.location.href);
+      let urlChanged = false;
+      if (url.searchParams.get('id') !== id) {
+        url.searchParams.set('id', id);
+        urlChanged = true;
+      }
+      if (preferredTab && url.searchParams.get('tab') !== preferredTab) {
+        url.searchParams.set('tab', preferredTab);
+        urlChanged = true;
+      }
+      if (urlChanged) {
+        window.history.replaceState({}, '', url.toString());
+      }
+
       const detailRequestSeq = ++detailRequestSeqRef.current;
       setSelectedHistoryId(id);
       setSelectedItem((current) => (current?.id === id ? current : null));
