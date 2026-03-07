@@ -187,17 +187,21 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                   style={{ backgroundColor: 'var(--accent-secondary)' }}
                   title={
                     reanalyzeTaskId
-                      ? `${t('history.reanalyzing', '重新分析中')} #${reanalyzeTaskId}`
-                      : t('history.reanalyzeTooltip', '重新发起分析并覆盖当前结果')
+                      ? `${selectedItem.analysis ? t('history.reanalyzing', '重新分析中') : t('popup.analyzing', '正在分析评论...')} #${reanalyzeTaskId}`
+                      : selectedItem.analysis
+                        ? t('history.reanalyzeTooltip', '重新发起分析并覆盖当前结果')
+                        : t('history.startAnalysisTooltip', '立即开始对评论数据进行AI分析')
                   }
                 >
-                  <span>{isReanalyzing ? '⏳' : '🔄'}</span>
+                  <span>{isReanalyzing ? '⏳' : selectedItem.analysis ? '🔄' : '✨'}</span>
                   <span>
                     {isReanalyzing
-                      ? `${t('history.reanalyzing', '重新分析中')} ${
+                      ? `${selectedItem.analysis ? t('history.reanalyzing', '重新分析中') : t('popup.analyzing', '正在分析评论...')} ${
                           reanalyzeProgress !== null ? `${Math.round(reanalyzeProgress)}%` : ''
                         }`
-                      : t('history.reanalyze', '重新分析')}
+                      : selectedItem.analysis
+                        ? t('history.reanalyze', '重新分析')
+                        : t('history.startAnalysis', '开始分析')}
                   </span>
                 </button>
                 {selectedItem.analysis && (

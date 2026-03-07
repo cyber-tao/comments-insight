@@ -251,6 +251,8 @@
     "reanalyze": "Re-analyze",
     "reanalyzing": "Re-analyzing",
     "reanalyzeTooltip": "Run analysis again and overwrite current result",
+    "startAnalysis": "Start Analysis",
+    "startAnalysisTooltip": "Start AI analysis for the extracted comments",
     "reanalyzeFailed": "Re-analysis failed",
     "reanalyzeStartFailed": "Failed to start re-analysis",
     "reanalyzeTaskMissing": "Analysis task not found or already finished",
