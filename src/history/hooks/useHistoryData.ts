@@ -49,6 +49,13 @@ export function useHistoryData({
   const detailRequestSeqRef = useRef(0);
 
   const clearSelectedHistoryItem = useCallback(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('id')) {
+      url.searchParams.delete('id');
+      url.searchParams.delete('tab');
+      window.history.replaceState({}, '', url.toString());
+    }
+
     detailRequestSeqRef.current += 1;
     setSelectedItemLoading(false);
     setSelectedHistoryId(null);
