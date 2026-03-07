@@ -27,7 +27,8 @@ function createMatchMedia(initialMatches: boolean) {
       },
       media: '(prefers-color-scheme: dark)',
       addEventListener: (_event: string, listener: MatchMediaListener) => listeners.add(listener),
-      removeEventListener: (_event: string, listener: MatchMediaListener) => listeners.delete(listener),
+      removeEventListener: (_event: string, listener: MatchMediaListener) =>
+        listeners.delete(listener),
     })),
     setMatches(next: boolean) {
       matches = next;

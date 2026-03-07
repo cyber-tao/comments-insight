@@ -169,7 +169,9 @@ describe('popup hooks', () => {
 
   it('useTask starts extraction once and blocks duplicate starts while pending', async () => {
     vi.useFakeTimers();
-    extensionApiMock.getTaskStatus.mockResolvedValue(createTask({ status: 'pending', progress: 0 }));
+    extensionApiMock.getTaskStatus.mockResolvedValue(
+      createTask({ status: 'pending', progress: 0 }),
+    );
 
     const { result } = renderHook(() => useTask());
 
@@ -180,7 +182,10 @@ describe('popup hooks', () => {
     });
 
     expect(taskId).toBe(TASK_ID);
-    expect(vi.mocked(chrome.tabs.query)).toHaveBeenCalledWith({ active: true, currentWindow: true });
+    expect(vi.mocked(chrome.tabs.query)).toHaveBeenCalledWith({
+      active: true,
+      currentWindow: true,
+    });
     expect(extensionApiMock.ensureContentScript).toHaveBeenCalledWith(TAB_ID);
     expect(extensionApiMock.startExtraction).toHaveBeenCalledWith(PAGE_URL);
     expect(result.current.currentTask).toMatchObject({

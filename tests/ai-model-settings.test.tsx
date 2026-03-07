@@ -207,7 +207,9 @@ describe('AIModelSettings', () => {
   it('supports api key visibility, prompt reset, and placeholder details', () => {
     const { onSettingsChange } = renderComponent();
 
-    const apiKeyInput = screen.getByPlaceholderText('options.apiKeyPlaceholder') as HTMLInputElement;
+    const apiKeyInput = screen.getByPlaceholderText(
+      'options.apiKeyPlaceholder',
+    ) as HTMLInputElement;
     expect(apiKeyInput.type).toBe('password');
 
     fireEvent.click(screen.getByRole('button', { name: /👁/ }));

@@ -17,7 +17,15 @@ vi.mock('../src/utils/logger', () => ({
 }));
 
 vi.mock('../src/options/components/CrawlingConfigEditor', () => ({
-  CrawlingConfigEditor: ({ config, onSave, onCancel }: { config: { domain: string }; onSave: () => void; onCancel: () => void }) => (
+  CrawlingConfigEditor: ({
+    config,
+    onSave,
+    onCancel,
+  }: {
+    config: { domain: string };
+    onSave: () => void;
+    onCancel: () => void;
+  }) => (
     <div>
       <div>editor:{config.domain}</div>
       <button onClick={onSave}>editor-save</button>
@@ -88,7 +96,10 @@ function createSettings(configs: CrawlingConfig[] = []): Settings {
 describe('ConfigSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal('confirm', vi.fn(() => true));
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
     vi.stubGlobal('alert', vi.fn());
     vi.stubGlobal('fetch', vi.fn());
   });
@@ -103,7 +114,12 @@ describe('ConfigSettings', () => {
 
   it('supports add, save, edit cancel, and delete flows', () => {
     const onSettingsChange = vi.fn();
-    render(<ConfigSettings settings={createSettings([createConfig()])} onSettingsChange={onSettingsChange} />);
+    render(
+      <ConfigSettings
+        settings={createSettings([createConfig()])}
+        onSettingsChange={onSettingsChange}
+      />,
+    );
 
     fireEvent.click(screen.getByText('options.crawlingConfigs.newConfig'));
     expect(screen.getByText('editor:new-site.com')).toBeTruthy();
@@ -133,17 +149,17 @@ describe('ConfigSettings', () => {
     const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     const clickSpy = vi.fn();
     const originalCreateElement = document.createElement.bind(document);
-    vi.spyOn(document, 'createElement').mockImplementation(
-      ((tagName: string) => {
-        const element = originalCreateElement(tagName);
-        if (tagName === 'a') {
-          vi.spyOn(element as HTMLAnchorElement, 'click').mockImplementation(clickSpy);
-        }
-        return element;
-      }) as typeof document.createElement,
-    );
+    vi.spyOn(document, 'createElement').mockImplementation(((tagName: string) => {
+      const element = originalCreateElement(tagName);
+      if (tagName === 'a') {
+        vi.spyOn(element as HTMLAnchorElement, 'click').mockImplementation(clickSpy);
+      }
+      return element;
+    }) as typeof document.createElement);
 
-    render(<ConfigSettings settings={createSettings([createConfig()])} onSettingsChange={vi.fn()} />);
+    render(
+      <ConfigSettings settings={createSettings([createConfig()])} onSettingsChange={vi.fn()} />,
+    );
 
     fireEvent.click(screen.getByText('options.crawlingConfigs.exportConfig'));
     expect(createObjectURLSpy).toHaveBeenCalledOnce();
@@ -163,7 +179,12 @@ describe('ConfigSettings', () => {
       json: async () => [createConfig({ id: 'config-2', domain: 'remote.com' })],
     } as Response);
 
-    render(<ConfigSettings settings={createSettings([createConfig()])} onSettingsChange={onSettingsChange} />);
+    render(
+      <ConfigSettings
+        settings={createSettings([createConfig()])}
+        onSettingsChange={onSettingsChange}
+      />,
+    );
 
     fireEvent.click(screen.getByText('options.crawlingConfigs.syncRemote'));
     fireEvent.click(screen.getByText('options.crawlingConfigs.syncDialogConfirm'));

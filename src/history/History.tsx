@@ -97,7 +97,6 @@ const History: React.FC = () => {
     return () => window.removeEventListener('resize', updateViewportHeight);
   }, []);
 
-
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleString();
   };

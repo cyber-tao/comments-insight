@@ -18,7 +18,13 @@ describe('ExtensionAPI', () => {
       .mockResolvedValueOnce({ settings: { theme: 'dark' } })
       .mockResolvedValueOnce({ item: { id: 'history-1' } })
       .mockResolvedValueOnce({ item: null })
-      .mockResolvedValueOnce({ entries: [{ id: 'entry-1' }], total: 1, page: 1, pageSize: 20, totalPages: 1 })
+      .mockResolvedValueOnce({
+        entries: [{ id: 'entry-1' }],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+      })
       .mockResolvedValueOnce({ tasks: [{ id: 'task-1' }] })
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ config: { domain: 'example.com' } })
@@ -69,7 +75,12 @@ describe('ExtensionAPI', () => {
       [{ type: MESSAGES.GET_TASK_STATUS, payload: { taskId: 'task-1' } }],
       [{ type: MESSAGES.GET_CRAWLING_CONFIG, payload: { domain: 'example.com' } }],
       [{ type: MESSAGES.EXPORT_DATA, payload: { type: 'settings' } }],
-      [{ type: MESSAGES.GET_AVAILABLE_MODELS, payload: { apiUrl: 'https://api.example.com', apiKey: 'secret' } }],
+      [
+        {
+          type: MESSAGES.GET_AVAILABLE_MODELS,
+          payload: { apiUrl: 'https://api.example.com', apiKey: 'secret' },
+        },
+      ],
       [
         {
           type: MESSAGES.TEST_MODEL,
@@ -100,8 +111,12 @@ describe('ExtensionAPI', () => {
       .mockResolvedValueOnce({ success: true });
 
     expect(await ExtensionAPI.saveSettings({ theme: 'dark' })).toEqual({ success: true });
-    expect(await ExtensionAPI.startExtraction('https://example.com/post')).toEqual({ taskId: 'extract-1' });
-    expect(await ExtensionAPI.startConfigGeneration('https://example.com/post')).toEqual({ taskId: 'config-1' });
+    expect(await ExtensionAPI.startExtraction('https://example.com/post')).toEqual({
+      taskId: 'extract-1',
+    });
+    expect(await ExtensionAPI.startConfigGeneration('https://example.com/post')).toEqual({
+      taskId: 'config-1',
+    });
     expect(
       await ExtensionAPI.startAnalysis({
         comments: [],
@@ -117,7 +132,16 @@ describe('ExtensionAPI', () => {
       [{ type: MESSAGES.SAVE_SETTINGS, payload: { settings: { theme: 'dark' } } }],
       [{ type: MESSAGES.START_EXTRACTION, payload: { url: 'https://example.com/post' } }],
       [{ type: MESSAGES.START_CONFIG_GENERATION, payload: { url: 'https://example.com/post' } }],
-      [{ type: MESSAGES.START_ANALYSIS, payload: { comments: [], historyId: 'history-1', metadata: { url: 'https://example.com/post' } } }],
+      [
+        {
+          type: MESSAGES.START_ANALYSIS,
+          payload: {
+            comments: [],
+            historyId: 'history-1',
+            metadata: { url: 'https://example.com/post' },
+          },
+        },
+      ],
       [{ type: MESSAGES.CANCEL_TASK, payload: { taskId: 'task-1' } }],
       [{ type: MESSAGES.DELETE_HISTORY, payload: { id: 'history-1' } }],
       [{ type: MESSAGES.CLEAR_ALL_HISTORY }],
@@ -133,6 +157,8 @@ describe('ExtensionAPI', () => {
     });
 
     sendMessageMock.mockResolvedValueOnce({ success: false, injected: false });
-    await expect(ExtensionAPI.ensureContentScript(13)).rejects.toThrow(TEXT.CONTENT_SCRIPT_INJECT_FAILED);
+    await expect(ExtensionAPI.ensureContentScript(13)).rejects.toThrow(
+      TEXT.CONTENT_SCRIPT_INJECT_FAILED,
+    );
   });
 });

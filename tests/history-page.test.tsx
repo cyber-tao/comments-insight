@@ -95,7 +95,9 @@ vi.mock('../src/history/components/HistoryDetailPanel', () => ({
     renderCommentTree: (comments: Array<Record<string, unknown>>) => React.ReactNode;
   }) => (
     <div>
-      <div>detail:{totalComments}:{totalPages}</div>
+      <div>
+        detail:{totalComments}:{totalPages}
+      </div>
       <button onClick={() => onViewModeChange('comments')}>detail-view</button>
       <button onClick={onReanalyze}>detail-reanalyze</button>
       <button onClick={() => onCommentSearchTermChange('needle')}>detail-search</button>
@@ -140,7 +142,10 @@ vi.mock('react-i18next', () => ({
 describe('History page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal('confirm', vi.fn(() => true));
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
     extensionApiMock.getSettings.mockResolvedValue({
       language: 'ja-JP',
       exportPostContentInMarkdown: true,

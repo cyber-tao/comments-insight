@@ -179,12 +179,7 @@ function waitForPendingTaskCompletion({
       }
 
       pending.reject(
-        new ExtensionError(
-          ErrorCode.EXTRACTION_FAILED,
-          tabClosedMessage,
-          { taskId, tabId },
-          false,
-        ),
+        new ExtensionError(ErrorCode.EXTRACTION_FAILED, tabClosedMessage, { taskId, tabId }, false),
       );
     };
 

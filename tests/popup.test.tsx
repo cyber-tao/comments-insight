@@ -64,7 +64,9 @@ vi.mock('../src/popup/components/Header', () => ({
     onOpenLogs: () => void;
   }) => (
     <div>
-      <div>header:{version}:{aiModelName}:{developerMode ? 'dev' : 'nodev'}</div>
+      <div>
+        header:{version}:{aiModelName}:{developerMode ? 'dev' : 'nodev'}
+      </div>
       <button onClick={onOpenSettings}>open-settings</button>
       <button onClick={onOpenLogs}>open-logs</button>
     </div>
@@ -72,8 +74,16 @@ vi.mock('../src/popup/components/Header', () => ({
 }));
 
 vi.mock('../src/popup/components/PageStatus', () => ({
-  PageStatus: ({ pageInfo, pageStatus }: { pageInfo: { url: string } | null; pageStatus: { extracted: boolean } }) => (
-    <div>status:{pageInfo?.url ?? 'none'}:{pageStatus.extracted ? 'extracted' : 'idle'}</div>
+  PageStatus: ({
+    pageInfo,
+    pageStatus,
+  }: {
+    pageInfo: { url: string } | null;
+    pageStatus: { extracted: boolean };
+  }) => (
+    <div>
+      status:{pageInfo?.url ?? 'none'}:{pageStatus.extracted ? 'extracted' : 'idle'}
+    </div>
   ),
 }));
 
@@ -144,8 +154,12 @@ describe('Popup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    vi.mocked(chrome.runtime.getManifest).mockReturnValue({ version: '1.2.3' } as chrome.runtime.Manifest);
-    vi.mocked(chrome.runtime.getURL).mockImplementation((path: string) => `chrome-extension://${path}`);
+    vi.mocked(chrome.runtime.getManifest).mockReturnValue({
+      version: '1.2.3',
+    } as chrome.runtime.Manifest);
+    vi.mocked(chrome.runtime.getURL).mockImplementation(
+      (path: string) => `chrome-extension://${path}`,
+    );
     usePageInfoMock.mockReturnValue({
       loading: false,
       pageInfo: {
@@ -236,15 +250,11 @@ describe('Popup', () => {
     fireEvent.click(screen.getByText('analyze'));
     await waitFor(() => {
       expect(extensionApiMock.getHistoryItem).toHaveBeenCalledWith('history-1');
-      expect(taskHook.startAnalysis).toHaveBeenCalledWith(
-        'history-1',
-        createComments(),
-        {
-          url: 'https://example.com/video',
-          platform: 'example.com',
-          title: 'Video Title',
-        },
-      );
+      expect(taskHook.startAnalysis).toHaveBeenCalledWith('history-1', createComments(), {
+        url: 'https://example.com/video',
+        platform: 'example.com',
+        title: 'Video Title',
+      });
     });
 
     fireEvent.click(screen.getByText('cancel'));

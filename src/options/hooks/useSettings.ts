@@ -118,38 +118,35 @@ export function useSettings() {
     }
   }, []);
 
-  const handleImport = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+  const handleImport = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        try {
-          const data = event.target?.result as string;
-          const imported = JSON.parse(data);
-          if (typeof imported !== 'object' || imported === null || Array.isArray(imported)) {
-            toastRef.current.error(tRef.current('options.importError'));
-            return;
-          }
-          setSettings((prev) => {
-            if (!prev) return prev;
-            return {
-              ...prev,
-              ...imported,
-              crawlingConfigs: prev.crawlingConfigs,
-              selectorCache: prev.selectorCache,
-            };
-          });
-          toastRef.current.success(tRef.current('options.importedSuccess'));
-        } catch (_error) {
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const data = event.target?.result as string;
+        const imported = JSON.parse(data);
+        if (typeof imported !== 'object' || imported === null || Array.isArray(imported)) {
           toastRef.current.error(tRef.current('options.importError'));
+          return;
         }
-      };
-      reader.readAsText(file);
-    },
-    [],
-  );
+        setSettings((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            ...imported,
+            crawlingConfigs: prev.crawlingConfigs,
+            selectorCache: prev.selectorCache,
+          };
+        });
+        toastRef.current.success(tRef.current('options.importedSuccess'));
+      } catch (_error) {
+        toastRef.current.error(tRef.current('options.importError'));
+      }
+    };
+    reader.readAsText(file);
+  }, []);
 
   return {
     settings,

@@ -19,9 +19,11 @@ vi.mock('../src/hooks/useTheme', () => ({
 }));
 
 vi.mock('../src/options/components/BasicSettings', () => ({
-  BasicSettings: ({ onThemeChange }: { onThemeChange: (theme: 'light' | 'dark' | 'system') => void }) => (
-    <button onClick={() => onThemeChange('dark')}>basic-settings</button>
-  ),
+  BasicSettings: ({
+    onThemeChange,
+  }: {
+    onThemeChange: (theme: 'light' | 'dark' | 'system') => void;
+  }) => <button onClick={() => onThemeChange('dark')}>basic-settings</button>,
 }));
 
 vi.mock('../src/options/components/AIModelSettings', () => ({

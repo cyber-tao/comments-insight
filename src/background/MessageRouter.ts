@@ -29,7 +29,11 @@ function ensurePortSender(
 }
 
 function toMessage(message: PortMessage): Message {
-  if (typeof message.id !== 'string' || message.id.length === 0 || !isKnownMessageType(message.type)) {
+  if (
+    typeof message.id !== 'string' ||
+    message.id.length === 0 ||
+    !isKnownMessageType(message.type)
+  ) {
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Invalid port message received', {
       id: message.id,
       type: message.type,

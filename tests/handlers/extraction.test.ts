@@ -11,7 +11,9 @@ import { HandlerContext } from '../../src/background/handlers/types';
 import { ErrorCode } from '../../src/utils/errors';
 import { TIMEOUT, TEXT } from '../../src/config/constants';
 
-const tabRemovedListeners = new Set<(tabId: number, removeInfo: chrome.tabs.TabRemoveInfo) => void>();
+const tabRemovedListeners = new Set<
+  (tabId: number, removeInfo: chrome.tabs.TabRemoveInfo) => void
+>();
 
 async function flushMicrotasks(iterations = 4): Promise<void> {
   for (let index = 0; index < iterations; index += 1) {

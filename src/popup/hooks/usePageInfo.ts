@@ -29,35 +29,32 @@ export function usePageInfo() {
   });
   const [loading, setLoading] = useState(true);
 
-  const checkPageStatus = useCallback(
-    async (url: string) => {
-      try {
-        const item = await ExtensionAPI.getHistoryByUrl(url);
+  const checkPageStatus = useCallback(async (url: string) => {
+    try {
+      const item = await ExtensionAPI.getHistoryByUrl(url);
 
-        if (item) {
-          const historyItem: HistoryItem = item;
-          setPageStatus((prev) => ({
-            extracted: true,
-            analyzed: !!historyItem.analysis,
-            extractedAt: historyItem.extractedAt,
-            analyzedAt: historyItem.analyzedAt,
-            commentsCount: historyItem.commentsCount,
-            historyId: historyItem.id,
-            hasConfig: prev.hasConfig,
-          }));
-        } else {
-          setPageStatus((prev) => ({
-            ...prev,
-            extracted: false,
-            analyzed: false,
-          }));
-        }
-      } catch (error) {
-        Logger.error('[usePageInfo] Failed to check page status', { error });
+      if (item) {
+        const historyItem: HistoryItem = item;
+        setPageStatus((prev) => ({
+          extracted: true,
+          analyzed: !!historyItem.analysis,
+          extractedAt: historyItem.extractedAt,
+          analyzedAt: historyItem.analyzedAt,
+          commentsCount: historyItem.commentsCount,
+          historyId: historyItem.id,
+          hasConfig: prev.hasConfig,
+        }));
+      } else {
+        setPageStatus((prev) => ({
+          ...prev,
+          extracted: false,
+          analyzed: false,
+        }));
       }
-    },
-    [],
-  );
+    } catch (error) {
+      Logger.error('[usePageInfo] Failed to check page status', { error });
+    }
+  }, []);
 
   const checkConfigStatus = useCallback(async (domain: string) => {
     try {
