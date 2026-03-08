@@ -11,6 +11,10 @@ import {
 } from '@/config/constants';
 import DEFAULT_CRAWLING_RULES from '@/config/default_rules.json';
 import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
+import {
+  hasCrawlingConfigContentChanged,
+  resolveCrawlingConfigLastUpdated,
+} from '@/utils/crawling-config';
 import { Logger } from '../../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../../utils/errors';
 import type { EncryptionService } from './EncryptionService';
@@ -36,7 +40,7 @@ export const DEFAULT_SETTINGS: Settings = {
   selectorCache: [],
   crawlingConfigs: DEFAULT_CRAWLING_RULES.map((config) => ({
     ...config,
-    lastUpdated: Date.now(),
+    lastUpdated: typeof config.lastUpdated === 'number' ? config.lastUpdated : Date.now(),
   })) as CrawlingConfig[],
   domAnalysisConfig: DOM_ANALYSIS_DEFAULTS,
   developerMode: false,
@@ -276,7 +280,7 @@ export class SettingsStore {
         const normalizedRemoteConfig: CrawlingConfig = {
           ...remote,
           domain: normalizedRemoteDomain,
-          lastUpdated: Date.now(),
+          lastUpdated: typeof remote.lastUpdated === 'number' ? remote.lastUpdated : Date.now(),
         };
 
         const indexByDomain = merged.findIndex(
@@ -286,11 +290,23 @@ export class SettingsStore {
         const index = indexByDomain >= 0 ? indexByDomain : indexById;
 
         if (index >= 0) {
-          merged[index] = {
-            ...merged[index],
+          const existing = merged[index];
+          const mergedConfig: CrawlingConfig = {
+            ...existing,
             ...normalizedRemoteConfig,
           };
-          updated++;
+          const contentChanged = hasCrawlingConfigContentChanged(existing, mergedConfig);
+          merged[index] = {
+            ...mergedConfig,
+            lastUpdated: resolveCrawlingConfigLastUpdated({
+              previous: existing,
+              next: mergedConfig,
+              preferredLastUpdated: normalizedRemoteConfig.lastUpdated,
+            }),
+          };
+          if (contentChanged) {
+            updated++;
+          }
         } else {
           merged.push(normalizedRemoteConfig);
           added++;
@@ -312,14 +328,21 @@ export class SettingsStore {
       const settings = await this.getSettings();
       const configs = settings.crawlingConfigs || [];
       const normalizedDomain = this.normalizeCrawlingDomain(config.domain);
-      const normalizedConfig: CrawlingConfig = {
-        ...config,
-        domain: normalizedDomain,
-      };
-
       const index = configs.findIndex(
         (c) => this.normalizeCrawlingDomain(c.domain) === normalizedDomain,
       );
+      const existing = index >= 0 ? configs[index] : undefined;
+      const incomingConfig: CrawlingConfig = {
+        ...config,
+        domain: normalizedDomain,
+      };
+      const normalizedConfig: CrawlingConfig = {
+        ...incomingConfig,
+        lastUpdated: resolveCrawlingConfigLastUpdated({
+          previous: existing,
+          next: incomingConfig,
+        }),
+      };
       if (index >= 0) {
         configs[index] = normalizedConfig;
       } else {

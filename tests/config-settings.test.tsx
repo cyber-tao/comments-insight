@@ -19,15 +19,20 @@ vi.mock('../src/utils/logger', () => ({
 vi.mock('../src/options/components/CrawlingConfigEditor', () => ({
   CrawlingConfigEditor: ({
     config,
+    onChange,
     onSave,
     onCancel,
   }: {
     config: { domain: string };
+    onChange: (config: { domain: string; siteName?: string }) => void;
     onSave: () => void;
     onCancel: () => void;
   }) => (
     <div>
       <div>editor:{config.domain}</div>
+      <button onClick={() => onChange({ ...config, siteName: 'Updated Example' })}>
+        editor-change-site-name
+      </button>
       <button onClick={onSave}>editor-save</button>
       <button onClick={onCancel}>editor-cancel</button>
     </div>
@@ -144,7 +149,36 @@ describe('ConfigSettings', () => {
     expect(onSettingsChange).toHaveBeenCalledWith({ crawlingConfigs: [] });
   });
 
-  it('exports selected configs and can cancel the sync dialog', () => {
+  it('updates lastUpdated only when config content changes on manual save', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-09T10:00:00.000Z'));
+
+    try {
+      const onSettingsChange = vi.fn();
+      render(
+        <ConfigSettings
+          settings={createSettings([createConfig({ lastUpdated: 1700000000000 })])}
+          onSettingsChange={onSettingsChange}
+        />,
+      );
+
+      fireEvent.click(screen.getByText('options.crawlingConfigs.edit'));
+      fireEvent.click(screen.getByText('editor-change-site-name'));
+      fireEvent.click(screen.getByText('editor-save'));
+
+      const savedConfigs = onSettingsChange.mock.calls[0]?.[0]?.crawlingConfigs as CrawlingConfig[];
+      expect(savedConfigs).toHaveLength(1);
+      expect(savedConfigs[0]).toMatchObject({
+        domain: 'example.com',
+        siteName: 'Updated Example',
+      });
+      expect(savedConfigs[0]?.lastUpdated).toBe(Date.now());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('exports selected configs without field validation and can cancel the sync dialog', async () => {
     const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
     const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
     const clickSpy = vi.fn();
@@ -158,13 +192,31 @@ describe('ConfigSettings', () => {
     }) as typeof document.createElement);
 
     render(
-      <ConfigSettings settings={createSettings([createConfig()])} onSettingsChange={vi.fn()} />,
+      <ConfigSettings
+        settings={createSettings([
+          createConfig({
+            fieldValidation: {
+              username: 'success',
+              content: 'failed',
+            },
+          }),
+        ])}
+        onSettingsChange={vi.fn()}
+      />,
     );
 
     fireEvent.click(screen.getByText('options.crawlingConfigs.exportConfig'));
     expect(createObjectURLSpy).toHaveBeenCalledOnce();
     expect(clickSpy).toHaveBeenCalledOnce();
     expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:test');
+
+    const exportedBlob = createObjectURLSpy.mock.calls[0]?.[0];
+    expect(exportedBlob).toBeInstanceOf(Blob);
+    const exportedConfigs = JSON.parse(await (exportedBlob as Blob).text()) as Array<
+      Record<string, unknown>
+    >;
+    expect(exportedConfigs).toHaveLength(1);
+    expect(exportedConfigs[0]).not.toHaveProperty('fieldValidation');
 
     fireEvent.click(screen.getByText('options.crawlingConfigs.syncRemote'));
     expect(screen.getByText('options.crawlingConfigs.syncDialogTitle')).toBeTruthy();

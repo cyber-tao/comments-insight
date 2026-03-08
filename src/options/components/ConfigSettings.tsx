@@ -3,6 +3,7 @@ import { Settings, CrawlingConfig, SelectorRule, FieldSelector, ReplyConfig } fr
 import { useTranslation } from 'react-i18next';
 import { CrawlingConfigEditor } from './CrawlingConfigEditor';
 import { API } from '@/config/constants';
+import { resolveCrawlingConfigLastUpdated } from '@/utils/crawling-config';
 import { Logger } from '../../utils/logger';
 
 interface Props {
@@ -35,6 +36,8 @@ interface ConflictItem {
   diffFields: MergeField[];
   choices: Record<MergeField, MergeChoice>;
 }
+
+type ExportableCrawlingConfig = Omit<CrawlingConfig, 'fieldValidation'>;
 
 const MERGE_FIELDS: MergeField[] = [
   'siteName',
@@ -69,6 +72,11 @@ const DEFAULT_EMPTY_CONFIG: CrawlingConfig = {
   ],
 };
 
+const toExportableCrawlingConfig = ({
+  fieldValidation: _fieldValidation,
+  ...config
+}: CrawlingConfig): ExportableCrawlingConfig => config;
+
 export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) => {
   const { t } = useTranslation();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -99,7 +107,11 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
   }, [configs]);
 
   const handleAdd = () => {
-    const newConfig = { ...DEFAULT_EMPTY_CONFIG, id: `manual_${Date.now()}` };
+    const newConfig = {
+      ...DEFAULT_EMPTY_CONFIG,
+      id: `manual_${Date.now()}`,
+      lastUpdated: Date.now(),
+    };
     setTempConfig(newConfig);
     setEditingId(newConfig.id);
   };
@@ -123,7 +135,8 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
       return;
     }
     setExportError(null);
-    const json = JSON.stringify(selectedConfigs, null, 2);
+    const exportConfigs = selectedConfigs.map(toExportableCrawlingConfig);
+    const json = JSON.stringify(exportConfigs, null, 2);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -433,7 +446,7 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
       ...conflict.existing,
       id: conflict.existing.id,
       domain: conflict.existing.domain,
-      lastUpdated: Date.now(),
+      lastUpdated: conflict.existing.lastUpdated,
       fields: [...conflict.existing.fields],
     };
 
@@ -548,6 +561,12 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
       merged.replies = mergedReplies as typeof merged.replies;
     }
 
+    merged.lastUpdated = resolveCrawlingConfigLastUpdated({
+      previous: conflict.existing,
+      next: merged,
+      preferredLastUpdated: conflict.incoming.lastUpdated,
+    });
+
     return merged;
   };
 
@@ -640,11 +659,23 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
   const handleSave = () => {
     if (tempConfig) {
       const exists = configs.find((c) => c.id === tempConfig.id);
+      const savedConfig = exists
+        ? {
+            ...tempConfig,
+            lastUpdated: resolveCrawlingConfigLastUpdated({
+              previous: exists,
+              next: tempConfig,
+            }),
+          }
+        : {
+            ...tempConfig,
+            lastUpdated: Date.now(),
+          };
       let newConfigs;
       if (exists) {
-        newConfigs = configs.map((c) => (c.id === tempConfig.id ? tempConfig : c));
+        newConfigs = configs.map((c) => (c.id === tempConfig.id ? savedConfig : c));
       } else {
-        newConfigs = [...configs, tempConfig];
+        newConfigs = [...configs, savedConfig];
       }
       onSettingsChange({ crawlingConfigs: newConfigs });
       setEditingId(null);
