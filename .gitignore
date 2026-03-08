@@ -74,3 +74,4 @@ gha-creds-*.json
 # Test and analysis files
 testmd/
 .serena/
+.spec-workflow/
