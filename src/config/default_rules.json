@@ -440,5 +440,100 @@
       "selector": "[data-e2e=\"browser-nickname\"] span:last-child",
       "type": "css"
     }
+  },
+  {
+    "container": {
+      "selector": ".list-container",
+      "type": "css"
+    },
+    "domain": "xiaohongshu.com",
+    "fields": [
+      {
+        "name": "username",
+        "rule": {
+          "selector": ".author .name",
+          "type": "css"
+        }
+      },
+      {
+        "name": "content",
+        "rule": {
+          "selector": ".note-text",
+          "type": "css"
+        }
+      },
+      {
+        "name": "timestamp",
+        "rule": {
+          "selector": ".date span:first-child",
+          "type": "css"
+        }
+      },
+      {
+        "name": "likes",
+        "rule": {
+          "selector": ".like .count",
+          "type": "css"
+        }
+      }
+    ],
+    "id": "xiaohongshu.com_1772976405287",
+    "item": {
+      "selector": ".parent-comment",
+      "type": "css"
+    },
+    "lastUpdated": 1772976405287,
+    "postContent": {
+      "selector": ".note-content .desc .note-text",
+      "type": "css"
+    },
+    "replies": {
+      "container": {
+        "selector": ".reply-container",
+        "type": "css"
+      },
+      "expandBtn": {
+        "selector": ".show-more",
+        "type": "css"
+      },
+      "fields": [
+        {
+          "name": "username",
+          "rule": {
+            "selector": ".author .name",
+            "type": "css"
+          }
+        },
+        {
+          "name": "content",
+          "rule": {
+            "selector": ".note-text",
+            "type": "css"
+          }
+        },
+        {
+          "name": "timestamp",
+          "rule": {
+            "selector": ".date span:first-child",
+            "type": "css"
+          }
+        },
+        {
+          "name": "likes",
+          "rule": {
+            "selector": ".like .count",
+            "type": "css"
+          }
+        }
+      ],
+      "item": {
+        "selector": ".comment-item-sub",
+        "type": "css"
+      }
+    },
+    "videoTime": {
+      "selector": ".note-content .bottom-container .date",
+      "type": "css"
+    }
   }
 ]
