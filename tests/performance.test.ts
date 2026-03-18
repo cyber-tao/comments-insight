@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { performanceMonitor } from '../src/utils/performance';
+import { TIMING } from '../src/config/constants';
 
 describe('PerformanceMonitor', () => {
   beforeEach(() => {
@@ -314,10 +315,10 @@ describe('PerformanceMonitor', () => {
     it('should track concurrent operations', async () => {
       await Promise.all([
         performanceMonitor.measureAsync('concurrent-1', async () => {
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          await new Promise((resolve) => setTimeout(resolve, TIMING.YIELD_EVENT_LOOP_MS));
         }),
         performanceMonitor.measureAsync('concurrent-2', async () => {
-          await new Promise((resolve) => setTimeout(resolve, 10));
+          await new Promise((resolve) => setTimeout(resolve, TIMING.YIELD_EVENT_LOOP_MS));
         }),
       ]);
 

@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { CurrentTask } from '../hooks/useTask';
+import { TIMING, UI_LIMITS } from '@/config/constants';
 
 interface TaskProgressProps {
   task: CurrentTask;
@@ -74,9 +75,9 @@ export const TaskProgress: React.FC<TaskProgressProps> = ({ task }) => {
 
   const formatTimeRemaining = (seconds: number): string => {
     if (seconds < 0) return '';
-    if (seconds < 60) return t('popup.timeRemainingSeconds', { seconds });
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
+    if (seconds < TIMING.SECONDS_PER_MINUTE) return t('popup.timeRemainingSeconds', { seconds });
+    const minutes = Math.floor(seconds / TIMING.SECONDS_PER_MINUTE);
+    const remainingSeconds = seconds % TIMING.SECONDS_PER_MINUTE;
     if (remainingSeconds === 0) {
       return t('popup.timeRemainingMinutes', { minutes });
     }
@@ -110,7 +111,7 @@ export const TaskProgress: React.FC<TaskProgressProps> = ({ task }) => {
       <div className="w-full bg-blue-200 rounded-full h-2">
         <div
           className={`h-2 rounded-full transition-all duration-300 ${getStatusColor()}`}
-          style={{ width: `${Math.max(task.progress, 5)}%` }}
+          style={{ width: `${Math.max(task.progress, UI_LIMITS.MIN_PROGRESS_WIDTH_PERCENT)}%` }}
         ></div>
       </div>
     </div>

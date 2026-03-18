@@ -130,7 +130,13 @@ export class AIStrategy implements ExtractionStrategy {
     }
 
     Logger.info('[AIStrategy] Detected comment section', { sectionSelector });
-    onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING + 5, 'comment section found', 'detecting', 1, 1);
+    onProgress?.(
+      EXTRACTION_PROGRESS.AI_ANALYZING + EXTRACTION_PROGRESS.STEPS.AI_DETECTING,
+      'comment section found',
+      'detecting',
+      1,
+      1,
+    );
 
     // Locate the element
     let sectionElement = document.querySelector(sectionSelector);

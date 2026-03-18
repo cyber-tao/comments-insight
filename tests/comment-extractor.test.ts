@@ -1,6 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { CommentExtractor } from '../src/content/CommentExtractor';
 import { mockComment, mockComments } from './fixtures';
+
+// Mock chrome
+beforeAll(() => {
+  (global as unknown as { chrome: unknown }).chrome = {
+    runtime: {
+      sendMessage: vi.fn((msg, callback) => {
+        if (callback) callback({ settings: {} });
+      }),
+    },
+  };
+});
+
+afterAll(() => {
+  delete (global as unknown as { chrome?: unknown }).chrome;
+});
 
 // Mock Logger
 vi.mock('../src/utils/logger', () => ({

@@ -1,7 +1,13 @@
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
 import { CrawlingConfig, Settings } from '../../types';
-import { EXTRACTION_PROGRESS, MESSAGES, AI, DOM } from '@/config/constants';
+import {
+  EXTRACTION_PROGRESS,
+  CONFIG_GENERATION_PROGRESS,
+  MESSAGES,
+  AI,
+  DOM,
+} from '@/config/constants';
 import {
   PROMPT_DETECT_COMMENTS_SECTION,
   PROMPT_GENERATE_CRAWLING_CONFIG,
@@ -80,7 +86,10 @@ export class AIConfigGenerator {
       // 3. AI Detection
       // Simplify body (shallow but wide enough to find the container)
       const simplifiedBody = DOMSimplifier.simplifyForAI(document.body, {
-        maxDepth: Math.max(DOM.DETECT_MIN_DEPTH, Math.floor(maxDepth / 2)), // Use shallower depth for detection
+        maxDepth: Math.max(
+          DOM.DETECT_MIN_DEPTH,
+          Math.floor(maxDepth * DOM.DETECT_SHALLOW_DEPTH_RATIO),
+        ), // Use shallower depth for detection
         includeText: true,
         maxNodes: maxNodes,
       });
@@ -174,7 +183,10 @@ export class AIConfigGenerator {
     let metaConfig: Partial<MetaConfigSubset> = {};
     try {
       const shallowSimplified = DOMSimplifier.simplifyForAI(document.body, {
-        maxDepth: Math.max(DOM.DETECT_MIN_DEPTH, Math.floor(domConfig.maxDepth / 2)),
+        maxDepth: Math.max(
+          DOM.DETECT_MIN_DEPTH,
+          Math.floor(domConfig.maxDepth * DOM.DETECT_SHALLOW_DEPTH_RATIO),
+        ),
         includeText: true,
         maxNodes: detectMaxNodes,
       });
@@ -185,7 +197,7 @@ export class AIConfigGenerator {
         `\n\nPage URL: ${window.location.href}\nDomain: ${hostname}\n\nDOM Structure:\n\`\`\`html\n${shallowDomStr}\n\`\`\``;
 
       onProgress?.(
-        EXTRACTION_PROGRESS.CONFIG_ANALYZING + 5,
+        EXTRACTION_PROGRESS.CONFIG_ANALYZING + CONFIG_GENERATION_PROGRESS.STEPS.META_CONFIG,
         'Asking AI for post metadata schemas...',
       );
       const response = await this.aiService.callAI<{
@@ -208,7 +220,7 @@ export class AIConfigGenerator {
     let sectionSelector = knownSectionSelector;
     if (!sectionSelector) {
       onProgress?.(
-        EXTRACTION_PROGRESS.CONFIG_ANALYZING + 10,
+        EXTRACTION_PROGRESS.CONFIG_ANALYZING + CONFIG_GENERATION_PROGRESS.STEPS.LOCATING_SECTION,
         'Locating primary comment section...',
       );
       const tokenChunks =
@@ -234,7 +246,7 @@ export class AIConfigGenerator {
 
     // Phase 3: Detailed Comments Config Generation
     onProgress?.(
-      EXTRACTION_PROGRESS.CONFIG_ANALYZING + 15,
+      EXTRACTION_PROGRESS.CONFIG_ANALYZING + CONFIG_GENERATION_PROGRESS.STEPS.EXTRACTING_DOM,
       'Extracting detailed comment DOM structure...',
     );
     const deepSimplified = DOMSimplifier.simplifyForAI(sectionElement, {
@@ -249,7 +261,7 @@ export class AIConfigGenerator {
       `\n\nPage URL: ${window.location.href}\nDomain: ${hostname}\n\nDOM Structure (Container: ${sectionSelector}):\n\`\`\`html\n${deepDomStr}\n\`\`\``;
 
     onProgress?.(
-      EXTRACTION_PROGRESS.CONFIG_ANALYZING + 20,
+      EXTRACTION_PROGRESS.CONFIG_ANALYZING + CONFIG_GENERATION_PROGRESS.STEPS.GENERATING_FIELDS,
       'Asking AI for comment fields schemas...',
     );
     const response = await this.aiService.callAI<{ config?: CrawlingConfig; error?: string }>({
@@ -278,7 +290,7 @@ export class AIConfigGenerator {
 
     // Phase 4: Self-Correction / Validation
     onProgress?.(
-      EXTRACTION_PROGRESS.CONFIG_ANALYZING + 30,
+      EXTRACTION_PROGRESS.CONFIG_ANALYZING + CONFIG_GENERATION_PROGRESS.STEPS.VERIFYING,
       'Verifying AI-generated schema on live page...',
     );
     try {

@@ -78,7 +78,13 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     const seenHashes = new Set<string>();
     const processedElements = new WeakSet<HTMLElement>();
 
-    onProgress?.(EXTRACTION_PROGRESS.MIN + 5, 'Extracting comments', 'extracting', 0, maxComments);
+    onProgress?.(
+      EXTRACTION_PROGRESS.MIN + EXTRACTION_PROGRESS.STEPS.EXTRACTING_START,
+      'Extracting comments',
+      'extracting',
+      0,
+      maxComments,
+    );
 
     this.recordFieldValidation(container);
 
