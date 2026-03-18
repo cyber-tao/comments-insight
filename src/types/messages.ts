@@ -33,7 +33,15 @@ export type ExtractionMessage =
   | { type: 'CANCEL_EXTRACTION'; payload: { taskId: string } }
   | {
       type: 'EXTRACTION_PROGRESS';
-      payload: { taskId: string; progress: number; message: string; data?: unknown };
+      payload: {
+        taskId: string;
+        progress: number;
+        message: string;
+        stage?: import('./index').ProgressStage;
+        current?: number;
+        total?: number;
+        data?: unknown;
+      };
     }
   | {
       type: 'EXTRACTION_COMPLETED';

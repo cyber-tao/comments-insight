@@ -79,6 +79,14 @@ export const AI = {
   ANALYSIS_POST_CONTENT_MAX_CHARS: 4000,
   ANALYSIS_TITLE_MAX_CHARS: 300,
   ANALYSIS_URL_MAX_CHARS: 2000,
+  ROLES: {
+    SYSTEM: 'system',
+    USER: 'user',
+  },
+  PROMPTS: {
+    JSON_ONLY:
+      'You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start with [ and end with ].',
+  },
 };
 
 export const ANALYSIS_FORMAT = {
@@ -96,6 +104,18 @@ export const ANALYSIS_FORMAT = {
 export const TIME_NORMALIZATION = {
   PATH_SEPARATOR: '.',
   ITEM_TOKEN_ESTIMATE: 40,
+};
+
+export const COMMENT_HASH = {
+  SEED_1: 0xdeadbeef,
+  SEED_2: 0x41c6ce57,
+  MULT_1: 2654435761,
+  MULT_2: 1597334677,
+  XOR_1: 2246822507,
+  XOR_2: 3266489909,
+  FINAL_MULT: 4294967296,
+  FINAL_MASK: 2097151,
+  RADIX: 36,
 };
 
 export const DATE_TIME = {
@@ -124,6 +144,10 @@ export const API = {
     'https://raw.githubusercontent.com/cyber-tao/comments-insight/refs/heads/master/src/config/default_rules.json',
   CRAWLING_CONFIGS_URL:
     'https://github.com/cyber-tao/comments-insight/blob/master/src/config/default_rules.json',
+  ENDPOINTS: {
+    CHAT_COMPLETIONS: '/chat/completions',
+    MODELS: '/models',
+  },
 };
 
 export const PATHS = {

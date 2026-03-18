@@ -161,10 +161,16 @@ async function handleStartExtraction(
     const comments = await commentExtractor.extractWithAI(
       maxComments,
       getCurrentHostname(),
-      (progress: number, message: string) => {
+      (
+        progress: number,
+        message: string,
+        stage?: import('@/types').ProgressStage,
+        current?: number,
+        total?: number,
+      ) => {
         chrome.runtime.sendMessage({
           type: MESSAGES.EXTRACTION_PROGRESS,
-          payload: { taskId, progress, message },
+          payload: { taskId, progress, message, stage, current, total },
         });
       },
     );

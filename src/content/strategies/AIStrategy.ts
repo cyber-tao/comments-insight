@@ -26,8 +26,8 @@ import {
 import { sendMessage } from '@/utils/chrome-message';
 import { isExtractionActive } from '../extractionState';
 import { getCurrentHostname } from '@/utils/url';
+import { runWithConcurrencyLimit } from '@/utils/promise';
 import { CrawlingConfig } from '../../types';
-import { ConfiguredStrategy } from './ConfiguredStrategy';
 import { generateCommentHash } from '@/utils/comment-hash';
 
 export type ConfigGenerationCallback = (progress: number, message: string) => void;
@@ -64,40 +64,6 @@ export class AIStrategy implements ExtractionStrategy {
   }
 
   async execute(
-    maxComments: number,
-    platform: Platform,
-    onProgress?: ProgressCallback,
-  ): Promise<Comment[]> {
-    const hostname = getCurrentHostname();
-    Logger.info('[AIStrategy] Starting execution', { hostname });
-
-    // 1. Check for existing Crawling Config
-    try {
-      const resp = await sendMessage<{ config: CrawlingConfig | null }>({
-        type: MESSAGES.GET_CRAWLING_CONFIG,
-        payload: { domain: hostname },
-      });
-
-      if (resp && resp.config) {
-        Logger.info('[AIStrategy] Found valid crawling config. Delegating to ConfiguredStrategy.', {
-          domain: hostname,
-        });
-        const strategy = new ConfiguredStrategy(this.pageController, resp.config);
-        return await strategy.execute(maxComments, platform, onProgress);
-      }
-    } catch (e) {
-      Logger.warn('[AIStrategy] Failed to check crawling config', { error: e });
-    }
-
-    // 2. If no config, fall back to "Legacy" AI Detection + Generation
-    Logger.info('[AIStrategy] No config found. Using AI for detection and config generation.');
-    return await this.executeLegacyAI(maxComments, platform, onProgress);
-  }
-
-  /**
-   * Original AI Logic - now wrapped as a fallback/generator
-   */
-  async executeLegacyAI(
     maxComments: number,
     platform: Platform,
     onProgress?: ProgressCallback,
@@ -199,6 +165,19 @@ export class AIStrategy implements ExtractionStrategy {
     let scrollCount = 0;
     let unchangedScrollCount = 0;
 
+    // Incremental extraction setup
+    let newElementsToProcess: Element[] = [sectionElement];
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            newElementsToProcess.push(node as Element);
+          }
+        }
+      }
+    });
+    observer.observe(sectionElement, { childList: true, subtree: true });
+
     // Step 2: Loop - Scroll & Extract
     while (allComments.length < maxComments) {
       // Check abort status at the start of each iteration
@@ -240,37 +219,59 @@ export class AIStrategy implements ExtractionStrategy {
       }
       scrollCount++;
 
-      onProgress?.(
-        currentProgress,
-        `extracting:${allComments.length}:${maxComments}`,
-        'extracting',
-        allComments.length,
-        maxComments,
-      );
+      onProgress?.(currentProgress, `extracting`, 'extracting', allComments.length, maxComments);
 
       // 2.1 Get current content of the section
-      // We assume the section grows as we scroll.
-      // Simplify the section
-      const simplifiedRoot = DOMSimplifier.simplifyForAI(sectionElement, {
-        maxDepth: domConfig.maxDepth, // Use configured depth
-        includeText: true,
-        maxNodes: extractMaxNodes,
-      });
+      // Process only new elements to save memory and CPU
+      const chunksToProcess: string[] = [];
+      const elementsBatch = [...newElementsToProcess];
+      newElementsToProcess = [];
 
-      // 2.2 Chunking
-      const chunks = Chunker.chunkSimplifiedNode(simplifiedRoot, maxChunkTokens);
-      Logger.debug('[AIStrategy] Chunked section', { chunks: chunks.length });
+      if (elementsBatch.length > 0) {
+        // Create a virtual root for the batch to simplify them together
+        const virtualRoot = document.createElement('div');
+        virtualRoot.id = 'ai-incremental-batch';
 
-      // 2.3 AI Extraction (Sequential or batch)
-      onProgress?.(
-        currentProgress,
-        `analyzing chunks (${chunks.length})`,
-        'analyzing',
-        allComments.length,
-        maxComments,
-      );
+        // We just simplify each element and combine them
+        const batchSimplifiedNodes = elementsBatch.map((el) =>
+          DOMSimplifier.simplifyForAI(el, {
+            maxDepth: domConfig.maxDepth,
+            includeText: true,
+            maxNodes: extractMaxNodes,
+          }),
+        );
 
-      const newComments = await this.extractFromChunks(chunks);
+        const simplifiedRoot: import('../../types').SimplifiedNode = {
+          tag: 'div',
+          id: 'ai-incremental-batch',
+          childCount: batchSimplifiedNodes.length,
+          expanded: true,
+          children: batchSimplifiedNodes,
+          selector: '',
+          depth: 0,
+        };
+
+        // 2.2 Chunking
+        const chunks = Chunker.chunkSimplifiedNode(simplifiedRoot, maxChunkTokens);
+        chunksToProcess.push(...chunks);
+        Logger.debug('[AIStrategy] Chunked incremental section', {
+          chunks: chunks.length,
+          elements: elementsBatch.length,
+        });
+      }
+
+      // 2.3 AI Extraction
+      let newComments: Comment[] = [];
+      if (chunksToProcess.length > 0) {
+        onProgress?.(
+          currentProgress,
+          `analyzing chunks (${chunksToProcess.length})`,
+          'analyzing',
+          allComments.length,
+          maxComments,
+        );
+        newComments = await this.extractFromChunks(chunksToProcess);
+      }
 
       // Check abort status after AI extraction
       this.checkAborted();
@@ -302,6 +303,8 @@ export class AIStrategy implements ExtractionStrategy {
 
       if (allComments.length >= maxComments) break;
     }
+
+    observer.disconnect();
 
     onProgress?.(95, 'validating results', 'validating', allComments.length, maxComments);
 
@@ -451,12 +454,12 @@ export class AIStrategy implements ExtractionStrategy {
   private async extractFromChunks(chunks: string[]): Promise<Comment[]> {
     const allComments: Comment[] = [];
 
-    for (let i = 0; i < chunks.length; i++) {
+    const tasks = chunks.map((chunk, i) => async () => {
       try {
         const response = await this.callAIviaPort<{ comments?: Comment[]; error?: string }>({
           type: MESSAGES.AI_EXTRACT_CONTENT,
           payload: {
-            chunks: [chunks[i]],
+            chunks: [chunk],
             systemPrompt: PROMPT_EXTRACT_COMMENTS_FROM_HTML,
           },
         });
@@ -465,14 +468,21 @@ export class AIStrategy implements ExtractionStrategy {
           Logger.warn(`[AIStrategy] Chunk ${i + 1}/${chunks.length} extraction error`, {
             error: response.error,
           });
+          return [];
         } else if (response?.comments?.length) {
-          allComments.push(...response.comments);
+          return response.comments;
         }
       } catch (err) {
         Logger.error(`[AIStrategy] Port call failed for chunk ${i + 1}/${chunks.length}`, {
           error: err,
         });
       }
+      return [];
+    });
+
+    const results = await runWithConcurrencyLimit(tasks, AI.MAX_CONCURRENT_REQUESTS);
+    for (const chunkComments of results) {
+      allComments.push(...chunkComments);
     }
 
     return allComments;

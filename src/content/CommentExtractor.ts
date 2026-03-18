@@ -2,8 +2,13 @@ import { Comment, Platform } from '../types';
 import { PageController } from './PageController';
 import { Logger } from '@/utils/logger';
 import { AIStrategy } from './strategies/AIStrategy';
+import { ConfiguredStrategy } from './strategies/ConfiguredStrategy';
 import type { ProgressCallback } from './strategies/ExtractionStrategy';
-import { EXTRACTION, EXTRACTION_PROGRESS, EXTRACTION_PROGRESS_MESSAGE } from '@/config/constants';
+import { EXTRACTION, EXTRACTION_PROGRESS } from '@/config/constants';
+import { getCurrentHostname } from '@/utils/url';
+import { sendMessage } from '@/utils/chrome-message';
+import { MESSAGES } from '@/config/constants';
+import { CrawlingConfig } from '../types';
 
 /**
  * CommentExtractor extracts comments from web pages using AI-powered strategies.
@@ -60,12 +65,25 @@ export class CommentExtractor {
     platform: Platform,
     onProgress?: ProgressCallback,
   ): Promise<Comment[]> {
-    Logger.info('[CommentExtractor] Starting pure AI extraction');
+    Logger.info('[CommentExtractor] Starting extraction process');
 
-    // Always use AI Strategy
-    const strategy = new AIStrategy(this.pageController);
+    let strategy: import('./strategies/ExtractionStrategy').ExtractionStrategy | null = null;
 
     try {
+      const hostname = getCurrentHostname();
+      const resp = await sendMessage<{ config: CrawlingConfig | null }>({
+        type: MESSAGES.GET_CRAWLING_CONFIG,
+        payload: { domain: hostname },
+      });
+
+      if (resp && resp.config) {
+        Logger.info('[CommentExtractor] Found valid crawling config. Using ConfiguredStrategy.');
+        strategy = new ConfiguredStrategy(this.pageController, resp.config);
+      } else {
+        Logger.info('[CommentExtractor] No config found. Using Legacy AIStrategy.');
+        strategy = new AIStrategy(this.pageController);
+      }
+
       const validationBuffer = Math.min(
         EXTRACTION.VALIDATION_BUFFER_MAX,
         Math.max(
@@ -74,27 +92,12 @@ export class CommentExtractor {
         ),
       );
       const targetComments = maxComments + validationBuffer;
-      const normalizeProgressMessage = (message: string, current?: number) => {
-        const parts = message.split(EXTRACTION_PROGRESS_MESSAGE.SEPARATOR);
-        if (parts.length >= EXTRACTION_PROGRESS_MESSAGE.MIN_PARTS) {
-          const resolvedCurrent = typeof current === 'number' ? current : Number(parts[1]);
-          if (!Number.isNaN(resolvedCurrent)) {
-            parts[EXTRACTION_PROGRESS_MESSAGE.CURRENT_INDEX] = String(
-              Math.min(resolvedCurrent, maxComments),
-            );
-          }
-          parts[EXTRACTION_PROGRESS_MESSAGE.TOTAL_INDEX] = String(maxComments);
-          return parts.join(EXTRACTION_PROGRESS_MESSAGE.SEPARATOR);
-        }
-        return message;
-      };
       const progressAdapter: ProgressCallback | undefined = onProgress
         ? (progress, message, stage, current, total) => {
             const safeCurrent =
               typeof current === 'number' ? Math.min(current, maxComments) : current;
             const safeTotal = typeof total === 'number' ? maxComments : total;
-            const normalizedMessage = normalizeProgressMessage(message, current);
-            onProgress(progress, normalizedMessage, stage, safeCurrent, safeTotal);
+            onProgress(progress, message, stage, safeCurrent, safeTotal);
           }
         : undefined;
 
@@ -109,7 +112,9 @@ export class CommentExtractor {
       return limitedComments;
     } finally {
       // Ensure strategy resources are cleaned up
-      strategy.cleanup();
+      if (strategy && strategy.cleanup) {
+        strategy.cleanup();
+      }
     }
   }
 

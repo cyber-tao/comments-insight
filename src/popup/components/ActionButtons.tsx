@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
-import { PATHS } from '@/config/constants';
+import { NavigationService } from '../utils/navigation';
 import type { PageInfo, PageStatus } from '../hooks/usePageInfo';
 import type { CurrentTask } from '../hooks/useTask';
 
@@ -28,11 +28,8 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
   const { t } = useTranslation();
 
   const handleExtractClick = () => {
-    if (pageStatus.extracted) {
-      chrome.tabs.create({
-        url: chrome.runtime.getURL(`${PATHS.HISTORY_PAGE}?id=${pageStatus.historyId}&tab=comments`),
-      });
-      window.close();
+    if (pageStatus.extracted && pageStatus.historyId) {
+      NavigationService.openHistoryPage(pageStatus.historyId, 'comments');
     } else if (!pageStatus.hasConfig) {
       onGenerateConfig();
     } else {
@@ -42,16 +39,20 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
 
   const handleAnalyzeClick = () => {
     if (pageStatus.analyzed && pageStatus.historyId) {
-      chrome.tabs.create({
-        url: chrome.runtime.getURL(`${PATHS.HISTORY_PAGE}?id=${pageStatus.historyId}&tab=analysis`),
-      });
-      window.close();
+      NavigationService.openHistoryPage(pageStatus.historyId, 'analysis');
     } else {
       onAnalyze();
     }
   };
 
   const getProgressMessage = () => {
+    if (currentTask?.detailedProgress) {
+      const { stage, current, total, stageMessage } = currentTask.detailedProgress;
+      const stageKey = `popup.progress${stage.charAt(0).toUpperCase() + stage.slice(1)}`;
+      const stageText = t(stageKey, stageMessage || stage);
+      return current >= 0 && total > 0 ? `${stageText} ${current}/${total}` : stageText;
+    }
+
     const msg = currentTask?.message || '';
     const parts = msg.split(':');
     if (parts.length >= 3) {

@@ -9,36 +9,15 @@ import {
   TIME_NORMALIZATION,
   TEXT,
   ANALYSIS_FORMAT,
+  API as API_CONST,
 } from '@/config/constants';
 import type { StorageManager } from './StorageManager';
 import { Tokenizer } from '../utils/tokenizer';
+import { runWithConcurrencyLimit } from '../utils/promise';
 
 import { AIErrorHandler } from './ai/AIErrorHandler';
 import { DataNormalizer } from './ai/DataNormalizer';
 import { PromptBuilder } from './ai/PromptBuilder';
-
-async function runWithConcurrencyLimit<T>(
-  tasks: (() => Promise<T>)[],
-  limit: number,
-): Promise<T[]> {
-  const results = new Array<T>(tasks.length);
-  let nextIndex = 0;
-
-  const workerCount = Math.min(Math.max(1, limit), tasks.length);
-  const workers = Array.from({ length: workerCount }, async () => {
-    while (true) {
-      const current = nextIndex;
-      nextIndex += 1;
-      if (current >= tasks.length) {
-        return;
-      }
-      results[current] = await tasks[current]();
-    }
-  });
-
-  await Promise.all(workers);
-  return results;
-}
 
 export class AIService {
   private lastVerifiedConfig: AIConfig | null = null;
@@ -102,8 +81,8 @@ export class AIService {
       });
     }
     let apiUrl = config.apiUrl.trim();
-    if (!apiUrl.endsWith('/chat/completions')) {
-      apiUrl = apiUrl.replace(new RegExp('/$'), '') + '/chat/completions';
+    if (!apiUrl.endsWith(API_CONST.ENDPOINTS.CHAT_COMPLETIONS)) {
+      apiUrl = apiUrl.replace(new RegExp('/$'), '') + API_CONST.ENDPOINTS.CHAT_COMPLETIONS;
     }
     return apiUrl;
   }
@@ -168,8 +147,8 @@ export class AIService {
             const requestBody = JSON.stringify({
               model: resolvedConfig.model,
               messages: [
-                ...(systemPrompt ? [{ role: 'system', content: systemPrompt }] : []),
-                { role: 'user', content: prompt },
+                ...(systemPrompt ? [{ role: AI_CONST.ROLES.SYSTEM, content: systemPrompt }] : []),
+                { role: AI_CONST.ROLES.USER, content: prompt },
               ],
               max_tokens: resolvedConfig.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS,
               temperature: resolvedConfig.temperature,
@@ -249,8 +228,8 @@ export class AIService {
       const baseUrl = apiUrl
         .trim()
         .replace(new RegExp('/$'), '')
-        .replace(new RegExp('/chat/completions$'), '');
-      const modelsUrl = baseUrl + '/models';
+        .replace(new RegExp(API_CONST.ENDPOINTS.CHAT_COMPLETIONS + '$'), '');
+      const modelsUrl = baseUrl + API_CONST.ENDPOINTS.MODELS;
 
       Logger.info('[AIService] Fetching available models', { url: modelsUrl });
 
@@ -388,8 +367,7 @@ export class AIService {
       try {
         const response = await this.callAI({
           prompt,
-          systemPrompt:
-            'You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start with [ and end with ].',
+          systemPrompt: AI_CONST.PROMPTS.JSON_ONLY,
           config,
           timeout,
         });
@@ -436,8 +414,7 @@ export class AIService {
     try {
       const response = await this.callAI({
         prompt,
-        systemPrompt:
-          'You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start with [ and end with ].',
+        systemPrompt: AI_CONST.PROMPTS.JSON_ONLY,
         config,
         timeout,
       });

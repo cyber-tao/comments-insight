@@ -549,10 +549,26 @@ export async function handleExtractionProgress(
   message: Extract<Message, { type: 'EXTRACTION_PROGRESS' }>,
   context: HandlerContext,
 ): Promise<ProgressResponse> {
-  const { taskId, progress, message: progressMessage } = message.payload || {};
+  const {
+    taskId,
+    progress,
+    message: progressMessage,
+    stage,
+    current,
+    total,
+  } = message.payload || {};
 
   if (taskId) {
-    context.taskManager.updateTaskProgress(taskId, progress, progressMessage || '');
+    if (stage && current !== undefined && total !== undefined) {
+      context.taskManager.updateDetailedProgress(taskId, {
+        stage,
+        current,
+        total,
+        stageMessage: progressMessage,
+      });
+    } else {
+      context.taskManager.updateTaskProgress(taskId, progress, progressMessage || '');
+    }
   }
 
   return { success: true };

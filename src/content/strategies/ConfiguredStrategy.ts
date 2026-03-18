@@ -138,7 +138,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
           EXTRACTION_PROGRESS.NORMALIZING,
           EXTRACTION_PROGRESS.MIN + (allComments.length / maxComments) * EXTRACTION_PROGRESS.RANGE,
         ),
-        `extracting:${allComments.length}:${maxComments}`,
+        `extracting`,
         'extracting',
         allComments.length,
         maxComments,

@@ -17,8 +17,12 @@ interface SimplificationOptions {
   includeText?: boolean;
   /** Maximum number of nodes to process */
   maxNodes?: number;
+  /** Elements to ignore during simplification */
+  ignoreElements?: WeakSet<Element> | Set<Element>;
   /** Internal node counter for limiting */
   _nodeCounter?: { count: number };
+  /** Parent selector to avoid full tree traversal */
+  parentSelector?: string;
 }
 
 /**
@@ -93,12 +97,14 @@ export class DOMSimplifier {
 
     // Light DOM children
     const lightChildren = Array.from(element.children).filter(
-      (child) => !this.shouldIgnoreElement(child as Element),
+      (child) => !this.shouldIgnoreElement(child as Element, options),
     );
 
     let children: SimplifiedNode[] | undefined;
+    let currentSelector = '';
 
     if (shouldExpand) {
+      currentSelector = this.generateSelector(element, options.parentSelector);
       children = [];
 
       // 1. Add Shadow Root as a virtual child node if present
@@ -111,6 +117,7 @@ export class DOMSimplifier {
             currentDepth: currentDepth + 1,
             forceExpandParent: forceExpandParent || forceExpandCurrent,
             _nodeCounter, // Pass the shared counter
+            parentSelector: currentSelector,
           }),
         );
 
@@ -137,9 +144,12 @@ export class DOMSimplifier {
           currentDepth: currentDepth + 1,
           forceExpandParent: forceExpandParent || forceExpandCurrent,
           _nodeCounter, // Pass the shared counter
+          parentSelector: currentSelector,
         }),
       );
       children.push(...lightChildrenProcessed);
+    } else {
+      currentSelector = this.generateSelector(element, options.parentSelector);
     }
 
     const node: SimplifiedNode = {
@@ -151,7 +161,7 @@ export class DOMSimplifier {
       childCount: lightChildren.length + (shadowRoot ? 1 : 0),
       expanded: shouldExpand && (children ? children.length > 0 : false),
       children,
-      selector: this.generateSelector(element),
+      selector: currentSelector,
       depth: currentDepth,
     };
 
@@ -163,7 +173,11 @@ export class DOMSimplifier {
     return node;
   }
 
-  private shouldIgnoreElement(element: Element): boolean {
+  private shouldIgnoreElement(element: Element, options?: SimplificationOptions): boolean {
+    if (options?.ignoreElements?.has(element)) {
+      return true;
+    }
+
     const tag = element.tagName.toLowerCase();
     // Ignore technical tags
     if (
@@ -328,46 +342,45 @@ export class DOMSimplifier {
   /**
    * Generate a unique CSS selector for an element
    */
-  private generateSelector(element: Element): string {
+  private generateSelector(element: Element, knownParentSelector?: string): string {
     // Check cache first
     if (this.selectorCache.has(element)) {
       return this.selectorCache.get(element)!;
     }
 
-    const parts: string[] = [];
-    let current: Element | null = element;
+    let selector = element.tagName.toLowerCase();
 
-    while (current && current !== document.body) {
-      let selector = current.tagName.toLowerCase();
-
-      // Add ID if available (most specific)
-      if (current.id) {
-        selector = `#${current.id}`;
-        parts.unshift(selector);
-        break; // ID is unique, we can stop here
-      }
-
-      // Add classes if available
-      const classes = this.getClasses(current);
-      if (classes && classes.length > 0) {
-        selector += '.' + classes.join('.');
-      }
-
-      // Add nth-child if needed for uniqueness
-      const parent: Element | null = current.parentElement;
-      if (parent) {
-        const siblings = Array.from(parent.children);
-        const index = siblings.indexOf(current);
-        if (siblings.filter((s: Element) => s.tagName === current!.tagName).length > 1) {
-          selector += `:nth-child(${index + 1})`;
-        }
-      }
-
-      parts.unshift(selector);
-      current = parent;
+    // Add ID if available (most specific)
+    if (element.id) {
+      selector = `#${element.id}`;
+      this.selectorCache.set(element, selector);
+      return selector; // ID is unique, we can stop here
     }
 
-    const fullSelector = parts.join(' > ');
+    // Add classes if available
+    const classes = this.getClasses(element);
+    if (classes && classes.length > 0) {
+      selector += '.' + classes.join('.');
+    }
+
+    // Add nth-child if needed for uniqueness
+    const parent: Element | null = element.parentElement;
+    if (parent) {
+      const siblings = Array.from(parent.children);
+      const index = siblings.indexOf(element);
+      if (siblings.filter((s: Element) => s.tagName === element.tagName).length > 1) {
+        selector += `:nth-child(${index + 1})`;
+      }
+    }
+
+    let fullSelector = selector;
+    if (knownParentSelector) {
+      fullSelector = `${knownParentSelector} > ${selector}`;
+    } else if (parent && parent !== document.body) {
+      // Fallback to recursively generating parent selector if not provided
+      fullSelector = `${this.generateSelector(parent)} > ${selector}`;
+    }
+
     this.selectorCache.set(element, fullSelector);
     return fullSelector;
   }
@@ -464,6 +477,7 @@ export class DOMSimplifier {
       maxDepth?: number;
       maxNodes?: number;
       includeText?: boolean;
+      ignoreElements?: WeakSet<Element> | Set<Element>;
     } = {},
   ): SimplifiedNode {
     return DOMSimplifier.getInstance().simplifyElement(element, options);
