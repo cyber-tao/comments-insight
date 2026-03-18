@@ -75,3 +75,5 @@ gha-creds-*.json
 testmd/
 .serena/
 .spec-workflow/
+.codex/
+.kiro/
