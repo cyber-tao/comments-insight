@@ -15,6 +15,7 @@
  */
 
 import { LOG_PREFIX, STORAGE, DEFAULTS, LOG_LEVELS } from '@/config/constants';
+import { Mutex } from './promise';
 
 interface StoredSettings {
   developerMode?: boolean;
@@ -122,6 +123,7 @@ export class Logger {
   private static isDevelopment = false;
   private static initialized = false;
   private static storageConfigLoaded = false;
+  private static logMutex = new Mutex();
 
   private static initializeSync(): void {
     if (this.initialized) {
@@ -341,6 +343,7 @@ export class Logger {
   }
 
   private static async appendSystemLogKey(logKey: string): Promise<void> {
+    const release = await this.logMutex.acquire();
     try {
       const index = await this.getSystemLogIndex();
       const next = index.includes(logKey) ? index : [...index, logKey];
@@ -356,6 +359,8 @@ export class Logger {
       await this.setSystemLogIndex(next);
     } catch (error) {
       console.error('[Logger] Cleanup error:', error);
+    } finally {
+      release();
     }
   }
 
@@ -367,7 +372,7 @@ export class Logger {
     try {
       const storage = await chrome.storage.local.get(null);
       let logs = Object.entries(storage)
-        .filter(([key]) => key.startsWith('log_'))
+        .filter(([key]) => key.startsWith(LOG_PREFIX.SYSTEM))
         .map(([, value]) => value as LogEntry)
         .sort((a, b) => b.timestamp - a.timestamp);
 
@@ -422,7 +427,7 @@ export class Logger {
         await chrome.storage.local.remove(keys);
       } else {
         const storage = await chrome.storage.local.get(null);
-        const logKeys = Object.keys(storage).filter((key) => key.startsWith('log_'));
+        const logKeys = Object.keys(storage).filter((key) => key.startsWith(LOG_PREFIX.SYSTEM));
 
         if (logKeys.length > 0) {
           await chrome.storage.local.remove(logKeys);

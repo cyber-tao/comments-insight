@@ -125,25 +125,25 @@ export class CommentExtractor {
    * @returns Validated comments
    */
   private validateComments(comments: Comment[], platform: Platform): Comment[] {
-    return comments
-      .filter((comment) => {
-        // Must have content
-        if (!comment.content || comment.content.trim().length === 0) {
-          return false;
-        }
+    return comments.reduce<Comment[]>((acc, comment) => {
+      // Must have content
+      if (!comment.content || comment.content.trim().length === 0) {
+        return acc;
+      }
 
-        // Must have username
-        if (!comment.username || comment.username.trim().length === 0) {
-          return false;
-        }
+      // Must have username
+      if (!comment.username || comment.username.trim().length === 0) {
+        return acc;
+      }
 
-        return true;
-      })
-      .map((comment) => ({
+      acc.push({
         ...comment,
         platform, // Ensure platform is set
         likes: Math.max(0, comment.likes || 0), // Ensure non-negative
         replies: comment.replies || [], // Ensure replies array exists
-      }));
+      });
+
+      return acc;
+    }, []);
   }
 }

@@ -22,6 +22,7 @@ export function useTask(options: UseTaskOptions = {}) {
   const { onTaskComplete, onStatusRefresh } = options;
   const [currentTask, setCurrentTask] = useState<CurrentTask | null>(null);
   const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const monitorGenerationRef = useRef(0);
   const isUnmountedRef = useRef(false);
   const isStartingRef = useRef(false);
   const hasActiveTask = (task: CurrentTask | null): boolean =>
@@ -40,18 +41,21 @@ export function useTask(options: UseTaskOptions = {}) {
 
   const monitorTask = useCallback(
     async (taskId: string) => {
+      monitorGenerationRef.current += 1;
+      const currentGeneration = monitorGenerationRef.current;
+
       if (monitorTimeoutRef.current) {
         clearTimeout(monitorTimeoutRef.current);
         monitorTimeoutRef.current = null;
       }
 
       const checkStatus = async () => {
-        if (isUnmountedRef.current) return;
+        if (isUnmountedRef.current || monitorGenerationRef.current !== currentGeneration) return;
 
         try {
           const task = await ExtensionAPI.getTaskStatus(taskId);
 
-          if (isUnmountedRef.current) return;
+          if (isUnmountedRef.current || monitorGenerationRef.current !== currentGeneration) return;
 
           if (task) {
             const updatedTask: CurrentTask = {

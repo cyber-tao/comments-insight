@@ -359,6 +359,10 @@ export async function handleExtractionCompleted(
           await context.storageManager.saveHistory(historyItem);
         } catch (saveError) {
           Logger.error('[ExtractionHandler] Failed to save extraction history', { saveError });
+          pending.reject(
+            new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save extraction history'),
+          );
+          return { success: false };
         }
       }
     }
@@ -712,6 +716,7 @@ export async function handleStartAnalysis(
       }
     } catch (saveError) {
       Logger.error('[ExtractionHandler] Failed to save analysis history', { saveError });
+      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save analysis history');
     }
 
     return {
@@ -738,12 +743,8 @@ export async function handleAIExtractContent(
     const settings = await context.storageManager.getSettings();
     const allComments: Comment[] = [];
 
-    // Process chunks sequentially (or with limited concurrency if we implement it)
-    // For now, sequential to avoid rate limits
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      if (!chunk.trim()) continue;
-
+    const tasks = chunks.map((chunk, i) => async () => {
+      if (!chunk.trim()) return [];
       try {
         const response = await context.aiService.callAI({
           prompt: chunk,
@@ -758,11 +759,19 @@ export async function handleAIExtractContent(
           if (!c.likes) c.likes = 0;
           if (!c.replies) c.replies = [];
         });
-        allComments.push(...(chunkComments as Comment[]));
+        return chunkComments as Comment[];
       } catch (e) {
         Logger.warn('[ExtractionHandler] Failed to extract from chunk', { index: i, error: e });
-        // Continue to next chunk
+        return [];
       }
+    });
+
+    const { runWithConcurrencyLimit } = await import('../../utils/promise');
+    const { AI } = await import('@/config/constants');
+    const results = await runWithConcurrencyLimit(tasks, AI.MAX_CONCURRENT_REQUESTS || 3);
+
+    for (const chunkComments of results) {
+      allComments.push(...chunkComments);
     }
 
     return { comments: allComments };

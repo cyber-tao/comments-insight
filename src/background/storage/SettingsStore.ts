@@ -18,6 +18,7 @@ import {
 import { Logger } from '../../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../../utils/errors';
 import type { EncryptionService } from './EncryptionService';
+import { Mutex } from '@/utils/promise';
 
 export const DEFAULT_SETTINGS: Settings = {
   maxComments: DEFAULTS.MAX_COMMENTS,
@@ -47,6 +48,9 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export class SettingsStore {
+  private saveMutex = new Mutex();
+  private tokenMutex = new Mutex();
+
   constructor(private readonly encryptionService: EncryptionService) {}
 
   private normalizeCrawlingDomain(domain: string): string {
@@ -167,6 +171,15 @@ export class SettingsStore {
   }
 
   async saveSettings(settings: Partial<Settings>): Promise<void> {
+    const release = await this.saveMutex.acquire();
+    try {
+      await this._saveSettings(settings);
+    } finally {
+      release();
+    }
+  }
+
+  private async _saveSettings(settings: Partial<Settings>): Promise<void> {
     try {
       await this.encryptionService.ensureEncryptionReady();
       Logger.debug('[SettingsStore] Saving settings');
@@ -210,6 +223,7 @@ export class SettingsStore {
   }
 
   async updateSelectorCache(hostname: string, selector: string): Promise<void> {
+    const release = await this.saveMutex.acquire();
     try {
       await this.encryptionService.ensureEncryptionReady();
       const settings = await this.getSettings();
@@ -226,11 +240,13 @@ export class SettingsStore {
         successCount: 1,
       });
 
-      await this.saveSettings({ selectorCache: filtered });
+      await this._saveSettings({ selectorCache: filtered });
       Logger.info('[SettingsStore] Selector cache updated', { hostname, selector });
     } catch (error) {
       Logger.error('[SettingsStore] Failed to update selector cache', { error });
       throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to update selector cache');
+    } finally {
+      release();
     }
   }
 
@@ -262,6 +278,7 @@ export class SettingsStore {
   }
 
   async syncCrawlingConfigs(): Promise<{ added: number; updated: number }> {
+    const release = await this.saveMutex.acquire();
     let added = 0;
     let updated = 0;
     try {
@@ -313,16 +330,19 @@ export class SettingsStore {
         }
       }
 
-      await this.saveSettings({ crawlingConfigs: merged });
+      await this._saveSettings({ crawlingConfigs: merged });
       Logger.info('[SettingsStore] Crawling configs synced successfully', { added, updated });
       return { added, updated };
     } catch (error) {
       Logger.error('[SettingsStore] Failed to sync crawling configs', { error });
       throw error;
+    } finally {
+      release();
     }
   }
 
   async saveCrawlingConfig(config: CrawlingConfig): Promise<void> {
+    const release = await this.saveMutex.acquire();
     try {
       await this.encryptionService.ensureEncryptionReady();
       const settings = await this.getSettings();
@@ -349,11 +369,13 @@ export class SettingsStore {
         configs.push(normalizedConfig);
       }
 
-      await this.saveSettings({ crawlingConfigs: configs });
+      await this._saveSettings({ crawlingConfigs: configs });
       Logger.info('[SettingsStore] Crawling config saved', { domain: normalizedDomain });
     } catch (error) {
       Logger.error('[SettingsStore] Failed to save crawling config', { error });
       throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save crawling config');
+    } finally {
+      release();
     }
   }
 
@@ -371,6 +393,7 @@ export class SettingsStore {
   }
 
   async importSettings(data: string): Promise<void> {
+    const release = await this.saveMutex.acquire();
     try {
       const settings = JSON.parse(data) as Settings;
 
@@ -390,7 +413,7 @@ export class SettingsStore {
         crawlingConfigs: currentSettings.crawlingConfigs,
         selectorCache: currentSettings.selectorCache,
       };
-      await this.saveSettings(merged);
+      await this._saveSettings(merged);
       Logger.info('[SettingsStore] Settings imported successfully');
     } catch (error) {
       Logger.error('[SettingsStore] Failed to import settings', { error });
@@ -400,10 +423,13 @@ export class SettingsStore {
       throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to import settings', {
         originalError: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      release();
     }
   }
 
   async recordTokenUsage(tokens: number): Promise<void> {
+    const release = await this.tokenMutex.acquire();
     try {
       const stats = await this.getTokenStats();
       const now = new Date();
@@ -421,6 +447,8 @@ export class SettingsStore {
       Logger.debug('[SettingsStore] Token usage recorded', { tokens, stats });
     } catch (error) {
       Logger.error('[SettingsStore] Failed to record token usage', { error });
+    } finally {
+      release();
     }
   }
 

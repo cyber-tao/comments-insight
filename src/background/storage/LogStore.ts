@@ -1,7 +1,10 @@
 import { STORAGE, DEFAULTS } from '@/config/constants';
 import { Logger } from '../../utils/logger';
+import { Mutex } from '@/utils/promise';
 
 export class LogStore {
+  private logMutex = new Mutex();
+
   async saveAiLog(
     logKey: string,
     entry: { type: 'extraction' | 'analysis'; timestamp: number; prompt: string; response: string },
@@ -38,6 +41,7 @@ export class LogStore {
   }
 
   private async appendAiLogKey(logKey: string): Promise<void> {
+    const release = await this.logMutex.acquire();
     try {
       const index = await this.getAiLogIndex();
       const next = index.includes(logKey) ? index : [...index, logKey];
@@ -55,6 +59,8 @@ export class LogStore {
       Logger.warn('[LogStore] Failed to cleanup AI logs', {
         error: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      release();
     }
   }
 }
