@@ -194,7 +194,7 @@ export class AIService {
               prompt,
               response: content,
               timestamp: Date.now(),
-            });
+            }).catch((e) => Logger.warn('Failed to log to file', { error: e }));
 
             return { content, tokensUsed, finishReason };
           } catch (error) {

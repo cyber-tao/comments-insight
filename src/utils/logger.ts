@@ -370,10 +370,12 @@ export class Logger {
 
   static async getLogsFiltered(filter: LogFilter = {}): Promise<LogEntry[]> {
     try {
-      const storage = await chrome.storage.local.get(null);
-      let logs = Object.entries(storage)
-        .filter(([key]) => key.startsWith(LOG_PREFIX.SYSTEM))
-        .map(([, value]) => value as LogEntry)
+      const index = await this.getSystemLogIndex();
+      if (index.length === 0) return [];
+
+      const storage = await chrome.storage.local.get(index);
+      let logs = Object.values(storage)
+        .map((value) => value as LogEntry)
         .sort((a, b) => b.timestamp - a.timestamp);
 
       if (filter.level) {

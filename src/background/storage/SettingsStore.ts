@@ -240,7 +240,10 @@ export class SettingsStore {
         successCount: 1,
       });
 
-      await this._saveSettings({ selectorCache: filtered });
+      filtered.sort((a, b) => b.lastUsed - a.lastUsed);
+      const limitedCache = filtered.slice(0, 50);
+
+      await this._saveSettings({ selectorCache: limitedCache });
       Logger.info('[SettingsStore] Selector cache updated', { hostname, selector });
     } catch (error) {
       Logger.error('[SettingsStore] Failed to update selector cache', { error });

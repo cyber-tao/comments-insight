@@ -107,11 +107,11 @@ export class AIErrorHandler {
       : 'analysis';
   }
 
-  static logToFile(
+  static async logToFile(
     storageManager: StorageManager,
     type: 'extraction' | 'analysis',
     data: { prompt: string; response: string; timestamp: number },
-  ) {
+  ): Promise<void> {
     Logger.debug(`[AI_LOG_${type.toUpperCase()}]`, {
       timestamp: data.timestamp,
       type,
@@ -121,18 +121,19 @@ export class AIErrorHandler {
       responseLength: data.response.length,
     });
 
-    storageManager.getSettings().then((settings) => {
+    try {
+      const settings = await storageManager.getSettings();
       if (!settings.developerMode) return;
       const logKey = `${LOG_PREFIX.AI}${type}_${data.timestamp}`;
-      storageManager
-        .saveAiLog(logKey, {
-          type,
-          timestamp: data.timestamp,
-          prompt: data.prompt,
-          response: data.response,
-        })
-        .catch((error: unknown) => Logger.error('[AIErrorHandler] Failed to save log', { error }));
-    });
+      await storageManager.saveAiLog(logKey, {
+        type,
+        timestamp: data.timestamp,
+        prompt: data.prompt,
+        response: data.response,
+      });
+    } catch (error) {
+      Logger.error('[AIErrorHandler] Failed to save log', { error });
+    }
   }
 
   static classifyCallError(
@@ -167,7 +168,7 @@ export class AIErrorHandler {
         prompt,
         response: error.message,
         timestamp: Date.now(),
-      });
+      }).catch((e) => Logger.warn('Failed to log to file', { error: e }));
       throw error;
     }
 
@@ -182,7 +183,7 @@ export class AIErrorHandler {
       prompt,
       response: error instanceof Error ? error.message : String(error),
       timestamp: Date.now(),
-    });
+    }).catch((e) => Logger.warn('Failed to log to file', { error: e }));
     throw error;
   }
 }

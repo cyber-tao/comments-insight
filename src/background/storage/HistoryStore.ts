@@ -3,6 +3,7 @@ import { STORAGE, HISTORY } from '@/config/constants';
 import LZString from 'lz-string';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
+import { Mutex } from '@/utils/promise';
 
 export interface HistoryIndexEntry {
   id: string;
@@ -19,8 +20,10 @@ export interface HistorySortedIndex {
 
 export class HistoryStore {
   private sortedIndexCache: HistorySortedIndex | null = null;
+  private mutex = new Mutex();
 
   async saveHistory(item: HistoryItem): Promise<void> {
+    const release = await this.mutex.acquire();
     try {
       const baseKey = `${STORAGE.HISTORY_KEY}_${item.id}`;
       const compressedComments = LZString.compressToUTF16(JSON.stringify(item.comments));
@@ -64,6 +67,8 @@ export class HistoryStore {
         historyId: item.id,
         originalError: error instanceof Error ? error.message : String(error),
       });
+    } finally {
+      release();
     }
   }
 
@@ -81,6 +86,7 @@ export class HistoryStore {
   }
 
   async clearAllHistory(): Promise<number> {
+    const release = await this.mutex.acquire();
     try {
       const ids = await this.getHistoryIndex();
       const keysToRemove: string[] = [];
@@ -122,6 +128,8 @@ export class HistoryStore {
     } catch (error) {
       Logger.error('[HistoryStore] Failed to clear all history', { error });
       return 0;
+    } finally {
+      release();
     }
   }
 
@@ -280,6 +288,15 @@ export class HistoryStore {
   }
 
   async deleteHistoryItem(id: string): Promise<void> {
+    const release = await this.mutex.acquire();
+    try {
+      await this._deleteHistoryItem(id);
+    } finally {
+      release();
+    }
+  }
+
+  private async _deleteHistoryItem(id: string): Promise<void> {
     try {
       const baseKey = `${STORAGE.HISTORY_KEY}_${id}`;
       const meta = await chrome.storage.local.get(baseKey);
@@ -352,7 +369,7 @@ export class HistoryStore {
 
         for (const oldId of toRemove) {
           try {
-            await this.deleteHistoryItem(oldId);
+            await this._deleteHistoryItem(oldId);
           } catch (e) {
             Logger.warn('[HistoryStore] Failed to prune history item', { id: oldId, error: e });
           }

@@ -150,7 +150,16 @@ describe('Logger', () => {
         log_system_error_2: { level: 'ERROR', timestamp: 2000, message: 'Log 2' },
         other_key: 'value',
       };
-      mockStorageGet.mockResolvedValue(mockLogs);
+      
+      mockStorageGet.mockImplementation((keys) => {
+        if (keys === 'system_log_index') {
+          return Promise.resolve({ system_log_index: ['log_system_info_1', 'log_system_error_2'] });
+        }
+        return Promise.resolve({
+          log_system_info_1: mockLogs.log_system_info_1,
+          log_system_error_2: mockLogs.log_system_error_2,
+        });
+      });
 
       const logs = await Logger.getLogs();
 
@@ -159,16 +168,16 @@ describe('Logger', () => {
     });
 
     it('should clear logs', async () => {
-      const mockLogs = {
-        log_1: {},
-        log_2: {},
-        other: {},
-      };
-      mockStorageGet.mockResolvedValue(mockLogs);
+      mockStorageGet.mockImplementation((keys) => {
+        if (keys === 'system_log_index') {
+          return Promise.resolve({ system_log_index: ['log_system_1', 'log_system_2'] });
+        }
+        return Promise.resolve({});
+      });
 
       await Logger.clearLogs();
 
-      expect(mockStorageRemove).toHaveBeenCalledWith(['log_1', 'log_2']);
+      expect(mockStorageRemove).toHaveBeenCalledWith(['log_system_1', 'log_system_2', 'system_log_index']);
     });
   });
 });

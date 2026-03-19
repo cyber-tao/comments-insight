@@ -4,6 +4,7 @@ import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
 import { ERROR_KEYS, LIMITS, RETRY, STORAGE, TASK, TIMING, TIMEOUT } from '@/config/constants';
 import i18n from '@/utils/i18n';
+import { Mutex } from '@/utils/promise';
 
 /**
  * Result returned when a task completes successfully.
@@ -91,6 +92,7 @@ export class TaskManager {
   private readonly enablePersistence: boolean;
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
   private isProcessing = false;
+  private stateMutex = new Mutex();
 
   constructor(options?: { enablePersistence?: boolean }) {
     this.enablePersistence = options?.enablePersistence === true;
@@ -660,6 +662,7 @@ export class TaskManager {
     if (!this.enablePersistence) {
       return;
     }
+    const release = await this.stateMutex.acquire();
     try {
       await ErrorHandler.withRetry(
         async () => {
@@ -680,6 +683,8 @@ export class TaskManager {
       );
     } catch (error) {
       Logger.warn('[TaskManager] Failed to persist task state', { error });
+    } finally {
+      release();
     }
   }
 

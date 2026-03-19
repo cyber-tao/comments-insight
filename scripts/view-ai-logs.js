@@ -12,7 +12,15 @@
  */
 
 async function viewAILogs() {
-  const storage = await chrome.storage.local.get(null);
+  const indexResult = await chrome.storage.local.get('ai_log_index');
+  const aiLogKeys = indexResult['ai_log_index'] || [];
+  
+  if (aiLogKeys.length === 0) {
+    console.log('Found 0 AI logs.');
+    return [];
+  }
+
+  const storage = await chrome.storage.local.get(aiLogKeys);
   const logs = Object.entries(storage)
     .filter(([key]) => key.startsWith('ai_log_'))
     .map(([key, value]) => ({ key, ...value }))
@@ -50,15 +58,15 @@ async function viewLatestLog() {
 }
 
 async function clearAILogs() {
-  const storage = await chrome.storage.local.get(null);
-  const logKeys = Object.keys(storage).filter((key) => key.startsWith('ai_log_'));
+  const indexResult = await chrome.storage.local.get('ai_log_index');
+  const logKeys = indexResult['ai_log_index'] || [];
 
   if (logKeys.length === 0) {
     console.log('No logs to clear');
     return;
   }
 
-  await chrome.storage.local.remove(logKeys);
+  await chrome.storage.local.remove([...logKeys, 'ai_log_index']);
   console.log(`Cleared ${logKeys.length} logs`);
 }
 

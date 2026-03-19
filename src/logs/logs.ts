@@ -123,7 +123,15 @@ function isSystemLog(value: unknown): value is SystemLog {
 }
 
 async function loadLogs() {
-  const storage = await chrome.storage.local.get(null);
+  const indexResult = await chrome.storage.local.get([
+    STORAGE.AI_LOG_INDEX_KEY,
+    STORAGE.SYSTEM_LOG_INDEX_KEY,
+  ]);
+  const aiLogKeys = (indexResult[STORAGE.AI_LOG_INDEX_KEY] as string[]) || [];
+  const systemLogKeys = (indexResult[STORAGE.SYSTEM_LOG_INDEX_KEY] as string[]) || [];
+  const allKeys = [...aiLogKeys, ...systemLogKeys];
+
+  const storage = allKeys.length > 0 ? await chrome.storage.local.get(allKeys) : {};
 
   // Load AI logs
   const aiLogs = Object.entries(storage)
@@ -432,7 +440,11 @@ async function clearLogs() {
   if (!confirm(i18n.t('logs.confirmClearLogs'))) return;
 
   const logKeys = allLogs.map((log) => log.key);
-  await chrome.storage.local.remove(logKeys);
+  await chrome.storage.local.remove([
+    ...logKeys,
+    STORAGE.AI_LOG_INDEX_KEY,
+    STORAGE.SYSTEM_LOG_INDEX_KEY,
+  ]);
   allLogs = [];
   displayLogs();
   updateStats();
