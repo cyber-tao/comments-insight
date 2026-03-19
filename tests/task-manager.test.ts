@@ -106,6 +106,38 @@ describe('TaskManager', () => {
       });
     });
 
+    it('should allow interrupted task to be recovered for late completion', async () => {
+      const now = Date.now();
+      mockStorageGet.mockResolvedValue({
+        [STORAGE.TASK_STATE_KEY]: {
+          tasks: [
+            {
+              id: 'task_running',
+              type: 'extract',
+              status: 'running',
+              url: 'https://example.com/a',
+              platform: 'Generic',
+              progress: 42,
+              startTime: now - 1000,
+              tokensUsed: 0,
+            },
+          ],
+          queue: ['task_running'],
+          currentTaskId: 'task_running',
+          savedAt: now - 100,
+        },
+      });
+
+      const persistentTaskManager = new TaskManager({ enablePersistence: true });
+      await persistentTaskManager.initialize();
+
+      const recovered = persistentTaskManager.recoverInterruptedTask('task_running');
+
+      expect(recovered?.status).toBe('running');
+      expect(recovered?.error).toBeUndefined();
+      expect(recovered?.endTime).toBeUndefined();
+    });
+
     it('should normalize malformed persisted state instead of crashing', async () => {
       mockStorageGet.mockResolvedValue({
         [STORAGE.TASK_STATE_KEY]: {
@@ -127,6 +159,52 @@ describe('TaskManager', () => {
           currentTaskId: null,
         }),
       });
+    });
+
+    it('should drop tasks with invalid nested progress payloads', async () => {
+      const now = Date.now();
+      mockStorageGet.mockResolvedValue({
+        [STORAGE.TASK_STATE_KEY]: {
+          tasks: [
+            {
+              id: 'task_valid',
+              type: 'extract',
+              status: 'completed',
+              url: 'https://example.com/ok',
+              platform: 'Generic',
+              progress: 100,
+              startTime: now - 1000,
+              endTime: now,
+              tokensUsed: 3,
+            },
+            {
+              id: 'task_invalid',
+              type: 'extract',
+              status: 'running',
+              url: 'https://example.com/bad',
+              platform: 'Generic',
+              progress: 50,
+              startTime: now - 500,
+              tokensUsed: 1,
+              detailedProgress: {
+                stage: 'extracting',
+                current: 'bad',
+                total: 10,
+                estimatedTimeRemaining: 5,
+              },
+            },
+          ],
+          queue: ['task_valid', 'task_invalid'],
+          currentTaskId: 'task_invalid',
+          savedAt: now,
+        },
+      });
+
+      const persistentTaskManager = new TaskManager({ enablePersistence: true });
+      await persistentTaskManager.initialize();
+
+      expect(persistentTaskManager.getTask('task_valid')).toBeDefined();
+      expect(persistentTaskManager.getTask('task_invalid')).toBeUndefined();
     });
   });
 

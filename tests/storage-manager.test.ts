@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StorageManager } from '../src/background/StorageManager';
 import type { Settings, HistoryItem } from '../src/types';
+import { LIMITS, STORAGE, TEXT } from '../src/config/constants';
 
 // Mock chrome API
 const mockStorageGet = vi.fn();
@@ -96,6 +97,68 @@ describe('StorageManager', () => {
 
       expect(settings.maxComments).toBe(100);
       expect(settings.aiModel).toBeDefined(); // Default merged
+    });
+
+    it('should throw when storage access fails', async () => {
+      mockStorageGet.mockRejectedValue(new Error('storage unavailable'));
+
+      await expect(storageManager.getSettings()).rejects.toThrow('Failed to get settings');
+    });
+
+    it('should sanitize malformed stored settings before merging defaults', async () => {
+      mockStorageGet.mockResolvedValue({
+        settings: {
+          maxComments: 80,
+          theme: 'dark',
+          selectorCache: [
+            {
+              domain: 'example.com',
+              selectors: { commentContainer: '.comment' },
+              lastUsed: 1,
+              successCount: 2,
+            },
+            {
+              domain: 'broken.com',
+              selectors: {},
+              lastUsed: 'bad',
+              successCount: 0,
+            },
+          ],
+          crawlingConfigs: [
+            {
+              id: 'cfg_1',
+              domain: 'example.com',
+              container: { selector: '.list', type: 'css' },
+              item: { selector: '.item', type: 'css' },
+              fields: [],
+              lastUpdated: 1,
+            },
+            {
+              id: 'cfg_2',
+              domain: '',
+              container: { selector: '.list', type: 'css' },
+              item: { selector: '.item', type: 'css' },
+              fields: [],
+              lastUpdated: 1,
+            },
+          ],
+          domAnalysisConfig: {
+            initialDepth: 2,
+            expandDepth: 4,
+            maxDepth: 6,
+          },
+        },
+      });
+
+      const settings = await storageManager.getSettings();
+
+      expect(settings.maxComments).toBe(80);
+      expect(settings.theme).toBe('dark');
+      expect(settings.selectorCache).toHaveLength(1);
+      expect(settings.selectorCache[0].domain).toBe('example.com');
+      expect(settings.crawlingConfigs.some((config) => config.domain === 'example.com')).toBe(true);
+      expect(settings.crawlingConfigs.some((config) => config.id === 'cfg_2')).toBe(false);
+      expect(settings.domAnalysisConfig).toEqual({ initialDepth: 2, expandDepth: 4, maxDepth: 6 });
     });
   });
 
@@ -236,6 +299,110 @@ describe('StorageManager', () => {
       expect(mockStorageSet).toHaveBeenCalledWith({
         history_index: ['2'],
       });
+    });
+  });
+
+  describe('AI Log Operations', () => {
+    it('should truncate oversized AI log fields before saving', async () => {
+      const longPrompt = 'p'.repeat(LIMITS.AI_LOG_MAX_FIELD_LENGTH + 50);
+      const longResponse = 'r'.repeat(LIMITS.AI_LOG_MAX_FIELD_LENGTH + 75);
+
+      await storageManager.saveAiLog('ai_log_test_1', {
+        type: 'analysis',
+        timestamp: 1,
+        prompt: longPrompt,
+        response: longResponse,
+      });
+
+      const firstPayload = mockStorageSet.mock.calls[0]?.[0] as Record<string, unknown>;
+      const entry = firstPayload?.ai_log_test_1 as { prompt: string; response: string } | undefined;
+
+      expect(entry?.prompt.length).toBe(LIMITS.AI_LOG_MAX_FIELD_LENGTH);
+      expect(entry?.prompt.endsWith(TEXT.PREVIEW_SUFFIX)).toBe(true);
+      expect(entry?.response.length).toBe(LIMITS.AI_LOG_MAX_FIELD_LENGTH);
+      expect(entry?.response.endsWith(TEXT.PREVIEW_SUFFIX)).toBe(true);
+    });
+
+    it('should evict oldest AI logs when total log budget is exceeded', async () => {
+      const storageState: Record<string, unknown> = {};
+
+      mockStorageGet.mockImplementation(async (key: string | string[]) => {
+        if (Array.isArray(key)) {
+          return key.reduce<Record<string, unknown>>((accumulator, currentKey) => {
+            accumulator[currentKey] = storageState[currentKey];
+            return accumulator;
+          }, {});
+        }
+
+        return { [key]: storageState[key] };
+      });
+
+      mockStorageSet.mockImplementation(async (payload: Record<string, unknown>) => {
+        Object.assign(storageState, payload);
+      });
+
+      mockStorageRemove.mockImplementation(async (keys: string | string[]) => {
+        const keysToRemove = Array.isArray(keys) ? keys : [keys];
+        for (const key of keysToRemove) {
+          delete storageState[key];
+        }
+      });
+
+      const oversizedField = 'x'.repeat(LIMITS.AI_LOG_MAX_FIELD_LENGTH + 500);
+
+      for (let index = 0; index < 10; index += 1) {
+        await storageManager.saveAiLog(`ai_log_test_${index}`, {
+          type: 'extraction',
+          timestamp: index,
+          prompt: oversizedField,
+          response: oversizedField,
+        });
+      }
+
+      const index = (storageState[STORAGE.AI_LOG_INDEX_KEY] as string[]) || [];
+
+      expect(index.length).toBeLessThan(10);
+      expect(index).not.toContain('ai_log_test_0');
+      expect(index.at(-1)).toBe('ai_log_test_9');
+    });
+
+    it('should sanitize malformed AI log index entries before appending new logs', async () => {
+      const storageState: Record<string, unknown> = {
+        [STORAGE.AI_LOG_INDEX_KEY]: [123, '', 'ai_log_test_existing'],
+        ai_log_test_existing: {
+          type: 'analysis',
+          timestamp: 1,
+          prompt: 'old prompt',
+          response: 'old response',
+        },
+      };
+
+      mockStorageGet.mockImplementation(async (key: string | string[]) => {
+        if (Array.isArray(key)) {
+          return key.reduce<Record<string, unknown>>((accumulator, currentKey) => {
+            accumulator[currentKey] = storageState[currentKey];
+            return accumulator;
+          }, {});
+        }
+
+        return { [key]: storageState[key] };
+      });
+
+      mockStorageSet.mockImplementation(async (payload: Record<string, unknown>) => {
+        Object.assign(storageState, payload);
+      });
+
+      await storageManager.saveAiLog('ai_log_test_new', {
+        type: 'extraction',
+        timestamp: 2,
+        prompt: 'new prompt',
+        response: 'new response',
+      });
+
+      expect(storageState[STORAGE.AI_LOG_INDEX_KEY]).toEqual([
+        'ai_log_test_existing',
+        'ai_log_test_new',
+      ]);
     });
   });
 });

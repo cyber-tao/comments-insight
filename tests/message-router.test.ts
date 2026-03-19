@@ -58,6 +58,7 @@ vi.mock('../src/background/handlers/misc', () => ({
   handleEnsureContentScript: vi.fn().mockResolvedValue({ injected: true }),
   handleGetAvailableModels: vi.fn().mockResolvedValue({ models: ['gpt-4'] }),
   handleTestModel: vi.fn().mockResolvedValue({ success: true }),
+  handleTestSelector: vi.fn().mockResolvedValue({ found: true }),
 }));
 
 // Mock services
@@ -136,7 +137,7 @@ describe('MessageRouter', () => {
 
     it('should handle SAVE_SETTINGS message', async () => {
       const result = await router.handleMessage(
-        { type: MESSAGES.SAVE_SETTINGS, payload: { maxComments: 200 } },
+        { type: MESSAGES.SAVE_SETTINGS, payload: { settings: { maxComments: 200 } } },
         mockSender,
       );
 
@@ -169,7 +170,10 @@ describe('MessageRouter', () => {
 
     it('should handle START_EXTRACTION message', async () => {
       const result = await router.handleMessage(
-        { type: MESSAGES.START_EXTRACTION, payload: { maxComments: 100 } },
+        {
+          type: MESSAGES.START_EXTRACTION,
+          payload: { url: 'https://example.com/post', maxComments: 100 },
+        },
         mockSender,
       );
 
@@ -178,11 +182,26 @@ describe('MessageRouter', () => {
 
     it('should handle GET_AVAILABLE_MODELS message', async () => {
       const result = await router.handleMessage(
-        { type: MESSAGES.GET_AVAILABLE_MODELS },
+        {
+          type: MESSAGES.GET_AVAILABLE_MODELS,
+          payload: { apiUrl: 'https://api.test', apiKey: '' },
+        },
         mockSender,
       );
 
       expect(result).toEqual({ models: ['gpt-4'] });
+    });
+
+    it('should reject invalid payload before dispatching', async () => {
+      await expect(
+        router.handleMessage(
+          { type: MESSAGES.START_EXTRACTION, payload: { maxComments: 100 } } as Message,
+          mockSender,
+        ),
+      ).rejects.toMatchObject({
+        code: ErrorCode.VALIDATION_ERROR,
+        message: expect.stringContaining('Invalid payload for START_EXTRACTION'),
+      });
     });
 
     it('should throw error for unknown message type', async () => {

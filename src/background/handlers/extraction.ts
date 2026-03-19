@@ -1,4 +1,4 @@
-import { Message, Comment, Task, TaskResolver, CrawlingConfig } from '../../types';
+import { Message, Comment, Task, CrawlingConfig } from '../../types';
 import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
@@ -11,6 +11,7 @@ import {
   ANALYSIS_FORMAT,
   STORAGE,
   TIMEOUT,
+  TIMING,
   TEXT,
 } from '@/config/constants';
 import { getDomain } from '../../utils/url';
@@ -80,17 +81,10 @@ interface ExtractionCompletionResponse {
   success: boolean;
 }
 
-interface PendingTaskEntry extends TaskResolver {
-  timeoutId: ReturnType<typeof setTimeout>;
-  cleanup: () => void;
-}
-
-type PendingTaskMap = Map<string, PendingTaskEntry>;
-
-interface WaitForPendingTaskOptions {
-  map: PendingTaskMap;
+interface WaitForTaskCompletionOptions {
   taskId: string;
   signal: AbortSignal;
+  context: HandlerContext;
   tabId: number;
   timeoutMs: number;
   timeoutMessage: string;
@@ -112,21 +106,6 @@ export function chunkDomText(
   return Tokenizer.chunkText(structure, maxTokens);
 }
 
-// Map to hold pending task resolvers
-const pendingExtractionTasks: PendingTaskMap = new Map();
-const pendingConfigTasks: PendingTaskMap = new Map();
-
-function takePendingTask(map: PendingTaskMap, taskId: string): PendingTaskEntry | undefined {
-  const pending = map.get(taskId);
-  if (!pending) {
-    return undefined;
-  }
-  map.delete(taskId);
-  clearTimeout(pending.timeoutId);
-  pending.cleanup();
-  return pending;
-}
-
 function notifyCancelExtraction(tabId: number, taskId: string, contextLabel: string): void {
   chrome.tabs
     .sendMessage(tabId, {
@@ -146,26 +125,56 @@ function isExpectedAsyncAckError(error: unknown): boolean {
   );
 }
 
-function waitForPendingTaskCompletion({
-  map,
+function waitForTaskCompletion({
   taskId,
   signal,
+  context,
   tabId,
   timeoutMs,
   timeoutMessage,
   tabClosedMessage,
   cancelWarnLabel,
   timeoutWarnLabel,
-}: WaitForPendingTaskOptions): Promise<PendingTaskResult> {
+}: WaitForTaskCompletionOptions): Promise<PendingTaskResult> {
   return new Promise((resolve, reject) => {
-    const onAbort = (): void => {
-      const pending = takePendingTask(map, taskId);
-      if (!pending) {
+    let settled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let pollTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = (): void => {
+      signal.removeEventListener('abort', onAbort);
+      chrome.tabs.onRemoved?.removeListener(onTabRemoved);
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      if (pollTimeoutId) {
+        clearTimeout(pollTimeoutId);
+        pollTimeoutId = null;
+      }
+    };
+
+    const settleResolve = (result: PendingTaskResult): void => {
+      if (settled) {
         return;
       }
+      settled = true;
+      cleanup();
+      resolve(result);
+    };
 
+    const settleReject = (error: ExtensionError): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      reject(error);
+    };
+
+    const onAbort = (): void => {
       notifyCancelExtraction(tabId, taskId, cancelWarnLabel);
-      pending.reject(new ExtensionError(ErrorCode.TASK_CANCELLED, 'Task cancelled by user'));
+      settleReject(new ExtensionError(ErrorCode.TASK_CANCELLED, 'Task cancelled by user'));
     };
 
     const onTabRemoved = (removedTabId: number): void => {
@@ -173,35 +182,47 @@ function waitForPendingTaskCompletion({
         return;
       }
 
-      const pending = takePendingTask(map, taskId);
-      if (!pending) {
-        return;
-      }
-
-      pending.reject(
+      settleReject(
         new ExtensionError(ErrorCode.EXTRACTION_FAILED, tabClosedMessage, { taskId, tabId }, false),
       );
     };
 
-    const timeoutId = setTimeout(() => {
-      const pending = takePendingTask(map, taskId);
-      if (!pending) {
+    const pollTaskStatus = (): void => {
+      if (settled) {
         return;
       }
 
-      notifyCancelExtraction(tabId, taskId, timeoutWarnLabel);
-      pending.reject(new ExtensionError(ErrorCode.TIMEOUT_ERROR, timeoutMessage));
-    }, timeoutMs);
+      const task = context.taskManager.getTask(taskId);
+      if (!task) {
+        settleReject(
+          new ExtensionError(ErrorCode.TASK_NOT_FOUND, `Task not found: ${taskId}`, { taskId }),
+        );
+        return;
+      }
 
-    map.set(taskId, {
-      resolve,
-      reject,
-      timeoutId,
-      cleanup: () => {
-        signal.removeEventListener('abort', onAbort);
-        chrome.tabs.onRemoved?.removeListener(onTabRemoved);
-      },
-    });
+      if (task.status === 'completed') {
+        settleResolve({
+          tokensUsed: task.tokensUsed,
+          commentsCount: 0,
+          title: task.url,
+        });
+        return;
+      }
+
+      if (task.status === 'failed') {
+        settleReject(
+          new ExtensionError(ErrorCode.EXTRACTION_FAILED, task.error || 'Task failed', { taskId }),
+        );
+        return;
+      }
+
+      pollTimeoutId = setTimeout(pollTaskStatus, TIMING.POLL_TASK_RUNNING_MS);
+    };
+
+    timeoutId = setTimeout(() => {
+      notifyCancelExtraction(tabId, taskId, timeoutWarnLabel);
+      settleReject(new ExtensionError(ErrorCode.TIMEOUT_ERROR, timeoutMessage));
+    }, timeoutMs);
 
     if (signal.aborted) {
       onAbort();
@@ -210,6 +231,7 @@ function waitForPendingTaskCompletion({
 
     signal.addEventListener('abort', onAbort);
     chrome.tabs.onRemoved?.addListener(onTabRemoved);
+    pollTaskStatus();
   });
 }
 
@@ -265,10 +287,10 @@ export async function handleStartExtraction(
       Logger.debug('[ExtractionHandler] Message ack timeout ignored, waiting for completion');
     }
     // Hang here until we receive the completion message
-    return waitForPendingTaskCompletion({
-      map: pendingExtractionTasks,
+    return waitForTaskCompletion({
       taskId,
       signal,
+      context,
       tabId: task.tabId!,
       timeoutMs: TIMEOUT.EXTRACTION_TASK_COMPLETION_MS,
       timeoutMessage: TEXT.EXTRACTION_TASK_TIMEOUT,
@@ -293,16 +315,16 @@ export async function handleExtractionCompleted(
     return { success: false };
   }
   const { taskId, success, comments, postInfo, error } = payload;
-  const pending = takePendingTask(pendingExtractionTasks, taskId);
+  const task =
+    context.taskManager.getTask(taskId) || context.taskManager.recoverInterruptedTask(taskId);
 
-  if (!pending) {
+  if (!task) {
     Logger.warn('[ExtractionHandler] Received completion for unknown or finished task', { taskId });
     return { success: false };
   }
 
   if (success) {
     if (comments && comments.length > 0) {
-      const task = context.taskManager.getTask(taskId);
       if (task) {
         let normalizedComments = comments;
         let normalizedPostTime = postInfo?.videoTime;
@@ -359,21 +381,23 @@ export async function handleExtractionCompleted(
           await context.storageManager.saveHistory(historyItem);
         } catch (saveError) {
           Logger.error('[ExtractionHandler] Failed to save extraction history', { saveError });
-          pending.reject(
-            new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save extraction history'),
+          const historyError = new ExtensionError(
+            ErrorCode.STORAGE_WRITE_ERROR,
+            'Failed to save extraction history',
           );
+          context.taskManager.failTask(taskId, historyError.message);
           return { success: false };
         }
       }
     }
 
-    pending.resolve({
+    context.taskManager.completeTask(taskId, {
       tokensUsed: 0,
       commentsCount: comments?.length || 0,
       title: postInfo?.title || postInfo?.url,
     });
   } else {
-    pending.reject(new ExtensionError(ErrorCode.EXTRACTION_FAILED, error || 'Extraction failed'));
+    context.taskManager.failTask(taskId, error || 'Extraction failed');
   }
 
   return { success: true };
@@ -419,10 +443,10 @@ export async function handleStartConfigGeneration(
       Logger.debug('[ExtractionHandler] Message ack timeout ignored, waiting for completion');
     }
 
-    return waitForPendingTaskCompletion({
-      map: pendingConfigTasks,
+    return waitForTaskCompletion({
       taskId,
       signal,
+      context,
       tabId: task.tabId!,
       timeoutMs: TIMEOUT.CONFIG_TASK_COMPLETION_MS,
       timeoutMessage: TEXT.CONFIG_TASK_TIMEOUT,
@@ -438,7 +462,7 @@ export async function handleStartConfigGeneration(
 
 export async function handleConfigGenerationCompleted(
   message: Extract<Message, { type: 'CONFIG_GENERATION_COMPLETED' }>,
-  _context: HandlerContext,
+  context: HandlerContext,
 ): Promise<ExtractionCompletionResponse> {
   const payload = message.payload;
   if (!payload?.taskId) {
@@ -446,19 +470,18 @@ export async function handleConfigGenerationCompleted(
     return { success: false };
   }
   const { taskId, success, error } = payload;
-  const pending = takePendingTask(pendingConfigTasks, taskId);
+  const task =
+    context.taskManager.getTask(taskId) || context.taskManager.recoverInterruptedTask(taskId);
 
-  if (!pending) {
+  if (!task) {
     Logger.warn('[ExtractionHandler] Received config completion for unknown task', { taskId });
     return { success: false };
   }
 
   if (success) {
-    pending.resolve({ tokensUsed: 0, commentsCount: 0 });
+    context.taskManager.completeTask(taskId, { tokensUsed: 0, commentsCount: 0 });
   } else {
-    pending.reject(
-      new ExtensionError(ErrorCode.EXTRACTION_FAILED, error || 'Config generation failed'),
-    );
+    context.taskManager.failTask(taskId, error || 'Config generation failed');
   }
 
   return { success: true };

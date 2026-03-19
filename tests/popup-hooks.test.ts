@@ -202,9 +202,37 @@ describe('popup hooks', () => {
     expect(extensionApiMock.startExtraction).toHaveBeenCalledTimes(1);
   });
 
+  it('useTask clears stale task state when task status is missing', async () => {
+    extensionApiMock.getTasks.mockResolvedValue([
+      createTask({
+        id: TASK_ID,
+        type: 'extract',
+        status: 'pending',
+      }),
+    ]);
+    extensionApiMock.getTaskStatus.mockResolvedValue(null);
+
+    const { result } = renderHook(() => useTask());
+
+    await act(async () => {
+      await result.current.loadCurrentTask(PAGE_URL);
+      await Promise.resolve();
+    });
+
+    expect(result.current.currentTask).toBeNull();
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      '[useTask] Task status returned empty result',
+      expect.objectContaining({ taskId: TASK_ID }),
+    );
+  });
+
   it('useTask starts analysis and delegates cancellation', async () => {
     const comments = createComments();
     const metadata = { url: PAGE_URL, platform: 'youtube', title: PAGE_TITLE };
+    extensionApiMock.getTaskStatus.mockResolvedValue(
+      createTask({ id: TASK_ID, type: 'analyze', status: 'pending', progress: 0 }),
+    );
+
     const { result } = renderHook(() => useTask());
 
     await act(async () => {

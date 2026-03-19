@@ -6,6 +6,7 @@ import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
 import { MESSAGES } from '@/config/constants';
 import { HandlerContext } from './handlers/types';
+import { validateMessagePayload } from '@/utils/message-validation';
 
 import * as extractionHandlers from './handlers/extraction';
 import * as settingsHandlers from './handlers/settings';
@@ -87,8 +88,10 @@ export class MessageRouter {
    * @returns Response data
    */
   async handleMessage(message: Message, sender: chrome.runtime.MessageSender): Promise<unknown> {
+    const validatedMessage = validateMessagePayload(message);
+
     Logger.debug('[MessageRouter] Handling message', {
-      type: message.type,
+      type: validatedMessage.type,
     });
 
     const context: HandlerContext = {
@@ -99,90 +102,93 @@ export class MessageRouter {
     };
 
     try {
-      switch (message.type) {
+      switch (validatedMessage.type) {
         case MESSAGES.PING:
-          return miscHandlers.handlePing(message, context);
+          return miscHandlers.handlePing(validatedMessage, context);
 
         case MESSAGES.ENSURE_CONTENT_SCRIPT:
-          return await miscHandlers.handleEnsureContentScript(message, context);
+          return await miscHandlers.handleEnsureContentScript(validatedMessage, context);
 
         case MESSAGES.START_EXTRACTION:
-          return await extractionHandlers.handleStartExtraction(message, context);
+          return await extractionHandlers.handleStartExtraction(validatedMessage, context);
 
         case MESSAGES.START_CONFIG_GENERATION:
-          return await extractionHandlers.handleStartConfigGeneration(message, context);
+          return await extractionHandlers.handleStartConfigGeneration(validatedMessage, context);
 
         case MESSAGES.AI_ANALYZE_STRUCTURE:
-          return await extractionHandlers.handleAIAnalyzeStructure(message, context);
+          return await extractionHandlers.handleAIAnalyzeStructure(validatedMessage, context);
 
         case MESSAGES.AI_EXTRACT_CONTENT:
-          return await extractionHandlers.handleAIExtractContent(message, context);
+          return await extractionHandlers.handleAIExtractContent(validatedMessage, context);
 
         case MESSAGES.GENERATE_CRAWLING_CONFIG:
-          return await extractionHandlers.handleGenerateCrawlingConfig(message, context);
+          return await extractionHandlers.handleGenerateCrawlingConfig(validatedMessage, context);
 
         case MESSAGES.EXTRACTION_COMPLETED:
-          return await extractionHandlers.handleExtractionCompleted(message, context);
+          return await extractionHandlers.handleExtractionCompleted(validatedMessage, context);
 
         case MESSAGES.CONFIG_GENERATION_COMPLETED:
-          return await extractionHandlers.handleConfigGenerationCompleted(message, context);
+          return await extractionHandlers.handleConfigGenerationCompleted(
+            validatedMessage,
+            context,
+          );
 
         case MESSAGES.EXTRACTION_PROGRESS:
-          return extractionHandlers.handleExtractionProgress(message, context);
+          return extractionHandlers.handleExtractionProgress(validatedMessage, context);
 
         case MESSAGES.START_ANALYSIS:
-          return await extractionHandlers.handleStartAnalysis(message, context);
+          return await extractionHandlers.handleStartAnalysis(validatedMessage, context);
 
         case MESSAGES.GET_TASK_STATUS:
-          return taskHandlers.handleGetTaskStatus(message, context);
+          return taskHandlers.handleGetTaskStatus(validatedMessage, context);
 
         case MESSAGES.CANCEL_TASK:
-          return taskHandlers.handleCancelTask(message, context);
+          return taskHandlers.handleCancelTask(validatedMessage, context);
 
         case MESSAGES.GET_SETTINGS:
-          return await settingsHandlers.handleGetSettings(message, context);
+          return await settingsHandlers.handleGetSettings(validatedMessage, context);
 
         case MESSAGES.SAVE_SETTINGS:
-          return await settingsHandlers.handleSaveSettings(message, context);
+          return await settingsHandlers.handleSaveSettings(validatedMessage, context);
 
         case MESSAGES.CACHE_SELECTOR:
-          return await settingsHandlers.handleCacheSelector(message, context);
+          return await settingsHandlers.handleCacheSelector(validatedMessage, context);
 
         case MESSAGES.GET_CRAWLING_CONFIG:
-          return await settingsHandlers.handleGetCrawlingConfig(message, context);
+          return await settingsHandlers.handleGetCrawlingConfig(validatedMessage, context);
 
         case MESSAGES.SAVE_CRAWLING_CONFIG:
-          return await settingsHandlers.handleSaveCrawlingConfig(message, context);
+          return await settingsHandlers.handleSaveCrawlingConfig(validatedMessage, context);
 
         case MESSAGES.SYNC_CRAWLING_CONFIGS:
-          return await settingsHandlers.handleSyncCrawlingConfigs(message, context);
+          return await settingsHandlers.handleSyncCrawlingConfigs(validatedMessage, context);
 
         case MESSAGES.UPDATE_FIELD_VALIDATION:
-          return await settingsHandlers.handleUpdateFieldValidation(message, context);
+          return await settingsHandlers.handleUpdateFieldValidation(validatedMessage, context);
 
         case MESSAGES.GET_HISTORY:
-          return await historyHandlers.handleGetHistory(message, context);
+          return await historyHandlers.handleGetHistory(validatedMessage, context);
 
         case MESSAGES.GET_HISTORY_BY_URL:
-          return await historyHandlers.handleGetHistoryByUrl(message, context);
+          return await historyHandlers.handleGetHistoryByUrl(validatedMessage, context);
 
         case MESSAGES.EXPORT_DATA:
-          return await historyHandlers.handleExportData(message, context);
+          return await historyHandlers.handleExportData(validatedMessage, context);
 
         case MESSAGES.DELETE_HISTORY:
-          return await historyHandlers.handleDeleteHistory(message, context);
+          return await historyHandlers.handleDeleteHistory(validatedMessage, context);
 
         case MESSAGES.CLEAR_ALL_HISTORY:
-          return await historyHandlers.handleClearAllHistory(message, context);
+          return await historyHandlers.handleClearAllHistory(validatedMessage, context);
 
         case MESSAGES.GET_AVAILABLE_MODELS:
-          return await miscHandlers.handleGetAvailableModels(message, context);
+          return await miscHandlers.handleGetAvailableModels(validatedMessage, context);
 
         case MESSAGES.TEST_MODEL:
-          return await miscHandlers.handleTestModel(message, context);
+          return await miscHandlers.handleTestModel(validatedMessage, context);
 
         case MESSAGES.TEST_SELECTOR:
-          return await miscHandlers.handleTestSelector(message, context);
+          return await miscHandlers.handleTestSelector(validatedMessage, context);
 
         // Messages handled by content script, ignored by background
         case MESSAGES.GET_PLATFORM_INFO:
@@ -200,7 +206,7 @@ export class MessageRouter {
     } catch (error) {
       await ErrorHandler.handleError(
         error as Error,
-        `MessageRouter.handleMessage(${message.type})`,
+        `MessageRouter.handleMessage(${validatedMessage.type})`,
       );
       throw error;
     }

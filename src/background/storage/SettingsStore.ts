@@ -19,6 +19,7 @@ import { Logger } from '../../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../../utils/errors';
 import type { EncryptionService } from './EncryptionService';
 import { Mutex } from '@/utils/promise';
+import { sanitizeStoredSettings } from '@/utils/storage-validation';
 
 export const DEFAULT_SETTINGS: Settings = {
   maxComments: DEFAULTS.MAX_COMMENTS,
@@ -62,15 +63,15 @@ export class SettingsStore {
       await this.encryptionService.ensureEncryptionReady();
       Logger.debug('[SettingsStore] Getting settings from storage');
       const result = await chrome.storage.local.get(STORAGE.SETTINGS_KEY);
-      const settings = result[STORAGE.SETTINGS_KEY] as Settings | undefined;
+      const settings = sanitizeStoredSettings(result[STORAGE.SETTINGS_KEY]);
 
-      if (!settings) {
+      if (Object.keys(settings).length === 0) {
         Logger.info('[SettingsStore] No settings found, using defaults');
         await this.saveSettings(DEFAULT_SETTINGS);
         return DEFAULT_SETTINGS;
       }
 
-      const merged = this.mergeSettingsWithDefaults(settings as Partial<Settings>);
+      const merged = this.mergeSettingsWithDefaults(settings);
 
       const normalizedModel = this.normalizeAIModel(merged);
       merged.aiModel = {
@@ -85,9 +86,16 @@ export class SettingsStore {
       Logger.debug('[SettingsStore] Settings retrieved successfully');
       return merged;
     } catch (error) {
-      Logger.error('[SettingsStore] Failed to get settings', { error });
-      await ErrorHandler.handleError(error as Error, 'SettingsStore.getSettings');
-      return DEFAULT_SETTINGS;
+      const wrappedError =
+        error instanceof ExtensionError
+          ? error
+          : new ExtensionError(ErrorCode.STORAGE_READ_ERROR, 'Failed to get settings', {
+              originalError: error instanceof Error ? error.message : String(error),
+            });
+
+      Logger.error('[SettingsStore] Failed to get settings', { error: wrappedError });
+      await ErrorHandler.handleError(wrappedError, 'SettingsStore.getSettings');
+      throw wrappedError;
     }
   }
 

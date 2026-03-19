@@ -25,11 +25,12 @@
     "react-dom": "^19.2.0",
     "react-i18next": "^16.5.0",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@crxjs/vite-plugin": "^2.2.1",
-    "@eslint/js": "^9.39.1",
+    "@crxjs/vite-plugin": "^2.4.0",
+    "@eslint/js": "^9.39.4",
     "@testing-library/react": "^16.3.2",
     "@types/chrome": "^0.1.31",
     "@types/react": "^19.2.7",
@@ -39,7 +40,7 @@
     "@vitest/coverage-v8": "^4.0.16",
     "archiver": "^7.0.1",
     "autoprefixer": "^10.4.22",
-    "eslint": "^9.39.1",
+    "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
     "eslint-plugin-react": "^7.37.5",
@@ -48,11 +49,26 @@
     "jsdom": "^28.1.0",
     "postcss": "^8.5.6",
     "prettier": "^3.6.2",
-    "puppeteer": "^24.34.0",
+    "puppeteer": "^24.39.1",
     "tailwindcss": "^3.4.18",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.48.0",
+    "typescript-eslint": "^8.57.1",
     "vite": "^6.4.1",
     "vitest": "^4.0.14"
+  },
+  "overrides": {
+    "undici": "^7.24.4",
+    "archiver-utils": {
+      "lodash": "^4.17.23",
+      "glob": {
+        "minimatch": "^9.0.7"
+      }
+    },
+    "readdir-glob": {
+      "minimatch": "^5.1.9"
+    },
+    "flat-cache": {
+      "flatted": "^3.4.2"
+    }
   }
 }

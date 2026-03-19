@@ -28,6 +28,9 @@ chrome.runtime.onInstalled.addListener(() => {
     .getSettings()
     .then((settings) => {
       Logger.debug('Settings initialized', { settings });
+    })
+    .catch((error) => {
+      Logger.error('[Background] Failed to initialize settings on install', { error });
     });
 });
 

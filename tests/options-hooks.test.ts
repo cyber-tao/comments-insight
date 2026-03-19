@@ -226,6 +226,18 @@ describe('useSettings', () => {
     expect(result.current.saving).toBe(false);
   });
 
+  it('shows error toast when loading settings fails', async () => {
+    extensionApiMock.getSettings.mockRejectedValue(new Error('storage unavailable'));
+
+    renderHook(() => useSettings());
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(toastMock.error).toHaveBeenCalledWith('Failed to load settings: storage unavailable');
+  });
+
   it('exports settings through a download link and shows success toast', async () => {
     const { result } = renderHook(() => useSettings());
     const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');

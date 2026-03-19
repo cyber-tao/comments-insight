@@ -1,17 +1,47 @@
-import { STORAGE, DEFAULTS } from '@/config/constants';
+import { STORAGE, DEFAULTS, LIMITS, TEXT } from '@/config/constants';
 import { Logger } from '../../utils/logger';
 import { Mutex } from '@/utils/promise';
+import {
+  sanitizeAiLogEntry,
+  sanitizeHistoryIndex,
+  type StoredAiLogEntry,
+} from '@/utils/storage-validation';
 
 export class LogStore {
   private logMutex = new Mutex();
+
+  private truncateLogField(value: string): string {
+    if (value.length <= LIMITS.AI_LOG_MAX_FIELD_LENGTH) {
+      return value;
+    }
+
+    const maxLengthWithoutSuffix = Math.max(
+      0,
+      LIMITS.AI_LOG_MAX_FIELD_LENGTH - TEXT.PREVIEW_SUFFIX.length,
+    );
+    return value.slice(0, maxLengthWithoutSuffix) + TEXT.PREVIEW_SUFFIX;
+  }
+
+  private sanitizeLogEntry(entry: StoredAiLogEntry): StoredAiLogEntry {
+    return {
+      ...entry,
+      prompt: this.truncateLogField(entry.prompt),
+      response: this.truncateLogField(entry.response),
+    };
+  }
+
+  private estimateEntrySize(entry: StoredAiLogEntry): number {
+    return JSON.stringify(entry).length;
+  }
 
   async saveAiLog(
     logKey: string,
     entry: { type: 'extraction' | 'analysis'; timestamp: number; prompt: string; response: string },
   ): Promise<void> {
     try {
+      const sanitizedEntry = this.sanitizeLogEntry(entry);
       await chrome.storage.local.set({
-        [logKey]: entry,
+        [logKey]: sanitizedEntry,
       });
       await this.appendAiLogKey(logKey);
     } catch (error) {
@@ -25,8 +55,7 @@ export class LogStore {
   private async getAiLogIndex(): Promise<string[]> {
     try {
       const result = await chrome.storage.local.get(STORAGE.AI_LOG_INDEX_KEY);
-      const index = result[STORAGE.AI_LOG_INDEX_KEY];
-      return Array.isArray(index) ? index : [];
+      return sanitizeHistoryIndex(result[STORAGE.AI_LOG_INDEX_KEY]);
     } catch {
       return [];
     }
@@ -46,10 +75,48 @@ export class LogStore {
       const index = await this.getAiLogIndex();
       const next = index.includes(logKey) ? index : [...index, logKey];
 
-      if (next.length > DEFAULTS.AI_LOGS_MAX_STORED) {
-        const toRemove = next.slice(0, next.length - DEFAULTS.AI_LOGS_MAX_STORED);
-        const kept = next.slice(next.length - DEFAULTS.AI_LOGS_MAX_STORED);
-        await chrome.storage.local.remove(toRemove);
+      const storedLogs = next.length > 0 ? await chrome.storage.local.get(next) : {};
+      const keysToRemove = new Set<string>();
+
+      while (next.length - keysToRemove.size > DEFAULTS.AI_LOGS_MAX_STORED) {
+        const oldestKey = next[keysToRemove.size];
+        if (typeof oldestKey === 'string') {
+          keysToRemove.add(oldestKey);
+        }
+      }
+
+      let totalChars = next.reduce((sum, key) => {
+        if (keysToRemove.has(key)) {
+          return sum;
+        }
+
+        const entry = sanitizeAiLogEntry(storedLogs[key]);
+        if (!entry) {
+          return sum;
+        }
+
+        return sum + this.estimateEntrySize(entry);
+      }, 0);
+
+      for (const key of next) {
+        if (totalChars <= LIMITS.AI_LOG_TOTAL_CHAR_BUDGET) {
+          break;
+        }
+        if (keysToRemove.has(key)) {
+          continue;
+        }
+
+        const entry = sanitizeAiLogEntry(storedLogs[key]);
+        keysToRemove.add(key);
+        if (entry) {
+          totalChars -= this.estimateEntrySize(entry);
+        }
+      }
+
+      if (keysToRemove.size > 0) {
+        const removalList = Array.from(keysToRemove);
+        const kept = next.filter((key) => !keysToRemove.has(key));
+        await chrome.storage.local.remove(removalList);
         await this.setAiLogIndex(kept);
         return;
       }

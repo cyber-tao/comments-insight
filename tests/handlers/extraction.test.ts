@@ -55,6 +55,7 @@ function createMockContext(overrides: Partial<HandlerContext> = {}): HandlerCont
       completeTask: vi.fn(),
       failTask: vi.fn(),
       getTask: vi.fn().mockReturnValue({ maxComments: 100 }),
+      recoverInterruptedTask: vi.fn().mockReturnValue(undefined),
       getAllTasks: vi.fn().mockReturnValue([]),
       cancelTask: vi.fn(),
       incrementTokens: vi.fn(),
@@ -305,6 +306,91 @@ describe('extraction handlers', () => {
 
       const result = await handleConfigGenerationCompleted(message, context);
       expect(result).toEqual({ success: false });
+    });
+
+    it('should complete recovered extraction task when pending state is lost', async () => {
+      const context = createMockContext({
+        taskManager: {
+          ...createMockContext().taskManager,
+          recoverInterruptedTask: vi.fn().mockReturnValue({
+            id: 'task_123',
+            type: 'extract',
+            status: 'running',
+            url: 'https://example.com',
+            platform: 'example.com',
+            progress: 80,
+            startTime: Date.now(),
+            tokensUsed: 0,
+          }),
+          completeTask: vi.fn(),
+          failTask: vi.fn(),
+        },
+      } as unknown as Partial<HandlerContext>);
+
+      const message = {
+        type: 'EXTRACTION_COMPLETED' as const,
+        payload: {
+          taskId: 'task_123',
+          success: true,
+          comments: [
+            {
+              id: 'comment-1',
+              username: 'user',
+              content: 'content',
+              likes: 1,
+              timestamp: new Date().toISOString(),
+              replies: [],
+            },
+          ],
+          postInfo: {
+            url: 'https://example.com',
+            title: 'Recovered Title',
+          },
+        },
+      };
+
+      const result = await handleExtractionCompleted(message, context);
+
+      expect(result).toEqual({ success: true });
+      expect(context.storageManager.saveHistory).toHaveBeenCalledOnce();
+      expect(context.taskManager.completeTask).toHaveBeenCalledWith(
+        'task_123',
+        expect.objectContaining({ commentsCount: 1, title: 'Recovered Title' }),
+      );
+    });
+
+    it('should fail recovered config task when completion reports an error', async () => {
+      const context = createMockContext({
+        taskManager: {
+          ...createMockContext().taskManager,
+          recoverInterruptedTask: vi.fn().mockReturnValue({
+            id: 'task_123',
+            type: 'config',
+            status: 'running',
+            url: 'https://example.com',
+            platform: 'example.com',
+            progress: 60,
+            startTime: Date.now(),
+            tokensUsed: 0,
+          }),
+          completeTask: vi.fn(),
+          failTask: vi.fn(),
+        },
+      } as unknown as Partial<HandlerContext>);
+
+      const message = {
+        type: 'CONFIG_GENERATION_COMPLETED' as const,
+        payload: {
+          taskId: 'task_123',
+          success: false,
+          error: 'config failed',
+        },
+      };
+
+      const result = await handleConfigGenerationCompleted(message, context);
+
+      expect(result).toEqual({ success: true });
+      expect(context.taskManager.failTask).toHaveBeenCalledWith('task_123', 'config failed');
     });
   });
 

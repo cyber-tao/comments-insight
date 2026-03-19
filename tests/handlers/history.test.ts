@@ -388,6 +388,17 @@ describe('History Handlers', () => {
 
       expect(result).toEqual({ success: true, count: 0 });
     });
+
+    it('should propagate storage failures', async () => {
+      mockStorageManager.clearAllHistory.mockRejectedValue(new Error('clear failed'));
+
+      const message: Extract<Message, { type: 'CLEAR_ALL_HISTORY' }> = {
+        type: 'CLEAR_ALL_HISTORY',
+        payload: {},
+      };
+
+      await expect(handleClearAllHistory(message, context)).rejects.toThrow('clear failed');
+    });
   });
 
   describe('handleExportData', () => {

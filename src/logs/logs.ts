@@ -2,6 +2,11 @@ import { LOG_PREFIX, STORAGE, LOG_LEVELS, THEME } from '@/config/constants';
 import { Logger, LogLevel } from '@/utils/logger';
 import { Settings } from '@/types';
 import i18n from '../utils/i18n';
+import {
+  sanitizeAiLogEntry,
+  sanitizeHistoryIndex,
+  sanitizeStoredSettings,
+} from '@/utils/storage-validation';
 
 // Theme management
 type ThemeMode = 'light' | 'dark' | 'system';
@@ -28,7 +33,7 @@ function applyTheme(theme: ThemeMode) {
 async function loadTheme() {
   try {
     const result = await chrome.storage.local.get(['settings']);
-    const settings = result?.settings as Settings | undefined;
+    const settings = sanitizeStoredSettings(result?.settings) as Partial<Settings>;
     const theme = settings?.theme || THEME.DEFAULT;
     applyTheme(theme);
   } catch (error) {
@@ -40,7 +45,7 @@ async function loadTheme() {
 // Listen for theme changes from settings
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === 'local' && changes.settings) {
-    const newSettings = changes.settings.newValue as Settings | undefined;
+    const newSettings = sanitizeStoredSettings(changes.settings.newValue) as Partial<Settings>;
     const newTheme = newSettings?.theme;
     if (newTheme) {
       applyTheme(newTheme);
@@ -52,7 +57,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', async () => {
   try {
     const result = await chrome.storage.local.get(['settings']);
-    const settings = result?.settings as Settings | undefined;
+    const settings = sanitizeStoredSettings(result?.settings) as Partial<Settings>;
     if (settings?.theme === 'system') {
       applyTheme('system');
     }
@@ -91,19 +96,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-function isAILog(value: unknown): value is AILog {
-  if (!isRecord(value)) {
-    return false;
-  }
-  const type = value.type;
-  return (
-    (type === 'extraction' || type === 'analysis') &&
-    typeof value.timestamp === 'number' &&
-    typeof value.prompt === 'string' &&
-    typeof value.response === 'string'
-  );
-}
-
 function normalizeSystemLogLevel(level: unknown): SystemLog['level'] | null {
   if (level === 'DEBUG' || level === 'INFO' || level === 'WARN' || level === 'ERROR') {
     return level;
@@ -127,8 +119,8 @@ async function loadLogs() {
     STORAGE.AI_LOG_INDEX_KEY,
     STORAGE.SYSTEM_LOG_INDEX_KEY,
   ]);
-  const aiLogKeys = (indexResult[STORAGE.AI_LOG_INDEX_KEY] as string[]) || [];
-  const systemLogKeys = (indexResult[STORAGE.SYSTEM_LOG_INDEX_KEY] as string[]) || [];
+  const aiLogKeys = sanitizeHistoryIndex(indexResult[STORAGE.AI_LOG_INDEX_KEY]);
+  const systemLogKeys = sanitizeHistoryIndex(indexResult[STORAGE.SYSTEM_LOG_INDEX_KEY]);
   const allKeys = [...aiLogKeys, ...systemLogKeys];
 
   const storage = allKeys.length > 0 ? await chrome.storage.local.get(allKeys) : {};
@@ -137,10 +129,11 @@ async function loadLogs() {
   const aiLogs = Object.entries(storage)
     .filter(([key]) => key.startsWith(LOG_PREFIX.AI))
     .map(([key, value]: [string, unknown]) => {
-      if (!isAILog(value)) {
+      const aiLog = sanitizeAiLogEntry(value);
+      if (!aiLog) {
         return null;
       }
-      return { key, ...value, logType: 'ai' as const };
+      return { key, ...aiLog, logType: 'ai' as const };
     })
     .filter((log): log is AILog & { key: string; logType: 'ai' } => log !== null);
 
@@ -429,10 +422,22 @@ async function copySystemLog(index: number) {
   }
 }
 
+async function removeLogKeyFromIndex(indexKey: string, keyToRemove: string) {
+  const result = await chrome.storage.local.get(indexKey);
+  const index = sanitizeHistoryIndex(result[indexKey]);
+  const next = index.filter((key) => key !== keyToRemove);
+  await chrome.storage.local.set({ [indexKey]: next });
+}
+
 async function deleteLog(key: string) {
   if (!confirm(i18n.t('logs.confirmDeleteLog'))) return;
 
   await chrome.storage.local.remove(key);
+  if (key.startsWith(LOG_PREFIX.AI)) {
+    await removeLogKeyFromIndex(STORAGE.AI_LOG_INDEX_KEY, key);
+  } else if (key.startsWith(LOG_PREFIX.SYSTEM)) {
+    await removeLogKeyFromIndex(STORAGE.SYSTEM_LOG_INDEX_KEY, key);
+  }
   await loadLogs();
 }
 

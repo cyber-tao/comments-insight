@@ -4,6 +4,14 @@ import LZString from 'lz-string';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
 import { Mutex } from '@/utils/promise';
+import {
+  sanitizeCompressedHistoryItem,
+  sanitizeHistoryComments,
+  sanitizeHistoryIndex,
+  sanitizeHistoryMetadata,
+  sanitizeHistorySortedIndex,
+  sanitizeHistoryUrlIndex,
+} from '@/utils/storage-validation';
 
 export interface HistoryIndexEntry {
   id: string;
@@ -22,8 +30,51 @@ export class HistoryStore {
   private sortedIndexCache: HistorySortedIndex | null = null;
   private mutex = new Mutex();
 
+  private async rollbackSaveHistory(item: HistoryItem, storageKeys: string[]): Promise<void> {
+    try {
+      if (storageKeys.length > 0) {
+        await chrome.storage.local.remove(storageKeys);
+      }
+    } catch (rollbackError) {
+      Logger.warn('[HistoryStore] Failed to remove history payload during rollback', {
+        historyId: item.id,
+        rollbackError,
+      });
+    }
+
+    try {
+      await this.removeFromHistoryIndex(item.id);
+    } catch (rollbackError) {
+      Logger.warn('[HistoryStore] Failed to rollback history index', {
+        historyId: item.id,
+        rollbackError,
+      });
+    }
+
+    try {
+      await this.removeFromSortedIndex(item.id);
+    } catch (rollbackError) {
+      Logger.warn('[HistoryStore] Failed to rollback sorted history index', {
+        historyId: item.id,
+        rollbackError,
+      });
+    }
+
+    if (typeof item.url === 'string' && item.url.length > 0) {
+      try {
+        await this.removeFromHistoryUrlIndex(item.url, item.id);
+      } catch (rollbackError) {
+        Logger.warn('[HistoryStore] Failed to rollback history url index', {
+          historyId: item.id,
+          rollbackError,
+        });
+      }
+    }
+  }
+
   async saveHistory(item: HistoryItem): Promise<void> {
     const release = await this.mutex.acquire();
+    let storageKeys: string[] = [];
     try {
       const baseKey = `${STORAGE.HISTORY_KEY}_${item.id}`;
       const compressedComments = LZString.compressToUTF16(JSON.stringify(item.comments));
@@ -50,6 +101,8 @@ export class HistoryStore {
         };
       }
 
+      storageKeys = Object.keys(toSet);
+
       await chrome.storage.local.set(toSet);
       await this.updateHistoryIndex(item.id);
 
@@ -62,6 +115,7 @@ export class HistoryStore {
       Logger.info('[HistoryStore] History item saved', { id: item.id });
     } catch (error) {
       this.sortedIndexCache = null;
+      await this.rollbackSaveHistory(item, storageKeys);
       Logger.error('[HistoryStore] Failed to save history', { error });
       throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save history', {
         historyId: item.id,
@@ -127,7 +181,9 @@ export class HistoryStore {
       return ids.length;
     } catch (error) {
       Logger.error('[HistoryStore] Failed to clear all history', { error });
-      return 0;
+      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to clear all history', {
+        originalError: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       release();
     }
@@ -240,9 +296,7 @@ export class HistoryStore {
     try {
       const baseKey = `${STORAGE.HISTORY_KEY}_${id}`;
       const result = await chrome.storage.local.get(baseKey);
-      const compressedItem = result[baseKey] as
-        | (Omit<HistoryItem, 'comments'> & { comments: string; commentsChunks?: number })
-        | undefined;
+      const compressedItem = sanitizeCompressedHistoryItem(result[baseKey]);
 
       if (!compressedItem) return undefined;
 
@@ -270,8 +324,9 @@ export class HistoryStore {
         );
       }
 
-      const comments = decompressed ? JSON.parse(decompressed) : [];
-      if (!Array.isArray(comments)) {
+      const parsedComments = decompressed ? JSON.parse(decompressed) : [];
+      const comments = sanitizeHistoryComments(parsedComments);
+      if (!comments) {
         throw new ExtensionError(ErrorCode.STORAGE_READ_ERROR, 'Invalid history comments payload', {
           id,
         });
@@ -300,10 +355,10 @@ export class HistoryStore {
     try {
       const baseKey = `${STORAGE.HISTORY_KEY}_${id}`;
       const meta = await chrome.storage.local.get(baseKey);
-      const storedItem = meta[baseKey] as { url?: string; commentsChunks?: number } | undefined;
+      const storedItem = sanitizeHistoryMetadata(meta[baseKey]);
 
       const keysToRemove: string[] = [baseKey];
-      const chunks = storedItem?.commentsChunks || 0;
+      const chunks = storedItem.commentsChunks || 0;
       for (let i = 0; i < chunks; i++) {
         keysToRemove.push(`${baseKey}_comments_${i}`);
       }
@@ -314,7 +369,7 @@ export class HistoryStore {
         this.removeFromHistoryIndex(id),
         this.removeFromSortedIndex(id),
       ];
-      if (storedItem?.url) {
+      if (storedItem.url) {
         indexRemovals.push(this.removeFromHistoryUrlIndex(storedItem.url, id));
       }
       await Promise.all(indexRemovals);
@@ -349,7 +404,7 @@ export class HistoryStore {
   private async getHistoryIndex(): Promise<string[]> {
     try {
       const result = await chrome.storage.local.get(STORAGE.HISTORY_INDEX_KEY);
-      return (result[STORAGE.HISTORY_INDEX_KEY] as string[]) || [];
+      return sanitizeHistoryIndex(result[STORAGE.HISTORY_INDEX_KEY]);
     } catch (error) {
       Logger.error('[HistoryStore] Failed to get history index', { error });
       return [];
@@ -378,7 +433,11 @@ export class HistoryStore {
       }
       await chrome.storage.local.set({ [STORAGE.HISTORY_INDEX_KEY]: index });
     } catch (error) {
-      Logger.error('[HistoryStore] Failed to update history index', { error });
+      Logger.error('[HistoryStore] Failed to update history index', { error, id });
+      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to update history index', {
+        historyId: id,
+        originalError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -388,14 +447,22 @@ export class HistoryStore {
       const filteredIndex = index.filter((itemId) => itemId !== id);
       await chrome.storage.local.set({ [STORAGE.HISTORY_INDEX_KEY]: filteredIndex });
     } catch (error) {
-      Logger.error('[HistoryStore] Failed to remove from history index', { error });
+      Logger.error('[HistoryStore] Failed to remove from history index', { error, id });
+      throw new ExtensionError(
+        ErrorCode.STORAGE_WRITE_ERROR,
+        'Failed to remove item from history index',
+        {
+          historyId: id,
+          originalError: error instanceof Error ? error.message : String(error),
+        },
+      );
     }
   }
 
   private async getHistoryUrlIndex(): Promise<Record<string, string[]>> {
     try {
       const result = await chrome.storage.local.get(STORAGE.HISTORY_URL_INDEX_KEY);
-      return (result[STORAGE.HISTORY_URL_INDEX_KEY] as Record<string, string[]>) || {};
+      return sanitizeHistoryUrlIndex(result[STORAGE.HISTORY_URL_INDEX_KEY]);
     } catch (error) {
       Logger.error('[HistoryStore] Failed to get history url index', { error });
       return {};
@@ -407,6 +474,9 @@ export class HistoryStore {
       await chrome.storage.local.set({ [STORAGE.HISTORY_URL_INDEX_KEY]: index });
     } catch (error) {
       Logger.error('[HistoryStore] Failed to set history url index', { error });
+      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to set history url index', {
+        originalError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -435,10 +505,8 @@ export class HistoryStore {
     if (this.sortedIndexCache) return this.sortedIndexCache;
     try {
       const result = await chrome.storage.local.get(STORAGE.HISTORY_SORTED_INDEX_KEY);
-      const storedIndex = result[STORAGE.HISTORY_SORTED_INDEX_KEY] as
-        | HistorySortedIndex
-        | undefined;
-      if (storedIndex && storedIndex.entries) {
+      const storedIndex = sanitizeHistorySortedIndex(result[STORAGE.HISTORY_SORTED_INDEX_KEY]);
+      if (storedIndex) {
         this.sortedIndexCache = storedIndex;
         return storedIndex;
       }
@@ -456,9 +524,7 @@ export class HistoryStore {
       for (const id of ids) {
         const baseKey = `${STORAGE.HISTORY_KEY}_${id}`;
         const result = await chrome.storage.local.get(baseKey);
-        const item = result[baseKey] as
-          | { id: string; extractedAt: number; url: string; title: string; platform: string }
-          | undefined;
+        const item = sanitizeCompressedHistoryItem(result[baseKey]);
         if (item) {
           entries.push({
             id: item.id,
@@ -513,6 +579,10 @@ export class HistoryStore {
     } catch (error) {
       Logger.error('[HistoryStore] Failed to add to sorted index', { error });
       this.sortedIndexCache = null;
+      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to add to sorted index', {
+        historyId: item.id,
+        originalError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -529,6 +599,14 @@ export class HistoryStore {
     } catch (error) {
       Logger.error('[HistoryStore] Failed to remove from sorted index', { error });
       this.sortedIndexCache = null;
+      throw new ExtensionError(
+        ErrorCode.STORAGE_WRITE_ERROR,
+        'Failed to remove item from sorted index',
+        {
+          historyId: id,
+          originalError: error instanceof Error ? error.message : String(error),
+        },
+      );
     }
   }
 

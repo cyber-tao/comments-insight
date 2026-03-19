@@ -57,34 +57,38 @@ export function useTask(options: UseTaskOptions = {}) {
 
           if (isUnmountedRef.current || monitorGenerationRef.current !== currentGeneration) return;
 
-          if (task) {
-            const updatedTask: CurrentTask = {
-              id: task.id,
-              type: task.type,
-              status: task.status,
-              progress: task.progress,
-              message: task.message || task.error,
-              detailedProgress: task.detailedProgress,
-            };
-            setCurrentTask(updatedTask);
+          if (!task) {
+            Logger.warn('[useTask] Task status returned empty result', { taskId });
+            setCurrentTask(null);
+            return;
+          }
 
-            if (task.status === 'running' || task.status === 'pending') {
-              monitorTimeoutRef.current = setTimeout(checkStatus, TIMING.POLL_TASK_RUNNING_MS);
-            } else if (task.status === 'completed') {
-              await onStatusRefresh?.();
-              onTaskComplete?.(updatedTask);
-              monitorTimeoutRef.current = setTimeout(() => {
-                if (!isUnmountedRef.current) {
-                  setCurrentTask(null);
-                }
-              }, TIMING.CLEAR_TASK_DELAY_MS);
-            } else if (task.status === 'failed') {
-              monitorTimeoutRef.current = setTimeout(() => {
-                if (!isUnmountedRef.current) {
-                  setCurrentTask(null);
-                }
-              }, TIMING.CLEAR_TASK_FAILED_MS);
-            }
+          const updatedTask: CurrentTask = {
+            id: task.id,
+            type: task.type,
+            status: task.status,
+            progress: task.progress,
+            message: task.message || task.error,
+            detailedProgress: task.detailedProgress,
+          };
+          setCurrentTask(updatedTask);
+
+          if (task.status === 'running' || task.status === 'pending') {
+            monitorTimeoutRef.current = setTimeout(checkStatus, TIMING.POLL_TASK_RUNNING_MS);
+          } else if (task.status === 'completed') {
+            await onStatusRefresh?.();
+            onTaskComplete?.(updatedTask);
+            monitorTimeoutRef.current = setTimeout(() => {
+              if (!isUnmountedRef.current) {
+                setCurrentTask(null);
+              }
+            }, TIMING.CLEAR_TASK_DELAY_MS);
+          } else if (task.status === 'failed') {
+            monitorTimeoutRef.current = setTimeout(() => {
+              if (!isUnmountedRef.current) {
+                setCurrentTask(null);
+              }
+            }, TIMING.CLEAR_TASK_FAILED_MS);
           }
         } catch (error) {
           Logger.error('[useTask] Failed to check task status', { error });

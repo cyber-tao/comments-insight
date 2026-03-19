@@ -5,6 +5,7 @@ import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
 import { ERROR_KEYS, LIMITS, RETRY, STORAGE, TASK, TIMING, TIMEOUT } from '@/config/constants';
 import i18n from '@/utils/i18n';
 import { Mutex } from '@/utils/promise';
+import { sanitizePersistedTaskState } from '@/utils/storage-validation';
 
 /**
  * Result returned when a task completes successfully.
@@ -41,23 +42,6 @@ interface PersistedTaskState {
   queue: string[];
   currentTaskId: string | null;
   savedAt: number;
-}
-
-function isPersistedTaskCandidate(value: unknown): value is Task {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
-  const task = value as Partial<Task>;
-  return (
-    typeof task.id === 'string' &&
-    typeof task.type === 'string' &&
-    typeof task.status === 'string' &&
-    typeof task.url === 'string' &&
-    typeof task.progress === 'number' &&
-    typeof task.startTime === 'number' &&
-    typeof task.tokensUsed === 'number'
-  );
 }
 
 /**
@@ -489,6 +473,37 @@ export class TaskManager {
     return this.tasks.get(taskId);
   }
 
+  recoverInterruptedTask(taskId: string): Task | undefined {
+    const task = this.tasks.get(taskId);
+    if (!task) {
+      Logger.warn(`[TaskManager] Task not found: ${taskId}`);
+      return undefined;
+    }
+
+    const interruptedMessage = i18n.t(ERROR_KEYS.TASK_INTERRUPTED_BY_RESTART);
+    const canRecoverFromInterruption =
+      task.status === 'failed' && task.error === interruptedMessage;
+
+    if (task.status === 'running') {
+      return task;
+    }
+
+    if (task.status === 'pending' || canRecoverFromInterruption) {
+      task.status = 'running';
+      task.error = undefined;
+      task.message = undefined;
+      task.endTime = undefined;
+      this.currentTaskId = taskId;
+      this.notifyTaskUpdate(task);
+      this.schedulePersist();
+      Logger.info(`[TaskManager] Recovered interrupted task: ${taskId}`);
+      return task;
+    }
+
+    Logger.warn(`[TaskManager] Cannot recover task ${taskId} in ${task.status} state`);
+    return undefined;
+  }
+
   /**
    * Get all tasks
    * @returns Array of all tasks
@@ -634,23 +649,16 @@ export class TaskManager {
   private async loadState(): Promise<PersistedTaskState | null> {
     try {
       const result = await chrome.storage.local.get(STORAGE.TASK_STATE_KEY);
-      const state = result[STORAGE.TASK_STATE_KEY] as PersistedTaskState | undefined;
-      if (!state || typeof state !== 'object') {
+      const state = sanitizePersistedTaskState(result[STORAGE.TASK_STATE_KEY]);
+      if (!state) {
         return null;
       }
 
-      const tasks = Array.isArray(state.tasks) ? state.tasks.filter(isPersistedTaskCandidate) : [];
-      const queue = Array.isArray(state.queue)
-        ? state.queue.filter((taskId): taskId is string => typeof taskId === 'string')
-        : [];
-      const currentTaskId = typeof state.currentTaskId === 'string' ? state.currentTaskId : null;
-      const savedAt = typeof state.savedAt === 'number' ? state.savedAt : Date.now();
-
       return {
-        tasks,
-        queue,
-        currentTaskId,
-        savedAt,
+        tasks: state.tasks,
+        queue: state.queue,
+        currentTaskId: state.currentTaskId,
+        savedAt: state.savedAt,
       };
     } catch (error) {
       Logger.warn('[TaskManager] Failed to load task state', { error });

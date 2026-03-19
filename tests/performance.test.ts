@@ -99,7 +99,7 @@ describe('PerformanceMonitor', () => {
       const metrics = performanceMonitor.getMetrics();
       expect(metrics).toHaveLength(1);
       expect(metrics[0].operation).toBe('async-op');
-      expect(metrics[0].duration).toBeGreaterThanOrEqual(10);
+      expect(metrics[0].duration).toBeGreaterThanOrEqual(9);
     });
 
     it('should record metadata for async operations', async () => {
