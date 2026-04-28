@@ -1,29 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { THEME } from '@/config/constants';
 import { ExtensionAPI } from '@/utils/extension-api';
-
-type ThemeMode = 'light' | 'dark' | 'system';
+import { applyThemeToDocument, ThemeMode, ResolvedTheme } from '@/utils/theme-applier';
 
 export function useTheme() {
   const [theme, setTheme] = useState<ThemeMode>(THEME.DEFAULT);
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>('light');
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>('light');
 
   const applyTheme = useCallback((mode: ThemeMode) => {
-    let effectiveTheme: 'light' | 'dark';
-
-    if (mode === 'system') {
-      effectiveTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    } else {
-      effectiveTheme = mode;
-    }
-
+    const effectiveTheme = applyThemeToDocument(mode);
     setResolvedTheme(effectiveTheme);
-
-    if (effectiveTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
   }, []);
 
   useEffect(() => {

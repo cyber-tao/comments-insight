@@ -1,6 +1,14 @@
 // Content Script for Comments Insight Extension
 import { PageController } from './PageController';
-import { MESSAGES, DOM, SCRAPER_GENERATION, LIMITS, REGEX, DEFAULTS } from '@/config/constants';
+import {
+  MESSAGES,
+  DOM,
+  SCRAPER_GENERATION,
+  LIMITS,
+  REGEX,
+  DEFAULTS,
+  TEXT,
+} from '@/config/constants';
 import { Comment, SimplifiedNode } from '@/types';
 import { CommentExtractor } from './CommentExtractor';
 import { Logger } from '@/utils/logger';
@@ -61,6 +69,53 @@ const getTools = () => {
 
 // Track current extraction task
 let currentTaskId: string | null = null;
+let currentTaskType: 'extract' | 'config' | null = null;
+let currentAbortController: AbortController | null = null;
+
+function beginContentTask(taskId: string, taskType: 'extract' | 'config'): AbortController {
+  if (currentAbortController && currentTaskId !== taskId) {
+    currentAbortController.abort();
+  }
+
+  const controller = new AbortController();
+  currentTaskId = taskId;
+  currentTaskType = taskType;
+  currentAbortController = controller;
+  setExtractionActive(true, taskId);
+  return controller;
+}
+
+function isCurrentContentTask(taskId: string, controller: AbortController): boolean {
+  return (
+    currentTaskId === taskId && currentAbortController === controller && !controller.signal.aborted
+  );
+}
+
+function finishContentTask(taskId: string, controller: AbortController): void {
+  if (currentTaskId !== taskId || currentAbortController !== controller) {
+    return;
+  }
+
+  currentTaskId = null;
+  currentTaskType = null;
+  currentAbortController = null;
+  setExtractionActive(false, taskId);
+}
+
+function sendCancelledCompletion(taskId: string, taskType: 'extract' | 'config'): void {
+  const type =
+    taskType === 'config' ? MESSAGES.CONFIG_GENERATION_COMPLETED : MESSAGES.EXTRACTION_COMPLETED;
+  chrome.runtime
+    .sendMessage({
+      type,
+      payload: {
+        taskId,
+        success: false,
+        error: TEXT.EXTRACTION_CANCELLED_BY_USER,
+      },
+    })
+    .catch(() => {});
+}
 
 if (!globalInsight.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED) {
   globalInsight.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED = true;
@@ -151,9 +206,7 @@ async function handleStartExtraction(
 
   Logger.info('[Content] Starting extraction', { taskId });
 
-  // Set current task
-  currentTaskId = taskId;
-  setExtractionActive(true);
+  const controller = beginContentTask(taskId, 'extract');
 
   try {
     // Use the unified extractor interface
@@ -168,15 +221,19 @@ async function handleStartExtraction(
         current?: number,
         total?: number,
       ) => {
+        if (!isCurrentContentTask(taskId, controller)) {
+          return;
+        }
         chrome.runtime.sendMessage({
           type: MESSAGES.EXTRACTION_PROGRESS,
           payload: { taskId, progress, message, stage, current, total },
         });
       },
+      controller.signal,
     );
 
     // Check if task was cancelled
-    if (currentTaskId !== taskId) {
+    if (!isCurrentContentTask(taskId, controller)) {
       Logger.info('[Content] Extraction cancelled');
       return;
     }
@@ -185,6 +242,11 @@ async function handleStartExtraction(
     const postInfo = await getPostInfo();
 
     // 2. Send completion message
+    if (!isCurrentContentTask(taskId, controller)) {
+      Logger.info('[Content] Extraction cancelled before completion');
+      return;
+    }
+
     await chrome.runtime.sendMessage({
       type: MESSAGES.EXTRACTION_COMPLETED,
       payload: {
@@ -197,6 +259,11 @@ async function handleStartExtraction(
 
     Logger.info('[Content] Extraction complete', { count: comments.length });
   } catch (error) {
+    if (!isCurrentContentTask(taskId, controller)) {
+      Logger.info('[Content] Extraction cancelled', { taskId });
+      return;
+    }
+
     Logger.error('[Content] Extraction failed', { error });
     await chrome.runtime.sendMessage({
       type: MESSAGES.EXTRACTION_COMPLETED,
@@ -207,8 +274,7 @@ async function handleStartExtraction(
       },
     });
   } finally {
-    currentTaskId = null;
-    setExtractionActive(false);
+    finishContentTask(taskId, controller);
   }
 }
 
@@ -219,8 +285,13 @@ async function handleStartExtraction(
 function handleCancelExtraction(taskId: string) {
   if (currentTaskId === taskId) {
     Logger.info('[Content] Cancelling extraction', { taskId });
+    const taskType = currentTaskType || 'extract';
+    currentAbortController?.abort();
     currentTaskId = null;
-    setExtractionActive(false);
+    currentTaskType = null;
+    currentAbortController = null;
+    setExtractionActive(false, taskId);
+    sendCancelledCompletion(taskId, taskType);
   }
 }
 
@@ -233,8 +304,7 @@ async function handleStartConfigGeneration(
   const { taskId } = data;
   Logger.info('[Content] Starting config generation', { taskId });
 
-  currentTaskId = taskId;
-  setExtractionActive(true);
+  const controller = beginContentTask(taskId, 'config');
 
   try {
     const { domAnalyzer } = getTools();
@@ -243,13 +313,16 @@ async function handleStartConfigGeneration(
 
     try {
       await strategy.generateConfig((progress: number, message: string) => {
+        if (!isCurrentContentTask(taskId, controller)) {
+          return;
+        }
         chrome.runtime.sendMessage({
           type: MESSAGES.EXTRACTION_PROGRESS,
           payload: { taskId, progress, message },
         });
-      });
+      }, controller.signal);
 
-      if (currentTaskId !== taskId) {
+      if (!isCurrentContentTask(taskId, controller)) {
         Logger.info('[Content] Config generation cancelled');
         return;
       }
@@ -264,6 +337,11 @@ async function handleStartConfigGeneration(
       strategy.cleanup();
     }
   } catch (error) {
+    if (!isCurrentContentTask(taskId, controller)) {
+      Logger.info('[Content] Config generation cancelled', { taskId });
+      return;
+    }
+
     Logger.error('[Content] Config generation failed', { error });
     await chrome.runtime.sendMessage({
       type: MESSAGES.CONFIG_GENERATION_COMPLETED,
@@ -274,8 +352,7 @@ async function handleStartConfigGeneration(
       },
     });
   } finally {
-    currentTaskId = null;
-    setExtractionActive(false);
+    finishContentTask(taskId, controller);
   }
 }
 

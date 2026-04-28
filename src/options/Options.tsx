@@ -107,7 +107,11 @@ const Options: React.FC = () => {
           )}
 
           {activeTab === 'crawling' && (
-            <ConfigSettings settings={settings} onSettingsChange={handleSettingsChange} />
+            <ConfigSettings
+              settings={settings}
+              onSettingsChange={handleSettingsChange}
+              showToast={toast.showToast}
+            />
           )}
         </div>
 

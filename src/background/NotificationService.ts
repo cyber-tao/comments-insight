@@ -3,21 +3,16 @@
  */
 import { ICONS, PATHS, TEXT, LIMITS, TIMING } from '@/config/constants';
 import { Logger } from '@/utils/logger';
+import { generateUniqueId } from '@/utils/id-generator';
 
 export class NotificationService {
-  /**
-   * Show task completion notification
-   * @param taskType - Type of completed task
-   * @param title - Post title
-   * @param commentsCount - Number of comments processed
-   */
   static async showTaskCompleted(
     taskType: 'extract' | 'analyze' | 'config',
     title: string,
     commentsCount?: number,
   ): Promise<void> {
     try {
-      const notificationId = `task_completed_${Date.now()}`;
+      const notificationId = generateUniqueId('task_completed');
       const options = {
         type: 'basic' as const,
         iconUrl: ICONS.ICON_48,
@@ -29,26 +24,20 @@ export class NotificationService {
 
       await chrome.notifications.create(notificationId, options);
 
-      // Auto-clear after 10 seconds if not interacted with
       setTimeout(() => {
-        chrome.notifications.clear(notificationId);
+        chrome.notifications.clear(notificationId).catch(() => {});
       }, TIMING.NOTIFICATION_AUTOCLEAR_MS);
     } catch (error) {
       Logger.error('[NotificationService] Failed to show notification', { error });
     }
   }
 
-  /**
-   * Show task failed notification
-   * @param taskType - Type of failed task
-   * @param error - Error message
-   */
   static async showTaskFailed(
     taskType: 'extract' | 'analyze' | 'config',
     error: string,
   ): Promise<void> {
     try {
-      const notificationId = `task_failed_${Date.now()}`;
+      const notificationId = generateUniqueId('task_failed');
       const options = {
         type: 'basic' as const,
         iconUrl: ICONS.ICON_48,

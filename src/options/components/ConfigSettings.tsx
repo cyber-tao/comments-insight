@@ -13,6 +13,7 @@ import { useConfigImport } from '../hooks/useConfigImport';
 interface Props {
   settings: Settings;
   onSettingsChange: (newSettings: Partial<Settings>) => void;
+  showToast: (message: string, type?: 'info' | 'success' | 'error' | 'warning') => void;
 }
 
 type ExportableCrawlingConfig = Omit<CrawlingConfig, 'fieldValidation'>;
@@ -36,7 +37,7 @@ const toExportableCrawlingConfig = ({
   ...config
 }: CrawlingConfig): ExportableCrawlingConfig => config;
 
-export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) => {
+export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange, showToast }) => {
   const { t } = useTranslation();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempConfig, setTempConfig] = useState<CrawlingConfig | null>(null);
@@ -296,7 +297,7 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange }) 
       // The original code showed an alert if no changes.
     } catch (error) {
       Logger.error('Failed to sync configs:', { error });
-      alert(t('options.crawlingConfigs.syncError'));
+      showToast(t('options.crawlingConfigs.syncError'), 'error');
     } finally {
       setSyncing(false);
     }

@@ -19,12 +19,13 @@ export function sendMessage<T = unknown>(
     }, timeoutMs);
 
     chrome.runtime.sendMessage(message, (response) => {
+      const lastError = chrome.runtime.lastError; // 立即捕获到局部变量
       if (settled) return;
       settled = true;
       clearTimeout(timer);
 
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
+      if (lastError) {
+        reject(new Error(lastError.message ?? 'Unknown chrome runtime error'));
         return;
       }
 
@@ -48,12 +49,13 @@ export function sendMessageToTab<T = unknown>(
     }, timeoutMs);
 
     chrome.tabs.sendMessage(tabId, message, (response) => {
+      const lastError = chrome.runtime.lastError; // 立即捕获到局部变量
       if (settled) return;
       settled = true;
       clearTimeout(timer);
 
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
+      if (lastError) {
+        reject(new Error(lastError.message ?? 'Unknown chrome runtime error'));
         return;
       }
 
@@ -73,12 +75,13 @@ export function sendMessageVoid(message: Message, options: MessageOptions = {}):
     }, timeoutMs);
 
     chrome.runtime.sendMessage(message, () => {
+      const lastError = chrome.runtime.lastError; // 立即捕获到局部变量
       if (settled) return;
       settled = true;
       clearTimeout(timer);
 
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
+      if (lastError) {
+        reject(new Error(lastError.message ?? 'Unknown chrome runtime error'));
         return;
       }
 

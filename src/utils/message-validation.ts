@@ -25,9 +25,6 @@ const coreCommentSchema = z.object({
 });
 
 const historyExportSchema = z.object({ type: z.literal('settings') });
-const taskOrHistoryExportSchema = z
-  .object({ format: z.enum(['csv', 'md']) })
-  .and(z.union([z.object({ taskId: nonEmptyString }), z.object({ historyId: nonEmptyString })]));
 
 const messagePayloadSchemas: Partial<Record<Message['type'], z.ZodTypeAny>> = {
   ENSURE_CONTENT_SCRIPT: z
@@ -66,15 +63,29 @@ const messagePayloadSchemas: Partial<Record<Message['type'], z.ZodTypeAny>> = {
     url: nonEmptyString,
     tabId: z.number().int().positive().optional(),
   }),
-  EXTRACTION_PROGRESS: z.object({
-    taskId: nonEmptyString,
-    progress: z.number().optional(),
-    message: z.string().optional(),
-    stage: progressStageSchema.optional(),
-    current: z.number().optional(),
-    total: z.number().optional(),
-    data: z.unknown().optional(),
-  }),
+  EXTRACTION_PROGRESS: z
+    .object({
+      taskId: nonEmptyString,
+      progress: z.number().optional(),
+      message: z.string().optional(),
+      stage: progressStageSchema.optional(),
+      current: z.number().optional(),
+      total: z.number().optional(),
+      data: z.unknown().optional(),
+    })
+    .superRefine((payload, context) => {
+      const hasDetailedProgress =
+        payload.stage !== undefined &&
+        typeof payload.current === 'number' &&
+        typeof payload.total === 'number';
+      if (typeof payload.progress !== 'number' && !hasDetailedProgress) {
+        context.addIssue({
+          code: 'custom',
+          path: ['progress'],
+          message: 'progress is required when detailed progress fields are incomplete',
+        });
+      }
+    }),
   EXTRACTION_COMPLETED: z.object({
     taskId: nonEmptyString,
     success: z.boolean(),
@@ -148,7 +159,7 @@ const messagePayloadSchemas: Partial<Record<Message['type'], z.ZodTypeAny>> = {
     selectorType: z.enum(['css', 'xpath']),
     tabId: z.number().int().positive().optional(),
   }),
-  EXPORT_DATA: z.union([historyExportSchema, taskOrHistoryExportSchema]),
+  EXPORT_DATA: historyExportSchema,
   GENERATE_CRAWLING_CONFIG: z.object({
     prompt: nonEmptyString,
   }),

@@ -19,8 +19,6 @@ interface SimplificationOptions {
   maxNodes?: number;
   /** Elements to ignore during simplification */
   ignoreElements?: WeakSet<Element> | Set<Element>;
-  /** Internal node counter for limiting */
-  _nodeCounter?: { count: number };
   /** Parent selector to avoid full tree traversal */
   parentSelector?: string;
 }
@@ -52,6 +50,7 @@ interface SimplificationOptions {
 export class DOMSimplifier {
   private static instance: DOMSimplifier | null = null;
   private selectorCache = new WeakMap<Element, string>();
+  private nodeCount = 0;
 
   /**
    * Get the singleton instance of DOMSimplifier
@@ -81,16 +80,20 @@ export class DOMSimplifier {
       forceExpandParent = false,
       includeText = true,
       maxNodes = DOM.SIMPLIFY_MAX_NODES,
-      _nodeCounter = { count: 0 },
     } = options;
 
-    _nodeCounter.count++;
+    // Reset node counter at the entry point (when called externally, not recursively)
+    if (currentDepth === 0) {
+      this.nodeCount = 0;
+    }
+
+    this.nodeCount++;
 
     const shadowRoot = getShadowRoot(element);
     const forceExpandCurrent = shadowRoot !== null || this.shouldForceExpandElement(element);
 
     // Stop expanding if we hit node limit (but allow current node)
-    const nodeLimitReached = _nodeCounter.count > maxNodes;
+    const nodeLimitReached = this.nodeCount > maxNodes;
 
     const shouldExpand =
       !nodeLimitReached && (forceExpandParent || forceExpandCurrent || currentDepth < maxDepth);
@@ -116,7 +119,6 @@ export class DOMSimplifier {
             ...options,
             currentDepth: currentDepth + 1,
             forceExpandParent: forceExpandParent || forceExpandCurrent,
-            _nodeCounter, // Pass the shared counter
             parentSelector: currentSelector,
           }),
         );
@@ -143,7 +145,6 @@ export class DOMSimplifier {
           ...options,
           currentDepth: currentDepth + 1,
           forceExpandParent: forceExpandParent || forceExpandCurrent,
-          _nodeCounter, // Pass the shared counter
           parentSelector: currentSelector,
         }),
       );

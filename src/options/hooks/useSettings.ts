@@ -15,13 +15,20 @@ export function useSettings() {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const isSavingRef = useRef(false);
   const isUserChangeRef = useRef(false);
+  const hasLoadedRef = useRef(false);
+  const pendingSaveRef = useRef(false);
+  const changeRevisionRef = useRef(0);
+  const savedRevisionRef = useRef(0);
   const tRef = useRef(t);
   const toastRef = useRef(toast);
+  const [saveRequestSeq, setSaveRequestSeq] = useState(0);
 
   useEffect(() => {
     tRef.current = t;
+  }, [t]);
+  useEffect(() => {
     toastRef.current = toast;
-  }, [t, toast]);
+  }, [toast]);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -29,6 +36,7 @@ export function useSettings() {
       Logger.debug('[useSettings] Settings response', { settings });
 
       if (settings) {
+        if (isUserChangeRef.current || isSavingRef.current) return;
         setSettings(settings);
         if (settings.language) {
           Logger.debug('[useSettings] Setting language to', {
@@ -53,14 +61,22 @@ export function useSettings() {
 
   // Load settings on mount
   useEffect(() => {
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
     void loadSettings();
   }, [loadSettings]);
 
   // Auto-save settings when they change
   useEffect(() => {
-    if (!settings || isInitialLoad || isSavingRef.current || !isUserChangeRef.current) return;
+    if (!settings || isInitialLoad || !isUserChangeRef.current) return;
+
+    if (isSavingRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
 
     const saveSettings = async () => {
+      const revisionToSave = changeRevisionRef.current;
       isSavingRef.current = true;
       setSaving(true);
 
@@ -74,9 +90,12 @@ export function useSettings() {
           throw new Error(response?.error || tRef.current('options.savedError'));
         }
 
-        if (isUserChangeRef.current) {
+        savedRevisionRef.current = Math.max(savedRevisionRef.current, revisionToSave);
+        if (changeRevisionRef.current === revisionToSave) {
           toastRef.current.success(tRef.current('options.savedSuccess'));
           isUserChangeRef.current = false;
+        } else {
+          pendingSaveRef.current = true;
         }
       } catch (error) {
         toastRef.current.error(
@@ -85,15 +104,20 @@ export function useSettings() {
       } finally {
         setSaving(false);
         isSavingRef.current = false;
+        if (pendingSaveRef.current && changeRevisionRef.current > savedRevisionRef.current) {
+          pendingSaveRef.current = false;
+          setSaveRequestSeq((value) => value + 1);
+        }
       }
     };
 
     const timeoutId = setTimeout(saveSettings, TIMING.DEBOUNCE_SAVE_MS);
     return () => clearTimeout(timeoutId);
-  }, [settings, isInitialLoad]);
+  }, [settings, isInitialLoad, saveRequestSeq]);
 
   const handleSettingsChange = useCallback((newSettings: Partial<Settings>) => {
     isUserChangeRef.current = true;
+    changeRevisionRef.current += 1;
     setSettings((prev) => (prev ? { ...prev, ...newSettings } : prev));
   }, []);
 
@@ -109,14 +133,12 @@ export function useSettings() {
         a.download = `comments-insight-settings-${Date.now()}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        toastRef.current.success(
-          tRef.current('options.exportSettings') + ' ' + tRef.current('common.save'),
-        );
+        toast.success(t('options.exportSettings') + ' ' + t('common.save'));
       }
     } catch (_error) {
-      toastRef.current.error(tRef.current('options.exportError'));
+      toast.error(t('options.exportError'));
     }
-  }, []);
+  }, [t, toast]);
 
   const handleImport = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -131,6 +153,8 @@ export function useSettings() {
           toastRef.current.error(tRef.current('options.importError'));
           return;
         }
+        isUserChangeRef.current = true;
+        changeRevisionRef.current += 1;
         setSettings((prev) => {
           if (!prev) return prev;
           return {

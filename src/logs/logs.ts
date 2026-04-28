@@ -4,41 +4,20 @@ import { Settings } from '@/types';
 import i18n from '../utils/i18n';
 import {
   sanitizeAiLogEntry,
-  sanitizeHistoryIndex,
+  sanitizeStringIndex,
   sanitizeStoredSettings,
 } from '@/utils/storage-validation';
-
-// Theme management
-type ThemeMode = 'light' | 'dark' | 'system';
-
-function getSystemTheme(): 'light' | 'dark' {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
-function applyTheme(theme: ThemeMode) {
-  let effectiveTheme: 'light' | 'dark';
-  if (theme === 'system') {
-    effectiveTheme = getSystemTheme();
-  } else {
-    effectiveTheme = theme;
-  }
-
-  if (effectiveTheme === 'dark') {
-    document.documentElement.classList.add('dark');
-  } else {
-    document.documentElement.classList.remove('dark');
-  }
-}
+import { applyThemeToDocument } from '@/utils/theme-applier';
 
 async function loadTheme() {
   try {
     const result = await chrome.storage.local.get(['settings']);
     const settings = sanitizeStoredSettings(result?.settings) as Partial<Settings>;
     const theme = settings?.theme || THEME.DEFAULT;
-    applyTheme(theme);
+    applyThemeToDocument(theme);
   } catch (error) {
     Logger.error('[Logs] Failed to load theme', { error });
-    applyTheme(THEME.DEFAULT);
+    applyThemeToDocument(THEME.DEFAULT);
   }
 }
 
@@ -48,7 +27,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     const newSettings = sanitizeStoredSettings(changes.settings.newValue) as Partial<Settings>;
     const newTheme = newSettings?.theme;
     if (newTheme) {
-      applyTheme(newTheme);
+      applyThemeToDocument(newTheme);
     }
   }
 });
@@ -59,7 +38,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', asy
     const result = await chrome.storage.local.get(['settings']);
     const settings = sanitizeStoredSettings(result?.settings) as Partial<Settings>;
     if (settings?.theme === 'system') {
-      applyTheme('system');
+      applyThemeToDocument('system');
     }
   } catch (error) {
     Logger.error('[Logs] Failed to handle system theme change', { error });
@@ -119,8 +98,8 @@ async function loadLogs() {
     STORAGE.AI_LOG_INDEX_KEY,
     STORAGE.SYSTEM_LOG_INDEX_KEY,
   ]);
-  const aiLogKeys = sanitizeHistoryIndex(indexResult[STORAGE.AI_LOG_INDEX_KEY]);
-  const systemLogKeys = sanitizeHistoryIndex(indexResult[STORAGE.SYSTEM_LOG_INDEX_KEY]);
+  const aiLogKeys = sanitizeStringIndex(indexResult[STORAGE.AI_LOG_INDEX_KEY]);
+  const systemLogKeys = sanitizeStringIndex(indexResult[STORAGE.SYSTEM_LOG_INDEX_KEY]);
   const allKeys = [...aiLogKeys, ...systemLogKeys];
 
   const storage = allKeys.length > 0 ? await chrome.storage.local.get(allKeys) : {};
@@ -424,7 +403,7 @@ async function copySystemLog(index: number) {
 
 async function removeLogKeyFromIndex(indexKey: string, keyToRemove: string) {
   const result = await chrome.storage.local.get(indexKey);
-  const index = sanitizeHistoryIndex(result[indexKey]);
+  const index = sanitizeStringIndex(result[indexKey]);
   const next = index.filter((key) => key !== keyToRemove);
   await chrome.storage.local.set({ [indexKey]: next });
 }

@@ -1,5 +1,9 @@
-import { REGEX, DATE_TIME } from '@/config/constants';
+import { REGEX } from '@/config/constants';
 import { Logger } from '../../utils/logger';
+import {
+  formatDateTimeFromDate,
+  normalizeTimestampToMinute as normalizeTimestamp,
+} from '@/utils/date-formatter';
 
 export class DataNormalizer {
   static parseTimestampNormalizationResponse(
@@ -29,21 +33,11 @@ export class DataNormalizer {
   }
 
   static formatLocalIsoMinute(date: Date): string {
-    const pad = (value: number) => value.toString().padStart(DATE_TIME.PAD_LENGTH, '0');
-    const year = date.getFullYear();
-    const month = pad(date.getMonth() + DATE_TIME.MONTH_OFFSET);
-    const day = pad(date.getDate());
-    const hours = pad(date.getHours());
-    const minutes = pad(date.getMinutes());
-    return `${year}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${month}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${day}T${hours}${DATE_TIME.DISPLAY_TIME_SEPARATOR}${minutes}`;
+    return formatDateTimeFromDate(date, 'T');
   }
 
   static normalizeTimestampToMinute(timestamp: string): string | null {
-    const parsed = new Date(timestamp);
-    if (Number.isNaN(parsed.getTime())) {
-      return null;
-    }
-    return this.formatLocalIsoMinute(parsed);
+    return normalizeTimestamp(timestamp);
   }
 
   static removeThinkTags(content: string): string {

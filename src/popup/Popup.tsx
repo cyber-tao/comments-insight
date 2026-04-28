@@ -20,6 +20,7 @@ const Popup: React.FC = () => {
   const [developerMode, setDeveloperMode] = useState(false);
 
   const { pageInfo, pageStatus, loading, loadPageInfo, refreshPageStatus } = usePageInfo();
+  // Initialize theme side-effect (applies dark/light class to document)
   useTheme();
 
   const {
@@ -59,18 +60,17 @@ const Popup: React.FC = () => {
     }
   }, []);
 
-  const initialize = useCallback(async () => {
-    const info = await loadPageInfo();
-    await loadVersion();
-    await loadBootstrapSettings();
-    if (info?.url) {
-      await loadCurrentTask(info.url);
-    }
-  }, [loadBootstrapSettings, loadCurrentTask, loadPageInfo, loadVersion]);
-
   useEffect(() => {
-    void initialize();
-  }, [initialize]);
+    const init = async () => {
+      const info = await loadPageInfo();
+      await loadVersion();
+      await loadBootstrapSettings();
+      if (info?.url) {
+        await loadCurrentTask(info.url);
+      }
+    };
+    void init();
+  }, [loadPageInfo, loadVersion, loadBootstrapSettings, loadCurrentTask]);
 
   const handleExtractComments = async () => {
     if (!pageInfo) return;

@@ -7,6 +7,7 @@ import {
   MESSAGES,
   AI,
   DOM,
+  TEXT,
 } from '@/config/constants';
 import {
   PROMPT_DETECT_COMMENTS_SECTION,
@@ -30,9 +31,14 @@ export class AIConfigGenerator {
    * Check if extraction should be aborted
    * @throws ExtensionError if extraction is cancelled
    */
-  private checkAborted(): void {
-    if (!isExtractionActive()) {
-      throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Extraction cancelled by user', {}, false);
+  private checkAborted(signal?: AbortSignal): void {
+    if (signal?.aborted || !isExtractionActive()) {
+      throw new ExtensionError(
+        ErrorCode.TASK_CANCELLED,
+        TEXT.EXTRACTION_CANCELLED_BY_USER,
+        {},
+        false,
+      );
     }
   }
 
@@ -40,9 +46,10 @@ export class AIConfigGenerator {
     maxDepth: number,
     maxNodes: number,
     maxTokens: number,
+    signal?: AbortSignal,
   ): Promise<string | null> {
     try {
-      this.checkAborted();
+      this.checkAborted(signal);
       const hostname = getCurrentHostname();
 
       // 1. Check Cache & Heuristics
@@ -118,7 +125,7 @@ export class AIConfigGenerator {
       };
 
       for (let i = 0; i < chunks.length; i++) {
-        this.checkAborted();
+        this.checkAborted(signal);
         const chunk = chunks[i];
         // Reconstruct prompt with the chunk
         const prompt = part1 + part2 + part3 + chunk + part5;
@@ -127,10 +134,13 @@ export class AIConfigGenerator {
           // Use Port for long-running AI request to avoid message timeout
           const response = await this.aiService.callAI<{
             data?: { selectors?: { commentContainer?: string }; confidence?: number };
-          }>({
-            type: MESSAGES.AI_ANALYZE_STRUCTURE,
-            payload: { prompt },
-          });
+          }>(
+            {
+              type: MESSAGES.AI_ANALYZE_STRUCTURE,
+              payload: { prompt },
+            },
+            signal,
+          );
 
           if (response?.data?.selectors?.commentContainer) {
             const conf = response.data.confidence || AI.DEFAULT_CONFIDENCE;
@@ -174,10 +184,11 @@ export class AIConfigGenerator {
     detectMaxNodes: number,
     onProgress?: ConfigGenerationCallback,
     knownSectionSelector?: string | null,
+    signal?: AbortSignal,
   ): Promise<CrawlingConfig | null> {
     Logger.info('[AIConfigGenerator] Starting intelligent config generation');
     onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING, 'Analyzing page macro structure...');
-    this.checkAborted();
+    this.checkAborted(signal);
 
     // Phase 1: Meta Config Generation (Shallow DOM)
     let metaConfig: Partial<MetaConfigSubset> = {};
@@ -203,10 +214,13 @@ export class AIConfigGenerator {
       const response = await this.aiService.callAI<{
         config?: Partial<MetaConfigSubset>;
         error?: string;
-      }>({
-        type: MESSAGES.GENERATE_CRAWLING_CONFIG,
-        payload: { prompt: metaPrompt },
-      });
+      }>(
+        {
+          type: MESSAGES.GENERATE_CRAWLING_CONFIG,
+          payload: { prompt: metaPrompt },
+        },
+        signal,
+      );
 
       if (response && response.config) {
         metaConfig = response.config;
@@ -229,6 +243,7 @@ export class AIConfigGenerator {
         domConfig.maxDepth,
         detectMaxNodes,
         tokenChunks,
+        signal,
       );
     }
 
@@ -264,10 +279,13 @@ export class AIConfigGenerator {
       EXTRACTION_PROGRESS.CONFIG_ANALYZING + CONFIG_GENERATION_PROGRESS.STEPS.GENERATING_FIELDS,
       'Asking AI for comment fields schemas...',
     );
-    const response = await this.aiService.callAI<{ config?: CrawlingConfig; error?: string }>({
-      type: MESSAGES.GENERATE_CRAWLING_CONFIG,
-      payload: { prompt },
-    });
+    const response = await this.aiService.callAI<{ config?: CrawlingConfig; error?: string }>(
+      {
+        type: MESSAGES.GENERATE_CRAWLING_CONFIG,
+        payload: { prompt },
+      },
+      signal,
+    );
 
     if (!response || !response.config) {
       throw new ExtensionError(

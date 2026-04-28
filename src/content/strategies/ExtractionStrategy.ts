@@ -14,6 +14,7 @@ export interface ExtractionStrategy {
     maxComments: number,
     platform: Platform,
     onProgress?: ProgressCallback,
+    signal?: AbortSignal,
   ): Promise<Comment[]>;
 
   /**

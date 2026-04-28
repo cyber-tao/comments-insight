@@ -2,8 +2,9 @@
  * Export utilities for Comments Insight
  */
 import { HistoryItem, Comment } from '../types';
-import { REGEX, DEFAULTS, LIMITS, DATE_TIME } from '../config/constants';
+import { REGEX, DEFAULTS, LIMITS } from '../config/constants';
 import { t } from './i18n';
+import { formatDateTimeFromTimestamp, formatCommentTimestamp } from './date-formatter';
 
 /**
  * Flatten comment tree to include all replies
@@ -74,27 +75,7 @@ function sanitizeFilename(filename: string): string {
     .substring(0, DEFAULTS.FILENAME_MAX_LENGTH);
 }
 
-function formatDateTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-  const pad = (value: number) => value.toString().padStart(DATE_TIME.PAD_LENGTH, '0');
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + DATE_TIME.MONTH_OFFSET);
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  return `${year}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${month}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${day}${DATE_TIME.DISPLAY_DATE_TIME_SEPARATOR}${hours}${DATE_TIME.DISPLAY_TIME_SEPARATOR}${minutes}`;
-}
-
-function formatCommentTimestamp(timestamp: string): string {
-  const parsed = new Date(timestamp);
-  if (Number.isNaN(parsed.getTime())) {
-    return timestamp;
-  }
-  return formatDateTime(parsed.getTime());
-}
+const formatDateTime = formatDateTimeFromTimestamp;
 
 /**
  * Export comments as CSV

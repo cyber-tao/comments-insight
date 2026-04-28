@@ -1,4 +1,5 @@
 import * as React from 'react';
+import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES, UI_LIMITS, THEME } from '@/config/constants';
 import { Settings } from '@/types';
@@ -22,6 +23,13 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
     onThemeChange?.(newTheme);
   };
 
+  const handleMaxCommentsChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onSettingsChange({ ...settings, maxComments: parseInt(e.target.value, 10) });
+    },
+    [settings, onSettingsChange],
+  );
+
   return (
     <section className="mb-8 theme-card p-6">
       <h2 className="text-xl font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
@@ -38,7 +46,7 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
         <input
           type="number"
           value={settings.maxComments}
-          onChange={(e) => onSettingsChange({ ...settings, maxComments: parseInt(e.target.value) })}
+          onChange={handleMaxCommentsChange}
           className="w-full theme-input"
           min={UI_LIMITS.MAX_COMMENTS_MIN}
           max={UI_LIMITS.MAX_COMMENTS_MAX}

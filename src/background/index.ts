@@ -39,7 +39,9 @@ chrome.runtime.onConnect.addListener((port) => {
   if (port.name === 'ai-bridge') {
     Logger.debug('[Background] AI Bridge Port connected');
     port.onMessage.addListener((message) => {
-      messageRouter.handlePortMessage(port, message);
+      messageRouter.handlePortMessage(port, message).catch((err) => {
+        Logger.error('[Background] Port message handling error', { error: err });
+      });
     });
   }
 });

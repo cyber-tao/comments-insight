@@ -10,6 +10,7 @@ import {
   CONFIG_GENERATION_PROGRESS,
   MESSAGES,
   AI,
+  TEXT,
   TIMING,
   DOM,
   DOM_ANALYSIS_DEFAULTS,
@@ -45,9 +46,14 @@ export class AIStrategy implements ExtractionStrategy {
    * Check if extraction should be aborted
    * @throws ExtensionError if extraction is cancelled
    */
-  private checkAborted(): void {
-    if (!isExtractionActive()) {
-      throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Extraction cancelled by user', {}, false);
+  private checkAborted(signal?: AbortSignal): void {
+    if (signal?.aborted || !isExtractionActive()) {
+      throw new ExtensionError(
+        ErrorCode.TASK_CANCELLED,
+        TEXT.EXTRACTION_CANCELLED_BY_USER,
+        {},
+        false,
+      );
     }
   }
 
@@ -55,12 +61,13 @@ export class AIStrategy implements ExtractionStrategy {
     maxComments: number,
     platform: Platform,
     onProgress?: ProgressCallback,
+    signal?: AbortSignal,
   ): Promise<Comment[]> {
     Logger.info('[AIStrategy] Starting Pure AI Extraction (Legacy Mode)');
     onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'loading settings', 'initializing', 0, 1);
 
     // Check if extraction is still active
-    this.checkAborted();
+    this.checkAborted(signal);
 
     // 0. Load Settings
     const hostname = getCurrentHostname();
@@ -88,7 +95,7 @@ export class AIStrategy implements ExtractionStrategy {
     }
 
     // Check abort status after settings load
-    this.checkAborted();
+    this.checkAborted(signal);
     onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'settings loaded', 'initializing', 1, 1);
 
     // Calculate safe max input tokens for chunking
@@ -117,10 +124,11 @@ export class AIStrategy implements ExtractionStrategy {
       domConfig.maxDepth,
       detectMaxNodes,
       maxChunkTokens,
+      signal,
     );
 
     // Check abort status after detection
-    this.checkAborted();
+    this.checkAborted(signal);
 
     if (!sectionSelector) {
       throw new ExtensionError(
@@ -142,7 +150,7 @@ export class AIStrategy implements ExtractionStrategy {
     let sectionElement = document.querySelector(sectionSelector);
     if (!sectionElement) {
       // Fallback: re-query after a short wait, maybe it loaded late
-      await this.delay(TIMING.SHORT_WAIT_MS);
+      await this.delay(TIMING.SHORT_WAIT_MS, signal);
       sectionElement = document.querySelector(sectionSelector);
       if (!sectionElement) {
         throw new ExtensionError(
@@ -172,133 +180,147 @@ export class AIStrategy implements ExtractionStrategy {
     });
     observer.observe(sectionElement, { childList: true, subtree: true });
 
-    // Step 2: Loop - Scroll & Extract
-    while (allComments.length < maxComments) {
-      // Check abort status at the start of each iteration
-      this.checkAborted();
+    let iterationCount = 0;
 
-      if (noNewCommentsCount >= DOM.NO_NEW_COMMENTS_THRESHOLD) {
-        Logger.info('[AIStrategy] No new comments found after multiple attempts. Stopping.');
-        break;
-      }
+    try {
+      // Step 2: Loop - Scroll & Extract
+      while (allComments.length < maxComments && iterationCount++ < SCROLL.MAX_SCROLL_ITERATIONS) {
+        // Check abort status at the start of each iteration
+        this.checkAborted(signal);
 
-      if (unchangedScrollCount >= SCROLL.UNCHANGED_SCROLL_THRESHOLD) {
-        Logger.info('[AIStrategy] Comment container stopped loading new content. Stopping.');
-        break;
-      }
-
-      const currentProgress = Math.min(
-        EXTRACTION_PROGRESS.NORMALIZING,
-        EXTRACTION_PROGRESS.MIN + (allComments.length / maxComments) * EXTRACTION_PROGRESS.RANGE,
-      );
-
-      // 2.1 Scroll first to load more content before extraction
-      if (scrollCount > 0) {
-        onProgress?.(
-          currentProgress,
-          `scrolling (${scrollCount})`,
-          'scrolling',
-          allComments.length,
-          maxComments,
-        );
-
-        const { contentChanged } = await this.pageController.scrollContainer(sectionElement);
-
-        if (!contentChanged) {
-          unchangedScrollCount++;
-          Logger.debug('[AIStrategy] Scroll did not load new content', { unchangedScrollCount });
-        } else {
-          unchangedScrollCount = 0;
+        if (noNewCommentsCount >= DOM.NO_NEW_COMMENTS_THRESHOLD) {
+          Logger.info('[AIStrategy] No new comments found after multiple attempts. Stopping.');
+          break;
         }
-      }
-      scrollCount++;
 
-      onProgress?.(currentProgress, `extracting`, 'extracting', allComments.length, maxComments);
+        if (unchangedScrollCount >= SCROLL.UNCHANGED_SCROLL_THRESHOLD) {
+          Logger.info('[AIStrategy] Comment container stopped loading new content. Stopping.');
+          break;
+        }
 
-      // 2.1 Get current content of the section
-      // Process only new elements to save memory and CPU
-      const chunksToProcess: string[] = [];
-      const elementsBatch = [...newElementsToProcess];
-      newElementsToProcess = [];
-
-      if (elementsBatch.length > 0) {
-        // Create a virtual root for the batch to simplify them together
-        const virtualRoot = document.createElement('div');
-        virtualRoot.id = 'ai-incremental-batch';
-
-        // We just simplify each element and combine them
-        const batchSimplifiedNodes = elementsBatch.map((el) =>
-          DOMSimplifier.simplifyForAI(el, {
-            maxDepth: domConfig.maxDepth,
-            includeText: true,
-            maxNodes: extractMaxNodes,
-          }),
+        const currentProgress = Math.min(
+          EXTRACTION_PROGRESS.NORMALIZING,
+          EXTRACTION_PROGRESS.MIN + (allComments.length / maxComments) * EXTRACTION_PROGRESS.RANGE,
         );
 
-        const simplifiedRoot: import('../../types').SimplifiedNode = {
-          tag: 'div',
-          id: 'ai-incremental-batch',
-          childCount: batchSimplifiedNodes.length,
-          expanded: true,
-          children: batchSimplifiedNodes,
-          selector: '',
-          depth: 0,
-        };
+        // 2.1 Scroll first to load more content before extraction
+        if (scrollCount > 0) {
+          onProgress?.(
+            currentProgress,
+            `scrolling (${scrollCount})`,
+            'scrolling',
+            allComments.length,
+            maxComments,
+          );
 
-        // 2.2 Chunking
-        const chunks = Chunker.chunkSimplifiedNode(simplifiedRoot, maxChunkTokens);
-        chunksToProcess.push(...chunks);
-        Logger.debug('[AIStrategy] Chunked incremental section', {
-          chunks: chunks.length,
-          elements: elementsBatch.length,
+          const { contentChanged } = await this.pageController.scrollContainer(
+            sectionElement,
+            signal,
+          );
+
+          if (!contentChanged) {
+            unchangedScrollCount++;
+            Logger.debug('[AIStrategy] Scroll did not load new content', { unchangedScrollCount });
+          } else {
+            unchangedScrollCount = 0;
+          }
+        }
+        scrollCount++;
+
+        onProgress?.(currentProgress, `extracting`, 'extracting', allComments.length, maxComments);
+
+        // 2.1 Get current content of the section
+        // Process only new elements to save memory and CPU
+        const chunksToProcess: string[] = [];
+        const elementsBatch = [...newElementsToProcess];
+        newElementsToProcess = [];
+
+        if (elementsBatch.length > 0) {
+          // Create a virtual root for the batch to simplify them together
+          const virtualRoot = document.createElement('div');
+          virtualRoot.id = 'ai-incremental-batch';
+
+          // We just simplify each element and combine them
+          const batchSimplifiedNodes = elementsBatch.map((el) =>
+            DOMSimplifier.simplifyForAI(el, {
+              maxDepth: domConfig.maxDepth,
+              includeText: true,
+              maxNodes: extractMaxNodes,
+            }),
+          );
+
+          const simplifiedRoot: import('../../types').SimplifiedNode = {
+            tag: 'div',
+            id: 'ai-incremental-batch',
+            childCount: batchSimplifiedNodes.length,
+            expanded: true,
+            children: batchSimplifiedNodes,
+            selector: '',
+            depth: 0,
+          };
+
+          // 2.2 Chunking
+          const chunks = Chunker.chunkSimplifiedNode(simplifiedRoot, maxChunkTokens);
+          chunksToProcess.push(...chunks);
+          Logger.debug('[AIStrategy] Chunked incremental section', {
+            chunks: chunks.length,
+            elements: elementsBatch.length,
+          });
+        }
+
+        // 2.3 AI Extraction
+        let newComments: Comment[] = [];
+        if (chunksToProcess.length > 0) {
+          onProgress?.(
+            currentProgress,
+            `analyzing chunks (${chunksToProcess.length})`,
+            'analyzing',
+            allComments.length,
+            maxComments,
+          );
+          newComments = await this.extractFromChunks(chunksToProcess, signal);
+        }
+
+        // Check abort status after AI extraction
+        this.checkAborted(signal);
+
+        // 2.4 Merge & Dedup
+        let added = 0;
+        for (const comment of newComments) {
+          const hash = generateCommentHash(comment);
+          if (!seenHashes.has(hash)) {
+            seenHashes.add(hash);
+            comment.platform = platform;
+            comment.id = comment.id || hash;
+            allComments.push(comment);
+            added++;
+          }
+        }
+
+        Logger.info('[AIStrategy] Extracted batch', {
+          found: newComments.length,
+          new: added,
+          total: allComments.length,
+        });
+
+        if (added === 0) {
+          noNewCommentsCount++;
+        } else {
+          noNewCommentsCount = 0;
+        }
+
+        if (allComments.length >= maxComments) break;
+      }
+
+      if (iterationCount >= SCROLL.MAX_SCROLL_ITERATIONS) {
+        Logger.warn('[AIStrategy] Reached maximum scroll iterations', {
+          iterationCount,
+          commentsFound: allComments.length,
         });
       }
-
-      // 2.3 AI Extraction
-      let newComments: Comment[] = [];
-      if (chunksToProcess.length > 0) {
-        onProgress?.(
-          currentProgress,
-          `analyzing chunks (${chunksToProcess.length})`,
-          'analyzing',
-          allComments.length,
-          maxComments,
-        );
-        newComments = await this.extractFromChunks(chunksToProcess);
-      }
-
-      // Check abort status after AI extraction
-      this.checkAborted();
-
-      // 2.4 Merge & Dedup
-      let added = 0;
-      for (const comment of newComments) {
-        const hash = generateCommentHash(comment);
-        if (!seenHashes.has(hash)) {
-          seenHashes.add(hash);
-          comment.platform = platform;
-          comment.id = comment.id || hash;
-          allComments.push(comment);
-          added++;
-        }
-      }
-
-      Logger.info('[AIStrategy] Extracted batch', {
-        found: newComments.length,
-        new: added,
-        total: allComments.length,
-      });
-
-      if (added === 0) {
-        noNewCommentsCount++;
-      } else {
-        noNewCommentsCount = 0;
-      }
-
-      if (allComments.length >= maxComments) break;
+    } finally {
+      observer.disconnect();
     }
-
-    observer.disconnect();
 
     onProgress?.(95, 'validating results', 'validating', allComments.length, maxComments);
 
@@ -311,6 +333,7 @@ export class AIStrategy implements ExtractionStrategy {
         detectMaxNodes,
         undefined,
         sectionSelector,
+        signal,
       );
       if (config) {
         await this.saveGeneratedConfig(hostname, config);
@@ -322,18 +345,21 @@ export class AIStrategy implements ExtractionStrategy {
     return result;
   }
 
-  private async extractFromChunks(chunks: string[]): Promise<Comment[]> {
+  private async extractFromChunks(chunks: string[], signal?: AbortSignal): Promise<Comment[]> {
     const allComments: Comment[] = [];
 
     const tasks = chunks.map((chunk, i) => async () => {
       try {
-        const response = await this.aiService.callAI<{ comments?: Comment[]; error?: string }>({
-          type: MESSAGES.AI_EXTRACT_CONTENT,
-          payload: {
-            chunks: [chunk],
-            systemPrompt: PROMPT_EXTRACT_COMMENTS_FROM_HTML,
+        const response = await this.aiService.callAI<{ comments?: Comment[]; error?: string }>(
+          {
+            type: MESSAGES.AI_EXTRACT_CONTENT,
+            payload: {
+              chunks: [chunk],
+              systemPrompt: PROMPT_EXTRACT_COMMENTS_FROM_HTML,
+            },
           },
-        });
+          signal,
+        );
 
         if (response?.error) {
           Logger.warn(`[AIStrategy] Chunk ${i + 1}/${chunks.length} extraction error`, {
@@ -379,13 +405,50 @@ export class AIStrategy implements ExtractionStrategy {
     });
   }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private delay(ms: number, signal?: AbortSignal): Promise<void> {
+    if (!signal) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    return new Promise((resolve, reject) => {
+      if (signal.aborted) {
+        reject(
+          new ExtensionError(
+            ErrorCode.TASK_CANCELLED,
+            TEXT.EXTRACTION_CANCELLED_BY_USER,
+            {},
+            false,
+          ),
+        );
+        return;
+      }
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      const onAbort = () => {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', onAbort);
+        reject(
+          new ExtensionError(
+            ErrorCode.TASK_CANCELLED,
+            TEXT.EXTRACTION_CANCELLED_BY_USER,
+            {},
+            false,
+          ),
+        );
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
   }
 
-  async generateConfig(onProgress?: ConfigGenerationCallback): Promise<boolean> {
+  async generateConfig(
+    onProgress?: ConfigGenerationCallback,
+    signal?: AbortSignal,
+  ): Promise<boolean> {
     Logger.info('[AIStrategy] Starting manual config generation');
     onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'Initializing configuration generator...');
+    this.checkAborted(signal);
 
     const hostname = getCurrentHostname();
     let domConfig = DOM_ANALYSIS_DEFAULTS;
@@ -404,9 +467,9 @@ export class AIStrategy implements ExtractionStrategy {
       'Scrolling to load dynamically rendered content...',
     );
 
-    await this.pageController.scrollToBottom();
+    await this.pageController.scrollToBottom(signal);
     // Use delay for now, PageController scroll update will augment this later
-    await this.delay(TIMING.SCROLL_DELAY_MS);
+    await this.delay(TIMING.SCROLL_DELAY_MS, signal);
 
     const detectMaxNodes = Math.max(
       DOM.DETECT_MAX_NODES_BASE,
@@ -418,6 +481,8 @@ export class AIStrategy implements ExtractionStrategy {
       domConfig,
       detectMaxNodes,
       onProgress,
+      undefined,
+      signal,
     );
     if (config) {
       await this.saveGeneratedConfig(hostname, config, onProgress);

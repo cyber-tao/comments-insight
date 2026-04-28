@@ -1,12 +1,13 @@
 import * as React from 'react';
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PAGINATION, DATE_TIME } from '@/config/constants';
+import { PAGINATION } from '@/config/constants';
 import { Comment } from '../types';
 import i18n from '../utils/i18n';
 import { useTheme } from '@/hooks/useTheme';
 import { Logger } from '@/utils/logger';
 import { ExtensionAPI } from '@/utils/extension-api';
+import { formatCommentTimestamp } from '@/utils/date-formatter';
 import { HistorySidebar } from './components/HistorySidebar';
 import { HistoryDetailPanel } from './components/HistoryDetailPanel';
 import { useHistoryData } from './hooks/useHistoryData';
@@ -14,6 +15,7 @@ import { useHistoryReanalyze } from './hooks/useHistoryReanalyze';
 
 const HISTORY_LIST_ITEM_HEIGHT = 108;
 const HISTORY_LIST_OVERSCAN = 4;
+const MAX_COMMENT_DEPTH = 10;
 
 const History: React.FC = () => {
   const { t } = useTranslation();
@@ -63,6 +65,7 @@ const History: React.FC = () => {
     searchQuery,
     selectedHistoryId,
     selectedItem,
+    selectedItemError,
     selectedItemLoading,
     setHistoryPage,
     setSearchQuery,
@@ -78,6 +81,8 @@ const History: React.FC = () => {
     handleReanalyze,
     isReanalyzing,
     reanalyzeError,
+    reanalyzeDetailedProgress,
+    reanalyzeMessage,
     reanalyzeProgress,
     reanalyzeTaskId,
     reanalyzingHistoryId,
@@ -99,20 +104,6 @@ const History: React.FC = () => {
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleString();
-  };
-
-  const formatCommentTimestamp = (timestamp: string) => {
-    const parsed = new Date(timestamp);
-    if (Number.isNaN(parsed.getTime())) {
-      return timestamp;
-    }
-    const pad = (value: number) => value.toString().padStart(DATE_TIME.PAD_LENGTH, '0');
-    const year = parsed.getFullYear();
-    const month = pad(parsed.getMonth() + DATE_TIME.MONTH_OFFSET);
-    const day = pad(parsed.getDate());
-    const hours = pad(parsed.getHours());
-    const minutes = pad(parsed.getMinutes());
-    return `${year}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${month}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${day}${DATE_TIME.DISPLAY_DATE_TIME_SEPARATOR}${hours}${DATE_TIME.DISPLAY_TIME_SEPARATOR}${minutes}`;
   };
 
   const sortComments = useCallback(
@@ -218,6 +209,12 @@ const History: React.FC = () => {
   };
 
   const renderCommentTree = (comments: Comment[], depth = 0) => {
+    if (depth >= MAX_COMMENT_DEPTH) {
+      return (
+        <div className="ml-4 pl-4 text-xs text-gray-400 italic">Deeply nested replies hidden</div>
+      );
+    }
+
     return (
       <div
         className={`${depth > 0 ? 'ml-4 pl-4' : ''}`}
@@ -338,6 +335,7 @@ const History: React.FC = () => {
       <div className="flex-1 flex flex-col">
         <HistoryDetailPanel
           selectedItem={selectedItem}
+          selectedItemError={selectedItemError}
           selectedItemLoading={selectedItemLoading}
           viewMode={viewMode}
           exportPostContentInMarkdown={exportPostContentInMarkdown}
@@ -350,6 +348,8 @@ const History: React.FC = () => {
           paginatedComments={paginatedComments}
           isReanalyzing={isReanalyzing}
           reanalyzeError={reanalyzeError}
+          reanalyzeDetailedProgress={reanalyzeDetailedProgress}
+          reanalyzeMessage={reanalyzeMessage}
           reanalyzeProgress={reanalyzeProgress}
           reanalyzeTaskId={reanalyzeTaskId}
           reanalyzingHistoryId={reanalyzingHistoryId}

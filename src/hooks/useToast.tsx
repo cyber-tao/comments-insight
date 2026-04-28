@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import Toast, { ToastType } from '../components/Toast';
 
 interface ToastMessage {
@@ -9,16 +9,13 @@ interface ToastMessage {
 
 export const useToast = () => {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [nextId, setNextId] = useState(0);
+  const nextIdRef = useRef(0);
 
-  const showToast = useCallback(
-    (message: string, type: ToastType = 'info') => {
-      const id = nextId;
-      setNextId(id + 1);
-      setToasts((prev) => [...prev, { id, message, type }]);
-    },
-    [nextId],
-  );
+  const showToast = useCallback((message: string, type: ToastType = 'info') => {
+    const id = nextIdRef.current;
+    nextIdRef.current += 1;
+    setToasts((prev) => [...prev, { id, message, type }]);
+  }, []);
 
   const removeToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));

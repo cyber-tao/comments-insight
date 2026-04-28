@@ -64,6 +64,7 @@ export class CommentExtractor {
     maxComments: number,
     platform: Platform,
     onProgress?: ProgressCallback,
+    signal?: AbortSignal,
   ): Promise<Comment[]> {
     Logger.info('[CommentExtractor] Starting extraction process');
 
@@ -102,7 +103,7 @@ export class CommentExtractor {
         : undefined;
 
       // Execute strategy
-      const comments = await strategy.execute(targetComments, platform, progressAdapter);
+      const comments = await strategy.execute(targetComments, platform, progressAdapter, signal);
 
       onProgress?.(EXTRACTION_PROGRESS.VALIDATING, 'validating');
       const validComments = this.validateComments(comments, platform);
@@ -112,8 +113,12 @@ export class CommentExtractor {
       return limitedComments;
     } finally {
       // Ensure strategy resources are cleaned up
-      if (strategy && strategy.cleanup) {
-        strategy.cleanup();
+      if (strategy?.cleanup) {
+        try {
+          strategy.cleanup();
+        } catch (cleanupError) {
+          Logger.warn('[CommentExtractor] Strategy cleanup failed', { error: cleanupError });
+        }
       }
     }
   }

@@ -332,6 +332,10 @@ export class ErrorHandler {
     if (message.includes('rate limit') || message.includes('too many requests')) {
       return ErrorCode.AI_RATE_LIMIT;
     }
+    // Storage quota must be checked before generic 'quota' match
+    if (message.includes('quota') && message.includes('storage')) {
+      return ErrorCode.STORAGE_QUOTA_EXCEEDED;
+    }
     if (message.includes('quota') || message.includes('insufficient')) {
       return ErrorCode.AI_QUOTA_EXCEEDED;
     }
@@ -343,9 +347,6 @@ export class ErrorHandler {
     }
 
     // Storage errors
-    if (message.includes('quota') && message.includes('storage')) {
-      return ErrorCode.STORAGE_QUOTA_EXCEEDED;
-    }
     if (message.includes('storage')) {
       return ErrorCode.STORAGE_ERROR;
     }

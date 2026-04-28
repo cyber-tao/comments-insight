@@ -14,7 +14,7 @@
  * ```
  */
 
-import { LOG_PREFIX, STORAGE, DEFAULTS, LOG_LEVELS } from '@/config/constants';
+import { LOG_PREFIX, STORAGE, DEFAULTS, LOG_LEVELS, LOG_SANITIZE } from '@/config/constants';
 import { Mutex } from './promise';
 
 interface StoredSettings {
@@ -254,16 +254,23 @@ export class Logger {
       return;
     }
 
+    const sanitizedMessage = this.sanitize(message);
+    const sanitizedData = data ? this.sanitizeObject(data) : undefined;
+
     const entry: LogEntry = {
       level,
       timestamp: Date.now(),
-      message,
-      data,
+      message: sanitizedMessage,
+      data: sanitizedData,
     };
 
     // Add stack trace for errors
-    if (level === LogLevel.ERROR && data?.stack && typeof data.stack === 'string') {
-      entry.stack = data.stack;
+    if (
+      level === LogLevel.ERROR &&
+      sanitizedData?.stack &&
+      typeof sanitizedData.stack === 'string'
+    ) {
+      entry.stack = sanitizedData.stack;
     }
 
     // Console output
@@ -284,6 +291,53 @@ export class Logger {
     const currentLevelIndex = levels.indexOf(this.config.minLevel);
     const logLevelIndex = levels.indexOf(level);
     return logLevelIndex >= currentLevelIndex;
+  }
+
+  private static maskValue(value: string): string {
+    if (value.length <= LOG_SANITIZE.MASK_VISIBLE_CHARS * 2) {
+      return LOG_SANITIZE.MASK_CHAR.repeat(value.length);
+    }
+    const prefix = value.slice(0, LOG_SANITIZE.MASK_VISIBLE_CHARS);
+    const suffix = value.slice(-LOG_SANITIZE.MASK_VISIBLE_CHARS);
+    const maskLength = Math.min(value.length - LOG_SANITIZE.MASK_VISIBLE_CHARS * 2, 8);
+    return `${prefix}${LOG_SANITIZE.MASK_CHAR.repeat(maskLength)}${suffix}`;
+  }
+
+  private static sanitize(text: string): string {
+    let result = text;
+    for (const pattern of LOG_SANITIZE.API_KEY_PATTERNS) {
+      const regex = new RegExp(pattern.source, pattern.flags);
+      result = result.replace(regex, (match) => this.maskValue(match));
+    }
+    return result;
+  }
+
+  private static sanitizeObject(obj: Record<string, unknown>): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      const lowerKey = key.toLowerCase();
+      const isSensitive = LOG_SANITIZE.SENSITIVE_FIELD_NAMES.some((field) =>
+        lowerKey.includes(field.toLowerCase()),
+      );
+      if (isSensitive && typeof value === 'string' && value.length > 0) {
+        result[key] = this.maskValue(value);
+      } else if (typeof value === 'string') {
+        result[key] = this.sanitize(value);
+      } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        result[key] = this.sanitizeObject(value as Record<string, unknown>);
+      } else if (Array.isArray(value)) {
+        result[key] = value.map((item) =>
+          item !== null && typeof item === 'object'
+            ? this.sanitizeObject(item as Record<string, unknown>)
+            : typeof item === 'string'
+              ? this.sanitize(item)
+              : item,
+        );
+      } else {
+        result[key] = value;
+      }
+    }
+    return result;
   }
 
   private static logToConsole(entry: LogEntry): void {

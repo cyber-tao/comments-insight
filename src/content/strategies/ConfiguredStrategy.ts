@@ -13,6 +13,7 @@ import { ExtensionError, ErrorCode } from '@/utils/errors';
 import {
   EXTRACTION_PROGRESS,
   MESSAGES,
+  TEXT,
   TIMING,
   DOM,
   LIKES,
@@ -36,9 +37,14 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     // No specific resources to cleanup for this strategy
   }
 
-  private checkAborted(): void {
-    if (!isExtractionActive()) {
-      throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Extraction cancelled by user', {}, false);
+  private checkAborted(signal?: AbortSignal): void {
+    if (signal?.aborted || !isExtractionActive()) {
+      throw new ExtensionError(
+        ErrorCode.TASK_CANCELLED,
+        TEXT.EXTRACTION_CANCELLED_BY_USER,
+        {},
+        false,
+      );
     }
   }
 
@@ -46,6 +52,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     maxComments: number,
     platform: Platform,
     onProgress?: ProgressCallback,
+    signal?: AbortSignal,
   ): Promise<Comment[]> {
     Logger.info('[ConfiguredStrategy] Starting extraction with config', {
       domain: this.config.domain,
@@ -63,7 +70,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
     if (!container) {
       // Try waiting
-      await this.delay(TIMING.SHORT_WAIT_MS);
+      await this.delay(TIMING.SHORT_WAIT_MS, signal);
       container = querySelectorDeep(document, containerSelector);
       if (!container) {
         throw new ExtensionError(
@@ -89,7 +96,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     this.recordFieldValidation(container);
 
     while (allComments.length < maxComments) {
-      this.checkAborted();
+      this.checkAborted(signal);
 
       if (noNewCommentsCount >= DOM.NO_NEW_COMMENTS_THRESHOLD) {
         break;
@@ -117,9 +124,13 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
         // Scroll element into view to trigger lazy loading before extraction
         (itemElement as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
-        await this.delay(TIMING.SCROLL_PAUSE_MS);
+        await this.delay(TIMING.SCROLL_PAUSE_MS, signal);
 
-        const comment = await this.extractCommentFromElement(itemElement as HTMLElement, platform);
+        const comment = await this.extractCommentFromElement(
+          itemElement as HTMLElement,
+          platform,
+          signal,
+        );
         if (comment) {
           const hash = generateCommentHash(comment);
           if (!seenHashes.has(hash)) {
@@ -150,7 +161,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         maxComments,
       );
 
-      const { contentChanged } = await this.pageController.scrollContainer(container);
+      const { contentChanged } = await this.pageController.scrollContainer(container, signal);
 
       // Re-query container in case of re-render
       const newContainer = querySelectorDeep(document, containerSelector);
@@ -170,8 +181,11 @@ export class ConfiguredStrategy implements ExtractionStrategy {
   private async extractCommentFromElement(
     element: HTMLElement,
     platform: Platform,
+    signal?: AbortSignal,
   ): Promise<Comment | null> {
     try {
+      this.checkAborted(signal);
+
       const username = this.extractField(
         element,
         this.config.fields.find((f) => f.name === 'username'),
@@ -233,7 +247,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
             // Scroll into view to trigger lazy loading and ensure clickability
             expandBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await this.delay(TIMING.SCROLL_INTO_VIEW_WAIT_MS); // Wait for scroll
+            await this.delay(TIMING.SCROLL_INTO_VIEW_WAIT_MS, signal);
 
             // Click to expand
             try {
@@ -241,8 +255,12 @@ export class ConfiguredStrategy implements ExtractionStrategy {
               Logger.info('[ReplyDebug] Clicked expand button', { currentReplyCount });
 
               // Smart wait: Poll for reply count to INCREASE
-              await this.waitForReplies(element, replyConfig, currentReplyCount);
+              await this.waitForReplies(element, replyConfig, currentReplyCount, signal);
             } catch (e: unknown) {
+              if (e instanceof ExtensionError && e.code === ErrorCode.TASK_CANCELLED) {
+                throw e;
+              }
+
               Logger.error('[ReplyDebug] Failed to click expand button', {
                 error: e instanceof Error ? e.message : String(e),
               });
@@ -263,6 +281,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
               platform,
               replyConfig,
               0,
+              signal,
             );
             if (reply) {
               comment.replies.push(reply);
@@ -273,6 +292,10 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
       return comment;
     } catch (e: unknown) {
+      if (e instanceof ExtensionError && e.code === ErrorCode.TASK_CANCELLED) {
+        throw e;
+      }
+
       Logger.error('[ReplyDebug] Error extracting comment', {
         error: e instanceof Error ? e.message : String(e),
       });
@@ -285,7 +308,10 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     platform: Platform,
     replyConfig: ReplyConfig,
     depth: number = 0,
+    signal?: AbortSignal,
   ): Promise<Comment | null> {
+    this.checkAborted(signal);
+
     if (depth >= DOM.MAX_REPLY_DEPTH) {
       Logger.warn('[ConfiguredStrategy] Max reply depth reached', { depth });
       return null;
@@ -340,10 +366,14 @@ export class ConfiguredStrategy implements ExtractionStrategy {
             currentNestedCount,
           });
           expandBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          await this.delay(TIMING.SCROLL_INTO_VIEW_WAIT_MS);
+          await this.delay(TIMING.SCROLL_INTO_VIEW_WAIT_MS, signal);
           expandBtn.click();
-          await this.waitForReplies(element, replyConfig, currentNestedCount);
+          await this.waitForReplies(element, replyConfig, currentNestedCount, signal);
         } catch (e: unknown) {
+          if (e instanceof ExtensionError && e.code === ErrorCode.TASK_CANCELLED) {
+            throw e;
+          }
+
           Logger.error('[ReplyDebug] Failed to click nested expand button', {
             error: e instanceof Error ? e.message : String(e),
           });
@@ -363,6 +393,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
           platform,
           replyConfig,
           depth + 1,
+          signal,
         );
         if (reply) {
           comment.replies.push(reply);
@@ -455,10 +486,13 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     element: HTMLElement,
     replyConfig: ReplyConfig,
     initialCount: number = 0,
+    signal?: AbortSignal,
   ): Promise<void> {
     const startTime = Date.now();
 
     while (Date.now() - startTime < TIMING.REPLY_POLL_TIMEOUT_MS) {
+      this.checkAborted(signal);
+
       const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
       if (replyContainer) {
         const items = querySelectorAllDeep(replyContainer, replyConfig.item.selector);
@@ -469,17 +503,50 @@ export class ConfiguredStrategy implements ExtractionStrategy {
             to: items.length,
           });
           // Add a tiny extra delay for render stability
-          await this.delay(TIMING.RENDER_STABILITY_WAIT_MS);
+          await this.delay(TIMING.RENDER_STABILITY_WAIT_MS, signal);
           return;
         }
       }
-      await this.delay(TIMING.REPLY_POLL_INTERVAL_MS);
+      await this.delay(TIMING.REPLY_POLL_INTERVAL_MS, signal);
     }
 
     Logger.debug('[ReplyDebug] Timed out waiting for replies to increase', { initialCount });
   }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  private delay(ms: number, signal?: AbortSignal): Promise<void> {
+    if (!signal) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    return new Promise((resolve, reject) => {
+      if (signal.aborted) {
+        reject(
+          new ExtensionError(
+            ErrorCode.TASK_CANCELLED,
+            TEXT.EXTRACTION_CANCELLED_BY_USER,
+            {},
+            false,
+          ),
+        );
+        return;
+      }
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      const onAbort = () => {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', onAbort);
+        reject(
+          new ExtensionError(
+            ErrorCode.TASK_CANCELLED,
+            TEXT.EXTRACTION_CANCELLED_BY_USER,
+            {},
+            false,
+          ),
+        );
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
   }
 }
