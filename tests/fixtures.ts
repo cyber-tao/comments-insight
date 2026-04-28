@@ -2,7 +2,7 @@ import { Comment, HistoryItem, Task, Settings, AIConfig } from '../src/types';
 import { LANGUAGES } from '../src/config/constants';
 
 export const mockComment = (overrides: Partial<Comment> = {}): Comment => ({
-  id: `comment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
   username: 'Test User',
   content: 'This is a test comment',
   likes: 10,
@@ -34,7 +34,7 @@ export const mockHistoryItem = (overrides: Partial<HistoryItem> = {}): HistoryIt
 });
 
 export const mockTask = (overrides: Partial<Task> = {}): Task => ({
-  id: `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+  id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
   type: 'extract',
   status: 'pending',
   url: 'https://example.com/post/123',

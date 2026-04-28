@@ -76,6 +76,7 @@ vi.mock('../src/history/components/HistorySidebar', () => ({
 
 vi.mock('../src/history/components/HistoryDetailPanel', () => ({
   HistoryDetailPanel: ({
+    selectedItemError,
     totalComments,
     totalPages,
     onViewModeChange,
@@ -85,6 +86,7 @@ vi.mock('../src/history/components/HistoryDetailPanel', () => ({
     onCurrentPageChange,
     renderCommentTree,
   }: {
+    selectedItemError: string | null;
     totalComments: number;
     totalPages: number;
     onViewModeChange: (value: 'comments' | 'analysis') => void;
@@ -98,6 +100,7 @@ vi.mock('../src/history/components/HistoryDetailPanel', () => ({
       <div>
         detail:{totalComments}:{totalPages}
       </div>
+      <div>detail-error:{selectedItemError ?? 'none'}</div>
       <button onClick={() => onViewModeChange('comments')}>detail-view</button>
       <button onClick={onReanalyze}>detail-reanalyze</button>
       <button onClick={() => onCommentSearchTermChange('needle')}>detail-search</button>
@@ -163,6 +166,7 @@ describe('History page', () => {
       loading: false,
       searchQuery: '',
       selectedHistoryId: 'history-1',
+      selectedItemError: null,
       selectedItem: {
         id: 'history-1',
         comments: [
@@ -186,6 +190,8 @@ describe('History page', () => {
       handleReanalyze: vi.fn(),
       isReanalyzing: false,
       reanalyzeError: null,
+      reanalyzeDetailedProgress: null,
+      reanalyzeMessage: null,
       reanalyzeProgress: null,
       reanalyzeTaskId: null,
       reanalyzingHistoryId: null,
@@ -208,6 +214,7 @@ describe('History page', () => {
 
     expect(screen.getByText('sidebar-total:2')).toBeTruthy();
     expect(screen.getByText('detail:1:1')).toBeTruthy();
+    expect(screen.getByText('detail-error:none')).toBeTruthy();
     expect(screen.getByText('alice')).toBeTruthy();
     expect(screen.getByText('top level')).toBeTruthy();
     expect(screen.getByRole('button', { name: /replies:1/i })).toBeTruthy();

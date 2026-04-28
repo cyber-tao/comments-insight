@@ -5,7 +5,7 @@
 import * as React from 'react';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { PAGINATION, TIMING } from '../src/config/constants';
+import { AI, PAGINATION, TIMING } from '../src/config/constants';
 import { useHistoryData } from '../src/history/hooks/useHistoryData';
 import { useHistoryReanalyze } from '../src/history/hooks/useHistoryReanalyze';
 import type { HistoryItem } from '../src/types';
@@ -173,13 +173,53 @@ describe('history hooks', () => {
     expect(result.current.searchQuery).toBe('');
     expect(result.current.selectedHistoryId).toBeNull();
     expect(result.current.selectedItem).toBeNull();
+    expect(result.current.selectedItemError).toBeNull();
     expect(onResetListScroll).toHaveBeenCalledTimes(2);
+  });
+
+  it('surfaces selected item load failures', async () => {
+    extensionApiMock.getHistoryItem.mockResolvedValueOnce(null);
+
+    const listContainerRef = { current: document.createElement('div') };
+    const onResetListScroll = vi.fn();
+    const onSelectViewMode = vi.fn();
+
+    const { result } = renderHook(() =>
+      useHistoryData({
+        listContainerRef,
+        onResetListScroll,
+        onSelectViewMode,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.handleSelectHistoryItem(createHistoryListEntry(HISTORY_ID));
+    });
+
+    expect(result.current.selectedHistoryId).toBe(HISTORY_ID);
+    expect(result.current.selectedItem).toBeNull();
+    expect(result.current.selectedItemLoading).toBe(false);
+    expect(result.current.selectedItemError).toBe('Failed to load history item');
   });
 
   it('polls reanalyze task until completion and refreshes selected item', async () => {
     vi.useFakeTimers();
+    const detailedProgress = {
+      stage: 'analyzing' as const,
+      current: 45,
+      total: 100,
+      estimatedTimeRemaining: -1,
+      stageMessageKey: AI.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
+      stageMessageParams: {
+        [AI.ANALYSIS_PROGRESS_PARAM_KEYS.CHARACTERS]: 1024,
+      },
+    };
     extensionApiMock.getTaskStatus
-      .mockResolvedValueOnce({ status: 'running', progress: 45 })
+      .mockResolvedValueOnce({ status: 'running', progress: 45, detailedProgress })
       .mockResolvedValueOnce({ status: 'completed', progress: 100 });
 
     const initialItem = createHistoryItem(HISTORY_ID);
@@ -216,6 +256,7 @@ describe('history hooks', () => {
     });
     expect(result.current.isReanalyzing).toBe(true);
     expect(result.current.reanalyzeProgress).toBe(45);
+    expect(result.current.reanalyzeDetailedProgress).toEqual(detailedProgress);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(TIMING.POLL_TASK_RUNNING_MS);
@@ -226,6 +267,7 @@ describe('history hooks', () => {
     expect(result.current.isReanalyzing).toBe(false);
     expect(result.current.reanalyzeTaskId).toBeNull();
     expect(result.current.reanalyzeProgress).toBeNull();
+    expect(result.current.reanalyzeDetailedProgress).toBeNull();
   });
 
   it('surfaces task failure during reanalyze polling', async () => {

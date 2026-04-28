@@ -161,4 +161,41 @@ describe('ExtensionAPI', () => {
       TEXT.CONTENT_SCRIPT_INJECT_FAILED,
     );
   });
+
+  it('rejects background error envelopes for public APIs', async () => {
+    const config = {
+      apiUrl: 'https://api.example.com',
+      apiKey: 'secret',
+      model: 'gpt-4o-mini',
+      contextWindowSize: 200000,
+      maxOutputTokens: 4096,
+      temperature: 1,
+      topP: 0.95,
+    };
+    const calls: Array<() => Promise<unknown>> = [
+      () => ExtensionAPI.getSettings(),
+      () => ExtensionAPI.saveSettings({ theme: 'dark' }),
+      () => ExtensionAPI.getHistoryItem('history-1'),
+      () => ExtensionAPI.getHistoryByUrl('https://example.com'),
+      () => ExtensionAPI.getHistoryMetadataPage(1, 20, 'query'),
+      () => ExtensionAPI.getTasks(),
+      () => ExtensionAPI.getTaskStatus('task-1'),
+      () => ExtensionAPI.ensureContentScript(12),
+      () => ExtensionAPI.startExtraction('https://example.com/post'),
+      () => ExtensionAPI.startConfigGeneration('https://example.com/post'),
+      () => ExtensionAPI.startAnalysis({ comments: [], historyId: 'history-1' }),
+      () => ExtensionAPI.cancelTask('task-1'),
+      () => ExtensionAPI.getCrawlingConfig('example.com'),
+      () => ExtensionAPI.deleteHistory('history-1'),
+      () => ExtensionAPI.clearAllHistory(),
+      () => ExtensionAPI.exportSettings(),
+      () => ExtensionAPI.getAvailableModels('https://api.example.com', 'secret'),
+      () => ExtensionAPI.testModel(config),
+    ];
+
+    for (const call of calls) {
+      sendMessageMock.mockResolvedValueOnce({ error: 'background failed' });
+      await expect(call()).rejects.toThrow('background failed');
+    }
+  });
 });

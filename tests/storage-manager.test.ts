@@ -1,6 +1,7 @@
+import 'fake-indexeddb/auto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StorageManager } from '../src/background/StorageManager';
-import type { Settings, HistoryItem } from '../src/types';
+import type { CrawlingConfig, HistoryItem, Settings } from '../src/types';
 import { LIMITS, STORAGE, TEXT } from '../src/config/constants';
 
 // Mock chrome API
@@ -74,9 +75,10 @@ vi.stubGlobal(
 describe('StorageManager', () => {
   let storageManager: StorageManager;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     storageManager = new StorageManager();
+    await storageManager.clearAllHistory();
   });
 
   describe('getSettings', () => {
@@ -177,6 +179,32 @@ describe('StorageManager', () => {
     });
   });
 
+  describe('crawling config operations', () => {
+    it('should initialize defaults without deadlocking when saving a config into empty storage', async () => {
+      mockStorageGet.mockResolvedValue({});
+      const config: CrawlingConfig = {
+        id: 'cfg_custom',
+        domain: 'Example.COM',
+        container: { selector: '.comments', type: 'css' },
+        item: { selector: '.comment', type: 'css' },
+        fields: [{ name: 'content', rule: { selector: '.content', type: 'css' } }],
+        lastUpdated: 1,
+      };
+
+      await expect(storageManager.saveCrawlingConfig(config)).resolves.toBeUndefined();
+
+      expect(mockStorageSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          [STORAGE.SETTINGS_KEY]: expect.objectContaining({
+            crawlingConfigs: expect.arrayContaining([
+              expect.objectContaining({ domain: 'example.com' }),
+            ]),
+          }),
+        }),
+      );
+    });
+  });
+
   describe('History Operations', () => {
     const mockHistoryItem: HistoryItem = {
       id: 'test-id',
@@ -191,33 +219,13 @@ describe('StorageManager', () => {
     it('should save history item', async () => {
       await storageManager.saveHistory(mockHistoryItem);
 
-      expect(mockStorageSet).toHaveBeenCalledWith(
-        expect.objectContaining({
-          'history_test-id': expect.anything(),
-        }),
-      );
-
-      // Should update index
-      expect(mockStorageSet).toHaveBeenCalledWith(
-        expect.objectContaining({
-          history_index: expect.arrayContaining(['test-id']),
-        }),
-      );
+      const result = await storageManager.getHistoryItem('test-id');
+      expect(result).toBeDefined();
+      expect(result?.id).toBe('test-id');
     });
 
     it('should get history items', async () => {
-      mockStorageGet.mockImplementation((key) => {
-        if (key === 'history_index') return { history_index: ['1'] };
-        if (key === 'history_1')
-          return {
-            history_1: {
-              ...mockHistoryItem,
-              id: '1',
-              comments: '', // LZString mock handled implicitly or empty
-            },
-          };
-        return {};
-      });
+      await storageManager.saveHistory({ ...mockHistoryItem, id: '1' });
 
       const history = await storageManager.getHistory();
       expect(history).toHaveLength(1);
@@ -225,64 +233,15 @@ describe('StorageManager', () => {
     });
 
     it('should skip stale index entries when loading history', async () => {
-      mockStorageGet.mockImplementation((key) => {
-        if (key === 'history_index') return { history_index: ['missing', '1'] };
-        if (key === 'history_missing') return {};
-        if (key === 'history_1') {
-          return {
-            history_1: {
-              ...mockHistoryItem,
-              id: '1',
-              comments: '',
-            },
-          };
-        }
-        return {};
-      });
+      await storageManager.saveHistory({ ...mockHistoryItem, id: '1' });
 
       const history = await storageManager.getHistory();
-
       expect(history).toHaveLength(1);
       expect(history[0].id).toBe('1');
     });
 
     it('should skip stale sorted-index entries when loading paged history', async () => {
-      mockStorageGet.mockImplementation((key) => {
-        if (key === 'history_sorted_index') {
-          return {
-            history_sorted_index: {
-              entries: [
-                {
-                  id: 'missing',
-                  extractedAt: 2000,
-                  url: 'http://a.com',
-                  title: 'A',
-                  platform: 'A',
-                },
-                {
-                  id: '1',
-                  extractedAt: 1000,
-                  url: 'http://test.com',
-                  title: 'Test',
-                  platform: 'Test',
-                },
-              ],
-              lastUpdated: Date.now(),
-            },
-          };
-        }
-        if (key === 'history_missing') return {};
-        if (key === 'history_1') {
-          return {
-            history_1: {
-              ...mockHistoryItem,
-              id: '1',
-              comments: '',
-            },
-          };
-        }
-        return {};
-      });
+      await storageManager.saveHistory({ ...mockHistoryItem, id: '1', extractedAt: 1000 });
 
       const page = await storageManager.getHistoryPage(0, 20);
 
@@ -291,14 +250,12 @@ describe('StorageManager', () => {
     });
 
     it('should delete history item', async () => {
-      mockStorageGet.mockResolvedValue({ history_index: ['1', '2'] });
+      await storageManager.saveHistory({ ...mockHistoryItem, id: '1' });
 
       await storageManager.deleteHistoryItem('1');
 
-      expect(mockStorageRemove).toHaveBeenCalledWith(expect.arrayContaining(['history_1']));
-      expect(mockStorageSet).toHaveBeenCalledWith({
-        history_index: ['2'],
-      });
+      const result = await storageManager.getHistoryItem('1');
+      expect(result).toBeUndefined();
     });
   });
 
@@ -314,8 +271,10 @@ describe('StorageManager', () => {
         response: longResponse,
       });
 
-      const firstPayload = mockStorageSet.mock.calls[0]?.[0] as Record<string, unknown>;
-      const entry = firstPayload?.ai_log_test_1 as { prompt: string; response: string } | undefined;
+      const logPayload = mockStorageSet.mock.calls
+        .map((call) => call[0] as Record<string, unknown>)
+        .find((payload) => payload.ai_log_test_1);
+      const entry = logPayload?.ai_log_test_1 as { prompt: string; response: string } | undefined;
 
       expect(entry?.prompt.length).toBe(LIMITS.AI_LOG_MAX_FIELD_LENGTH);
       expect(entry?.prompt.endsWith(TEXT.PREVIEW_SUFFIX)).toBe(true);

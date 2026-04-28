@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TaskManager } from '../src/background/TaskManager';
-import { STORAGE } from '../src/config/constants';
+import { AI, STORAGE } from '../src/config/constants';
 
 const mockSendMessage = vi.fn().mockResolvedValue(undefined);
 const mockStorageGet = vi.fn().mockResolvedValue({});
@@ -294,6 +294,76 @@ describe('TaskManager', () => {
     it('should ignore updates for non-existent tasks', () => {
       expect(() => taskManager.updateTaskProgress('non-existent', 50)).not.toThrow();
     });
+
+    it('should ignore late progress updates for completed tasks', async () => {
+      const taskId = taskManager.createTask('extract', 'https://example.com', 'Generic');
+      await taskManager.startTask(taskId);
+      taskManager.completeTask(taskId, { commentsCount: 5 });
+
+      taskManager.updateTaskProgress(taskId, 25, 'late update');
+
+      const task = taskManager.getTask(taskId);
+      expect(task?.status).toBe('completed');
+      expect(task?.progress).toBe(100);
+      expect(task?.message).not.toBe('late update');
+    });
+
+    it('should ignore late detailed progress updates for failed tasks', async () => {
+      const taskId = taskManager.createTask('extract', 'https://example.com', 'Generic');
+      await taskManager.startTask(taskId);
+      taskManager.failTask(taskId, 'Network error');
+
+      taskManager.updateDetailedProgress(taskId, {
+        stage: 'extracting',
+        current: 5,
+        total: 10,
+      });
+
+      const task = taskManager.getTask(taskId);
+      expect(task?.status).toBe('failed');
+      expect(task?.detailedProgress).toBeUndefined();
+    });
+
+    it('should keep estimated time finite when elapsed time is not positive', async () => {
+      const taskId = taskManager.createTask('extract', 'https://example.com', 'Generic');
+      await taskManager.startTask(taskId);
+
+      const task = taskManager.getTask(taskId);
+      expect(task).toBeDefined();
+      task!.startTime = Date.now() + 1000;
+
+      taskManager.updateDetailedProgress(taskId, {
+        stage: 'extracting',
+        current: 5,
+        total: 10,
+      });
+
+      const estimatedTimeRemaining =
+        taskManager.getTask(taskId)?.detailedProgress?.estimatedTimeRemaining;
+      expect(estimatedTimeRemaining).toBe(-1);
+    });
+
+    it('should map analyze task stream progress into the analysis progress range', async () => {
+      const taskId = taskManager.createTask('analyze', 'https://example.com', 'Generic');
+      await taskManager.startTask(taskId);
+
+      taskManager.updateDetailedProgress(taskId, {
+        stage: 'analyzing',
+        current: AI.ANALYSIS_STREAM_BATCH_UNITS / 2,
+        total: AI.ANALYSIS_STREAM_BATCH_UNITS,
+        stageMessageKey: AI.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
+        stageMessageParams: { characters: 1024 },
+      });
+
+      const task = taskManager.getTask(taskId);
+      expect(task?.progress).toBe(
+        AI.ANALYSIS_TASK_PROGRESS_START + AI.ANALYSIS_TASK_PROGRESS_RANGE / 2,
+      );
+      expect(task?.detailedProgress?.stageMessageKey).toBe(
+        AI.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
+      );
+      expect(task?.detailedProgress?.stageMessageParams).toEqual({ characters: 1024 });
+    });
   });
 
   describe('completeTask', () => {
@@ -323,6 +393,34 @@ describe('TaskManager', () => {
           payload: expect.objectContaining({ status: 'completed' }),
         }),
       );
+    });
+  });
+
+  describe('setExecutor', () => {
+    it('should continue queued executors after the current task completes', async () => {
+      const firstTaskId = taskManager.createTask('extract', 'https://a.com', 'Generic');
+      const secondTaskId = taskManager.createTask('analyze', 'https://b.com', 'Generic');
+      const executionOrder: string[] = [];
+
+      taskManager.setExecutor(firstTaskId, async () => {
+        executionOrder.push('first');
+        return {};
+      });
+      taskManager.setExecutor(secondTaskId, async () => {
+        executionOrder.push('second');
+        return {};
+      });
+
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        if (taskManager.getTask(secondTaskId)?.status === 'completed') {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      expect(taskManager.getTask(firstTaskId)?.status).toBe('completed');
+      expect(taskManager.getTask(secondTaskId)?.status).toBe('completed');
+      expect(executionOrder).toEqual(['first', 'second']);
     });
   });
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AIService } from '../src/background/AIService';
 import { mockAIConfig, mockComments } from './fixtures';
 import { ErrorCode } from '../src/utils/errors';
+import { AI } from '../src/config/constants';
 
 // Mock chrome API
 vi.stubGlobal('chrome', {
@@ -36,6 +37,17 @@ const mockStorageManager = {
 // Mock fetch
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
+
+const createStreamingResponse = (chunks: string[]) => ({
+  ok: true,
+  body: new ReadableStream<Uint8Array>({
+    start(controller) {
+      const encoder = new TextEncoder();
+      chunks.forEach((chunk) => controller.enqueue(encoder.encode(chunk)));
+      controller.close();
+    },
+  }),
+});
 
 describe('AIService', () => {
   let aiService: AIService;
@@ -89,8 +101,87 @@ describe('AIService', () => {
         }),
       );
 
+      const requestInit = mockFetch.mock.calls[0]?.[1] as RequestInit;
+      expect(JSON.parse(requestInit.body as string)).toMatchObject({ stream: true });
+
       expect(result.content).toBe('Test response');
       expect(result.tokensUsed).toBe(100);
+    });
+
+    it('should parse streamed chat completion chunks', async () => {
+      const streamProgress = vi.fn();
+      mockFetch.mockResolvedValue(
+        createStreamingResponse([
+          'data: {"choices":[{"delta":{"role":"assistant","content":""},"finish_reason":null}]}\n\n',
+          'data: {"choices":[{"delta":{"content":"Hello "},"finish_reason":null}]}\n\n',
+          'data: {"choices":[{"delta":{"content":"world"},"finish_reason":"stop"}],"usage":{"total_tokens":42}}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      );
+
+      const config = mockAIConfig();
+
+      const result = await aiService.callAI({
+        prompt: 'Test prompt',
+        config,
+        onStreamProgress: streamProgress,
+      });
+
+      expect(result).toEqual({
+        content: 'Hello world',
+        tokensUsed: 42,
+        finishReason: 'stop',
+      });
+      expect(mockStorageManager.recordTokenUsage).toHaveBeenCalledWith(42);
+      expect(streamProgress).toHaveBeenCalledWith(
+        expect.objectContaining({ chunksReceived: 2, charactersReceived: 'Hello world'.length }),
+      );
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('should parse JSON response bodies from providers that ignore stream mode', async () => {
+      mockFetch.mockResolvedValue(
+        createStreamingResponse([
+          '{"choices":[{"message":{"content":"JSON response"},"finish_reason":"stop"}],"usage":{"total_tokens":24}}',
+        ]),
+      );
+
+      const config = mockAIConfig();
+
+      const result = await aiService.callAI({
+        prompt: 'Test prompt',
+        config,
+      });
+
+      expect(result).toEqual({
+        content: 'JSON response',
+        tokensUsed: 24,
+        finishReason: 'stop',
+      });
+    });
+
+    it('should reject empty model responses instead of returning a blank success', async () => {
+      mockFetch.mockImplementation(() =>
+        Promise.resolve(
+          createStreamingResponse([
+            'data: {"choices":[{"delta":{"content":""},"finish_reason":"stop"}],"usage":{"total_tokens":24}}\n\n',
+            'data: [DONE]\n\n',
+          ]),
+        ),
+      );
+
+      const config = mockAIConfig();
+      const promise = aiService.callAI({
+        prompt: 'Test prompt',
+        config,
+      });
+      const rejection = expect(promise).rejects.toMatchObject({
+        code: ErrorCode.AI_INVALID_RESPONSE,
+      });
+
+      await vi.runAllTimersAsync();
+      await rejection;
+      expect(mockFetch).toHaveBeenCalledTimes(3);
     });
 
     it('should append /chat/completions to API URL if missing', async () => {
@@ -472,6 +563,51 @@ describe('AIService', () => {
 
       await vi.runAllTimersAsync();
       await rejection;
+    });
+
+    it('should report analysis progress while streaming model output', async () => {
+      mockFetch.mockResolvedValue(
+        createStreamingResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { content: '# Analysis Report\n' }, finish_reason: null }] })}\n\n`,
+          'data: {"choices":[{"delta":{"content":"streaming body"},"finish_reason":"stop"}],"usage":{"total_tokens":50}}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      );
+
+      const comments = mockComments(2);
+      const config = mockAIConfig();
+      const progress = vi.fn();
+
+      await aiService.analyzeComments(
+        comments,
+        config,
+        'Analyze these comments',
+        'en-US',
+        undefined,
+        undefined,
+        undefined,
+        progress,
+      );
+
+      expect(progress).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stageMessage: AI.ANALYSIS_PROGRESS_MESSAGES.WAITING,
+          stageMessageKey: AI.ANALYSIS_PROGRESS_MESSAGE_KEYS.WAITING,
+        }),
+      );
+      expect(progress).toHaveBeenCalledWith(
+        expect.objectContaining({
+          stageMessage: expect.stringContaining('receiving model response'),
+          stageMessageKey: AI.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
+          stageMessageParams: expect.objectContaining({ characters: expect.any(Number) }),
+        }),
+      );
+      expect(progress).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          stageMessage: AI.ANALYSIS_PROGRESS_MESSAGES.COMPLETE,
+          stageMessageKey: AI.ANALYSIS_PROGRESS_MESSAGE_KEYS.COMPLETE,
+        }),
+      );
     });
   });
 });

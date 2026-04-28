@@ -23,6 +23,17 @@ vi.mock('react-i18next', () => ({
       if (typeof options === 'string') {
         return options;
       }
+      const translations: Record<string, string> = {
+        'popup.analyzing': '正在分析评论',
+        'popup.taskProgress': '任务进度',
+        'popup.analysisProgressReceiving': 'AI 响应接收中，已收到 {{characters}} 个字符',
+        'popup.analysisProgressReceivingCompact': '接收中 · {{characters}} 字符',
+      };
+      if (translations[key]) {
+        return translations[key].replace(/{{(\w+)}}/g, (_, name: string) =>
+          String(options?.[name] ?? ''),
+        );
+      }
       if (key === 'history.commentsWithCount' && options?.count !== undefined) {
         return `count:${String(options.count)}`;
       }
@@ -231,6 +242,7 @@ describe('HistoryDetailPanel', () => {
     const { rerender } = render(
       <HistoryDetailPanel
         selectedItem={null}
+        selectedItemError={null}
         selectedItemLoading={true}
         viewMode="analysis"
         exportPostContentInMarkdown={false}
@@ -262,6 +274,7 @@ describe('HistoryDetailPanel', () => {
     rerender(
       <HistoryDetailPanel
         selectedItem={null}
+        selectedItemError={null}
         selectedItemLoading={false}
         viewMode="analysis"
         exportPostContentInMarkdown={false}
@@ -289,6 +302,38 @@ describe('HistoryDetailPanel', () => {
     );
 
     expect(screen.getByText('history.selectItem')).toBeTruthy();
+
+    rerender(
+      <HistoryDetailPanel
+        selectedItem={null}
+        selectedItemError="Failed to load history item"
+        selectedItemLoading={false}
+        viewMode="analysis"
+        exportPostContentInMarkdown={false}
+        commentSearchTerm=""
+        sortBy="likes"
+        commentsPerPage={PAGINATION.DEFAULT_PER_PAGE}
+        currentPage={1}
+        totalComments={0}
+        totalPages={0}
+        paginatedComments={[]}
+        isReanalyzing={false}
+        reanalyzeError={null}
+        reanalyzeProgress={null}
+        reanalyzeTaskId={null}
+        reanalyzingHistoryId={null}
+        onViewModeChange={vi.fn()}
+        onReanalyze={vi.fn()}
+        onCommentSearchTermChange={vi.fn()}
+        onSortByChange={vi.fn()}
+        onCommentsPerPageChange={vi.fn()}
+        onCurrentPageChange={vi.fn()}
+        renderCommentTree={vi.fn()}
+        formatDate={() => 'formatted-date'}
+      />,
+    );
+
+    expect(screen.getByText('Failed to load history item')).toBeTruthy();
   });
 
   it('handles analysis tab actions and markdown export', () => {
@@ -299,6 +344,7 @@ describe('HistoryDetailPanel', () => {
     render(
       <HistoryDetailPanel
         selectedItem={selectedItem}
+        selectedItemError={null}
         selectedItemLoading={false}
         viewMode="analysis"
         exportPostContentInMarkdown={true}
@@ -338,6 +384,103 @@ describe('HistoryDetailPanel', () => {
     expect(screen.getByText(/formatted-date/)).toBeTruthy();
   });
 
+  it('treats blank analysis markdown as no analysis result', () => {
+    const selectedItem = createHistoryItem({
+      analysis: {
+        ...(createHistoryItem().analysis as NonNullable<HistoryItem['analysis']>),
+        markdown: '   ',
+      },
+    });
+
+    render(
+      <HistoryDetailPanel
+        selectedItem={selectedItem}
+        selectedItemError={null}
+        selectedItemLoading={false}
+        viewMode="analysis"
+        exportPostContentInMarkdown={false}
+        commentSearchTerm=""
+        sortBy="likes"
+        commentsPerPage={PAGINATION.DEFAULT_PER_PAGE}
+        currentPage={1}
+        totalComments={selectedItem.comments.length}
+        totalPages={1}
+        paginatedComments={selectedItem.comments}
+        isReanalyzing={false}
+        reanalyzeError={null}
+        reanalyzeProgress={null}
+        reanalyzeTaskId={null}
+        reanalyzingHistoryId={null}
+        onViewModeChange={vi.fn()}
+        onReanalyze={vi.fn()}
+        onCommentSearchTermChange={vi.fn()}
+        onSortByChange={vi.fn()}
+        onCommentsPerPageChange={vi.fn()}
+        onCurrentPageChange={vi.fn()}
+        renderCommentTree={vi.fn()}
+        formatDate={() => 'formatted-date'}
+      />,
+    );
+
+    expect(screen.getByText('history.noAnalysis')).toBeTruthy();
+    expect(screen.getByText('开始分析')).toBeTruthy();
+    expect(screen.queryByText('history.exportMarkdown')).toBeNull();
+  });
+
+  it('renders streaming progress on the analysis action button', () => {
+    const selectedItem = createHistoryItem();
+
+    render(
+      <HistoryDetailPanel
+        selectedItem={selectedItem}
+        selectedItemError={null}
+        selectedItemLoading={false}
+        viewMode="analysis"
+        exportPostContentInMarkdown={false}
+        commentSearchTerm=""
+        sortBy="likes"
+        commentsPerPage={PAGINATION.DEFAULT_PER_PAGE}
+        currentPage={1}
+        totalComments={selectedItem.comments.length}
+        totalPages={1}
+        paginatedComments={selectedItem.comments}
+        isReanalyzing={true}
+        reanalyzeError={null}
+        reanalyzeDetailedProgress={{
+          stage: 'analyzing',
+          current: 42,
+          total: 100,
+          estimatedTimeRemaining: -1,
+          stageMessageKey: 'popup.analysisProgressReceiving',
+          stageMessageParams: { characters: 2048 },
+        }}
+        reanalyzeMessage={null}
+        reanalyzeProgress={42}
+        reanalyzeTaskId="task-1"
+        reanalyzingHistoryId={selectedItem.id}
+        onViewModeChange={vi.fn()}
+        onReanalyze={vi.fn()}
+        onCommentSearchTermChange={vi.fn()}
+        onSortByChange={vi.fn()}
+        onCommentsPerPageChange={vi.fn()}
+        onCurrentPageChange={vi.fn()}
+        renderCommentTree={vi.fn()}
+        formatDate={() => 'formatted-date'}
+      />,
+    );
+
+    expect(screen.getByText('接收中 · 2048 字符')).toBeTruthy();
+
+    const button = screen.getByRole('button', { name: /接收中 · 2048 字符/ });
+    expect(button.getAttribute('title')).toBe(
+      '正在分析评论: AI 响应接收中，已收到 2048 个字符 #task-1',
+    );
+
+    const progressbar = screen.getByRole('progressbar', { name: '任务进度' });
+    expect(progressbar.getAttribute('aria-valuenow')).toBe('42');
+    expect((progressbar.firstElementChild as HTMLElement).style.width).toBe('42%');
+  });
+
   it('handles comments tab actions, paging and csv export', () => {
     const selectedItem = createHistoryItem({ analysis: undefined });
     const onCommentSearchTermChange = vi.fn();
@@ -349,6 +492,7 @@ describe('HistoryDetailPanel', () => {
     render(
       <HistoryDetailPanel
         selectedItem={selectedItem}
+        selectedItemError={null}
         selectedItemLoading={false}
         viewMode="comments"
         exportPostContentInMarkdown={false}

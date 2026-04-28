@@ -43,7 +43,7 @@ describe('NotificationService', () => {
       await NotificationService.showTaskCompleted('extract', 'Test Post', 10);
 
       expect(mockNotificationCreate).toHaveBeenCalledWith(
-        expect.stringMatching(/^task_completed_\d+$/),
+        expect.stringMatching(/^task_completed_\d+_/),
         expect.objectContaining({
           type: 'basic',
           title: 'Comments Insight',
@@ -56,7 +56,7 @@ describe('NotificationService', () => {
       await NotificationService.showTaskCompleted('analyze', 'Test Post', 5);
 
       expect(mockNotificationCreate).toHaveBeenCalledWith(
-        expect.stringMatching(/^task_completed_\d+$/),
+        expect.stringMatching(/^task_completed_\d+_/),
         expect.objectContaining({
           type: 'basic',
           requireInteraction: true,
@@ -68,7 +68,7 @@ describe('NotificationService', () => {
       await NotificationService.showTaskCompleted('config', 'Test Post');
 
       expect(mockNotificationCreate).toHaveBeenCalledWith(
-        expect.stringMatching(/^task_completed_\d+$/),
+        expect.stringMatching(/^task_completed_\d+_/),
         expect.objectContaining({
           message: expect.stringContaining('Config generation completed'),
           requireInteraction: true,
@@ -102,7 +102,7 @@ describe('NotificationService', () => {
       await NotificationService.showTaskFailed('extract', 'Network error');
 
       expect(mockNotificationCreate).toHaveBeenCalledWith(
-        expect.stringMatching(/^task_failed_\d+$/),
+        expect.stringMatching(/^task_failed_\d+_/),
         expect.objectContaining({
           requireInteraction: false,
         }),

@@ -24,6 +24,12 @@ vi.mock('react-i18next', () => ({
       if (key === 'popup.timeRemainingMinutesSeconds') {
         return `${String(options?.minutes)}m ${String(options?.seconds)}s`;
       }
+      if (key === 'popup.analysisProgressReceiving') {
+        return `localized receiving ${String(options?.characters)} chars`;
+      }
+      if (key === 'popup.analysisProgressReceivingCompact') {
+        return `compact receiving ${String(options?.characters)} chars`;
+      }
       return key;
     },
   }),
@@ -155,6 +161,39 @@ describe('ActionButtons', () => {
     rerender(
       <ActionButtons
         pageInfo={{ url: 'https://example.com', title: 'Example', domain: 'example.com' }}
+        pageStatus={{ extracted: true, analyzed: false, hasConfig: true, historyId: 'history-1' }}
+        currentTask={{
+          id: 'task-2',
+          type: 'analyze',
+          status: 'running',
+          progress: 40,
+          detailedProgress: {
+            stage: 'analyzing',
+            current: 12,
+            total: 100,
+            estimatedTimeRemaining: -1,
+            stageMessage: 'receiving model response, 2048 chars',
+            stageMessageKey: 'popup.analysisProgressReceiving',
+            stageMessageParams: { characters: 2048 },
+          },
+        }}
+        onExtract={vi.fn()}
+        onGenerateConfig={vi.fn()}
+        onAnalyze={onAnalyze}
+        onCancel={onCancel}
+        onOpenHistory={onOpenHistory}
+      />,
+    );
+
+    expect(screen.getByText('compact receiving 2048 chars')).toBeTruthy();
+    expect(screen.getByTitle('popup.analyzing: localized receiving 2048 chars')).toBeTruthy();
+    const progressBar = screen.getByRole('progressbar', { name: 'popup.taskProgress' });
+    expect(progressBar.getAttribute('aria-valuenow')).toBe('40');
+    expect((progressBar as HTMLElement).style.width).toBe('40%');
+
+    rerender(
+      <ActionButtons
+        pageInfo={{ url: 'https://example.com', title: 'Example', domain: 'example.com' }}
         pageStatus={{ extracted: true, analyzed: true, hasConfig: true, historyId: 'history-1' }}
         currentTask={null}
         onExtract={vi.fn()}
@@ -187,13 +226,15 @@ describe('TaskProgress', () => {
             total: 10,
             estimatedTimeRemaining: 75,
             stageMessage: 'deep scan',
+            stageMessageKey: 'popup.analysisProgressReceiving',
+            stageMessageParams: { characters: 128 },
           },
         }}
       />,
     );
 
     expect(screen.getByText('popup.extracting')).toBeTruthy();
-    expect(screen.getByText('popup.progressScrolling: deep scan')).toBeTruthy();
+    expect(screen.getByText('popup.progressScrolling: localized receiving 128 chars')).toBeTruthy();
     expect(screen.getByText('popup.estimatedTime: 1m 15s')).toBeTruthy();
 
     rerender(

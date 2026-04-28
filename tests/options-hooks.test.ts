@@ -226,6 +226,55 @@ describe('useSettings', () => {
     expect(result.current.saving).toBe(false);
   });
 
+  it('saves the latest settings when changes happen during an in-flight save', async () => {
+    let resolveFirstSave: ((value: { success: boolean }) => void) | undefined;
+    extensionApiMock.saveSettings
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveFirstSave = resolve;
+        }),
+      )
+      .mockResolvedValue({ success: true });
+
+    const { result } = renderHook(() => useSettings());
+
+    await act(async () => {
+      await flushMicrotasks();
+      await vi.advanceTimersByTimeAsync(TIMING.MICRO_WAIT_MS);
+    });
+
+    await act(async () => {
+      result.current.handleSettingsChange({ maxComments: 200 });
+      await flushMicrotasks();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
+      await flushMicrotasks();
+    });
+
+    expect(extensionApiMock.saveSettings).toHaveBeenCalledTimes(1);
+    expect(extensionApiMock.saveSettings.mock.calls[0][0]).toMatchObject({ maxComments: 200 });
+
+    await act(async () => {
+      result.current.handleSettingsChange({ maxComments: 300 });
+      await flushMicrotasks();
+    });
+
+    await act(async () => {
+      resolveFirstSave?.({ success: true });
+      await flushMicrotasks();
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
+      await flushMicrotasks();
+    });
+
+    expect(extensionApiMock.saveSettings).toHaveBeenCalledTimes(2);
+    expect(extensionApiMock.saveSettings.mock.calls[1][0]).toMatchObject({ maxComments: 300 });
+  });
+
   it('shows error toast when loading settings fails', async () => {
     extensionApiMock.getSettings.mockRejectedValue(new Error('storage unavailable'));
 

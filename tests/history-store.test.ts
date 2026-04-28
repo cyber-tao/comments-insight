@@ -1,21 +1,7 @@
+import 'fake-indexeddb/auto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import LZString from 'lz-string';
 import { HistoryStore } from '../src/background/storage/HistoryStore';
-import { STORAGE } from '../src/config/constants';
-
-const mockGet = vi.fn();
-const mockSet = vi.fn();
-const mockRemove = vi.fn();
-
-vi.stubGlobal('chrome', {
-  storage: {
-    local: {
-      get: mockGet,
-      set: mockSet,
-      remove: mockRemove,
-    },
-  },
-});
+import { HISTORY } from '../src/config/constants';
 
 vi.mock('../src/utils/logger', () => ({
   Logger: {
@@ -26,232 +12,176 @@ vi.mock('../src/utils/logger', () => ({
   },
 }));
 
-describe('HistoryStore', () => {
+describe('HistoryStore (IndexedDB)', () => {
   let store: HistoryStore;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
     store = new HistoryStore();
+    await store.clearAllHistory();
   });
 
-  describe('getHistoryItem', () => {
-    it('should return history item when comments payload is valid', async () => {
-      const id = 'history_1';
-      const key = `${STORAGE.HISTORY_KEY}_${id}`;
-      const comments = [
+  it('should save and retrieve a history item', async () => {
+    const id = 'history_1';
+    const comments = [
+      {
+        id: 'comment_1',
+        username: 'user',
+        content: 'hello',
+        likes: 1,
+        timestamp: new Date().toISOString(),
+        replies: [],
+      },
+    ];
+
+    await store.saveHistory({
+      id,
+      url: 'https://example.com',
+      title: 'Test',
+      platform: 'example',
+      extractedAt: Date.now(),
+      commentsCount: comments.length,
+      comments: comments,
+    });
+
+    const result = await store.getHistoryItem(id);
+
+    expect(result).toBeDefined();
+    expect(result?.id).toBe(id);
+    expect(result?.comments).toEqual(comments);
+  });
+
+  it('should retrieve latest history id by url', async () => {
+    await store.saveHistory({
+      id: 'id_old',
+      url: 'https://example.com',
+      title: 'Test',
+      platform: 'example',
+      extractedAt: 1000,
+      commentsCount: 1,
+      comments: [],
+    });
+
+    await store.saveHistory({
+      id: 'id_new',
+      url: 'https://example.com',
+      title: 'Test 2',
+      platform: 'example',
+      extractedAt: 2000,
+      commentsCount: 1,
+      comments: [],
+    });
+
+    const latestId = await store.getLatestHistoryIdByUrl('https://example.com');
+    expect(latestId).toBe('id_new');
+  });
+
+  it('should delete a history item', async () => {
+    const id = 'history_to_delete';
+    await store.saveHistory({
+      id,
+      url: 'https://example.com',
+      title: 'Test',
+      platform: 'example',
+      extractedAt: Date.now(),
+      commentsCount: 1,
+      comments: [],
+    });
+
+    await store.deleteHistoryItem(id);
+
+    const result = await store.getHistoryItem(id);
+    expect(result).toBeUndefined();
+  });
+
+  it('should return metadata search results without comment payloads', async () => {
+    await store.saveHistory({
+      id: 'history_metadata_search',
+      url: 'https://example.com/search',
+      title: 'Needle Title',
+      platform: 'example',
+      extractedAt: 1000,
+      commentsCount: 1,
+      comments: [
         {
           id: 'comment_1',
           username: 'user',
-          content: 'hello',
-          likes: 1,
+          content: 'large comment payload',
+          likes: 0,
           timestamp: new Date().toISOString(),
           replies: [],
         },
-      ];
-      const compressed = LZString.compressToUTF16(JSON.stringify(comments));
-
-      mockGet.mockResolvedValueOnce({
-        [key]: {
-          id,
-          url: 'https://example.com',
-          title: 'Test',
-          platform: 'example',
-          extractedAt: Date.now(),
-          commentsCount: comments.length,
-          comments: compressed,
-        },
-      });
-
-      const result = await store.getHistoryItem(id);
-
-      expect(result).toBeDefined();
-      expect(result?.id).toBe(id);
-      expect(result?.comments).toEqual(comments);
+      ],
     });
 
-    it('should return undefined when comments payload is corrupted', async () => {
-      const id = 'history_corrupted';
-      const key = `${STORAGE.HISTORY_KEY}_${id}`;
+    const result = await store.searchHistoryMetadataPage('needle');
 
-      mockGet.mockResolvedValueOnce({
-        [key]: {
-          id,
-          url: 'https://example.com',
-          title: 'Broken',
-          platform: 'example',
-          extractedAt: Date.now(),
-          commentsCount: 1,
-          comments: '@@not-compressed@@',
-        },
-      });
-
-      const result = await store.getHistoryItem(id);
-
-      expect(result).toBeUndefined();
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]).toEqual({
+      id: 'history_metadata_search',
+      extractedAt: 1000,
+      url: 'https://example.com/search',
+      title: 'Needle Title',
+      platform: 'example',
     });
+    expect(result.entries[0]).not.toHaveProperty('comments');
   });
 
-  describe('saveHistory', () => {
-    it('should roll back stored payload when sorted index update fails', async () => {
-      const historyId = 'history_save_failure';
-      const payloadKey = `${STORAGE.HISTORY_KEY}_${historyId}`;
-      const storageState: Record<string, unknown> = {};
-
-      mockGet.mockImplementation(async (key: string) => {
-        if (typeof key === 'string') {
-          return { [key]: storageState[key] };
-        }
-        return {};
-      });
-
-      mockSet.mockImplementation(async (payload: Record<string, unknown>) => {
-        const entries = Object.entries(payload);
-        const shouldFail = entries.some(([key]) => key === STORAGE.HISTORY_SORTED_INDEX_KEY);
-
-        if (shouldFail) {
-          throw new Error('sorted index write failed');
-        }
-
-        for (const [key, value] of entries) {
-          storageState[key] = value;
-        }
-      });
-
-      mockRemove.mockImplementation(async (keys: string | string[]) => {
-        const keysToDelete = Array.isArray(keys) ? keys : [keys];
-        for (const key of keysToDelete) {
-          delete storageState[key];
-        }
-      });
-
-      await expect(
-        store.saveHistory({
-          id: historyId,
-          url: 'https://example.com/post',
-          title: 'Rollback Test',
-          platform: 'example',
-          extractedAt: Date.now(),
-          commentsCount: 1,
-          comments: [
+  it('should recursively search comments for full history queries', async () => {
+    await store.saveHistory({
+      id: 'history_nested_comment_search',
+      url: 'https://example.com/nested-search',
+      title: 'Nested Search',
+      platform: 'example',
+      extractedAt: 1000,
+      commentsCount: 1,
+      comments: [
+        {
+          id: 'comment_parent',
+          username: 'parent-user',
+          content: 'parent content',
+          likes: 0,
+          timestamp: new Date().toISOString(),
+          replies: [
             {
-              id: 'comment-1',
-              username: 'user',
-              content: 'content',
-              likes: 1,
+              id: 'comment_reply',
+              username: 'reply-user',
+              content: 'deep reply needle',
+              likes: 0,
               timestamp: new Date().toISOString(),
               replies: [],
             },
           ],
-        }),
-      ).rejects.toThrow('Failed to save history');
-
-      expect(storageState[payloadKey]).toBeUndefined();
-      expect(storageState[STORAGE.HISTORY_INDEX_KEY]).toEqual([]);
-      expect(storageState[STORAGE.HISTORY_URL_INDEX_KEY]).toEqual({});
-      expect(mockRemove).toHaveBeenCalledWith([payloadKey]);
+        },
+      ],
     });
+
+    const fullResult = await store.searchHistoryPaginated('deep reply needle');
+    const metadataResult = await store.searchHistoryMetadataPage('deep reply needle');
+
+    expect(fullResult.total).toBe(1);
+    expect(fullResult.items[0].id).toBe('history_nested_comment_search');
+    expect(metadataResult.total).toBe(0);
   });
 
-  describe('storage sanitization', () => {
-    it('should ignore malformed history index entries', async () => {
-      mockGet.mockImplementation(async (key: string) => {
-        if (key === STORAGE.HISTORY_INDEX_KEY) {
-          return {
-            [STORAGE.HISTORY_INDEX_KEY]: ['history_1', '', null, 123],
-          };
-        }
-
-        if (key === `${STORAGE.HISTORY_KEY}_history_1`) {
-          return {
-            [`${STORAGE.HISTORY_KEY}_history_1`]: {
-              id: 'history_1',
-              url: 'https://example.com',
-              title: 'Valid',
-              platform: 'example',
-              extractedAt: Date.now(),
-              commentsCount: 0,
-              comments: '',
-            },
-          };
-        }
-
-        return {};
+  it('should enforce the configured history retention limit', async () => {
+    for (let index = 0; index < HISTORY.MAX_ITEMS + 2; index += 1) {
+      await store.saveHistory({
+        id: `history_${index}`,
+        url: `https://example.com/${index}`,
+        title: `History ${index}`,
+        platform: 'example',
+        extractedAt: index,
+        commentsCount: 0,
+        comments: [],
       });
+    }
 
-      const history = await store.getHistory();
+    const page = await store.getHistoryPage(0, HISTORY.MAX_ITEMS + 2);
 
-      expect(history).toHaveLength(1);
-      expect(history[0].id).toBe('history_1');
-    });
-
-    it('should ignore malformed sorted index entries when paging history', async () => {
-      mockGet.mockImplementation(async (key: string) => {
-        if (key === STORAGE.HISTORY_SORTED_INDEX_KEY) {
-          return {
-            [STORAGE.HISTORY_SORTED_INDEX_KEY]: {
-              entries: [
-                {
-                  id: 'history_1',
-                  extractedAt: 2,
-                  url: 'https://example.com/1',
-                  title: 'Valid',
-                  platform: 'example',
-                },
-                {
-                  id: '',
-                  extractedAt: 'bad',
-                  url: 'https://example.com/2',
-                  title: 'Broken',
-                  platform: 'example',
-                },
-              ],
-              lastUpdated: Date.now(),
-            },
-          };
-        }
-
-        if (key === `${STORAGE.HISTORY_KEY}_history_1`) {
-          return {
-            [`${STORAGE.HISTORY_KEY}_history_1`]: {
-              id: 'history_1',
-              url: 'https://example.com/1',
-              title: 'Valid',
-              platform: 'example',
-              extractedAt: 2,
-              commentsCount: 0,
-              comments: '',
-            },
-          };
-        }
-
-        return {};
-      });
-
-      const page = await store.getHistoryPage(0, 20);
-
-      expect(page.items).toHaveLength(1);
-      expect(page.items[0].id).toBe('history_1');
-    });
-
-    it('should return undefined for malformed stored history metadata', async () => {
-      const id = 'history_broken_meta';
-      const key = `${STORAGE.HISTORY_KEY}_${id}`;
-
-      mockGet.mockResolvedValueOnce({
-        [key]: {
-          id,
-          url: 'https://example.com',
-          title: 'Broken',
-          platform: 'example',
-          extractedAt: Date.now(),
-          commentsCount: 'bad',
-          comments: '',
-        },
-      });
-
-      const result = await store.getHistoryItem(id);
-
-      expect(result).toBeUndefined();
-    });
+    expect(page.total).toBe(HISTORY.MAX_ITEMS);
+    expect(page.items.map((item) => item.id)).not.toContain('history_0');
+    expect(page.items.map((item) => item.id)).not.toContain('history_1');
   });
 });
