@@ -67,7 +67,7 @@ export class SettingsStore {
 
       if (Object.keys(settings).length === 0) {
         Logger.info('[SettingsStore] No settings found, using defaults');
-        await this.saveSettings(DEFAULT_SETTINGS);
+        await this._saveSettings(DEFAULT_SETTINGS);
         return DEFAULT_SETTINGS;
       }
 
@@ -493,15 +493,12 @@ export class SettingsStore {
     const c = config as Record<string, unknown>;
     const hasMaxOutputTokens =
       c.maxOutputTokens === undefined || typeof c.maxOutputTokens === 'number';
-    const hasLegacyMaxTokens = c.maxTokens === undefined || typeof c.maxTokens === 'number';
-
     return (
       typeof c.apiUrl === 'string' &&
       typeof c.apiKey === 'string' &&
       typeof c.model === 'string' &&
       typeof c.contextWindowSize === 'number' &&
       hasMaxOutputTokens &&
-      hasLegacyMaxTokens &&
       typeof c.temperature === 'number' &&
       typeof c.topP === 'number'
     );

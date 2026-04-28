@@ -10,6 +10,7 @@ import type {
   Settings,
   Task,
 } from '@/types';
+import { Logger } from '@/utils/logger';
 
 export type StoredAiLogEntry = {
   type: 'extraction' | 'analysis';
@@ -23,19 +24,6 @@ type PersistedTaskStateShape = {
   queue: string[];
   currentTaskId: string | null;
   savedAt: number;
-};
-
-type HistoryIndexEntryShape = {
-  id: string;
-  extractedAt: number;
-  url: string;
-  title: string;
-  platform: string;
-};
-
-type HistorySortedIndexShape = {
-  entries: HistoryIndexEntryShape[];
-  lastUpdated: number;
 };
 
 const finiteNumberSchema = z.number().finite();
@@ -115,6 +103,8 @@ const taskProgressSchema = z.object({
   total: finiteNumberSchema,
   estimatedTimeRemaining: finiteNumberSchema,
   stageMessage: z.string().optional(),
+  stageMessageKey: z.string().optional(),
+  stageMessageParams: z.record(z.string(), z.union([z.string(), finiteNumberSchema])).optional(),
 });
 const taskSchema = z.object({
   id: nonEmptyStringSchema,
@@ -169,17 +159,10 @@ const compressedHistoryItemSchema = z.object({
   postContent: z.string().optional(),
   extractedAt: finiteNumberSchema,
   commentsCount: finiteNumberSchema,
-  comments: z.string(),
+  comments: z.string().optional(),
   commentsChunks: z.number().int().nonnegative().optional(),
   analysis: analysisResultSchema.optional(),
   analyzedAt: finiteNumberSchema.optional(),
-});
-const historyIndexEntrySchema = z.object({
-  id: nonEmptyStringSchema,
-  extractedAt: finiteNumberSchema,
-  url: z.string(),
-  title: z.string(),
-  platform: z.string(),
 });
 const aiLogEntrySchema = z.object({
   type: z.enum(['extraction', 'analysis']),
@@ -197,9 +180,19 @@ function filterValidItems<T>(items: unknown, schema: z.ZodType<T>): T[] {
     return [];
   }
 
-  return items.flatMap((item) => {
+  return items.flatMap((item, index) => {
     const result = schema.safeParse(item);
-    return result.success ? [result.data] : [];
+    if (result.success) {
+      return [result.data];
+    }
+    Logger.warn('[storage-validation] Item validation failed', {
+      index,
+      errors: result.error.issues.map((issue) => ({
+        path: issue.path.join('.'),
+        message: issue.message,
+      })),
+    });
+    return [];
   });
 }
 
@@ -295,52 +288,12 @@ export function sanitizePersistedTaskState(value: unknown): PersistedTaskStateSh
   };
 }
 
-export function sanitizeHistoryIndex(value: unknown): string[] {
+export function sanitizeStringIndex(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
 
   return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
-}
-
-export function sanitizeHistoryUrlIndex(value: unknown): Record<string, string[]> {
-  if (!isPlainObject(value)) {
-    return {};
-  }
-
-  return Object.entries(value).reduce<Record<string, string[]>>((accumulator, [url, ids]) => {
-    if (url.length === 0) {
-      return accumulator;
-    }
-
-    const sanitizedIds = sanitizeHistoryIndex(ids);
-    if (sanitizedIds.length > 0) {
-      accumulator[url] = sanitizedIds;
-    }
-
-    return accumulator;
-  }, {});
-}
-
-export function sanitizeHistorySortedIndex(value: unknown): HistorySortedIndexShape | null {
-  if (!isPlainObject(value)) {
-    return null;
-  }
-
-  const raw = value as Record<string, unknown>;
-  const entries = filterValidItems(
-    raw.entries,
-    historyIndexEntrySchema,
-  ) as HistoryIndexEntryShape[];
-  const lastUpdated =
-    typeof raw.lastUpdated === 'number' && Number.isFinite(raw.lastUpdated)
-      ? raw.lastUpdated
-      : Date.now();
-
-  return {
-    entries,
-    lastUpdated,
-  };
 }
 
 export function sanitizeCompressedHistoryItem(value: unknown): {
@@ -352,7 +305,7 @@ export function sanitizeCompressedHistoryItem(value: unknown): {
   postContent?: string;
   extractedAt: number;
   commentsCount: number;
-  comments: string;
+  comments?: string;
   commentsChunks?: number;
   analysis?: AnalysisResult;
   analyzedAt?: number;

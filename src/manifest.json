@@ -22,33 +22,17 @@
   },
   "content_scripts": [
     {
-      "matches": [
-        "http://*/*",
-        "https://*/*"
-      ],
-      "js": [
-        "src/content/index.ts"
-      ],
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["src/content/index.ts"],
       "run_at": "document_idle"
     }
   ],
-  "permissions": [
-    "storage",
-    "activeTab",
-    "notifications",
-    "scripting",
-    "tabs"
-  ],
+  "permissions": ["storage", "unlimitedStorage", "activeTab", "notifications", "scripting", "tabs"],
   "options_page": "src/options/index.html",
   "web_accessible_resources": [
     {
-      "resources": [
-        "assets/*"
-      ],
-      "matches": [
-        "http://*/*",
-        "https://*/*"
-      ]
+      "resources": ["assets/*"],
+      "matches": ["http://*/*", "https://*/*"]
     }
   ],
   "content_security_policy": {

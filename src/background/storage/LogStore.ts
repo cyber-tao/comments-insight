@@ -3,7 +3,7 @@ import { Logger } from '../../utils/logger';
 import { Mutex } from '@/utils/promise';
 import {
   sanitizeAiLogEntry,
-  sanitizeHistoryIndex,
+  sanitizeStringIndex,
   type StoredAiLogEntry,
 } from '@/utils/storage-validation';
 
@@ -55,7 +55,7 @@ export class LogStore {
   private async getAiLogIndex(): Promise<string[]> {
     try {
       const result = await chrome.storage.local.get(STORAGE.AI_LOG_INDEX_KEY);
-      return sanitizeHistoryIndex(result[STORAGE.AI_LOG_INDEX_KEY]);
+      return sanitizeStringIndex(result[STORAGE.AI_LOG_INDEX_KEY]);
     } catch {
       return [];
     }
