@@ -10,7 +10,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.2-000000)](https://crxjs.dev/vite-plugin/)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.4-000000)](https://crxjs.dev/vite-plugin/)
 
 </div>
 
@@ -42,7 +42,8 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
 - Manifest V3 Chrome extension with multi-page UI: Popup, Options, History, Logs.
 - Built with Vite, React, TypeScript, and `@crxjs/vite-plugin`.
-- Combines selectors and AI to robustly extract comments (including nested replies) and produce comprehensive Markdown reports with tables and structured data.
+- Combines selectors and AI to robustly extract comments (including nested replies), stream AI analysis progress, and produce comprehensive Markdown reports with tables and structured data.
+- Persists history in Dexie-backed IndexedDB with lightweight metadata paging, full comment search, and local task/log storage.
 
 ## 📸 Screenshots
 
@@ -85,7 +86,9 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
   - Real-time granular progress tracking (e.g., "Verifying AI-generated schema...", "Extracting (55/100)").
 - 🧠 **AI Analysis**:
   - **Scalable Processing**: Automatically batches large comment sets with concurrency control (up to 3 concurrent requests) to handle long threads efficiently.
+  - **Streaming Responses**: Streams Chat Completions output, keeps long requests alive with activity-based timeouts, and shows live receiving progress in Popup and History actions.
   - **Thought Filtering**: Supports reasoning models (like DeepSeek) by automatically stripping `<think>` tags from output for clean reports.
+  - **Invalid Output Guard**: Empty model responses are rejected and retried instead of being stored as successful blank reports.
   - Comprehensive reports including Sentiment Distribution, Hot Comments, Top Discussed, and Interaction Analysis.
   - Customizable prompt templates with "Reset to Default" capability.
 - 🧩 **Scraper Config**:
@@ -93,7 +96,8 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
   - Visual selector validation and caching for performance.
 - 🗂️ **History & Logs**:
   - **Token Tracking**: Locally records token usage stats for better cost management.
-  - Compressed storage (`lz-string`) for efficient local saving.
+  - IndexedDB history storage with metadata-only paging for fast browsing and full-content search when needed.
+  - Sanitized AI/system logs with local inspection tools for debugging.
   - Searchable history with filtering and sorting (by Time, Likes, Replies).
 - 🌐 **i18n**: Multi-language support: English, Chinese (简体中文), Japanese (日本語), French (Français), and Spanish (Español).
 - 🎨 **Theme Support**: Light, Dark, and System modes with automatic theme switching.
@@ -105,17 +109,17 @@ API keys are stored locally (reversible encryption/obfuscation) to avoid acciden
 
 ## 🧱 Architecture
 
-- **Background**: Service Worker orchestrates the `TaskManager` (for maintaining long-running tasks), `AIService` (handling concurrency, cleaning output, and token tracking), and a unified `StorageManager` (automatically routing payloads to History, Settings, or Log stores with `lz-string` compression).
-- **Content Scripts**: Handles DOM traversal, `MutationObserver`-powered interactions (clicking "View Replies" and waiting for network-bound changes), and data extraction.
+- **Background**: Service Worker orchestrates the `TaskManager` (for maintaining long-running tasks), `AIService` (streaming AI calls, concurrency, output cleanup, and token tracking), and a unified `StorageManager` that routes data to Dexie history, settings, and log stores.
+- **Content Scripts**: Handles DOM traversal, abortable `MutationObserver`-powered interactions (clicking "View Replies" and waiting for network-bound changes), and data extraction.
 - **Popup**: Main control center for triggering tasks, viewing page status, and monitoring granular real-time progress.
 - **Options**: Configuration for AI models (OpenAI, Ollama, DeepSeek, etc.), Prompts, and Scraper Management.
-- **History**: Rich interface for browsing extracted data and analysis reports.
+- **History**: Rich interface for browsing extracted data, rerunning analysis, monitoring streaming progress, and exporting reports.
 
 ## 📦 Project Structure
 
 ```
 src/
-  background/            # Service Worker: TaskManager, AIService, etc.
+  background/            # Service Worker: TaskManager, AIService, storage, handlers
   content/               # Content Scripts: PageController, Extractor strategies
   popup/                 # Extension Popup UI
   options/               # Options Page: Settings & Config Management
@@ -124,7 +128,7 @@ src/
   config/                # Constants, default scrapers (5 platforms), analysis parameters
   components/            # Shared UI components (Toast, etc.)
   hooks/                 # Shared React Hooks (useTheme, useToast)
-  utils/                 # Helpers: Prompts, Logger, Export, ErrorHandler, etc.
+  utils/                 # Helpers: Prompts, Logger, Export, validation, task display, etc.
   types/                 # TypeScript definitions
   locales/               # i18n translation files (5 languages)
   styles/                # Global CSS with Tailwind
@@ -142,14 +146,14 @@ Visit the Chrome Web Store to install the extension with one click.
 
 ### Build from Source
 
-1. **Prerequisites**: Node.js 18+, Chrome.
+1. **Prerequisites**: Node.js 20.19+ or 22.12+, Bun 1.3.11+, Chrome.
 2. **Install dependencies**:
    ```bash
-   npm install
+   bun install
    ```
 3. **Development build**:
    ```bash
-   npm run dev
+   bun run dev
    ```
 4. **Load into Chrome**:
    - Open `chrome://extensions`
@@ -157,7 +161,7 @@ Visit the Chrome Web Store to install the extension with one click.
    - Click **Load unpacked** and select the `dist` folder
 5. **Production build**:
    ```bash
-   npm run build
+   bun run build
    ```
 
 ## 🧭 Usage
@@ -192,8 +196,8 @@ OpenRouter provides access to various AI models, including free options. Here's 
 1. **Navigate**: Go to a post or video page with comments (e.g., YouTube, Reddit, Bilibili).
 2. **Extract**: Click the extension icon. If a config exists, click "Extract Comments". If not, click "Generate Config" to let AI find selectors.
 3. **Monitor**: Watch the progress bar in the popup.
-4. **Analyze**: Once extracted, click "Analyze Comments" to generate a report.
-5. **View**: Click "View History" to see detailed comments and the analysis report.
+4. **Analyze**: Once extracted, click "Analyze Comments" and watch the streamed response progress.
+5. **View**: Click "View History" to see detailed comments, rerun analysis, and export the report.
 
 ## ⚙️ Configuration
 
@@ -207,31 +211,31 @@ OpenRouter provides access to various AI models, including free options. Here's 
 - **Framework**: React 19.2, Vite 6.4
 - **Language**: TypeScript 5.9 (strict mode)
 - **Styling**: TailwindCSS 3.4 with dark mode support
-- **Extension**: Manifest V3, CRXJS 2.2
+- **Extension**: Manifest V3, CRXJS 2.4
 - **i18n**: i18next 25.6 + react-i18next 16.5
 - **Markdown**: react-markdown 10.1 + remark-gfm 4.0
-- **Storage**: lz-string 1.5 for compression
-- **Testing**: Vitest 4.0 with unit and [E2E tests](docs/e2e-testing.md) (Puppeteer 24.34)
+- **Storage**: Dexie 4.4 backed by IndexedDB
+- **Testing**: Vitest 4.1 with unit and [E2E tests](docs/e2e-testing.md) (Puppeteer 24.42)
 - **Code Quality**: ESLint 9.39 + Prettier 3.6
 
 ## 🛠️ Commands
 
-- `npm run dev`: Start dev server with HMR
-- `npm run build`: Production build (TypeScript check + Vite build)
-- `npm run preview`: Preview production build
-- `npm run package`: Build and package for distribution (.zip)
-- `npm run typecheck`: Run TypeScript checks
-- `npm run lint`: Run ESLint
-- `npm run lint:fix`: Run ESLint with auto-fix
-- `npm run format`: Format code with Prettier
-- `npm run test`: Run unit tests
-- `npm run test:coverage`: Run tests with coverage report
-- `npm run audit`: Check dependency security and outdated packages
-- `npm run audit:fix`: Auto-fix dependency security issues
+- `bun run dev`: Start dev server with HMR
+- `bun run build`: Production build (TypeScript check + Vite build)
+- `bun run preview`: Preview production build
+- `bun run package`: Build and package for distribution (.zip)
+- `bun run typecheck`: Run TypeScript checks
+- `bun run lint`: Run ESLint
+- `bun run lint:fix`: Run ESLint with auto-fix
+- `bun run format`: Format code with Prettier
+- `bun run format:check`: Check formatting with Prettier
+- `bun run test`: Run unit tests
+- `bun run test:coverage`: Run tests with coverage report
+- `bun run audit`: Check high severity dependency security issues
 
 ## 🤝 Contributing
 
-Issues and PRs are welcome! Please ensure you run `npm run typecheck` and `npm run lint` before submitting.
+Issues and PRs are welcome! Please ensure you run `bun run format:check`, `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run build` before submitting.
 
 ## 📝 License
 
