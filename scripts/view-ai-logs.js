@@ -14,7 +14,7 @@
 async function viewAILogs() {
   const indexResult = await chrome.storage.local.get('ai_log_index');
   const aiLogKeys = indexResult['ai_log_index'] || [];
-  
+
   if (aiLogKeys.length === 0) {
     console.log('Found 0 AI logs.');
     return [];
@@ -81,6 +81,11 @@ async function exportLogsToFile() {
   URL.revokeObjectURL(url);
   console.log('Logs exported to file');
 }
+
+globalThis.viewAILogs = viewAILogs;
+globalThis.viewLatestLog = viewLatestLog;
+globalThis.clearAILogs = clearAILogs;
+globalThis.exportLogsToFile = exportLogsToFile;
 
 console.log('AI Log Viewer loaded. Available commands:');
 console.log('- viewAILogs() - View all logs');

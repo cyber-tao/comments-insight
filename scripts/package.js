@@ -1,40 +1,48 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import archiver from 'archiver';
+import { zipSync } from 'fflate';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const distPath = path.resolve(__dirname, '../dist');
-const outputPath = path.resolve(__dirname, '../dist/extension.zip');
+const outputFileName = 'extension.zip';
+const outputPath = path.resolve(distPath, outputFileName);
+const zipCompressionLevel = 9;
+const zipModifiedTime = new Date('1980-01-01T00:00:00Z');
 
-// Create a file to stream archive data to
-const output = fs.createWriteStream(outputPath);
-const archive = archiver('zip', {
-  zlib: { level: 9 }, // Maximum compression
-});
+async function collectZippableFiles(directory, rootDirectory = directory) {
+  const files = {};
+  const entries = await fs.readdir(directory, { withFileTypes: true });
 
-output.on('close', () => {
-  console.log(`Extension packaged: ${archive.pointer()} total bytes`);
-  console.log(`Output: ${outputPath}`);
-});
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    const relativePath = path.relative(rootDirectory, fullPath).split(path.sep).join('/');
 
-archive.on('error', (err) => {
-  throw err;
-});
+    if (relativePath === outputFileName) {
+      continue;
+    }
 
-// Pipe archive data to the file
-archive.pipe(output);
+    if (entry.isDirectory()) {
+      Object.assign(files, await collectZippableFiles(fullPath, rootDirectory));
+      continue;
+    }
 
-// Append files from dist directory
-archive.directory(distPath, false, (entry) => {
-  // Exclude the zip file itself
-  if (entry.name === 'extension.zip') {
-    return false;
+    if (entry.isFile()) {
+      files[relativePath] = new Uint8Array(await fs.readFile(fullPath));
+    }
   }
-  return entry;
+
+  return files;
+}
+
+const files = await collectZippableFiles(distPath);
+const archive = zipSync(files, {
+  level: zipCompressionLevel,
+  mtime: zipModifiedTime,
 });
 
-// Finalize the archive
-archive.finalize();
+await fs.writeFile(outputPath, archive);
+console.log(`Extension packaged: ${archive.byteLength} total bytes`);
+console.log(`Output: ${outputPath}`);

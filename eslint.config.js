@@ -8,7 +8,7 @@ import globals from 'globals';
 
 export default tseslint.config(
   {
-    ignores: ['dist/', 'build/', 'node_modules/', 'scripts/*.js'],
+    ignores: ['dist/', 'build/', 'node_modules/'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -41,7 +41,7 @@ export default tseslint.config(
       ...prettierConfig.rules,
       'prettier/prettier': ['error', { endOfLine: 'auto' }],
       'no-console': ['warn', { allow: ['error', 'warn'] }],
-      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-unused-vars': [
         'warn',
@@ -49,10 +49,33 @@ export default tseslint.config(
       ],
       'react/react-in-jsx-scope': 'off',
       'react/jsx-uses-react': 'off',
+      'no-useless-escape': 'error',
+      'no-useless-catch': 'error',
+      'no-empty': ['error', { allowEmptyCatch: true }],
+      'prefer-const': 'error',
+    },
+  },
+  {
+    files: ['scripts/**/*.js', '*.config.js'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        ...globals.node,
+        ...globals.browser,
+        ...globals.es2021,
+        chrome: 'readonly',
+      },
+    },
+    rules: {
+      'no-console': 'off',
+      'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
+  {
+    files: ['**/src/config/constants.ts', '**/tests/dom-query.test.ts'],
+    rules: {
       'no-useless-escape': 'off',
-      'no-useless-catch': 'warn',
-      'no-empty': 'warn',
-      'prefer-const': 'warn',
     },
   },
 );

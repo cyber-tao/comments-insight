@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-# package-lock.json should be committed for consistent builds
+# Lockfiles should be committed for consistent builds
 yarn.lock
 pnpm-lock.yaml
 
@@ -77,3 +77,4 @@ testmd/
 .spec-workflow/
 .codex/
 .kiro/
+.qoder/
