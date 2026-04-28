@@ -3,6 +3,7 @@ import { HandlerContext } from './types';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
 import {
+  AI as AI_CONST,
   CHROME_MESSAGE_ERRORS,
   MESSAGES,
   DEFAULTS,
@@ -15,6 +16,7 @@ import {
   TEXT,
 } from '@/config/constants';
 import { getDomain } from '../../utils/url';
+import { generateUniqueId } from '../../utils/id-generator';
 import { Tokenizer } from '../../utils/tokenizer';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
 import { resolveTabId } from '../../utils/tab-helpers';
@@ -28,14 +30,6 @@ interface ScraperAnalysisResult {
     needsExpand: boolean;
   };
   confidence: number;
-}
-
-interface HistoryItemWithVideoTime {
-  platform?: string;
-  url?: string;
-  title?: string;
-  videoTime?: string;
-  postContent?: string;
 }
 
 interface StoredVerifiedAIModel {
@@ -138,10 +132,13 @@ function waitForTaskCompletion({
 }: WaitForTaskCompletionOptions): Promise<PendingTaskResult> {
   return new Promise((resolve, reject) => {
     let settled = false;
+    let cleaned = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let pollTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
     const cleanup = (): void => {
+      if (cleaned) return;
+      cleaned = true;
       signal.removeEventListener('abort', onAbort);
       chrome.tabs.onRemoved?.removeListener(onTabRemoved);
       if (timeoutId) {
@@ -367,7 +364,7 @@ export async function handleExtractionCompleted(
         }
 
         const historyItem = {
-          id: `history_${Date.now()}`,
+          id: generateUniqueId('history'),
           url: postInfo?.url || task.url,
           title: postInfo?.title || 'Untitled',
           platform: task.platform || 'unknown',
@@ -593,8 +590,11 @@ export async function handleExtractionProgress(
         total,
         stageMessage: progressMessage,
       });
-    } else {
+    } else if (typeof progress === 'number') {
       context.taskManager.updateTaskProgress(taskId, progress, progressMessage || '');
+    } else {
+      Logger.warn('[ExtractionHandler] Invalid progress payload', { payload: message.payload });
+      return { success: false };
     }
   }
 
@@ -672,7 +672,13 @@ export async function handleStartAnalysis(
       }
     }
 
-    context.taskManager.updateTaskProgress(taskId, 25);
+    context.taskManager.updateDetailedProgress(taskId, {
+      stage: 'analyzing',
+      current: 0,
+      total: AI_CONST.ANALYSIS_STREAM_BATCH_UNITS,
+      stageMessage: AI_CONST.ANALYSIS_PROGRESS_MESSAGES.WAITING,
+      stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.WAITING,
+    });
 
     let platform = ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
     let url = ANALYSIS_FORMAT.UNKNOWN_URL;
@@ -686,8 +692,8 @@ export async function handleStartAnalysis(
         platform = historyItem.platform || 'Unknown Platform';
         url = historyItem.url || 'N/A';
         title = historyItem.title || 'Untitled';
-        videoTime = (historyItem as HistoryItemWithVideoTime).videoTime || 'N/A';
-        postContent = (historyItem as HistoryItemWithVideoTime).postContent || 'N/A';
+        videoTime = historyItem.videoTime || 'N/A';
+        postContent = historyItem.postContent || 'N/A';
       }
     } else {
       platform = task.platform || 'Unknown Platform';
@@ -711,6 +717,16 @@ export async function handleStartAnalysis(
       },
       signal,
       settings.aiTimeout,
+      (progress) => {
+        context.taskManager.updateDetailedProgress(taskId, {
+          stage: 'analyzing',
+          current: progress.current,
+          total: progress.total,
+          stageMessage: progress.stageMessage,
+          stageMessageKey: progress.stageMessageKey,
+          stageMessageParams: progress.stageMessageParams,
+        });
+      },
     );
 
     context.taskManager.updateTaskProgress(taskId, 75);
@@ -725,7 +741,7 @@ export async function handleStartAnalysis(
         }
       } else {
         await context.storageManager.saveHistory({
-          id: `history_${Date.now()}`,
+          id: generateUniqueId('history'),
           url: task.url,
           title: `Analysis ${new Date().toLocaleString()}`,
           platform: task.platform || 'unknown',

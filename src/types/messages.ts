@@ -1,4 +1,12 @@
-import { Comment, Task, Settings, AIConfig, CrawlingConfig, FieldValidationStatus } from './index';
+import {
+  Comment,
+  Task,
+  Settings,
+  AIConfig,
+  CrawlingConfig,
+  FieldValidationStatus,
+  ProgressStage,
+} from './index';
 
 export type SystemMessage =
   | { type: 'PING'; payload?: never }
@@ -33,15 +41,22 @@ export type ExtractionMessage =
   | { type: 'CANCEL_EXTRACTION'; payload: { taskId: string } }
   | {
       type: 'EXTRACTION_PROGRESS';
-      payload: {
-        taskId: string;
-        progress: number;
-        message: string;
-        stage?: import('./index').ProgressStage;
-        current?: number;
-        total?: number;
-        data?: unknown;
-      };
+      payload: { taskId: string; data?: unknown } & (
+        | {
+            progress: number;
+            message?: string;
+            stage?: ProgressStage;
+            current?: number;
+            total?: number;
+          }
+        | {
+            progress?: number;
+            message?: string;
+            stage: ProgressStage;
+            current: number;
+            total: number;
+          }
+      );
     }
   | {
       type: 'EXTRACTION_COMPLETED';
@@ -114,10 +129,7 @@ export type AIModelMessage =
 
 export type ExportMessage = {
   type: 'EXPORT_DATA';
-  payload:
-    | { type: 'settings' }
-    | { format: 'csv' | 'md'; taskId: string }
-    | { format: 'csv' | 'md'; historyId: string };
+  payload: { type: 'settings' };
 };
 
 export interface GenerateCrawlingConfigMessage {

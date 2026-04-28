@@ -1,8 +1,17 @@
-import { Task, Platform, ProgressStage } from '../types';
+import { Task, Platform, ProgressStage, TaskProgressMessageParams } from '../types';
 import { NotificationService } from './NotificationService';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
-import { ERROR_KEYS, LIMITS, RETRY, STORAGE, TASK, TIMING, TIMEOUT } from '@/config/constants';
+import {
+  AI as AI_CONST,
+  ERROR_KEYS,
+  LIMITS,
+  RETRY,
+  STORAGE,
+  TASK,
+  TIMING,
+  TIMEOUT,
+} from '@/config/constants';
 import i18n from '@/utils/i18n';
 import { Mutex } from '@/utils/promise';
 import { sanitizePersistedTaskState } from '@/utils/storage-validation';
@@ -31,6 +40,10 @@ export interface DetailedProgressUpdate {
   total: number;
   /** Optional stage-specific message */
   stageMessage?: string;
+  /** Optional translation key for the stage-specific message */
+  stageMessageKey?: string;
+  /** Optional translation params for the stage-specific message */
+  stageMessageParams?: TaskProgressMessageParams;
 }
 
 /** Function type for task executors */
@@ -251,6 +264,11 @@ export class TaskManager {
       return;
     }
 
+    if (task.status !== 'running') {
+      Logger.debug(`[TaskManager] Ignoring progress update for ${task.status} task: ${taskId}`);
+      return;
+    }
+
     task.progress = Math.min(100, Math.max(0, progress));
     if (message) {
       task.message = message;
@@ -276,9 +294,17 @@ export class TaskManager {
       return;
     }
 
+    if (task.status !== 'running') {
+      Logger.debug(
+        `[TaskManager] Ignoring detailed progress update for ${task.status} task: ${taskId}`,
+      );
+      return;
+    }
+
     // Calculate estimated time remaining based on progress rate
     const elapsed = Date.now() - task.startTime;
-    const { stage, current, total, stageMessage } = detailedProgress;
+    const { stage, current, total, stageMessage, stageMessageKey, stageMessageParams } =
+      detailedProgress;
 
     // Calculate progress percentage based on stage and current/total
     let progressPercent = 0;
@@ -293,7 +319,11 @@ export class TaskManager {
           progressPercent = 5 + stageProgress * 10;
           break;
         case 'analyzing':
-          progressPercent = 15 + stageProgress * 10;
+          progressPercent =
+            task.type === 'analyze'
+              ? AI_CONST.ANALYSIS_TASK_PROGRESS_START +
+                stageProgress * AI_CONST.ANALYSIS_TASK_PROGRESS_RANGE
+              : 15 + stageProgress * 10;
           break;
         case 'extracting':
           progressPercent = 25 + stageProgress * 50;
@@ -317,10 +347,14 @@ export class TaskManager {
 
     // Estimate remaining time
     let estimatedTimeRemaining = -1;
-    if (progressPercent > 5 && progressPercent < 100) {
+    if (progressPercent > 5 && progressPercent < 100 && elapsed > 0) {
       const rate = progressPercent / elapsed;
-      const remaining = (100 - progressPercent) / rate;
-      estimatedTimeRemaining = Math.ceil(remaining / TIMEOUT.MS_PER_SEC); // Convert to seconds
+      if (Number.isFinite(rate) && rate > 0) {
+        const remaining = (100 - progressPercent) / rate;
+        if (Number.isFinite(remaining) && remaining >= 0) {
+          estimatedTimeRemaining = Math.ceil(remaining / TIMEOUT.MS_PER_SEC);
+        }
+      }
     }
 
     // Update task
@@ -332,6 +366,8 @@ export class TaskManager {
       total,
       estimatedTimeRemaining,
       stageMessage,
+      stageMessageKey,
+      stageMessageParams,
     };
 
     Logger.debug(`[TaskManager] Detailed progress updated: ${taskId}`, {
@@ -386,7 +422,9 @@ export class TaskManager {
     this.currentTaskId = null;
     this.notifyTaskUpdate(task);
     this.autoCleanFinishedTasks();
-    this.schedulePersist();
+    this.saveState().catch((error) => {
+      Logger.warn('[TaskManager] Failed to persist completed task state', { error });
+    });
     this.processQueue();
   }
 
@@ -420,7 +458,9 @@ export class TaskManager {
     this.currentTaskId = null;
     this.notifyTaskUpdate(task);
     this.autoCleanFinishedTasks();
-    this.schedulePersist();
+    this.saveState().catch((err) => {
+      Logger.warn('[TaskManager] Failed to persist failed task state', { error: err });
+    });
     this.processQueue();
   }
 
@@ -450,6 +490,8 @@ export class TaskManager {
 
     this.abortTask(taskId);
 
+    this.clearAbortController(taskId);
+
     task.status = 'failed';
     task.error = i18n.t(ERROR_KEYS.TASK_CANCELLED_BY_USER);
     task.endTime = Date.now();
@@ -460,7 +502,9 @@ export class TaskManager {
 
     Logger.info(`[TaskManager] Task cancelled: ${taskId}`);
     this.notifyTaskUpdate(task);
-    this.schedulePersist();
+    this.saveState().catch((error) => {
+      Logger.warn('[TaskManager] Failed to persist cancelled task state', { error });
+    });
     this.processQueue();
   }
 
@@ -595,8 +639,6 @@ export class TaskManager {
 
     this.startTask(nextTaskId)
       .then(async () => {
-        this.isProcessing = false;
-
         const task = this.tasks.get(nextTaskId);
         if (!task) {
           return;
@@ -625,9 +667,12 @@ export class TaskManager {
         }
       })
       .catch((error) => {
-        this.isProcessing = false;
         Logger.error(`[TaskManager] Failed to start task ${nextTaskId}`, { error });
         this.failTask(nextTaskId, error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        this.isProcessing = false;
+        this.processQueue();
       });
   }
 
@@ -691,6 +736,7 @@ export class TaskManager {
       );
     } catch (error) {
       Logger.warn('[TaskManager] Failed to persist task state', { error });
+      throw error;
     } finally {
       release();
     }

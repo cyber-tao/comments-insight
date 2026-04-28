@@ -13,6 +13,8 @@ export type ProgressStage =
   | 'validating'
   | 'complete';
 
+export type TaskProgressMessageParams = Record<string, string | number>;
+
 /**
  * Detailed task progress information for enhanced UI feedback
  */
@@ -27,6 +29,10 @@ export interface TaskProgress {
   estimatedTimeRemaining: number;
   /** Stage-specific message */
   stageMessage?: string;
+  /** Translation key for stage-specific message */
+  stageMessageKey?: string;
+  /** Translation params for stage-specific message */
+  stageMessageParams?: TaskProgressMessageParams;
 }
 
 export interface Comment {
@@ -89,6 +95,13 @@ export interface AIRequest {
   config: AIConfig;
   timeout?: number;
   signal?: AbortSignal;
+  onStreamProgress?: (progress: AIStreamProgress) => void;
+}
+
+export interface AIStreamProgress {
+  chunksReceived: number;
+  charactersReceived: number;
+  finishReason?: string;
 }
 
 export interface AIResponse {
@@ -202,6 +215,15 @@ export interface HistoryItem {
   comments: Comment[];
   analysis?: AnalysisResult; // Optional - may not be analyzed yet
   analyzedAt?: number; // When analysis was performed
+}
+
+export interface AnalysisMetadata {
+  platform?: string;
+  url?: string;
+  title?: string;
+  datetime?: string;
+  videoTime?: string;
+  postContent?: string;
 }
 
 export {

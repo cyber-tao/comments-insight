@@ -2,12 +2,14 @@ import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { PAGINATION } from '@/config/constants';
-import { type HistoryItem, type Comment } from '@/types';
+import { PAGINATION, UI_LIMITS } from '@/config/constants';
+import { type HistoryItem, type Comment, type TaskProgress } from '@/types';
 import { exportAnalysisAsMarkdown, exportCommentsAsCSV } from '@/utils/export';
+import { formatTaskProgressMessage } from '@/utils/task-progress-display';
 
 interface HistoryDetailPanelProps {
   selectedItem: HistoryItem | null;
+  selectedItemError: string | null;
   selectedItemLoading: boolean;
   viewMode: 'analysis' | 'comments';
   exportPostContentInMarkdown: boolean;
@@ -20,6 +22,8 @@ interface HistoryDetailPanelProps {
   paginatedComments: Comment[];
   isReanalyzing: boolean;
   reanalyzeError: string | null;
+  reanalyzeDetailedProgress?: TaskProgress | null;
+  reanalyzeMessage?: string | null;
   reanalyzeProgress: number | null;
   reanalyzeTaskId: string | null;
   reanalyzingHistoryId: string | null;
@@ -35,6 +39,7 @@ interface HistoryDetailPanelProps {
 
 export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
   selectedItem,
+  selectedItemError,
   selectedItemLoading,
   viewMode,
   exportPostContentInMarkdown,
@@ -47,6 +52,8 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
   paginatedComments,
   isReanalyzing,
   reanalyzeError,
+  reanalyzeDetailedProgress = null,
+  reanalyzeMessage = null,
   reanalyzeProgress,
   reanalyzeTaskId,
   reanalyzingHistoryId,
@@ -76,6 +83,23 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
       );
     }
 
+    if (selectedItemError) {
+      return (
+        <div
+          className="flex-1 flex items-center justify-center"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          <div className="text-center max-w-md px-6">
+            <p className="text-4xl mb-4">⚠️</p>
+            <p className="text-lg mb-2" style={{ color: 'var(--accent-danger)' }}>
+              {selectedItemError}
+            </p>
+            <p>{t('history.selectItem')}</p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         className="flex-1 flex items-center justify-center"
@@ -88,6 +112,31 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
       </div>
     );
   }
+
+  const activeReanalyzeProgress = Math.min(
+    Math.max(reanalyzeProgress ?? UI_LIMITS.PROGRESS_MIN_PERCENT, UI_LIMITS.PROGRESS_MIN_PERCENT),
+    UI_LIMITS.PROGRESS_MAX_PERCENT,
+  );
+  const hasAnalysis = Boolean(selectedItem.analysis?.markdown?.trim());
+  const reanalyzeProgressMessage = formatTaskProgressMessage({
+    type: 'analyze',
+    detailedProgress: reanalyzeDetailedProgress,
+    message: reanalyzeMessage,
+    t,
+  });
+  const compactReanalyzeProgressMessage = formatTaskProgressMessage({
+    type: 'analyze',
+    detailedProgress: reanalyzeDetailedProgress,
+    message: reanalyzeMessage,
+    compact: true,
+    t,
+  });
+  const idleReanalyzeTitle = hasAnalysis
+    ? t('history.reanalyzeTooltip', '重新发起分析并覆盖当前结果')
+    : t('history.startAnalysisTooltip', '立即开始对评论数据进行AI分析');
+  const activeReanalyzeTitle = reanalyzeTaskId
+    ? `${reanalyzeProgressMessage} #${reanalyzeTaskId}`
+    : reanalyzeProgressMessage;
 
   return (
     <>
@@ -183,28 +232,37 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                 <button
                   onClick={onReanalyze}
                   disabled={isReanalyzing}
-                  className="px-4 py-2 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-all shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="relative overflow-hidden px-4 py-2 rounded-lg text-white text-sm font-medium flex items-center justify-center gap-2 transition-all shadow-md disabled:opacity-70 disabled:cursor-not-allowed max-w-[18rem]"
                   style={{ backgroundColor: 'var(--accent-secondary)' }}
-                  title={
-                    reanalyzeTaskId
-                      ? `${selectedItem.analysis ? t('history.reanalyzing', '重新分析中') : t('popup.analyzing', '正在分析评论...')} #${reanalyzeTaskId}`
-                      : selectedItem.analysis
-                        ? t('history.reanalyzeTooltip', '重新发起分析并覆盖当前结果')
-                        : t('history.startAnalysisTooltip', '立即开始对评论数据进行AI分析')
-                  }
+                  title={isReanalyzing ? activeReanalyzeTitle : idleReanalyzeTitle}
                 >
-                  <span>{isReanalyzing ? '⏳' : selectedItem.analysis ? '🔄' : '✨'}</span>
-                  <span>
-                    {isReanalyzing
-                      ? `${selectedItem.analysis ? t('history.reanalyzing', '重新分析中') : t('popup.analyzing', '正在分析评论...')} ${
-                          reanalyzeProgress !== null ? `${Math.round(reanalyzeProgress)}%` : ''
-                        }`
-                      : selectedItem.analysis
-                        ? t('history.reanalyze', '重新分析')
-                        : t('history.startAnalysis', '开始分析')}
+                  {isReanalyzing && (
+                    <span
+                      role="progressbar"
+                      aria-label={t('popup.taskProgress')}
+                      aria-valuemin={UI_LIMITS.PROGRESS_MIN_PERCENT}
+                      aria-valuemax={UI_LIMITS.PROGRESS_MAX_PERCENT}
+                      aria-valuenow={Math.round(activeReanalyzeProgress)}
+                      className="absolute inset-x-0 bottom-0 h-1 bg-white/20"
+                    >
+                      <span
+                        className="block h-full bg-white/70 transition-all duration-300"
+                        style={{ width: `${activeReanalyzeProgress}%` }}
+                      />
+                    </span>
+                  )}
+                  <span className="relative z-10 flex min-w-0 items-center gap-2">
+                    <span>{isReanalyzing ? '⏳' : hasAnalysis ? '🔄' : '✨'}</span>
+                    <span className="min-w-0 truncate">
+                      {isReanalyzing
+                        ? compactReanalyzeProgressMessage
+                        : hasAnalysis
+                          ? t('history.reanalyze', '重新分析')
+                          : t('history.startAnalysis', '开始分析')}
+                    </span>
                   </span>
                 </button>
-                {selectedItem.analysis && (
+                {hasAnalysis && (
                   <button
                     onClick={() =>
                       exportAnalysisAsMarkdown(selectedItem, exportPostContentInMarkdown)
@@ -239,13 +297,13 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                 backgroundColor: 'var(--bg-card)',
               }}
             >
-              {selectedItem.analysis ? (
+              {hasAnalysis ? (
                 <div
                   className="prose prose-sm md:prose-base dark:prose-invert max-w-none"
                   style={{ color: 'var(--text-secondary)' }}
                 >
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {selectedItem.analysis.markdown}
+                    {selectedItem.analysis?.markdown ?? ''}
                   </ReactMarkdown>
                 </div>
               ) : (

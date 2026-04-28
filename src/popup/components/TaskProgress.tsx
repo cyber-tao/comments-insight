@@ -28,8 +28,13 @@ export const TaskProgress: React.FC<TaskProgressProps> = ({ task }) => {
   const getProgressMessage = () => {
     // Use detailed progress if available
     if (task.detailedProgress) {
-      const { stage, current, total, stageMessage } = task.detailedProgress;
+      const { stage, current, total, stageMessage, stageMessageKey, stageMessageParams } =
+        task.detailedProgress;
       const stageLabel = getStageLabel(stage);
+
+      if (stageMessageKey) {
+        return `${stageLabel}: ${t(stageMessageKey, stageMessageParams)}`;
+      }
 
       if (stageMessage) {
         return `${stageLabel}: ${stageMessage}`;

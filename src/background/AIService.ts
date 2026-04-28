@@ -1,4 +1,13 @@
-import { AIConfig, AIRequest, AIResponse, Comment, AnalysisResult } from '../types';
+import {
+  AIConfig,
+  AIRequest,
+  AIResponse,
+  AIStreamProgress,
+  Comment,
+  AnalysisResult,
+  AnalysisMetadata,
+  TaskProgressMessageParams,
+} from '../types';
 import { buildTimestampNormalizationPrompt } from '../utils/prompts';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, createAIError, ErrorCode } from '../utils/errors';
@@ -18,6 +27,31 @@ import { runWithConcurrencyLimit } from '../utils/promise';
 import { AIErrorHandler } from './ai/AIErrorHandler';
 import { DataNormalizer } from './ai/DataNormalizer';
 import { PromptBuilder } from './ai/PromptBuilder';
+
+interface ChatCompletionData {
+  choices?: Array<{
+    message?: { content?: string };
+    delta?: { content?: string };
+    finish_reason?: string | null;
+  }>;
+  usage?: { total_tokens?: number };
+}
+
+interface StreamingAIResult {
+  content: string;
+  tokensUsed: number;
+  finishReason: string;
+}
+
+interface AnalysisProgressUpdate {
+  current: number;
+  total: number;
+  stageMessage: string;
+  stageMessageKey?: string;
+  stageMessageParams?: TaskProgressMessageParams;
+}
+
+type AnalysisProgressCallback = (progress: AnalysisProgressUpdate) => void;
 
 export class AIService {
   private lastVerifiedConfig: AIConfig | null = null;
@@ -82,13 +116,137 @@ export class AIService {
     }
     let apiUrl = config.apiUrl.trim();
     if (!apiUrl.endsWith(API_CONST.ENDPOINTS.CHAT_COMPLETIONS)) {
-      apiUrl = apiUrl.replace(new RegExp('/$'), '') + API_CONST.ENDPOINTS.CHAT_COMPLETIONS;
+      apiUrl = apiUrl.replace(/\/$/, '') + API_CONST.ENDPOINTS.CHAT_COMPLETIONS;
     }
     return apiUrl;
   }
 
+  private buildChatCompletionRequest(
+    prompt: string,
+    systemPrompt: string | undefined,
+    config: AIConfig,
+  ): string {
+    return JSON.stringify({
+      model: config.model,
+      messages: [
+        ...(systemPrompt ? [{ role: AI_CONST.ROLES.SYSTEM, content: systemPrompt }] : []),
+        { role: AI_CONST.ROLES.USER, content: prompt },
+      ],
+      max_tokens: config.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS,
+      temperature: config.temperature,
+      top_p: config.topP,
+      stream: true,
+    });
+  }
+
+  private async readAIResponse(
+    response: Response,
+    onStreamActivity: () => void,
+    onStreamProgress?: (progress: AIStreamProgress) => void,
+  ): Promise<StreamingAIResult> {
+    if (!response.body) {
+      const data = (await response.json()) as ChatCompletionData;
+      const result = this.parseChatCompletionData(data);
+      onStreamProgress?.({
+        chunksReceived: result.content ? 1 : 0,
+        charactersReceived: result.content.length,
+        finishReason: result.finishReason,
+      });
+      return result;
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let content = '';
+    let tokensUsed = 0;
+    let finishReason = AI_CONST.STREAM.UNKNOWN_FINISH_REASON;
+    let streamDone = false;
+    let chunksReceived = 0;
+
+    const emitProgress = (): void => {
+      onStreamProgress?.({
+        chunksReceived,
+        charactersReceived: content.length,
+        finishReason,
+      });
+    };
+
+    const consumeLine = (line: string): void => {
+      const trimmed = line.trim();
+      if (!trimmed || streamDone) {
+        return;
+      }
+
+      const payload = trimmed.startsWith(AI_CONST.STREAM.DATA_PREFIX)
+        ? trimmed.slice(AI_CONST.STREAM.DATA_PREFIX.length).trim()
+        : trimmed;
+      if (!payload || payload === AI_CONST.STREAM.DONE_MARKER) {
+        streamDone = payload === AI_CONST.STREAM.DONE_MARKER;
+        return;
+      }
+      if (!payload.startsWith(AI_CONST.STREAM.JSON_START)) {
+        return;
+      }
+
+      const chunk = JSON.parse(payload) as ChatCompletionData;
+      const choice = chunk.choices?.[0];
+      const deltaContent = choice?.delta?.content;
+      const messageContent = choice?.message?.content;
+      if (deltaContent) {
+        content += deltaContent;
+        chunksReceived += 1;
+        emitProgress();
+      } else if (messageContent) {
+        content += messageContent;
+        chunksReceived += 1;
+        emitProgress();
+      }
+      if (choice?.finish_reason) {
+        finishReason = choice.finish_reason;
+        emitProgress();
+      }
+      if (typeof chunk.usage?.total_tokens === 'number') {
+        tokensUsed = chunk.usage.total_tokens;
+      }
+    };
+
+    try {
+      while (!streamDone) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+        onStreamActivity();
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          consumeLine(line);
+        }
+      }
+
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        consumeLine(buffer);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return { content, tokensUsed, finishReason };
+  }
+
+  private parseChatCompletionData(data: ChatCompletionData): StreamingAIResult {
+    return {
+      content: data.choices?.[0]?.message?.content || '',
+      tokensUsed: data.usage?.total_tokens || 0,
+      finishReason: data.choices?.[0]?.finish_reason || AI_CONST.STREAM.UNKNOWN_FINISH_REASON,
+    };
+  }
+
   async callAI(request: AIRequest): Promise<AIResponse> {
-    const { prompt, systemPrompt, config, signal, timeout } = request;
+    const { prompt, systemPrompt, config, signal, timeout, onStreamProgress } = request;
     const effectiveTimeout = timeout || AI_CONST.DEFAULT_TIMEOUT;
 
     if (signal?.aborted) {
@@ -113,7 +271,17 @@ export class AIService {
             retryController.abort();
           }
 
-          const timeoutId = setTimeout(() => {
+          let timeoutId: ReturnType<typeof setTimeout> | null = null;
+          const resetTimeout = (): void => {
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
+            timeoutId = setTimeout(() => {
+              retryController.abort(new Error('Timeout'));
+            }, effectiveTimeout);
+          };
+
+          timeoutId = setTimeout(() => {
             retryController.abort(new Error('Timeout'));
           }, effectiveTimeout);
 
@@ -144,16 +312,11 @@ export class AIService {
               headers.Authorization = `Bearer ${resolvedConfig.apiKey}`;
             }
 
-            const requestBody = JSON.stringify({
-              model: resolvedConfig.model,
-              messages: [
-                ...(systemPrompt ? [{ role: AI_CONST.ROLES.SYSTEM, content: systemPrompt }] : []),
-                { role: AI_CONST.ROLES.USER, content: prompt },
-              ],
-              max_tokens: resolvedConfig.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS,
-              temperature: resolvedConfig.temperature,
-              top_p: resolvedConfig.topP,
-            });
+            const requestBody = this.buildChatCompletionRequest(
+              prompt,
+              systemPrompt,
+              resolvedConfig,
+            );
 
             const response = await fetch(apiUrl, {
               method: 'POST',
@@ -172,13 +335,32 @@ export class AIService {
               AIErrorHandler.classifyHTTPError(response.status, errorText, resolvedConfig.model);
             }
 
-            const data = await response.json();
+            resetTimeout();
 
-            let content = data.choices?.[0]?.message?.content || '';
-            const tokensUsed = data.usage?.total_tokens || 0;
-            const finishReason = data.choices?.[0]?.finish_reason || 'unknown';
+            const streamResult = await this.readAIResponse(
+              response,
+              resetTimeout,
+              onStreamProgress,
+            );
+
+            let content = streamResult.content;
+            const tokensUsed = streamResult.tokensUsed;
+            const finishReason = streamResult.finishReason;
 
             content = DataNormalizer.removeThinkTags(content);
+
+            if (!content.trim()) {
+              Logger.warn('[AIService] AI response content is empty', {
+                tokensUsed,
+                finishReason,
+              });
+              throw createAIError(
+                ErrorCode.AI_INVALID_RESPONSE,
+                TEXT.NO_RESPONSE_FROM_MODEL,
+                { tokensUsed, finishReason },
+                true,
+              );
+            }
 
             Logger.info('[AIService] AI response received', {
               tokensUsed,
@@ -207,7 +389,9 @@ export class AIService {
             );
             throw error;
           } finally {
-            clearTimeout(timeoutId);
+            if (timeoutId) {
+              clearTimeout(timeoutId);
+            }
             controller.signal.removeEventListener('abort', onAbort);
           }
         },
@@ -227,7 +411,7 @@ export class AIService {
     try {
       const baseUrl = apiUrl
         .trim()
-        .replace(new RegExp('/$'), '')
+        .replace(/\/$/, '')
         .replace(new RegExp(API_CONST.ENDPOINTS.CHAT_COMPLETIONS + '$'), '');
       const modelsUrl = baseUrl + API_CONST.ENDPOINTS.MODELS;
 
@@ -266,16 +450,10 @@ export class AIService {
     config: AIConfig,
     promptTemplate: string,
     language?: string,
-    metadata?: {
-      platform?: string;
-      url?: string;
-      title?: string;
-      datetime?: string;
-      videoTime?: string;
-      postContent?: string;
-    },
+    metadata?: AnalysisMetadata,
     signal?: AbortSignal,
     timeout?: number,
+    onProgress?: AnalysisProgressCallback,
   ): Promise<AnalysisResult> {
     const resolvedLanguage = language || LANGUAGES.DEFAULT;
     const sanitizedMetadata = this.sanitizeAnalysisMetadata(metadata);
@@ -290,8 +468,11 @@ export class AIService {
       batches: commentBatches.length,
     });
 
+    const progressTracker = this.createAnalysisProgressTracker(commentBatches.length, onProgress);
+    progressTracker.reportWaiting();
+
     if (commentBatches.length === 1) {
-      return await this.analyzeSingleBatch(
+      const result = await this.analyzeSingleBatch(
         commentBatches[0],
         config,
         promptTemplate,
@@ -299,7 +480,11 @@ export class AIService {
         signal,
         timeout,
         resolvedLanguage,
+        (progress) => progressTracker.reportStreamProgress(0, progress),
       );
+      progressTracker.reportBatchComplete(0);
+      progressTracker.reportAllComplete();
+      return result;
     } else {
       const tasks = commentBatches.map((batch, index) => async () => {
         try {
@@ -311,7 +496,9 @@ export class AIService {
             signal,
             timeout,
             resolvedLanguage,
+            (progress) => progressTracker.reportStreamProgress(index, progress),
           );
+          progressTracker.reportBatchComplete(index);
           return { ok: true as const, result };
         } catch (error) {
           Logger.error(`[AIService] Analysis batch ${index + 1} failed`, { error });
@@ -338,8 +525,132 @@ export class AIService {
         });
       }
 
-      return PromptBuilder.mergeAnalysisResults(successful);
+      const merged = PromptBuilder.mergeAnalysisResults(successful);
+      progressTracker.reportAllComplete();
+      return merged;
     }
+  }
+
+  private createAnalysisProgressTracker(
+    totalBatches: number,
+    onProgress?: AnalysisProgressCallback,
+  ) {
+    const safeTotalBatches = Math.max(1, totalBatches);
+    const batchUnits = Array.from({ length: safeTotalBatches }, () => 0);
+    const batchCharacters = Array.from({ length: safeTotalBatches }, () => 0);
+    const batchChunks = Array.from({ length: safeTotalBatches }, () => 0);
+    const totalUnits = safeTotalBatches * AI_CONST.ANALYSIS_STREAM_BATCH_UNITS;
+    const messages = AI_CONST.ANALYSIS_PROGRESS_MESSAGES;
+    const messageKeys = AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS;
+    const paramKeys = AI_CONST.ANALYSIS_PROGRESS_PARAM_KEYS;
+
+    const createMessage = (
+      baseMessage: string,
+      messageKey: string,
+      batchMessageKey: string,
+      batchIndex?: number,
+    ): Pick<AnalysisProgressUpdate, 'stageMessage' | 'stageMessageKey' | 'stageMessageParams'> => {
+      const charactersReceived = batchCharacters.reduce((sum, count) => sum + count, 0);
+      if (safeTotalBatches <= 1 || batchIndex === undefined) {
+        return {
+          stageMessage:
+            charactersReceived > 0
+              ? `${baseMessage}, ${charactersReceived} ${messages.CHARS_LABEL}`
+              : baseMessage,
+          stageMessageKey: messageKey,
+          stageMessageParams: { [paramKeys.CHARACTERS]: charactersReceived },
+        };
+      }
+
+      return {
+        stageMessage: `${baseMessage}, ${messages.BATCH_LABEL} ${batchIndex + 1}/${safeTotalBatches}, ${charactersReceived} ${messages.CHARS_LABEL}`,
+        stageMessageKey: batchMessageKey,
+        stageMessageParams: {
+          [paramKeys.BATCH]: batchIndex + 1,
+          [paramKeys.TOTAL_BATCHES]: safeTotalBatches,
+          [paramKeys.CHARACTERS]: charactersReceived,
+        },
+      };
+    };
+
+    const emit = ({
+      stageMessage,
+      stageMessageKey,
+      stageMessageParams,
+    }: Pick<
+      AnalysisProgressUpdate,
+      'stageMessage' | 'stageMessageKey' | 'stageMessageParams'
+    >): void => {
+      if (!onProgress) {
+        return;
+      }
+
+      const current = Math.min(
+        totalUnits,
+        batchUnits.reduce((sum, units) => sum + units, 0),
+      );
+      onProgress({ current, total: totalUnits, stageMessage, stageMessageKey, stageMessageParams });
+    };
+
+    return {
+      reportWaiting: (): void => {
+        emit({
+          stageMessage: messages.WAITING,
+          stageMessageKey: messageKeys.WAITING,
+        });
+      },
+      reportStreamProgress: (batchIndex: number, progress: AIStreamProgress): void => {
+        if (batchIndex < 0 || batchIndex >= safeTotalBatches) {
+          return;
+        }
+
+        batchCharacters[batchIndex] = Math.max(
+          batchCharacters[batchIndex],
+          progress.charactersReceived,
+        );
+        batchChunks[batchIndex] = Math.max(batchChunks[batchIndex], progress.chunksReceived);
+        const streamUnits = Math.min(
+          AI_CONST.ANALYSIS_STREAM_MAX_UNITS_PER_BATCH,
+          Math.max(
+            1,
+            Math.floor(batchCharacters[batchIndex] / AI_CONST.ANALYSIS_STREAM_CHARS_PER_UNIT),
+          ),
+        );
+        batchUnits[batchIndex] = Math.max(batchUnits[batchIndex], streamUnits);
+        emit(
+          createMessage(
+            messages.RECEIVING,
+            messageKeys.RECEIVING,
+            messageKeys.RECEIVING_BATCH,
+            batchIndex,
+          ),
+        );
+      },
+      reportBatchComplete: (batchIndex: number): void => {
+        if (batchIndex < 0 || batchIndex >= safeTotalBatches) {
+          return;
+        }
+
+        batchUnits[batchIndex] = AI_CONST.ANALYSIS_STREAM_BATCH_UNITS;
+        emit(
+          createMessage(
+            messages.COMPLETE,
+            messageKeys.COMPLETE,
+            messageKeys.COMPLETE_BATCH,
+            batchIndex,
+          ),
+        );
+      },
+      reportAllComplete: (): void => {
+        for (let batchIndex = 0; batchIndex < batchUnits.length; batchIndex += 1) {
+          batchUnits[batchIndex] = AI_CONST.ANALYSIS_STREAM_BATCH_UNITS;
+        }
+        emit({
+          stageMessage: messages.COMPLETE,
+          stageMessageKey: messageKeys.COMPLETE,
+        });
+      },
+    };
   }
 
   async normalizeCommentTimestamps(
@@ -434,17 +745,11 @@ export class AIService {
     comments: Comment[],
     config: AIConfig,
     promptTemplate: string,
-    metadata?: {
-      platform?: string;
-      url?: string;
-      title?: string;
-      datetime?: string;
-      videoTime?: string;
-      postContent?: string;
-    },
+    metadata?: AnalysisMetadata,
     signal?: AbortSignal,
     timeout?: number,
     language: string = LANGUAGES.DEFAULT,
+    onStreamProgress?: (progress: AIStreamProgress) => void,
   ): Promise<AnalysisResult> {
     const serialized = PromptBuilder.serializeCommentsDense(comments);
     const prompt = PromptBuilder.buildAnalysisPromptWrapper(
@@ -460,6 +765,7 @@ export class AIService {
       config,
       signal,
       timeout,
+      onStreamProgress,
     });
 
     const markdown = response.content;
@@ -475,14 +781,7 @@ export class AIService {
 
   private estimateAnalysisPromptOverheadTokens(
     promptTemplate: string,
-    metadata?: {
-      platform?: string;
-      url?: string;
-      title?: string;
-      datetime?: string;
-      videoTime?: string;
-      postContent?: string;
-    },
+    metadata?: AnalysisMetadata,
     language: string = LANGUAGES.DEFAULT,
   ): number {
     const probePrompt = PromptBuilder.buildAnalysisPromptWrapper(
@@ -507,23 +806,7 @@ export class AIService {
     return value.slice(0, maxChars) + TEXT.TRUNCATED_SUFFIX;
   }
 
-  private sanitizeAnalysisMetadata(metadata?: {
-    platform?: string;
-    url?: string;
-    title?: string;
-    datetime?: string;
-    videoTime?: string;
-    postContent?: string;
-  }):
-    | {
-        platform?: string;
-        url?: string;
-        title?: string;
-        datetime?: string;
-        videoTime?: string;
-        postContent?: string;
-      }
-    | undefined {
+  private sanitizeAnalysisMetadata(metadata?: AnalysisMetadata): AnalysisMetadata | undefined {
     if (!metadata) {
       return metadata;
     }

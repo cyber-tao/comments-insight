@@ -79,13 +79,56 @@ export const AI = {
   ANALYSIS_POST_CONTENT_MAX_CHARS: 4000,
   ANALYSIS_TITLE_MAX_CHARS: 300,
   ANALYSIS_URL_MAX_CHARS: 2000,
+  ANALYSIS_STREAM_BATCH_UNITS: 100,
+  ANALYSIS_STREAM_MAX_UNITS_PER_BATCH: 95,
+  ANALYSIS_STREAM_CHARS_PER_UNIT: 512,
+  ANALYSIS_TASK_PROGRESS_START: 25,
+  ANALYSIS_TASK_PROGRESS_RANGE: 50,
   ROLES: {
     SYSTEM: 'system',
     USER: 'user',
   },
+  STREAM: {
+    DATA_PREFIX: 'data:',
+    DONE_MARKER: '[DONE]',
+    JSON_START: '{',
+    UNKNOWN_FINISH_REASON: 'unknown',
+  },
+  ANALYSIS_PROGRESS_MESSAGES: {
+    WAITING: 'waiting for model response',
+    RECEIVING: 'receiving model response',
+    COMPLETE: 'model response received',
+    BATCH_LABEL: 'batch',
+    CHARS_LABEL: 'chars',
+  },
+  ANALYSIS_PROGRESS_MESSAGE_KEYS: {
+    WAITING: 'popup.analysisProgressWaiting',
+    RECEIVING: 'popup.analysisProgressReceiving',
+    RECEIVING_BATCH: 'popup.analysisProgressReceivingBatch',
+    COMPLETE: 'popup.analysisProgressComplete',
+    COMPLETE_BATCH: 'popup.analysisProgressCompleteBatch',
+  },
+  ANALYSIS_PROGRESS_COMPACT_MESSAGE_KEYS: {
+    WAITING: 'popup.analysisProgressWaitingCompact',
+    RECEIVING: 'popup.analysisProgressReceivingCompact',
+    RECEIVING_BATCH: 'popup.analysisProgressReceivingBatchCompact',
+    COMPLETE: 'popup.analysisProgressCompleteCompact',
+    COMPLETE_BATCH: 'popup.analysisProgressCompleteBatchCompact',
+  },
+  ANALYSIS_PROGRESS_PARAM_KEYS: {
+    CHARACTERS: 'characters',
+    BATCH: 'batch',
+    TOTAL_BATCHES: 'totalBatches',
+  },
   PROMPTS: {
     JSON_ONLY:
       'You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start with [ and end with ].',
+  },
+  PORT: {
+    MAX_RECONNECT_ATTEMPTS: 3,
+    RECONNECT_BASE_DELAY_MS: 1000,
+    RECONNECT_MAX_DELAY_MS: 5000,
+    RECONNECT_BACKOFF_MULTIPLIER: 2,
   },
 };
 
@@ -127,9 +170,7 @@ export const DATE_TIME = {
 };
 
 export const HISTORY = {
-  SORT_DESC: true,
   MAX_ITEMS: 200,
-  COMMENTS_CHUNK_SIZE: 8000,
 };
 
 export const INJECTION = {
@@ -168,8 +209,6 @@ export const SCRIPTS = {
 export const STORAGE = {
   SETTINGS_KEY: 'settings',
   HISTORY_KEY: 'history',
-  HISTORY_INDEX_KEY: 'history_index',
-  HISTORY_URL_INDEX_KEY: 'history_url_index',
   LAST_VERIFIED_AI_MODEL_KEY: 'last_verified_ai_model',
   ENCRYPTION_SALT_KEY: 'encryption_salt',
   ENCRYPTION_SECRET_KEY: 'encryption_secret',
@@ -179,7 +218,6 @@ export const STORAGE = {
   AI_LOG_INDEX_KEY: 'ai_log_index',
   TASK_STATE_KEY: 'task_state',
   SELECTOR_TESTER_STATE_KEY: 'selector_tester_state',
-  HISTORY_SORTED_INDEX_KEY: 'history_sorted_index',
 };
 
 export const SCRAPER_GENERATION = {
@@ -268,10 +306,13 @@ export const TEXT = {
   UNTITLED: 'Untitled',
   API_KEY_PLACEHOLDER: 'sk-',
   CONTENT_SCRIPT_INJECT_FAILED: 'Failed to inject content script. Please refresh the page.',
+  EXTRACTION_CANCELLED_BY_USER: 'Extraction cancelled by user',
   EXTRACTION_TASK_TIMEOUT: 'Extraction timed out waiting for completion signal',
   CONFIG_TASK_TIMEOUT: 'Config generation timed out waiting for completion signal',
   TASK_SOURCE_TAB_CLOSED: 'Task source tab was closed before completion',
   MODEL_TEST_HINT: 'Please verify API URL, API key, and network connectivity.',
+  NO_RESPONSE_FROM_MODEL:
+    'AI returned an empty response. Please retry or check the model output settings.',
   TRUNCATED_SUFFIX: '... [Truncated]',
   PREVIEW_SUFFIX: '...',
 };
@@ -417,6 +458,7 @@ export const SCROLL = {
   UNCHANGED_SCROLL_THRESHOLD: 5,
   CONTAINER_SCROLL_STEP: 500,
   MAX_SCROLL_TIMEOUT_MS: 120000,
+  MAX_SCROLL_ITERATIONS: 100,
 };
 
 export const DOM = {
@@ -470,18 +512,6 @@ export const PAGINATION = {
   OPTIONS: [10, 20, 50, 100],
 };
 
-export const PERFORMANCE = {
-  MAX_METRICS_COUNT: 1000,
-  SLOW_OPERATION_THRESHOLD_MS: 100,
-  MEMORY_CHECK_INTERVAL_MS: 30000,
-  MEMORY_START_DELAY_MS: 5000,
-};
-
-export const MEMORY = {
-  HIGH_USAGE_THRESHOLD_PERCENT: 80,
-  BYTES_PER_MB: 1024 * 1024,
-};
-
 export const LIMITS = {
   API_KEY_MASK_PREFIX: 4,
   API_KEY_MASK_SUFFIX: 4,
@@ -523,5 +553,31 @@ export const UI_LIMITS = {
   /** Prompt template textarea rows */
   PROMPT_TEXTAREA_ROWS: 10,
   /** Minimum progress bar width percent */
+  PROGRESS_MIN_PERCENT: 0,
+  /** Maximum progress bar width percent */
+  PROGRESS_MAX_PERCENT: 100,
+  /** Minimum visible progress bar width percent */
   MIN_PROGRESS_WIDTH_PERCENT: 5,
+};
+
+export const LOG_SANITIZE = {
+  SENSITIVE_FIELD_NAMES: [
+    'apiKey',
+    'apikey',
+    'api_key',
+    'token',
+    'password',
+    'secret',
+    'credential',
+    'authorization',
+    'auth',
+  ] as const,
+  API_KEY_PATTERNS: [
+    /sk-[A-Za-z0-9]{20,}/g,
+    /key-[A-Za-z0-9]{20,}/g,
+    /Bearer\s+[A-Za-z0-9._-]{20,}/gi,
+    /[A-Za-z0-9]{32,}/g,
+  ] as const,
+  MASK_VISIBLE_CHARS: 4,
+  MASK_CHAR: '*',
 };

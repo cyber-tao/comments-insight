@@ -1,5 +1,8 @@
 import * as React from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { UI_LIMITS } from '@/config/constants';
+import { formatTaskProgressMessage } from '@/utils/task-progress-display';
 import { NavigationService } from '../utils/navigation';
 import type { PageInfo, PageStatus } from '../hooks/usePageInfo';
 import type { CurrentTask } from '../hooks/useTask';
@@ -27,6 +30,57 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
 }) => {
   const { t } = useTranslation();
 
+  const { isConfigActive, isAnalyzeActive, isExtractionFlowActive } = useMemo(() => {
+    const isTaskActive = (type: 'extract' | 'config' | 'analyze') =>
+      currentTask?.type === type &&
+      (currentTask?.status === 'running' || currentTask?.status === 'pending');
+    const extractActive = isTaskActive('extract');
+    const configActive = isTaskActive('config');
+    const analyzeActive = isTaskActive('analyze');
+    return {
+      isConfigActive: configActive,
+      isAnalyzeActive: analyzeActive,
+      isExtractionFlowActive: extractActive || configActive,
+    };
+  }, [currentTask]);
+
+  const { progressMessage, compactProgressMessage } = useMemo(() => {
+    return {
+      progressMessage: formatTaskProgressMessage({
+        type: currentTask?.type,
+        detailedProgress: currentTask?.detailedProgress,
+        message: currentTask?.message,
+        t,
+      }),
+      compactProgressMessage: formatTaskProgressMessage({
+        type: currentTask?.type,
+        detailedProgress: currentTask?.detailedProgress,
+        message: currentTask?.message,
+        compact: true,
+        t,
+      }),
+    };
+  }, [currentTask, t]);
+
+  const activeProgress = currentTask
+    ? Math.min(
+        UI_LIMITS.PROGRESS_MAX_PERCENT,
+        Math.max(UI_LIMITS.PROGRESS_MIN_PERCENT, currentTask.progress),
+      )
+    : UI_LIMITS.PROGRESS_MIN_PERCENT;
+
+  const renderProgressBar = (className: string) => (
+    <span
+      role="progressbar"
+      aria-label={t('popup.taskProgress')}
+      aria-valuemin={UI_LIMITS.PROGRESS_MIN_PERCENT}
+      aria-valuemax={UI_LIMITS.PROGRESS_MAX_PERCENT}
+      aria-valuenow={Math.round(activeProgress)}
+      className={`absolute bottom-0 left-0 h-1 transition-all duration-300 ${className}`}
+      style={{ width: `${activeProgress}%` }}
+    />
+  );
+
   const handleExtractClick = () => {
     if (pageStatus.extracted && pageStatus.historyId) {
       NavigationService.openHistoryPage(pageStatus.historyId, 'comments');
@@ -45,34 +99,6 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
     }
   };
 
-  const getProgressMessage = () => {
-    if (currentTask?.detailedProgress) {
-      const { stage, current, total, stageMessage } = currentTask.detailedProgress;
-      const stageKey = `popup.progress${stage.charAt(0).toUpperCase() + stage.slice(1)}`;
-      const stageText = t(stageKey, stageMessage || stage);
-      return current >= 0 && total > 0 ? `${stageText} ${current}/${total}` : stageText;
-    }
-
-    const msg = currentTask?.message || '';
-    const parts = msg.split(':');
-    if (parts.length >= 3) {
-      const [stage, count, max] = parts;
-      const stageKey = `popup.progress${stage.charAt(0).toUpperCase() + stage.slice(1)}`;
-      const stageText = t(stageKey);
-      const countNum = parseInt(count, 10);
-      return countNum >= 0 ? `${stageText} ${count}/${max}` : stageText;
-    }
-    return currentTask?.type === 'config' ? t('popup.generatingConfig') : t('popup.extracting');
-  };
-
-  const isTaskActive = (type: CurrentTask['type']) =>
-    currentTask?.type === type &&
-    (currentTask?.status === 'running' || currentTask?.status === 'pending');
-  const isExtractActive = isTaskActive('extract');
-  const isConfigActive = isTaskActive('config');
-  const isAnalyzeActive = isTaskActive('analyze');
-  const isExtractionFlowActive = isExtractActive || isConfigActive;
-
   return (
     <div className="p-4 space-y-3">
       {/* Extract Comments button */}
@@ -81,7 +107,9 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
           <button
             onClick={handleExtractClick}
             disabled={isExtractionFlowActive}
-            className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${
+            aria-disabled={isExtractionFlowActive}
+            title={isExtractionFlowActive ? t('popup.disabledTaskInProgress') : undefined}
+            className={`relative overflow-hidden flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${
               isExtractionFlowActive
                 ? 'cursor-not-allowed opacity-70'
                 : 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700'
@@ -94,9 +122,12 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
           >
             {isExtractionFlowActive ? (
               <>
-                <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                <span className="truncate max-w-[180px]">
-                  {isConfigActive ? t('popup.generatingConfig') : getProgressMessage()}
+                {renderProgressBar('bg-blue-500/70')}
+                <span className="relative z-10 flex items-center justify-center gap-2 min-w-0">
+                  <span className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></span>
+                  <span className="truncate max-w-[180px]" title={progressMessage}>
+                    {isConfigActive ? t('popup.generatingConfig') : compactProgressMessage}
+                  </span>
                 </span>
               </>
             ) : pageStatus.extracted ? (
@@ -141,6 +172,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
             <button
               onClick={() => onCancel(currentTask.id)}
               className="px-3 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-md flex items-center justify-center"
+              aria-label="Cancel task"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -160,7 +192,15 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
         <button
           onClick={handleAnalyzeClick}
           disabled={!pageStatus.extracted || isAnalyzeActive}
-          className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${
+          aria-disabled={!pageStatus.extracted || isAnalyzeActive}
+          title={
+            !pageStatus.extracted
+              ? t('popup.disabledNotExtracted')
+              : isAnalyzeActive
+                ? t('popup.disabledTaskInProgress')
+                : undefined
+          }
+          className={`relative overflow-hidden flex-1 py-3 px-4 rounded-lg font-medium transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2 ${
             !pageStatus.extracted || isAnalyzeActive
               ? 'cursor-not-allowed opacity-70'
               : 'bg-gradient-to-r from-purple-500 to-purple-600 text-white hover:from-purple-600 hover:to-purple-700'
@@ -173,8 +213,13 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
         >
           {isAnalyzeActive ? (
             <>
-              <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-              {t('popup.analyzing')}
+              {renderProgressBar('bg-purple-500/70')}
+              <span className="relative z-10 flex items-center justify-center gap-2 min-w-0">
+                <span className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></span>
+                <span className="truncate max-w-[180px]" title={progressMessage}>
+                  {compactProgressMessage}
+                </span>
+              </span>
             </>
           ) : pageStatus.analyzed ? (
             <>
@@ -206,6 +251,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
           <button
             onClick={() => onCancel(currentTask.id)}
             className="px-3 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-md flex items-center justify-center"
+            aria-label="Cancel task"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path

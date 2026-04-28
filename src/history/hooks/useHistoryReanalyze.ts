@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TIMING } from '@/config/constants';
-import { HistoryItem } from '@/types';
+import { type HistoryItem, type TaskProgress } from '@/types';
 import { ExtensionAPI } from '@/utils/extension-api';
 import { Logger } from '@/utils/logger';
 
@@ -20,6 +20,10 @@ export function useHistoryReanalyze({
   const [reanalyzeTaskId, setReanalyzeTaskId] = useState<string | null>(null);
   const [reanalyzingHistoryId, setReanalyzingHistoryId] = useState<string | null>(null);
   const [reanalyzeProgress, setReanalyzeProgress] = useState<number | null>(null);
+  const [reanalyzeDetailedProgress, setReanalyzeDetailedProgress] = useState<TaskProgress | null>(
+    null,
+  );
+  const [reanalyzeMessage, setReanalyzeMessage] = useState<string | null>(null);
   const [reanalyzeError, setReanalyzeError] = useState('');
   const [isReanalyzing, setIsReanalyzing] = useState(false);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -37,6 +41,8 @@ export function useHistoryReanalyze({
     setReanalyzeTaskId(null);
     setReanalyzingHistoryId(null);
     setReanalyzeProgress(null);
+    setReanalyzeDetailedProgress(null);
+    setReanalyzeMessage(null);
   }, []);
 
   const clearReanalyzeError = useCallback(() => {
@@ -68,6 +74,8 @@ export function useHistoryReanalyze({
 
           if (task.status === 'running' || task.status === 'pending') {
             setReanalyzeProgress(typeof task.progress === 'number' ? task.progress : 0);
+            setReanalyzeDetailedProgress(task.detailedProgress ?? null);
+            setReanalyzeMessage(task.message || task.error || null);
             pollTimeoutRef.current = setTimeout(() => {
               void pollTaskStatus();
             }, TIMING.POLL_TASK_RUNNING_MS);
@@ -113,6 +121,8 @@ export function useHistoryReanalyze({
     setReanalyzeError('');
     setIsReanalyzing(true);
     setReanalyzeProgress(0);
+    setReanalyzeDetailedProgress(null);
+    setReanalyzeMessage(null);
     setReanalyzingHistoryId(selectedItem.id);
 
     try {
@@ -148,6 +158,8 @@ export function useHistoryReanalyze({
     handleReanalyze,
     isReanalyzing,
     reanalyzeError,
+    reanalyzeDetailedProgress,
+    reanalyzeMessage,
     reanalyzeProgress,
     reanalyzeTaskId,
     reanalyzingHistoryId,
