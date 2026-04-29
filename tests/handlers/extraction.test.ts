@@ -473,6 +473,57 @@ describe('extraction handlers', () => {
       );
     });
 
+    it('should ignore stale extraction completion for failed task', async () => {
+      const context = createMockContext({
+        taskManager: {
+          ...createMockContext().taskManager,
+          getTask: vi.fn().mockReturnValue({
+            id: 'task_123',
+            type: 'extract',
+            status: 'failed',
+            url: 'https://example.com',
+            platform: 'example.com',
+            progress: 80,
+            startTime: Date.now(),
+            tokensUsed: 0,
+            error: 'Task cancelled by user',
+          }),
+          recoverInterruptedTask: vi.fn().mockReturnValue(undefined),
+          completeTask: vi.fn(),
+          failTask: vi.fn(),
+        },
+      } as unknown as Partial<HandlerContext>);
+
+      const message = {
+        type: 'EXTRACTION_COMPLETED' as const,
+        payload: {
+          taskId: 'task_123',
+          success: true,
+          comments: [
+            {
+              id: 'comment-1',
+              username: 'user',
+              content: 'content',
+              likes: 1,
+              timestamp: new Date().toISOString(),
+              replies: [],
+            },
+          ],
+          postInfo: {
+            url: 'https://example.com',
+            title: 'Late Title',
+          },
+        },
+      };
+
+      const result = await handleExtractionCompleted(message, context);
+
+      expect(result).toEqual({ success: false });
+      expect(context.storageManager.saveHistory).not.toHaveBeenCalled();
+      expect(context.taskManager.completeTask).not.toHaveBeenCalled();
+      expect(context.taskManager.failTask).not.toHaveBeenCalled();
+    });
+
     it('should fail recovered config task when completion reports an error', async () => {
       const context = createMockContext({
         taskManager: {
@@ -505,6 +556,41 @@ describe('extraction handlers', () => {
 
       expect(result).toEqual({ success: true });
       expect(context.taskManager.failTask).toHaveBeenCalledWith('task_123', 'config failed');
+    });
+
+    it('should ignore stale config completion for completed task', async () => {
+      const context = createMockContext({
+        taskManager: {
+          ...createMockContext().taskManager,
+          getTask: vi.fn().mockReturnValue({
+            id: 'task_123',
+            type: 'config',
+            status: 'completed',
+            url: 'https://example.com',
+            platform: 'example.com',
+            progress: 100,
+            startTime: Date.now(),
+            tokensUsed: 0,
+          }),
+          recoverInterruptedTask: vi.fn().mockReturnValue(undefined),
+          completeTask: vi.fn(),
+          failTask: vi.fn(),
+        },
+      } as unknown as Partial<HandlerContext>);
+
+      const message = {
+        type: 'CONFIG_GENERATION_COMPLETED' as const,
+        payload: {
+          taskId: 'task_123',
+          success: true,
+        },
+      };
+
+      const result = await handleConfigGenerationCompleted(message, context);
+
+      expect(result).toEqual({ success: false });
+      expect(context.taskManager.completeTask).not.toHaveBeenCalled();
+      expect(context.taskManager.failTask).not.toHaveBeenCalled();
     });
   });
 

@@ -103,6 +103,7 @@ describe('ExtensionAPI', () => {
   it('maps mutating operations to the expected messages', async () => {
     sendMessageMock
       .mockResolvedValueOnce({ success: true })
+      .mockResolvedValueOnce({ success: true })
       .mockResolvedValueOnce({ taskId: 'extract-1' })
       .mockResolvedValueOnce({ taskId: 'config-1' })
       .mockResolvedValueOnce({ taskId: 'analysis-1' })
@@ -111,6 +112,7 @@ describe('ExtensionAPI', () => {
       .mockResolvedValueOnce({ success: true });
 
     expect(await ExtensionAPI.saveSettings({ theme: 'dark' })).toEqual({ success: true });
+    expect(await ExtensionAPI.importSettings('{"maxComments":200}')).toEqual({ success: true });
     expect(await ExtensionAPI.startExtraction('https://example.com/post')).toEqual({
       taskId: 'extract-1',
     });
@@ -130,6 +132,7 @@ describe('ExtensionAPI', () => {
 
     expect(sendMessageMock.mock.calls).toEqual([
       [{ type: MESSAGES.SAVE_SETTINGS, payload: { settings: { theme: 'dark' } } }],
+      [{ type: MESSAGES.IMPORT_SETTINGS, payload: { data: '{"maxComments":200}' } }],
       [{ type: MESSAGES.START_EXTRACTION, payload: { url: 'https://example.com/post' } }],
       [{ type: MESSAGES.START_CONFIG_GENERATION, payload: { url: 'https://example.com/post' } }],
       [
@@ -175,6 +178,7 @@ describe('ExtensionAPI', () => {
     const calls: Array<() => Promise<unknown>> = [
       () => ExtensionAPI.getSettings(),
       () => ExtensionAPI.saveSettings({ theme: 'dark' }),
+      () => ExtensionAPI.importSettings('{"theme":"dark"}'),
       () => ExtensionAPI.getHistoryItem('history-1'),
       () => ExtensionAPI.getHistoryByUrl('https://example.com'),
       () => ExtensionAPI.getHistoryMetadataPage(1, 20, 'query'),

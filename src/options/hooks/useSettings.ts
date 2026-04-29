@@ -30,13 +30,13 @@ export function useSettings() {
     toastRef.current = toast;
   }, [toast]);
 
-  const loadSettings = useCallback(async () => {
+  const loadSettings = useCallback(async (options?: { force?: boolean }) => {
     try {
       const settings = await ExtensionAPI.getSettings();
       Logger.debug('[useSettings] Settings response', { settings });
 
       if (settings) {
-        if (isUserChangeRef.current || isSavingRef.current) return;
+        if (!options?.force && (isUserChangeRef.current || isSavingRef.current)) return;
         setSettings(settings);
         if (settings.language) {
           Logger.debug('[useSettings] Setting language to', {
@@ -140,37 +140,33 @@ export function useSettings() {
     }
   }, [t, toast]);
 
-  const handleImport = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleImport = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const data = event.target?.result as string;
-        const imported = JSON.parse(data);
-        if (typeof imported !== 'object' || imported === null || Array.isArray(imported)) {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const data = event.target?.result as string;
+          if (typeof data !== 'string' || data.trim().length === 0) {
+            toastRef.current.error(tRef.current('options.importError'));
+            return;
+          }
+          await ExtensionAPI.importSettings(data);
+          pendingSaveRef.current = false;
+          isUserChangeRef.current = false;
+          savedRevisionRef.current = changeRevisionRef.current;
+          await loadSettings({ force: true });
+          toastRef.current.success(tRef.current('options.importedSuccess'));
+        } catch (_error) {
           toastRef.current.error(tRef.current('options.importError'));
-          return;
         }
-        isUserChangeRef.current = true;
-        changeRevisionRef.current += 1;
-        setSettings((prev) => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            ...imported,
-            crawlingConfigs: prev.crawlingConfigs,
-            selectorCache: prev.selectorCache,
-          };
-        });
-        toastRef.current.success(tRef.current('options.importedSuccess'));
-      } catch (_error) {
-        toastRef.current.error(tRef.current('options.importError'));
-      }
-    };
-    reader.readAsText(file);
-  }, []);
+      };
+      reader.readAsText(file);
+    },
+    [loadSettings],
+  );
 
   return {
     settings,

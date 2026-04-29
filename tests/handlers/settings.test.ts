@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   handleGetSettings,
   handleSaveSettings,
+  handleImportSettings,
   handleCacheSelector,
   handleGetCrawlingConfig,
   handleSaveCrawlingConfig,
@@ -13,6 +14,7 @@ describe('Settings Handlers', () => {
   const mockStorageManager = {
     getSettings: vi.fn(),
     saveSettings: vi.fn(),
+    importSettings: vi.fn(),
     updateSelectorCache: vi.fn(),
     getCrawlingConfig: vi.fn(),
     saveCrawlingConfig: vi.fn(),
@@ -132,6 +134,34 @@ describe('Settings Handlers', () => {
 
       expect(result).toEqual({ success: true });
       expect(mockStorageManager.saveSettings).toHaveBeenCalledWith({});
+    });
+  });
+
+  describe('handleImportSettings', () => {
+    it('should import settings successfully', async () => {
+      mockStorageManager.importSettings.mockResolvedValue(undefined);
+
+      const message: Extract<Message, { type: 'IMPORT_SETTINGS' }> = {
+        type: 'IMPORT_SETTINGS',
+        payload: { data: '{"maxComments":200}' },
+      };
+
+      const result = await handleImportSettings(message, context);
+
+      expect(result).toEqual({ success: true });
+      expect(mockStorageManager.importSettings).toHaveBeenCalledWith('{"maxComments":200}');
+    });
+
+    it('should throw error when import data is missing', async () => {
+      const message: Extract<Message, { type: 'IMPORT_SETTINGS' }> = {
+        type: 'IMPORT_SETTINGS',
+        payload: { data: '' },
+      };
+
+      await expect(handleImportSettings(message, context)).rejects.toThrow(
+        'Settings import data is required',
+      );
+      expect(mockStorageManager.importSettings).not.toHaveBeenCalled();
     });
   });
 

@@ -151,6 +151,9 @@ export class MessageRouter {
         case MESSAGES.SAVE_SETTINGS:
           return await settingsHandlers.handleSaveSettings(validatedMessage, context);
 
+        case MESSAGES.IMPORT_SETTINGS:
+          return await settingsHandlers.handleImportSettings(validatedMessage, context);
+
         case MESSAGES.CACHE_SELECTOR:
           return await settingsHandlers.handleCacheSelector(validatedMessage, context);
 

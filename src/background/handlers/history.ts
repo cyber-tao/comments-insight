@@ -1,6 +1,7 @@
 import { Message, HistoryItem } from '../../types';
 import { HandlerContext } from './types';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
+import { PAGINATION } from '@/config/constants';
 
 interface GetHistoryListResponse {
   history: HistoryItem[];
@@ -65,7 +66,8 @@ export async function handleGetHistory(
   }
 
   const safePage = typeof page === 'number' && page >= 0 ? page : 0;
-  const safePageSize = typeof pageSize === 'number' && pageSize > 0 ? pageSize : 20;
+  const safePageSize =
+    typeof pageSize === 'number' && pageSize > 0 ? pageSize : PAGINATION.DEFAULT_PER_PAGE;
 
   if (metadataOnly) {
     if (query) {

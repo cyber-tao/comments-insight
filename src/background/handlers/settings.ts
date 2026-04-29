@@ -27,6 +27,20 @@ export async function handleSaveSettings(
   return { success: true };
 }
 
+export async function handleImportSettings(
+  message: Extract<Message, { type: 'IMPORT_SETTINGS' }>,
+  context: HandlerContext,
+): Promise<SuccessResponse> {
+  const { data } = message.payload || {};
+
+  if (!data) {
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Settings import data is required');
+  }
+
+  await context.storageManager.importSettings(data);
+  return { success: true };
+}
+
 export async function handleCacheSelector(
   message: Extract<Message, { type: 'CACHE_SELECTOR' }>,
   context: HandlerContext,

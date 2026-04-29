@@ -35,6 +35,9 @@ const messagePayloadSchemas: Partial<Record<Message['type'], z.ZodTypeAny>> = {
   SAVE_SETTINGS: z.object({
     settings: looseObjectSchema,
   }),
+  IMPORT_SETTINGS: z.object({
+    data: nonEmptyString,
+  }),
   CACHE_SELECTOR: z.object({
     hostname: nonEmptyString,
     selector: nonEmptyString,

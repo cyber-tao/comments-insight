@@ -119,6 +119,29 @@ function isExpectedAsyncAckError(error: unknown): boolean {
   );
 }
 
+function resolveRunningCompletionTask(
+  taskId: string,
+  context: HandlerContext,
+  completionType: 'extraction' | 'config',
+): Task | null {
+  const task = context.taskManager.getTask(taskId);
+  if (task?.status === 'running') {
+    return task;
+  }
+
+  const recoveredTask = context.taskManager.recoverInterruptedTask(taskId);
+  if (recoveredTask?.status === 'running') {
+    return recoveredTask;
+  }
+
+  Logger.warn(`[ExtractionHandler] Ignoring stale ${completionType} completion`, {
+    taskId,
+    status: task?.status,
+    recoveredStatus: recoveredTask?.status,
+  });
+  return null;
+}
+
 function waitForTaskCompletion({
   taskId,
   signal,
@@ -312,11 +335,9 @@ export async function handleExtractionCompleted(
     return { success: false };
   }
   const { taskId, success, comments, postInfo, error } = payload;
-  const task =
-    context.taskManager.getTask(taskId) || context.taskManager.recoverInterruptedTask(taskId);
+  const task = resolveRunningCompletionTask(taskId, context, 'extraction');
 
   if (!task) {
-    Logger.warn('[ExtractionHandler] Received completion for unknown or finished task', { taskId });
     return { success: false };
   }
 
@@ -467,11 +488,9 @@ export async function handleConfigGenerationCompleted(
     return { success: false };
   }
   const { taskId, success, error } = payload;
-  const task =
-    context.taskManager.getTask(taskId) || context.taskManager.recoverInterruptedTask(taskId);
+  const task = resolveRunningCompletionTask(taskId, context, 'config');
 
   if (!task) {
-    Logger.warn('[ExtractionHandler] Received config completion for unknown task', { taskId });
     return { success: false };
   }
 

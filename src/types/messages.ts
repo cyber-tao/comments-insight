@@ -20,6 +20,7 @@ export type InjectionMessage = {
 export type SettingsMessage =
   | { type: 'GET_SETTINGS'; payload?: never }
   | { type: 'SAVE_SETTINGS'; payload: { settings: Partial<Settings> } }
+  | { type: 'IMPORT_SETTINGS'; payload: { data: string } }
   | { type: 'CACHE_SELECTOR'; payload: { hostname: string; selector: string } }
   | { type: 'GET_CRAWLING_CONFIG'; payload: { domain: string } }
   | { type: 'SAVE_CRAWLING_CONFIG'; payload: { config: CrawlingConfig } }

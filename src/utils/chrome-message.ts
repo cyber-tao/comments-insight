@@ -1,5 +1,5 @@
 import { Message } from '../types';
-import { TIMEOUT } from '@/config/constants';
+import { CHROME_MESSAGE_ERRORS, TIMEOUT } from '@/config/constants';
 
 interface MessageOptions {
   timeoutMs?: number;
@@ -15,7 +15,7 @@ export function sendMessage<T = unknown>(
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      reject(new Error('Message timeout'));
+      reject(new Error(CHROME_MESSAGE_ERRORS.TIMEOUT));
     }, timeoutMs);
 
     chrome.runtime.sendMessage(message, (response) => {
@@ -45,7 +45,7 @@ export function sendMessageToTab<T = unknown>(
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      reject(new Error('Message timeout'));
+      reject(new Error(CHROME_MESSAGE_ERRORS.TIMEOUT));
     }, timeoutMs);
 
     chrome.tabs.sendMessage(tabId, message, (response) => {
@@ -71,7 +71,7 @@ export function sendMessageVoid(message: Message, options: MessageOptions = {}):
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
-      reject(new Error('Message timeout'));
+      reject(new Error(CHROME_MESSAGE_ERRORS.TIMEOUT));
     }, timeoutMs);
 
     chrome.runtime.sendMessage(message, () => {

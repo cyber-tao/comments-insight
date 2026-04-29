@@ -1,4 +1,5 @@
 import { Settings, HistoryItem, CrawlingConfig } from '../types';
+import { PAGINATION } from '@/config/constants';
 import { SettingsStore } from './storage/SettingsStore';
 import { HistoryStore } from './storage/HistoryStore';
 import { EncryptionService } from './storage/EncryptionService';
@@ -81,19 +82,27 @@ export class StorageManager {
     return this.historyStore.getHistory();
   }
 
-  async getHistoryPage(page: number = 0, pageSize: number = 20) {
+  async getHistoryPage(page: number = 0, pageSize: number = PAGINATION.DEFAULT_PER_PAGE) {
     return this.historyStore.getHistoryPage(page, pageSize);
   }
 
-  async getHistoryMetadataPage(page: number = 0, pageSize: number = 20) {
+  async getHistoryMetadataPage(page: number = 0, pageSize: number = PAGINATION.DEFAULT_PER_PAGE) {
     return this.historyStore.getHistoryMetadataPage(page, pageSize);
   }
 
-  async searchHistoryMetadataPage(query: string, page: number = 0, pageSize: number = 20) {
+  async searchHistoryMetadataPage(
+    query: string,
+    page: number = 0,
+    pageSize: number = PAGINATION.DEFAULT_PER_PAGE,
+  ) {
     return this.historyStore.searchHistoryMetadataPage(query, page, pageSize);
   }
 
-  async searchHistoryPaginated(query: string, page: number = 0, pageSize: number = 20) {
+  async searchHistoryPaginated(
+    query: string,
+    page: number = 0,
+    pageSize: number = PAGINATION.DEFAULT_PER_PAGE,
+  ) {
     return this.historyStore.searchHistoryPaginated(query, page, pageSize);
   }
 

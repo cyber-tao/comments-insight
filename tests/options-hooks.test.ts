@@ -4,6 +4,7 @@
 
 import { renderHook, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ChangeEvent } from 'react';
 import { TIMING } from '../src/config/constants';
 import { useSettings } from '../src/options/hooks/useSettings';
 import type { Settings } from '../src/types';
@@ -11,6 +12,7 @@ import type { Settings } from '../src/types';
 const extensionApiMock = vi.hoisted(() => ({
   exportSettings: vi.fn(),
   getSettings: vi.fn(),
+  importSettings: vi.fn(),
   saveSettings: vi.fn(),
 }));
 
@@ -106,6 +108,7 @@ describe('useSettings', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     extensionApiMock.getSettings.mockResolvedValue(createSettings());
+    extensionApiMock.importSettings.mockResolvedValue({ success: true });
     extensionApiMock.saveSettings.mockResolvedValue({ success: true });
     extensionApiMock.exportSettings.mockResolvedValue('{"maxComments":100}');
   });
@@ -314,5 +317,70 @@ describe('useSettings', () => {
     createElementSpy.mockRestore();
     createObjectURLSpy.mockRestore();
     revokeObjectURLSpy.mockRestore();
+  });
+
+  it('imports settings through the background validation path and reloads settings', async () => {
+    const importedSettings = { ...createSettings(), maxComments: 200 };
+    extensionApiMock.getSettings
+      .mockResolvedValueOnce(createSettings())
+      .mockResolvedValueOnce(importedSettings);
+    const fileReaderResult = '{"maxComments":200}';
+    class MockFileReader {
+      onload: ((event: ProgressEvent<FileReader>) => void) | null = null;
+
+      readAsText(): void {
+        this.onload?.({ target: { result: fileReaderResult } } as ProgressEvent<FileReader>);
+      }
+    }
+    vi.stubGlobal('FileReader', MockFileReader);
+
+    const { result } = renderHook(() => useSettings());
+
+    await act(async () => {
+      await flushMicrotasks();
+      await vi.advanceTimersByTimeAsync(TIMING.MICRO_WAIT_MS);
+    });
+
+    await act(async () => {
+      result.current.handleImport({
+        target: { files: [new File([fileReaderResult], 'settings.json')] },
+      } as unknown as ChangeEvent<HTMLInputElement>);
+      await flushMicrotasks();
+    });
+
+    expect(extensionApiMock.importSettings).toHaveBeenCalledWith(fileReaderResult);
+    expect(result.current.settings?.maxComments).toBe(200);
+    expect(toastMock.success).toHaveBeenCalledWith('options.importedSuccess');
+    expect(extensionApiMock.saveSettings).not.toHaveBeenCalled();
+  });
+
+  it('shows import error when background validation rejects imported settings', async () => {
+    const fileReaderResult = '{"maxComments":"bad"}';
+    extensionApiMock.importSettings.mockRejectedValueOnce(new Error('Invalid settings format'));
+    class MockFileReader {
+      onload: ((event: ProgressEvent<FileReader>) => void) | null = null;
+
+      readAsText(): void {
+        this.onload?.({ target: { result: fileReaderResult } } as ProgressEvent<FileReader>);
+      }
+    }
+    vi.stubGlobal('FileReader', MockFileReader);
+
+    const { result } = renderHook(() => useSettings());
+
+    await act(async () => {
+      await flushMicrotasks();
+      await vi.advanceTimersByTimeAsync(TIMING.MICRO_WAIT_MS);
+    });
+
+    await act(async () => {
+      result.current.handleImport({
+        target: { files: [new File([fileReaderResult], 'settings.json')] },
+      } as unknown as ChangeEvent<HTMLInputElement>);
+      await flushMicrotasks();
+    });
+
+    expect(extensionApiMock.importSettings).toHaveBeenCalledWith(fileReaderResult);
+    expect(toastMock.error).toHaveBeenCalledWith('options.importError');
   });
 });

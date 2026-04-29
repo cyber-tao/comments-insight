@@ -38,6 +38,7 @@ vi.mock('../src/background/handlers/extraction', () => ({
 vi.mock('../src/background/handlers/settings', () => ({
   handleGetSettings: vi.fn().mockResolvedValue({ maxComments: 100 }),
   handleSaveSettings: vi.fn().mockResolvedValue({ success: true }),
+  handleImportSettings: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 vi.mock('../src/background/handlers/history', () => ({
@@ -138,6 +139,15 @@ describe('MessageRouter', () => {
     it('should handle SAVE_SETTINGS message', async () => {
       const result = await router.handleMessage(
         { type: MESSAGES.SAVE_SETTINGS, payload: { settings: { maxComments: 200 } } },
+        mockSender,
+      );
+
+      expect(result).toEqual({ success: true });
+    });
+
+    it('should handle IMPORT_SETTINGS message', async () => {
+      const result = await router.handleMessage(
+        { type: MESSAGES.IMPORT_SETTINGS, payload: { data: '{"maxComments":200}' } },
         mockSender,
       );
 

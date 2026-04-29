@@ -1,5 +1,5 @@
 import { Comment, HistoryItem } from '../../types';
-import { HISTORY } from '@/config/constants';
+import { HISTORY, PAGINATION } from '@/config/constants';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
 import Dexie, { type Table } from 'dexie';
@@ -171,7 +171,7 @@ export class HistoryStore {
     }
   }
 
-  async getHistoryPage(page: number = 0, pageSize: number = 20) {
+  async getHistoryPage(page: number = 0, pageSize: number = PAGINATION.DEFAULT_PER_PAGE) {
     try {
       const total = await db.historyMetadata.count();
       const totalPages = Math.ceil(total / pageSize);
@@ -194,7 +194,7 @@ export class HistoryStore {
     }
   }
 
-  async getHistoryMetadataPage(page: number = 0, pageSize: number = 20) {
+  async getHistoryMetadataPage(page: number = 0, pageSize: number = PAGINATION.DEFAULT_PER_PAGE) {
     try {
       const total = await db.historyMetadata.count();
       const totalPages = Math.ceil(total / pageSize);
@@ -218,7 +218,11 @@ export class HistoryStore {
     }
   }
 
-  async searchHistoryMetadataPage(query: string, page: number = 0, pageSize: number = 20) {
+  async searchHistoryMetadataPage(
+    query: string,
+    page: number = 0,
+    pageSize: number = PAGINATION.DEFAULT_PER_PAGE,
+  ) {
     try {
       const lowerQuery = query.toLowerCase();
       const allItems = await db.historyMetadata.orderBy('extractedAt').reverse().toArray();
@@ -248,7 +252,11 @@ export class HistoryStore {
     }
   }
 
-  async searchHistoryPaginated(query: string, page: number = 0, pageSize: number = 20) {
+  async searchHistoryPaginated(
+    query: string,
+    page: number = 0,
+    pageSize: number = PAGINATION.DEFAULT_PER_PAGE,
+  ) {
     try {
       const lowerQuery = query.toLowerCase();
       const matchingItems = await this.getMatchingHistoryItems(lowerQuery);

@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PAGINATION } from '@/config/constants';
+import { HISTORY_UI, PAGINATION } from '@/config/constants';
 import { Comment } from '../types';
 import i18n from '../utils/i18n';
 import { useTheme } from '@/hooks/useTheme';
@@ -12,10 +12,6 @@ import { HistorySidebar } from './components/HistorySidebar';
 import { HistoryDetailPanel } from './components/HistoryDetailPanel';
 import { useHistoryData } from './hooks/useHistoryData';
 import { useHistoryReanalyze } from './hooks/useHistoryReanalyze';
-
-const HISTORY_LIST_ITEM_HEIGHT = 108;
-const HISTORY_LIST_OVERSCAN = 4;
-const MAX_COMMENT_DEPTH = 10;
 
 const History: React.FC = () => {
   const { t } = useTranslation();
@@ -168,21 +164,18 @@ const History: React.FC = () => {
     return filterRecursive(comments);
   }, []);
 
-  const getProcessedComments = (): Comment[] => {
-    if (!selectedItem) return [];
-    const filtered = filterComments(selectedItem.comments, commentSearchTerm);
+  const processedComments = React.useMemo(() => {
+    const filtered = filterComments(selectedItem?.comments || [], commentSearchTerm);
     return sortComments(filtered);
-  };
+  }, [selectedItem, commentSearchTerm, sortComments, filterComments]);
 
   const paginatedComments = React.useMemo(() => {
-    const filtered = filterComments(selectedItem?.comments || [], commentSearchTerm);
-    const sorted = sortComments(filtered);
     const startIndex = (currentPage - 1) * commentsPerPage;
     const endIndex = startIndex + commentsPerPage;
-    return sorted.slice(startIndex, endIndex);
-  }, [selectedItem, commentSearchTerm, sortComments, filterComments, currentPage, commentsPerPage]);
+    return processedComments.slice(startIndex, endIndex);
+  }, [processedComments, currentPage, commentsPerPage]);
 
-  const totalComments = getProcessedComments().length;
+  const totalComments = processedComments.length;
   const totalPages = Math.ceil(totalComments / commentsPerPage);
 
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
@@ -209,7 +202,7 @@ const History: React.FC = () => {
   };
 
   const renderCommentTree = (comments: Comment[], depth = 0) => {
-    if (depth >= MAX_COMMENT_DEPTH) {
+    if (depth >= HISTORY_UI.MAX_COMMENT_DEPTH) {
       return (
         <div className="ml-4 pl-4 text-xs text-gray-400 italic">Deeply nested replies hidden</div>
       );
@@ -290,16 +283,16 @@ const History: React.FC = () => {
 
   const visibleListCount = Math.max(
     1,
-    Math.ceil(listViewportHeight / HISTORY_LIST_ITEM_HEIGHT) + HISTORY_LIST_OVERSCAN * 2,
+    Math.ceil(listViewportHeight / HISTORY_UI.LIST_ITEM_HEIGHT) + HISTORY_UI.LIST_OVERSCAN * 2,
   );
   const listStartIndex = Math.max(
     0,
-    Math.floor(listScrollTop / HISTORY_LIST_ITEM_HEIGHT) - HISTORY_LIST_OVERSCAN,
+    Math.floor(listScrollTop / HISTORY_UI.LIST_ITEM_HEIGHT) - HISTORY_UI.LIST_OVERSCAN,
   );
   const listEndIndex = Math.min(history.length, listStartIndex + visibleListCount);
   const visibleHistoryEntries = history.slice(listStartIndex, listEndIndex);
-  const listOffsetY = listStartIndex * HISTORY_LIST_ITEM_HEIGHT;
-  const listTotalHeight = history.length * HISTORY_LIST_ITEM_HEIGHT;
+  const listOffsetY = listStartIndex * HISTORY_UI.LIST_ITEM_HEIGHT;
+  const listTotalHeight = history.length * HISTORY_UI.LIST_ITEM_HEIGHT;
 
   return (
     <div className="flex h-screen" style={{ backgroundColor: 'var(--bg-secondary)' }}>
@@ -312,7 +305,7 @@ const History: React.FC = () => {
         searchQuery={searchQuery}
         selectedHistoryId={selectedHistoryId}
         listContainerRef={listContainerRef}
-        historyListItemHeight={HISTORY_LIST_ITEM_HEIGHT}
+        historyListItemHeight={HISTORY_UI.LIST_ITEM_HEIGHT}
         listTotalHeight={listTotalHeight}
         listOffsetY={listOffsetY}
         visibleHistoryEntries={visibleHistoryEntries}

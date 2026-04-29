@@ -112,6 +112,13 @@ export const ExtensionAPI = {
     });
   },
 
+  async importSettings(data: string): Promise<SuccessResponse> {
+    return sendMessageOrThrow<SuccessResponse>({
+      type: MESSAGES.IMPORT_SETTINGS,
+      payload: { data },
+    });
+  },
+
   async getHistoryItem(id: string): Promise<HistoryItem | null> {
     const response = await sendMessageOrThrow<GetHistoryItemResponse>({
       type: MESSAGES.GET_HISTORY,
