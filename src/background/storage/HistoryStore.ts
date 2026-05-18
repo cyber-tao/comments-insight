@@ -67,13 +67,6 @@ function commentMatchesQuery(comment: Comment, lowerQuery: string): boolean {
   );
 }
 
-function historyItemMatchesQuery(item: HistoryItem, lowerQuery: string): boolean {
-  return (
-    historyMetadataMatchesQuery(toHistoryMetadata(item), lowerQuery) ||
-    item.comments.some((comment) => commentMatchesQuery(comment, lowerQuery))
-  );
-}
-
 export class CommentsInsightDatabase extends Dexie {
   history!: Table<HistoryItem, string>;
   historyMetadata!: Table<HistoryMetadata, string>;
@@ -93,6 +86,10 @@ export class CommentsInsightDatabase extends Dexie {
         const historyMetadata = transaction.table<HistoryMetadata, string>('historyMetadata');
         await history.toCollection().each((item) => historyMetadata.put(toHistoryMetadata(item)));
       });
+    this.version(3).stores({
+      history: 'id, extractedAt, url, title, platform',
+      historyMetadata: 'id, extractedAt, url, title, platform, [url+extractedAt]',
+    });
   }
 }
 
@@ -134,9 +131,11 @@ export class HistoryStore {
   async getLatestHistoryIdByUrl(url: string): Promise<string | null> {
     try {
       if (!url) return null;
-      const items = await db.historyMetadata.where('url').equals(url).sortBy('extractedAt');
-      if (items.length === 0) return null;
-      return items[items.length - 1].id;
+      const item = await db.historyMetadata
+        .where('[url+extractedAt]')
+        .between([url, Dexie.minKey], [url, Dexie.maxKey])
+        .last();
+      return item?.id ?? null;
     } catch (error) {
       const wrappedError = toHistoryReadError('Failed to get history id by url', error, { url });
       Logger.error('[HistoryStore] Failed to get history id by url', { url, error: wrappedError });
@@ -225,16 +224,19 @@ export class HistoryStore {
   ) {
     try {
       const lowerQuery = query.toLowerCase();
-      const allItems = await db.historyMetadata.orderBy('extractedAt').reverse().toArray();
+      // Use Dexie filter() so the predicate runs inside IndexedDB cursor without
+      // materialising the entire table in memory; ordered scan stops at offset+limit.
+      const orderedCollection = db.historyMetadata
+        .orderBy('extractedAt')
+        .reverse()
+        .filter((entry) => historyMetadataMatchesQuery(entry, lowerQuery));
 
-      const matchingItems = allItems.filter((entry) =>
-        historyMetadataMatchesQuery(entry, lowerQuery),
-      );
-
-      const total = matchingItems.length;
+      const total = await orderedCollection.count();
       const totalPages = Math.ceil(total / pageSize);
-      const start = page * pageSize;
-      const pageItems = matchingItems.slice(start, start + pageSize);
+      const pageItems = await orderedCollection
+        .offset(page * pageSize)
+        .limit(pageSize)
+        .toArray();
 
       const entries = pageItems.map(toMetadataEntry);
 
@@ -341,8 +343,54 @@ export class HistoryStore {
   }
 
   private async getMatchingHistoryItems(lowerQuery: string): Promise<HistoryItem[]> {
-    const allItems = await db.history.orderBy('extractedAt').reverse().toArray();
-    return allItems.filter((item) => historyItemMatchesQuery(item, lowerQuery));
+    // Two-phase metadata-first search:
+    //   1. Cheap pass over metadata index (no cap) → IDs matched by url/title/etc.
+    //   2. Bounded scan over recent history rows for comment-body matches.
+    // Results are merged and returned in extractedAt-desc order.
+    const metadataMatches = await db.historyMetadata
+      .orderBy('extractedAt')
+      .reverse()
+      .filter((entry) => historyMetadataMatchesQuery(entry, lowerQuery))
+      .toArray();
+    const matchedIds = new Set(metadataMatches.map((entry) => entry.id));
+
+    let scanned = 0;
+    let truncated = false;
+    await db.history
+      .orderBy('extractedAt')
+      .reverse()
+      .until(() => {
+        if (scanned >= HISTORY.SEARCH_FULL_SCAN_HARD_CAP) {
+          truncated = true;
+          return true;
+        }
+        return false;
+      })
+      .each((item) => {
+        scanned += 1;
+        if (matchedIds.has(item.id)) {
+          return;
+        }
+        if (item.comments?.some((comment) => commentMatchesQuery(comment, lowerQuery))) {
+          matchedIds.add(item.id);
+        }
+      });
+
+    if (truncated) {
+      Logger.warn('[HistoryStore] Comment search truncated at scan cap', {
+        cap: HISTORY.SEARCH_FULL_SCAN_HARD_CAP,
+        metadataMatches: metadataMatches.length,
+      });
+    }
+
+    if (matchedIds.size === 0) {
+      return [];
+    }
+
+    const items = await db.history.bulkGet(Array.from(matchedIds));
+    return items
+      .filter((item): item is HistoryItem => Boolean(item))
+      .sort((a, b) => b.extractedAt - a.extractedAt);
   }
 
   private async getItemsForMetadata(metadata: HistoryMetadata[]): Promise<HistoryItem[]> {

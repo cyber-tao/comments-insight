@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DOMSimplifier } from '@/content/DOMSimplifier';
+import { querySelectorDeep } from '@/utils/dom-query';
 
 // Mock the logger to avoid console output during tests
 vi.mock('@/utils/logger', () => ({
@@ -14,21 +15,13 @@ vi.mock('@/utils/logger', () => ({
 
 describe('DOMSimplifier', () => {
   beforeEach(() => {
-    DOMSimplifier.resetInstance();
     document.body.innerHTML = '';
   });
 
-  describe('getInstance', () => {
-    it('should return singleton instance', () => {
-      const instance1 = DOMSimplifier.getInstance();
-      const instance2 = DOMSimplifier.getInstance();
-      expect(instance1).toBe(instance2);
-    });
-
-    it('should return new instance after reset', () => {
-      const instance1 = DOMSimplifier.getInstance();
-      DOMSimplifier.resetInstance();
-      const instance2 = DOMSimplifier.getInstance();
+  describe('initialization', () => {
+    it('should create an instance', () => {
+      const instance1 = new DOMSimplifier();
+      const instance2 = new DOMSimplifier();
       expect(instance1).not.toBe(instance2);
     });
   });
@@ -37,7 +30,7 @@ describe('DOMSimplifier', () => {
     it('should simplify a basic element', () => {
       document.body.innerHTML = '<div id="test" class="container">Hello</div>';
       const element = document.getElementById('test')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element);
 
@@ -51,7 +44,7 @@ describe('DOMSimplifier', () => {
     it('should handle element without id or classes', () => {
       document.body.innerHTML = '<span>Text only</span>';
       const element = document.querySelector('span')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element);
 
@@ -64,7 +57,7 @@ describe('DOMSimplifier', () => {
     it('should handle multiple classes', () => {
       document.body.innerHTML = '<div class="class1 class2 class3">Content</div>';
       const element = document.querySelector('div')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element);
 
@@ -75,7 +68,7 @@ describe('DOMSimplifier', () => {
       document.body.innerHTML =
         '<button data-action="submit" aria-label="Submit form">Submit</button>';
       const element = document.querySelector('button')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element);
 
@@ -88,7 +81,7 @@ describe('DOMSimplifier', () => {
       document.body.innerHTML =
         '<div style="color: red" onclick="alert()" data-value="test">Content</div>';
       const element = document.querySelector('div')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element);
 
@@ -117,7 +110,7 @@ describe('DOMSimplifier', () => {
 
     it('should expand children up to maxDepth', () => {
       const element = document.getElementById('level0')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element, { maxDepth: 2 });
 
@@ -136,7 +129,7 @@ describe('DOMSimplifier', () => {
 
     it('should not expand with maxDepth 0', () => {
       const element = document.getElementById('level0')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element, { maxDepth: 0 });
 
@@ -147,7 +140,7 @@ describe('DOMSimplifier', () => {
 
     it('should expand all with large maxDepth', () => {
       const element = document.getElementById('level0')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element, { maxDepth: 10 });
 
@@ -180,7 +173,7 @@ describe('DOMSimplifier', () => {
       `;
 
       const element = document.getElementById('root')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       // With maxNodes = 3 and maxDepth = 10, we should see limited expansion
       const result = simplifier.simplifyElement(element, { maxNodes: 3, maxDepth: 10 });
@@ -217,7 +210,7 @@ describe('DOMSimplifier', () => {
       `;
 
       const element = document.getElementById('container')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element, { maxNodes: 1, maxDepth: 0 });
 
@@ -235,7 +228,7 @@ describe('DOMSimplifier', () => {
         </div>
       `;
       const element = document.getElementById('container')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element, { maxDepth: 2 });
 
@@ -252,7 +245,7 @@ describe('DOMSimplifier', () => {
         </div>
       `;
       const element = document.getElementById('container')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element, { maxDepth: 2 });
 
@@ -269,7 +262,7 @@ describe('DOMSimplifier', () => {
         </div>
       `;
       const element = document.getElementById('container')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element, { maxDepth: 2 });
 
@@ -287,7 +280,7 @@ describe('DOMSimplifier', () => {
       `;
       const ignoreMe = document.getElementById('ignore-me')!;
       const container = document.getElementById('container')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const ignoreSet = new Set([ignoreMe]);
       const result = simplifier.simplifyElement(container, {
@@ -310,7 +303,7 @@ describe('DOMSimplifier', () => {
         </div>
       `;
       const element = document.getElementById('parent')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element);
 
@@ -322,7 +315,7 @@ describe('DOMSimplifier', () => {
       const longText = 'A'.repeat(200);
       document.body.innerHTML = `<div id="test">${longText}</div>`;
       const element = document.getElementById('test')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element);
 
@@ -334,7 +327,7 @@ describe('DOMSimplifier', () => {
     it('should handle empty text', () => {
       document.body.innerHTML = '<div id="empty"></div>';
       const element = document.getElementById('empty')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element);
 
@@ -344,7 +337,7 @@ describe('DOMSimplifier', () => {
     it('should respect includeText option', () => {
       document.body.innerHTML = '<div id="test">Some text</div>';
       const element = document.getElementById('test')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const resultWithText = simplifier.simplifyElement(element, { includeText: true });
       const resultWithoutText = simplifier.simplifyElement(element, { includeText: false });
@@ -358,7 +351,7 @@ describe('DOMSimplifier', () => {
     it('should generate ID-based selector for elements with ID', () => {
       document.body.innerHTML = '<div id="unique-id">Content</div>';
       const element = document.getElementById('unique-id')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element);
 
@@ -368,7 +361,7 @@ describe('DOMSimplifier', () => {
     it('should generate class-based selector for elements without ID', () => {
       document.body.innerHTML = '<div class="my-class">Content</div>';
       const element = document.querySelector('.my-class')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element);
 
@@ -383,11 +376,31 @@ describe('DOMSimplifier', () => {
         </div>
       `;
       const secondSpan = document.querySelectorAll('span')[1];
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(secondSpan);
 
       expect(result.selector).toContain('nth-child');
+    });
+
+    it('should generate selectors that work for IDs with special characters', () => {
+      document.body.innerHTML = '<div id="comment:section.1">Content</div>';
+      const element = document.getElementById('comment:section.1')!;
+      const simplifier = new DOMSimplifier();
+
+      const result = simplifier.simplifyElement(element);
+
+      expect(querySelectorDeep(document, result.selector)).toBe(element);
+    });
+
+    it('should generate selectors that work for classes with special characters', () => {
+      document.body.innerHTML = '<div class="comment:item primary">Content</div>';
+      const element = document.querySelector('[class~="comment:item"]')!;
+      const simplifier = new DOMSimplifier();
+
+      const result = simplifier.simplifyElement(element);
+
+      expect(querySelectorDeep(document, result.selector)).toBe(element);
     });
   });
 
@@ -401,7 +414,7 @@ describe('DOMSimplifier', () => {
         </div>
       `;
       const element = document.getElementById('container')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element, { maxDepth: 1 });
 
@@ -418,7 +431,7 @@ describe('DOMSimplifier', () => {
         </div>
       `;
       const element = document.getElementById('comment-section')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element, { maxDepth: 1 });
 
@@ -432,7 +445,7 @@ describe('DOMSimplifier', () => {
         </div>
       `;
       const element = document.querySelector('.comments-container')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const result = simplifier.simplifyElement(element, { maxDepth: 1 });
 
@@ -440,28 +453,28 @@ describe('DOMSimplifier', () => {
     });
   });
 
-  describe('static methods', () => {
-    it('simplifyForAI should work correctly', () => {
-      document.body.innerHTML = '<div id="test">Content</div>';
+  describe('static methods to instance methods migration', () => {
+    it('simplifyElement should work correctly', () => {
+      document.body.innerHTML = '<div id="test"><span>Test</span></div>';
       const element = document.getElementById('test')!;
+      const simplifier = new DOMSimplifier();
 
-      const result = DOMSimplifier.simplifyForAI(element);
+      const result = simplifier.simplifyElement(element);
 
       expect(result.tag).toBe('div');
-      expect(result.id).toBe('test');
+      expect(result.childCount).toBe(1);
     });
 
-    it('toStringFormat should convert node to string', () => {
-      document.body.innerHTML = '<div id="test" class="container">Content</div>';
+    it('nodeToString should convert node to string', () => {
+      document.body.innerHTML = '<div id="test">Test text</div>';
       const element = document.getElementById('test')!;
+      const simplifier = new DOMSimplifier();
 
-      const node = DOMSimplifier.simplifyForAI(element);
-      const str = DOMSimplifier.toStringFormat(node);
+      const node = simplifier.simplifyElement(element);
+      const str = simplifier.nodeToString(node);
 
       expect(str).toContain('<div');
-      expect(str).toContain('id="test"');
-      expect(str).toContain('class="container"');
-      expect(str).toContain('Content');
+      expect(str).toContain('Test text');
       expect(str).toContain('</div>');
     });
   });
@@ -474,7 +487,7 @@ describe('DOMSimplifier', () => {
         </div>
       `;
       const element = document.getElementById('parent')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const node = simplifier.simplifyElement(element, { maxDepth: 2 });
       const str = simplifier.nodeToString(node);
@@ -493,7 +506,7 @@ describe('DOMSimplifier', () => {
         </div>
       `;
       const element = document.getElementById('parent')!;
-      const simplifier = DOMSimplifier.getInstance();
+      const simplifier = new DOMSimplifier();
 
       const node = simplifier.simplifyElement(element, { maxDepth: 0 });
       const str = simplifier.nodeToString(node);

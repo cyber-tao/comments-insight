@@ -11,11 +11,10 @@ import {
 import { HandlerContext } from '../../src/background/handlers/types';
 import { ErrorCode } from '../../src/utils/errors';
 import { AI, TIMEOUT, TEXT } from '../../src/config/constants';
-import { mockAIConfig } from '../fixtures';
 
-const tabRemovedListeners = new Set<
-  (tabId: number, removeInfo: chrome.tabs.TabRemoveInfo) => void
->();
+type TabRemoveInfo = { windowId: number; isWindowClosing: boolean };
+
+const tabRemovedListeners = new Set<(tabId: number, removeInfo: TabRemoveInfo) => void>();
 
 async function flushMicrotasks(iterations = 4): Promise<void> {
   for (let index = 0; index < iterations; index += 1) {
@@ -63,15 +62,25 @@ function createMockContext(overrides: Partial<HandlerContext> = {}): HandlerCont
       cancelTask: vi.fn(),
       incrementTokens: vi.fn(),
     },
-    storageManager: {
-      getSettings: vi.fn().mockResolvedValue({ maxComments: 100 }),
-      saveSettings: vi.fn(),
-      getHistory: vi.fn().mockResolvedValue([]),
-      saveHistory: vi.fn(),
+    settingsStore: {
+      getSettings: vi.fn().mockResolvedValue({
+        maxComments: 100,
+        normalizeTimestamps: false,
+      }),
+    },
+    historyStore: {
+      saveHistory: vi.fn().mockResolvedValue(undefined),
+      getHistoryItem: vi.fn().mockResolvedValue({ id: 'history-123' }),
     },
     aiService: {
       callAI: vi.fn(),
+    },
+    commentAnalyzer: {
       analyzeComments: vi.fn(),
+    },
+    timestampNormalizer: {
+      normalizeCommentTimestamps: vi.fn(),
+      normalizeSingleTimestamp: vi.fn(),
     },
     sender: {
       tab: { id: 1 },
@@ -119,7 +128,7 @@ describe('extraction handlers', () => {
 
       await handleStartExtraction(message, context);
 
-      expect(context.storageManager.getSettings).toHaveBeenCalled();
+      expect(context.settingsStore.getSettings).toHaveBeenCalled();
       expect(context.taskManager.createTask).toHaveBeenCalledWith(
         'extract',
         'https://example.com',
@@ -332,18 +341,14 @@ describe('extraction handlers', () => {
         return analysisResult;
       });
       const context = createMockContext({
-        storageManager: {
-          ...createMockContext().storageManager,
+        settingsStore: {
+          ...createMockContext().settingsStore,
           getSettings: vi.fn().mockResolvedValue({
-            aiModel: mockAIConfig(),
-            analyzerPromptTemplate: 'Analyze these comments',
-            language: 'en-US',
-            aiTimeout: AI.DEFAULT_TIMEOUT,
+            maxComments: 100,
+            normalizeTimestamps: true,
           }),
-          saveHistory: vi.fn().mockResolvedValue(undefined),
         },
-        aiService: {
-          callAI: vi.fn(),
+        commentAnalyzer: {
           analyzeComments,
         },
       } as unknown as Partial<HandlerContext>);
@@ -466,7 +471,7 @@ describe('extraction handlers', () => {
       const result = await handleExtractionCompleted(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(context.storageManager.saveHistory).toHaveBeenCalledOnce();
+      expect(context.historyStore.saveHistory).toHaveBeenCalledOnce();
       expect(context.taskManager.completeTask).toHaveBeenCalledWith(
         'task_123',
         expect.objectContaining({ commentsCount: 1, title: 'Recovered Title' }),
@@ -519,7 +524,7 @@ describe('extraction handlers', () => {
       const result = await handleExtractionCompleted(message, context);
 
       expect(result).toEqual({ success: false });
-      expect(context.storageManager.saveHistory).not.toHaveBeenCalled();
+      expect(context.historyStore.saveHistory).not.toHaveBeenCalled();
       expect(context.taskManager.completeTask).not.toHaveBeenCalled();
       expect(context.taskManager.failTask).not.toHaveBeenCalled();
     });

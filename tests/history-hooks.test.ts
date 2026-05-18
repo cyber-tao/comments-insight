@@ -74,9 +74,14 @@ function createHistoryItem(id: string, title: string = HISTORY_TITLE): HistoryIt
     ],
     analysis: {
       markdown: '# Analysis',
-      summary: 'summary',
-      sentiment: 'positive',
-      keywords: ['keyword'],
+      summary: {
+        totalComments: 1,
+        sentimentDistribution: { positive: 1, neutral: 0, negative: 0 },
+        hotComments: [],
+        keyInsights: ['keyword'],
+      },
+      tokensUsed: 10,
+      generatedAt: 1700000000000,
     },
   };
 }

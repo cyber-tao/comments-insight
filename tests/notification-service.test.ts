@@ -33,30 +33,33 @@ vi.mock('../src/utils/logger', () => ({
 }));
 
 describe('NotificationService', () => {
+  let notificationService: NotificationService;
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    notificationService = new NotificationService();
   });
 
   describe('showTaskCompleted', () => {
     it('should create notification for extraction completion', async () => {
-      await NotificationService.showTaskCompleted('extract', 'Test Post', 10);
+      await notificationService.showTaskCompleted('extract', 'Test Post', 10);
 
       expect(mockNotificationCreate).toHaveBeenCalledWith(
-        expect.stringMatching(/^task_completed_\d+_/),
+        expect.stringContaining('task_completed_'),
         expect.objectContaining({
           type: 'basic',
-          title: 'Comments Insight',
+          title: expect.any(String),
           requireInteraction: true,
         }),
       );
     });
 
     it('should create notification for analysis completion', async () => {
-      await NotificationService.showTaskCompleted('analyze', 'Test Post', 5);
+      await notificationService.showTaskCompleted('analyze', 'Test Post', 5);
 
       expect(mockNotificationCreate).toHaveBeenCalledWith(
-        expect.stringMatching(/^task_completed_\d+_/),
+        expect.stringContaining('task_completed_'),
         expect.objectContaining({
           type: 'basic',
           requireInteraction: true,
@@ -65,12 +68,12 @@ describe('NotificationService', () => {
     });
 
     it('should create notification for config generation completion', async () => {
-      await NotificationService.showTaskCompleted('config', 'Test Post');
+      await notificationService.showTaskCompleted('config', 'Test Post');
 
       expect(mockNotificationCreate).toHaveBeenCalledWith(
-        expect.stringMatching(/^task_completed_\d+_/),
+        expect.stringContaining('task_completed_'),
         expect.objectContaining({
-          message: expect.stringContaining('Config generation completed'),
+          message: expect.any(String),
           requireInteraction: true,
         }),
       );
@@ -78,7 +81,7 @@ describe('NotificationService', () => {
 
     it('should truncate long titles', async () => {
       const longTitle = 'A'.repeat(100);
-      await NotificationService.showTaskCompleted('extract', longTitle);
+      await notificationService.showTaskCompleted('extract', longTitle);
 
       expect(mockNotificationCreate).toHaveBeenCalledWith(
         expect.any(String),
@@ -89,7 +92,7 @@ describe('NotificationService', () => {
     });
 
     it('should auto-clear notification after timeout', async () => {
-      await NotificationService.showTaskCompleted('extract', 'Test', 5);
+      await notificationService.showTaskCompleted('extract', 'Test', 5);
 
       vi.advanceTimersByTime(10000);
 
@@ -99,10 +102,10 @@ describe('NotificationService', () => {
 
   describe('showTaskFailed', () => {
     it('should create error notification for extraction failure', async () => {
-      await NotificationService.showTaskFailed('extract', 'Network error');
+      await notificationService.showTaskFailed('extract', 'Network error');
 
       expect(mockNotificationCreate).toHaveBeenCalledWith(
-        expect.stringMatching(/^task_failed_\d+_/),
+        expect.stringContaining('task_failed_'),
         expect.objectContaining({
           requireInteraction: false,
         }),
@@ -110,7 +113,7 @@ describe('NotificationService', () => {
     });
 
     it('should create error notification for analysis failure', async () => {
-      await NotificationService.showTaskFailed('analyze', 'API error');
+      await notificationService.showTaskFailed('analyze', 'API error');
 
       expect(mockNotificationCreate).toHaveBeenCalledWith(
         expect.any(String),
@@ -121,12 +124,12 @@ describe('NotificationService', () => {
     });
 
     it('should create error notification for config generation failure', async () => {
-      await NotificationService.showTaskFailed('config', 'Invalid selectors');
+      await notificationService.showTaskFailed('config', 'Invalid selectors');
 
       expect(mockNotificationCreate).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          message: expect.stringContaining('Config generation failed'),
+          message: expect.any(String),
           requireInteraction: false,
         }),
       );
@@ -135,14 +138,14 @@ describe('NotificationService', () => {
 
   describe('setupNotificationHandlers', () => {
     it('should register click handlers', () => {
-      NotificationService.setupNotificationHandlers();
+      notificationService.setupNotificationHandlers();
 
       expect(mockOnClicked.addListener).toHaveBeenCalledWith(expect.any(Function));
       expect(mockOnButtonClicked.addListener).toHaveBeenCalledWith(expect.any(Function));
     });
 
     it('should open history page on notification click', () => {
-      NotificationService.setupNotificationHandlers();
+      notificationService.setupNotificationHandlers();
 
       const clickHandler = mockOnClicked.addListener.mock.calls[0][0];
       clickHandler('task_completed_123');
@@ -154,7 +157,7 @@ describe('NotificationService', () => {
     });
 
     it('should open history page on View Results button click', () => {
-      NotificationService.setupNotificationHandlers();
+      notificationService.setupNotificationHandlers();
 
       const buttonHandler = mockOnButtonClicked.addListener.mock.calls[0][0];
       buttonHandler('task_completed_123', 0);
@@ -164,7 +167,7 @@ describe('NotificationService', () => {
     });
 
     it('should only clear notification on Dismiss button click', () => {
-      NotificationService.setupNotificationHandlers();
+      notificationService.setupNotificationHandlers();
 
       const buttonHandler = mockOnButtonClicked.addListener.mock.calls[0][0];
       buttonHandler('task_completed_123', 1);

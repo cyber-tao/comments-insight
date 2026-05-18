@@ -3,6 +3,7 @@ import { HistoryItem } from '@/types';
 import { Logger } from '@/utils/logger';
 import { getDomain } from '@/utils/url';
 import { ExtensionAPI } from '@/utils/extension-api';
+import { TEXT } from '@/config/constants';
 
 export interface PageInfo {
   url: string;
@@ -78,7 +79,7 @@ export function usePageInfo() {
       const info: PageInfo = {
         url: tab.url,
         title: tab.title || '',
-        domain: getDomain(tab.url) || 'unknown',
+        domain: getDomain(tab.url) || TEXT.UNKNOWN,
       };
       setPageInfo(info);
 
@@ -106,7 +107,7 @@ export function usePageInfo() {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab?.url) {
         // Refresh both history status AND config status
-        // We use full hostname for config check to support suffix matching in StorageManager
+        // We use full hostname for config check to support suffix matching in SettingsStore
         const u = new URL(tab.url);
         await checkConfigStatus(u.hostname);
         await checkPageStatus(tab.url);

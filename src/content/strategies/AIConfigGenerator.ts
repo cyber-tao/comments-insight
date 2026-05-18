@@ -7,7 +7,7 @@ import {
   MESSAGES,
   AI,
   DOM,
-  TEXT,
+  LIMITS,
 } from '@/config/constants';
 import {
   PROMPT_DETECT_COMMENTS_SECTION,
@@ -19,28 +19,14 @@ import { getCurrentHostname } from '@/utils/url';
 import { DOMSimplifier } from '../DOMSimplifier';
 import { Tokenizer } from '@/utils/tokenizer';
 import { ContentAIService } from '../services/ContentAIService';
-import { isExtractionActive } from '../extractionState';
+import { querySelectorAllDeep, querySelectorDeep } from '@/utils/dom-query';
+import { checkAborted } from '../utils/abort';
 
 export type ConfigGenerationCallback = (progress: number, message: string) => void;
 type MetaConfigSubset = Pick<CrawlingConfig, 'videoTime' | 'postContent'>;
 
 export class AIConfigGenerator {
   constructor(private aiService: ContentAIService) {}
-
-  /**
-   * Check if extraction should be aborted
-   * @throws ExtensionError if extraction is cancelled
-   */
-  private checkAborted(signal?: AbortSignal): void {
-    if (signal?.aborted || !isExtractionActive()) {
-      throw new ExtensionError(
-        ErrorCode.TASK_CANCELLED,
-        TEXT.EXTRACTION_CANCELLED_BY_USER,
-        {},
-        false,
-      );
-    }
-  }
 
   async detectCommentSection(
     maxDepth: number,
@@ -49,7 +35,7 @@ export class AIConfigGenerator {
     signal?: AbortSignal,
   ): Promise<string | null> {
     try {
-      this.checkAborted(signal);
+      checkAborted(signal);
       const hostname = getCurrentHostname();
 
       // 1. Check Cache & Heuristics
@@ -92,7 +78,8 @@ export class AIConfigGenerator {
 
       // 3. AI Detection
       // Simplify body (shallow but wide enough to find the container)
-      const simplifiedBody = DOMSimplifier.simplifyForAI(document.body, {
+      const simplifier = new DOMSimplifier();
+      const simplifiedBody = simplifier.simplifyElement(document.body, {
         maxDepth: Math.max(
           DOM.DETECT_MIN_DEPTH,
           Math.floor(maxDepth * DOM.DETECT_SHALLOW_DEPTH_RATIO),
@@ -101,7 +88,7 @@ export class AIConfigGenerator {
         maxNodes: maxNodes,
       });
 
-      const domStr = DOMSimplifier.toStringFormat(simplifiedBody);
+      const domStr = simplifier.nodeToString(simplifiedBody);
 
       const part1 = PROMPT_DETECT_COMMENTS_SECTION;
       const part2 =
@@ -125,7 +112,7 @@ export class AIConfigGenerator {
       };
 
       for (let i = 0; i < chunks.length; i++) {
-        this.checkAborted(signal);
+        checkAborted(signal);
         const chunk = chunks[i];
         // Reconstruct prompt with the chunk
         const prompt = part1 + part2 + part3 + chunk + part5;
@@ -188,12 +175,13 @@ export class AIConfigGenerator {
   ): Promise<CrawlingConfig | null> {
     Logger.info('[AIConfigGenerator] Starting intelligent config generation');
     onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING, 'Analyzing page macro structure...');
-    this.checkAborted(signal);
+    checkAborted(signal);
 
     // Phase 1: Meta Config Generation (Shallow DOM)
     let metaConfig: Partial<MetaConfigSubset> = {};
+    const simplifier = new DOMSimplifier();
     try {
-      const shallowSimplified = DOMSimplifier.simplifyForAI(document.body, {
+      const shallowSimplified = simplifier.simplifyElement(document.body, {
         maxDepth: Math.max(
           DOM.DETECT_MIN_DEPTH,
           Math.floor(domConfig.maxDepth * DOM.DETECT_SHALLOW_DEPTH_RATIO),
@@ -201,7 +189,7 @@ export class AIConfigGenerator {
         includeText: true,
         maxNodes: detectMaxNodes,
       });
-      const shallowDomStr = DOMSimplifier.toStringFormat(shallowSimplified);
+      const shallowDomStr = simplifier.nodeToString(shallowSimplified);
 
       const metaPrompt =
         PROMPT_GENERATE_CRAWLING_META_CONFIG +
@@ -251,7 +239,7 @@ export class AIConfigGenerator {
       throw new ExtensionError(ErrorCode.DOM_ANALYSIS_FAILED, 'Could not detect comment container');
     }
 
-    const sectionElement = document.querySelector(sectionSelector);
+    const sectionElement = querySelectorDeep(document, sectionSelector, { signal });
     if (!sectionElement) {
       throw new ExtensionError(
         ErrorCode.DOM_ANALYSIS_FAILED,
@@ -264,12 +252,12 @@ export class AIConfigGenerator {
       EXTRACTION_PROGRESS.CONFIG_ANALYZING + CONFIG_GENERATION_PROGRESS.STEPS.EXTRACTING_DOM,
       'Extracting detailed comment DOM structure...',
     );
-    const deepSimplified = DOMSimplifier.simplifyForAI(sectionElement, {
+    const deepSimplified = simplifier.simplifyElement(sectionElement, {
       maxDepth: domConfig.maxDepth,
       includeText: true,
       maxNodes: DOM.SIMPLIFY_MAX_NODES,
     });
-    const deepDomStr = DOMSimplifier.toStringFormat(deepSimplified);
+    const deepDomStr = simplifier.nodeToString(deepSimplified);
 
     const prompt =
       PROMPT_GENERATE_CRAWLING_CONFIG +
@@ -312,8 +300,11 @@ export class AIConfigGenerator {
       'Verifying AI-generated schema on live page...',
     );
     try {
-      const items = document.querySelectorAll(config.item.selector);
-      if (!items || items.length === 0) {
+      const items = querySelectorAllDeep(document, config.item.selector, {
+        maxResults: LIMITS.SELECTOR_TEST_MAX_RESULTS,
+        signal,
+      });
+      if (items.length === 0) {
         Logger.warn(
           '[AIConfigGenerator] Self-correction failed: Generated config item selector found NO elements.',
           { selector: config.item.selector },

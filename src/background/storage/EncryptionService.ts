@@ -1,5 +1,6 @@
 import { SECURITY, STORAGE } from '@/config/constants';
 import { Logger } from '../../utils/logger';
+import { ExtensionError, ErrorCode } from '../../utils/errors';
 import { Mutex } from '@/utils/promise';
 
 export class EncryptionService {
@@ -32,8 +33,7 @@ export class EncryptionService {
   }
 
   private async getOrCreateSecret(): Promise<string> {
-    const release = await this.secretMutex.acquire();
-    try {
+    return this.secretMutex.withLock(async () => {
       const result = await chrome.storage.local.get(STORAGE.ENCRYPTION_SECRET_KEY);
       let secretBase64 = result[STORAGE.ENCRYPTION_SECRET_KEY] as string | undefined;
       if (!secretBase64) {
@@ -42,9 +42,7 @@ export class EncryptionService {
         await chrome.storage.local.set({ [STORAGE.ENCRYPTION_SECRET_KEY]: secretBase64 });
       }
       return secretBase64;
-    } finally {
-      release();
-    }
+    });
   }
 
   async enableEncryption(passphrase: string): Promise<void> {
@@ -60,8 +58,7 @@ export class EncryptionService {
   }
 
   private async getOrCreateSalt(): Promise<ArrayBuffer> {
-    const release = await this.saltMutex.acquire();
-    try {
+    return this.saltMutex.withLock(async () => {
       const result = await chrome.storage.local.get(STORAGE.ENCRYPTION_SALT_KEY);
       let saltBase64 = result[STORAGE.ENCRYPTION_SALT_KEY] as string | undefined;
       if (!saltBase64) {
@@ -71,9 +68,7 @@ export class EncryptionService {
       }
       const bytes = Uint8Array.from(atob(saltBase64), (c) => c.charCodeAt(0));
       return bytes.buffer;
-    } finally {
-      release();
-    }
+    });
   }
 
   private async importKeyMaterial(passphrase: string): Promise<CryptoKey> {
@@ -100,10 +95,18 @@ export class EncryptionService {
   }
 
   async encrypt(text: string): Promise<string> {
+    if (!text) {
+      return text;
+    }
     if (!this.encryptionEnabled || !this.encryptionKey) {
       await this.ensureEncryptionReady();
     }
-    if (!this.encryptionEnabled || !this.encryptionKey) return text;
+    if (!this.encryptionEnabled || !this.encryptionKey) {
+      throw new ExtensionError(
+        ErrorCode.STORAGE_WRITE_ERROR,
+        'Encryption key unavailable while saving protected value',
+      );
+    }
     const iv = crypto.getRandomValues(new Uint8Array(SECURITY.IV_LENGTH));
     const enc = new TextEncoder();
     const ciphertext = await crypto.subtle.encrypt(
@@ -119,13 +122,15 @@ export class EncryptionService {
   }
 
   async decrypt(text: string): Promise<string> {
-    if (!text.startsWith(SECURITY.ENCRYPTION_PREFIX)) return text;
+    if (!text || !text.startsWith(SECURITY.ENCRYPTION_PREFIX)) return text;
     if (!this.encryptionKey) {
       await this.ensureEncryptionReady();
     }
     if (!this.encryptionKey) {
-      Logger.warn('[EncryptionService] Decrypt skipped: encryption key unavailable');
-      return '';
+      throw new ExtensionError(
+        ErrorCode.STORAGE_READ_ERROR,
+        'Encryption key unavailable while reading protected value',
+      );
     }
     try {
       const base64 = text.slice(SECURITY.ENCRYPTION_PREFIX.length);
@@ -141,7 +146,9 @@ export class EncryptionService {
       return dec.decode(plaintext);
     } catch (error) {
       Logger.warn('[EncryptionService] Failed to decrypt value', { error });
-      return '';
+      throw new ExtensionError(ErrorCode.STORAGE_READ_ERROR, 'Failed to decrypt protected value', {
+        originalError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }

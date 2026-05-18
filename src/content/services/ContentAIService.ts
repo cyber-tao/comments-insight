@@ -70,15 +70,18 @@ export class ContentAIService {
 
   private handleMessage = (msg: PortMessageResponse): void => {
     const pending = this.pendingRequests.get(msg.id);
-    if (pending) {
-      this.clearPending(pending);
-      this.pendingRequests.delete(msg.id);
-      if (this.isErrorResponse(msg.response)) {
-        pending.reject(new Error(msg.response.error));
-        return;
-      }
-      pending.resolve(msg.response);
+    if (!pending) {
+      Logger.warn('[ContentAIService] Received response for unknown request', { id: msg.id });
+      return;
     }
+
+    this.clearPending(pending);
+    this.pendingRequests.delete(msg.id);
+    if (this.isErrorResponse(msg.response)) {
+      pending.reject(new Error(msg.response.error));
+      return;
+    }
+    pending.resolve(msg.response);
   };
 
   private handleDisconnect = (): void => {
@@ -200,7 +203,12 @@ export class ContentAIService {
       let abortHandler: (() => void) | undefined;
       try {
         const port = this.getPort();
-        const requestId = Math.random().toString(36).slice(2);
+        const requestId =
+          typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) =>
+                b.toString(16).padStart(2, '0'),
+              ).join('');
         id = requestId;
 
         timer = setTimeout(() => {

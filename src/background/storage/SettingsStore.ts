@@ -1,6 +1,5 @@
 import { Settings, AIConfig, CrawlingConfig } from '../../types';
 import {
-  API,
   AI,
   LANGUAGES,
   THEME,
@@ -11,15 +10,11 @@ import {
 } from '@/config/constants';
 import DEFAULT_CRAWLING_RULES from '@/config/default_rules.json';
 import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
-import {
-  hasCrawlingConfigContentChanged,
-  resolveCrawlingConfigLastUpdated,
-} from '@/utils/crawling-config';
 import { Logger } from '../../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../../utils/errors';
 import type { EncryptionService } from './EncryptionService';
 import { Mutex } from '@/utils/promise';
-import { sanitizeStoredSettings } from '@/utils/storage-validation';
+import { sanitizeStoredSettings, settingsPatchSchema } from '@/utils/storage-validation';
 
 export const DEFAULT_SETTINGS: Settings = {
   maxComments: DEFAULTS.MAX_COMMENTS,
@@ -50,7 +45,6 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export class SettingsStore {
   private saveMutex = new Mutex();
-  private tokenMutex = new Mutex();
 
   constructor(private readonly encryptionService: EncryptionService) {}
 
@@ -179,24 +173,38 @@ export class SettingsStore {
   }
 
   async saveSettings(settings: Partial<Settings>): Promise<void> {
-    const release = await this.saveMutex.acquire();
-    try {
-      await this._saveSettings(settings);
-    } finally {
-      release();
-    }
+    return this.saveMutex.withLock(() => this._saveSettings(settings));
   }
 
   private async _saveSettings(settings: Partial<Settings>): Promise<void> {
     try {
+      const settingsResult = settingsPatchSchema.safeParse(settings);
+      if (!settingsResult.success) {
+        throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Invalid settings data', {
+          issues: settingsResult.error.flatten(),
+        });
+      }
+
+      const sanitizedSettings = settingsResult.data as Partial<Settings>;
+
       await this.encryptionService.ensureEncryptionReady();
       Logger.debug('[SettingsStore] Saving settings');
 
       const result = await chrome.storage.local.get(STORAGE.SETTINGS_KEY);
-      const currentSettings = result[STORAGE.SETTINGS_KEY] || DEFAULT_SETTINGS;
-      const updatedSettings = { ...currentSettings, ...settings } as Settings & {
+      const currentSettings = this.mergeSettingsWithDefaults(
+        sanitizeStoredSettings(result[STORAGE.SETTINGS_KEY]),
+      );
+      const updatedSettings = { ...currentSettings, ...sanitizedSettings } as Settings & {
         extractorModel?: AIConfig;
         analyzerModel?: AIConfig;
+      };
+      updatedSettings.aiModel = {
+        ...currentSettings.aiModel,
+        ...(sanitizedSettings.aiModel || {}),
+      };
+      updatedSettings.domAnalysisConfig = {
+        ...currentSettings.domAnalysisConfig,
+        ...(sanitizedSettings.domAnalysisConfig || {}),
       };
 
       updatedSettings.aiModel = this.normalizeAIModel(updatedSettings);
@@ -224,6 +232,9 @@ export class SettingsStore {
       Logger.info('[SettingsStore] Settings saved successfully');
     } catch (error) {
       Logger.error('[SettingsStore] Failed to save settings', { error });
+      if (error instanceof ExtensionError) {
+        throw error;
+      }
       throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save settings', {
         originalError: error instanceof Error ? error.message : String(error),
       });
@@ -231,163 +242,33 @@ export class SettingsStore {
   }
 
   async updateSelectorCache(hostname: string, selector: string): Promise<void> {
-    const release = await this.saveMutex.acquire();
-    try {
-      await this.encryptionService.ensureEncryptionReady();
-      const settings = await this.getSettings();
-      const currentCache = settings.selectorCache || [];
+    return this.saveMutex.withLock(async () => {
+      try {
+        await this.encryptionService.ensureEncryptionReady();
+        const settings = await this.getSettings();
+        const currentCache = settings.selectorCache || [];
 
-      const filtered = currentCache.filter((item) => item.domain !== hostname);
+        const filtered = currentCache.filter((item) => item.domain !== hostname);
 
-      filtered.push({
-        domain: hostname,
-        selectors: {
-          commentContainer: selector,
-        },
-        lastUsed: Date.now(),
-        successCount: 1,
-      });
+        filtered.push({
+          domain: hostname,
+          selectors: {
+            commentContainer: selector,
+          },
+          lastUsed: Date.now(),
+          successCount: 1,
+        });
 
-      filtered.sort((a, b) => b.lastUsed - a.lastUsed);
-      const limitedCache = filtered.slice(0, 50);
+        filtered.sort((a, b) => b.lastUsed - a.lastUsed);
+        const limitedCache = filtered.slice(0, 50);
 
-      await this._saveSettings({ selectorCache: limitedCache });
-      Logger.info('[SettingsStore] Selector cache updated', { hostname, selector });
-    } catch (error) {
-      Logger.error('[SettingsStore] Failed to update selector cache', { error });
-      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to update selector cache');
-    } finally {
-      release();
-    }
-  }
-
-  async getCrawlingConfig(domain: string): Promise<CrawlingConfig | null> {
-    try {
-      await this.encryptionService.ensureEncryptionReady();
-      const settings = await this.getSettings();
-      const configs = settings.crawlingConfigs || [];
-      const normalizedDomain = this.normalizeCrawlingDomain(domain);
-
-      const exact = configs.find(
-        (c) => this.normalizeCrawlingDomain(c.domain) === normalizedDomain,
-      );
-      if (exact) return exact;
-
-      const matches = configs.filter((c) => {
-        const configDomain = this.normalizeCrawlingDomain(c.domain);
-        return normalizedDomain === configDomain || normalizedDomain.endsWith(`.${configDomain}`);
-      });
-      if (matches.length > 0) {
-        return matches.sort((a, b) => b.domain.length - a.domain.length)[0];
+        await this._saveSettings({ selectorCache: limitedCache });
+        Logger.info('[SettingsStore] Selector cache updated', { hostname, selector });
+      } catch (error) {
+        Logger.error('[SettingsStore] Failed to update selector cache', { error });
+        throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to update selector cache');
       }
-
-      return null;
-    } catch (error) {
-      Logger.warn('[SettingsStore] Failed to get crawling config', { error });
-      return null;
-    }
-  }
-
-  async syncCrawlingConfigs(): Promise<{ added: number; updated: number }> {
-    const release = await this.saveMutex.acquire();
-    let added = 0;
-    let updated = 0;
-    try {
-      const response = await fetch(API.CRAWLING_CONFIGS_RAW_URL);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch remote config: ${response.statusText}`);
-      }
-
-      const remoteConfigs = (await response.json()) as CrawlingConfig[];
-      const settings = await this.getSettings();
-      const currentConfigs = settings.crawlingConfigs || [];
-
-      const merged = [...currentConfigs];
-      for (const remote of remoteConfigs) {
-        const normalizedRemoteDomain = this.normalizeCrawlingDomain(remote.domain);
-        const normalizedRemoteConfig: CrawlingConfig = {
-          ...remote,
-          domain: normalizedRemoteDomain,
-          lastUpdated: typeof remote.lastUpdated === 'number' ? remote.lastUpdated : Date.now(),
-        };
-
-        const indexByDomain = merged.findIndex(
-          (c) => this.normalizeCrawlingDomain(c.domain) === normalizedRemoteDomain,
-        );
-        const indexById = merged.findIndex((c) => c.id === remote.id);
-        const index = indexByDomain >= 0 ? indexByDomain : indexById;
-
-        if (index >= 0) {
-          const existing = merged[index];
-          const mergedConfig: CrawlingConfig = {
-            ...existing,
-            ...normalizedRemoteConfig,
-          };
-          const contentChanged = hasCrawlingConfigContentChanged(existing, mergedConfig);
-          merged[index] = {
-            ...mergedConfig,
-            lastUpdated: resolveCrawlingConfigLastUpdated({
-              previous: existing,
-              next: mergedConfig,
-              preferredLastUpdated: normalizedRemoteConfig.lastUpdated,
-            }),
-          };
-          if (contentChanged) {
-            updated++;
-          }
-        } else {
-          merged.push(normalizedRemoteConfig);
-          added++;
-        }
-      }
-
-      await this._saveSettings({ crawlingConfigs: merged });
-      Logger.info('[SettingsStore] Crawling configs synced successfully', { added, updated });
-      return { added, updated };
-    } catch (error) {
-      Logger.error('[SettingsStore] Failed to sync crawling configs', { error });
-      throw error;
-    } finally {
-      release();
-    }
-  }
-
-  async saveCrawlingConfig(config: CrawlingConfig): Promise<void> {
-    const release = await this.saveMutex.acquire();
-    try {
-      await this.encryptionService.ensureEncryptionReady();
-      const settings = await this.getSettings();
-      const configs = settings.crawlingConfigs || [];
-      const normalizedDomain = this.normalizeCrawlingDomain(config.domain);
-      const index = configs.findIndex(
-        (c) => this.normalizeCrawlingDomain(c.domain) === normalizedDomain,
-      );
-      const existing = index >= 0 ? configs[index] : undefined;
-      const incomingConfig: CrawlingConfig = {
-        ...config,
-        domain: normalizedDomain,
-      };
-      const normalizedConfig: CrawlingConfig = {
-        ...incomingConfig,
-        lastUpdated: resolveCrawlingConfigLastUpdated({
-          previous: existing,
-          next: incomingConfig,
-        }),
-      };
-      if (index >= 0) {
-        configs[index] = normalizedConfig;
-      } else {
-        configs.push(normalizedConfig);
-      }
-
-      await this._saveSettings({ crawlingConfigs: configs });
-      Logger.info('[SettingsStore] Crawling config saved', { domain: normalizedDomain });
-    } catch (error) {
-      Logger.error('[SettingsStore] Failed to save crawling config', { error });
-      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save crawling config');
-    } finally {
-      release();
-    }
+    });
   }
 
   async exportSettings(): Promise<string> {
@@ -404,104 +285,49 @@ export class SettingsStore {
   }
 
   async importSettings(data: string): Promise<void> {
-    const release = await this.saveMutex.acquire();
-    try {
-      const settings = JSON.parse(data) as Settings;
+    return this.saveMutex.withLock(async () => {
+      try {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(data);
+        } catch (parseError) {
+          throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Invalid settings JSON', {
+            originalError: parseError instanceof Error ? parseError.message : String(parseError),
+          });
+        }
 
-      if (!this.validateSettings(settings)) {
-        throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Invalid settings format');
+        // Reuse the same zod-driven sanitizer that protects stored settings, so
+        // imported payloads cannot inject unknown fields or bypass type checks.
+        const sanitized = sanitizeStoredSettings(parsed);
+        if (!sanitized.aiModel?.apiUrl || !sanitized.aiModel?.model) {
+          throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Invalid settings format');
+        }
+
+        const currentSettings = await this.getSettings();
+        const {
+          crawlingConfigs: _crawlingConfigs,
+          selectorCache: _selectorCache,
+          ...rest
+        } = sanitized;
+        const merged: Settings = {
+          ...currentSettings,
+          ...rest,
+          aiModel: { ...currentSettings.aiModel, ...rest.aiModel } as AIConfig,
+          crawlingConfigs: currentSettings.crawlingConfigs,
+          selectorCache: currentSettings.selectorCache,
+        };
+        await this._saveSettings(merged);
+        Logger.info('[SettingsStore] Settings imported successfully');
+      } catch (error) {
+        Logger.error('[SettingsStore] Failed to import settings', { error });
+        if (error instanceof ExtensionError) {
+          throw error;
+        }
+        throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to import settings', {
+          originalError: error instanceof Error ? error.message : String(error),
+        });
       }
-
-      const currentSettings = await this.getSettings();
-      const {
-        crawlingConfigs: _crawlingConfigs,
-        selectorCache: _selectorCache,
-        ...rest
-      } = settings;
-      const merged = {
-        ...currentSettings,
-        ...rest,
-        crawlingConfigs: currentSettings.crawlingConfigs,
-        selectorCache: currentSettings.selectorCache,
-      };
-      await this._saveSettings(merged);
-      Logger.info('[SettingsStore] Settings imported successfully');
-    } catch (error) {
-      Logger.error('[SettingsStore] Failed to import settings', { error });
-      if (error instanceof ExtensionError) {
-        throw error;
-      }
-      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to import settings', {
-        originalError: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      release();
-    }
-  }
-
-  async recordTokenUsage(tokens: number): Promise<void> {
-    const release = await this.tokenMutex.acquire();
-    try {
-      const stats = await this.getTokenStats();
-      const now = new Date();
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-
-      if (stats.lastReset < todayStart) {
-        stats.today = 0;
-        stats.lastReset = todayStart;
-      }
-
-      stats.today += tokens;
-      stats.total += tokens;
-
-      await chrome.storage.local.set({ [STORAGE.TOKEN_STATS_KEY]: stats });
-      Logger.debug('[SettingsStore] Token usage recorded', { tokens, stats });
-    } catch (error) {
-      Logger.error('[SettingsStore] Failed to record token usage', { error });
-    } finally {
-      release();
-    }
-  }
-
-  async getTokenStats(): Promise<{ today: number; total: number; lastReset: number }> {
-    try {
-      const result = await chrome.storage.local.get(STORAGE.TOKEN_STATS_KEY);
-      const stats = result[STORAGE.TOKEN_STATS_KEY] as
-        | { today: number; total: number; lastReset: number }
-        | undefined;
-      return stats || { today: 0, total: 0, lastReset: 0 };
-    } catch (error) {
-      Logger.error('[SettingsStore] Failed to get token stats', { error });
-      return { today: 0, total: 0, lastReset: 0 };
-    }
-  }
-
-  private validateSettings(settings: unknown): settings is Settings {
-    if (typeof settings !== 'object' || settings === null) return false;
-    const s = settings as Record<string, unknown>;
-    return (
-      typeof s.maxComments === 'number' &&
-      (this.validateAIConfig(s.aiModel) ||
-        (this.validateAIConfig(s.extractorModel) && this.validateAIConfig(s.analyzerModel))) &&
-      typeof s.analyzerPromptTemplate === 'string' &&
-      typeof s.language === 'string'
-    );
-  }
-
-  private validateAIConfig(config: unknown): config is AIConfig {
-    if (typeof config !== 'object' || config === null) return false;
-    const c = config as Record<string, unknown>;
-    const hasMaxOutputTokens =
-      c.maxOutputTokens === undefined || typeof c.maxOutputTokens === 'number';
-    return (
-      typeof c.apiUrl === 'string' &&
-      typeof c.apiKey === 'string' &&
-      typeof c.model === 'string' &&
-      typeof c.contextWindowSize === 'number' &&
-      hasMaxOutputTokens &&
-      typeof c.temperature === 'number' &&
-      typeof c.topP === 'number'
-    );
+    });
   }
 
   private normalizeAIModel(

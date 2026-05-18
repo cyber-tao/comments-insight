@@ -137,12 +137,12 @@ Let me know if you need more details.
       expect(result.score).toBe(0.85);
     });
 
-    it('should handle multiple JSON blocks by extracting from first { to last }', () => {
-      // The implementation extracts from first '{' to last '}'
-      // So 'First: {"first": 1} Second: {"second": 2}' extracts '{"first": 1} Second: {"second": 2}'
-      // which is invalid JSON and will throw
+    it('should extract the first balanced JSON object when multiple are present', () => {
+      // Brace-counting parser locks on to the first balanced region instead of
+      // greedily slicing from the first '{' to the last '}'.
       const raw = 'First: {"first": 1} Second: {"second": 2}';
-      expect(() => cleanAndParseJsonObject(raw)).toThrow();
+      const result = cleanAndParseJsonObject<{ first: number }>(raw);
+      expect(result.first).toBe(1);
     });
   });
 

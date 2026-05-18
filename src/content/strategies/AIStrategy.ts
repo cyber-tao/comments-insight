@@ -10,7 +10,6 @@ import {
   CONFIG_GENERATION_PROGRESS,
   MESSAGES,
   AI,
-  TEXT,
   TIMING,
   DOM,
   DOM_ANALYSIS_DEFAULTS,
@@ -18,12 +17,13 @@ import {
 } from '@/config/constants';
 import { PROMPT_EXTRACT_COMMENTS_FROM_HTML } from '@/utils/prompts';
 import { sendMessage } from '@/utils/chrome-message';
-import { isExtractionActive } from '../extractionState';
 import { getCurrentHostname } from '@/utils/url';
 import { runWithConcurrencyLimit } from '@/utils/promise';
 import { generateCommentHash } from '@/utils/comment-hash';
+import { querySelectorDeep } from '@/utils/dom-query';
 import { ContentAIService } from '../services/ContentAIService';
 import { AIConfigGenerator, ConfigGenerationCallback } from './AIConfigGenerator';
+import { checkAborted, abortableDelay } from '../utils/abort';
 
 export class AIStrategy implements ExtractionStrategy {
   private aiService: ContentAIService;
@@ -42,21 +42,6 @@ export class AIStrategy implements ExtractionStrategy {
     this.aiService.disconnect();
   }
 
-  /**
-   * Check if extraction should be aborted
-   * @throws ExtensionError if extraction is cancelled
-   */
-  private checkAborted(signal?: AbortSignal): void {
-    if (signal?.aborted || !isExtractionActive()) {
-      throw new ExtensionError(
-        ErrorCode.TASK_CANCELLED,
-        TEXT.EXTRACTION_CANCELLED_BY_USER,
-        {},
-        false,
-      );
-    }
-  }
-
   async execute(
     maxComments: number,
     platform: Platform,
@@ -67,7 +52,7 @@ export class AIStrategy implements ExtractionStrategy {
     onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'loading settings', 'initializing', 0, 1);
 
     // Check if extraction is still active
-    this.checkAborted(signal);
+    checkAborted(signal);
 
     // 0. Load Settings
     const hostname = getCurrentHostname();
@@ -95,7 +80,7 @@ export class AIStrategy implements ExtractionStrategy {
     }
 
     // Check abort status after settings load
-    this.checkAborted(signal);
+    checkAborted(signal);
     onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'settings loaded', 'initializing', 1, 1);
 
     // Calculate safe max input tokens for chunking
@@ -128,7 +113,7 @@ export class AIStrategy implements ExtractionStrategy {
     );
 
     // Check abort status after detection
-    this.checkAborted(signal);
+    checkAborted(signal);
 
     if (!sectionSelector) {
       throw new ExtensionError(
@@ -146,12 +131,10 @@ export class AIStrategy implements ExtractionStrategy {
       1,
     );
 
-    // Locate the element
-    let sectionElement = document.querySelector(sectionSelector);
+    let sectionElement = querySelectorDeep(document, sectionSelector, { signal });
     if (!sectionElement) {
-      // Fallback: re-query after a short wait, maybe it loaded late
-      await this.delay(TIMING.SHORT_WAIT_MS, signal);
-      sectionElement = document.querySelector(sectionSelector);
+      await abortableDelay(TIMING.SHORT_WAIT_MS, signal);
+      sectionElement = querySelectorDeep(document, sectionSelector, { signal });
       if (!sectionElement) {
         throw new ExtensionError(
           ErrorCode.DOM_ANALYSIS_FAILED,
@@ -186,7 +169,7 @@ export class AIStrategy implements ExtractionStrategy {
       // Step 2: Loop - Scroll & Extract
       while (allComments.length < maxComments && iterationCount++ < SCROLL.MAX_SCROLL_ITERATIONS) {
         // Check abort status at the start of each iteration
-        this.checkAborted(signal);
+        checkAborted(signal);
 
         if (noNewCommentsCount >= DOM.NO_NEW_COMMENTS_THRESHOLD) {
           Logger.info('[AIStrategy] No new comments found after multiple attempts. Stopping.');
@@ -240,9 +223,9 @@ export class AIStrategy implements ExtractionStrategy {
           const virtualRoot = document.createElement('div');
           virtualRoot.id = 'ai-incremental-batch';
 
-          // We just simplify each element and combine them
+          const simplifier = new DOMSimplifier();
           const batchSimplifiedNodes = elementsBatch.map((el) =>
-            DOMSimplifier.simplifyForAI(el, {
+            simplifier.simplifyElement(el, {
               maxDepth: domConfig.maxDepth,
               includeText: true,
               maxNodes: extractMaxNodes,
@@ -282,7 +265,7 @@ export class AIStrategy implements ExtractionStrategy {
         }
 
         // Check abort status after AI extraction
-        this.checkAborted(signal);
+        checkAborted(signal);
 
         // 2.4 Merge & Dedup
         let added = 0;
@@ -405,50 +388,13 @@ export class AIStrategy implements ExtractionStrategy {
     });
   }
 
-  private delay(ms: number, signal?: AbortSignal): Promise<void> {
-    if (!signal) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
-    }
-
-    return new Promise((resolve, reject) => {
-      if (signal.aborted) {
-        reject(
-          new ExtensionError(
-            ErrorCode.TASK_CANCELLED,
-            TEXT.EXTRACTION_CANCELLED_BY_USER,
-            {},
-            false,
-          ),
-        );
-        return;
-      }
-      const timer = setTimeout(() => {
-        signal.removeEventListener('abort', onAbort);
-        resolve();
-      }, ms);
-      const onAbort = () => {
-        clearTimeout(timer);
-        signal.removeEventListener('abort', onAbort);
-        reject(
-          new ExtensionError(
-            ErrorCode.TASK_CANCELLED,
-            TEXT.EXTRACTION_CANCELLED_BY_USER,
-            {},
-            false,
-          ),
-        );
-      };
-      signal.addEventListener('abort', onAbort, { once: true });
-    });
-  }
-
   async generateConfig(
     onProgress?: ConfigGenerationCallback,
     signal?: AbortSignal,
   ): Promise<boolean> {
     Logger.info('[AIStrategy] Starting manual config generation');
     onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'Initializing configuration generator...');
-    this.checkAborted(signal);
+    checkAborted(signal);
 
     const hostname = getCurrentHostname();
     let domConfig = DOM_ANALYSIS_DEFAULTS;
@@ -469,7 +415,7 @@ export class AIStrategy implements ExtractionStrategy {
 
     await this.pageController.scrollToBottom(signal);
     // Use delay for now, PageController scroll update will augment this later
-    await this.delay(TIMING.SCROLL_DELAY_MS, signal);
+    await abortableDelay(TIMING.SCROLL_DELAY_MS, signal);
 
     const detectMaxNodes = Math.max(
       DOM.DETECT_MAX_NODES_BASE,

@@ -1,8 +1,12 @@
 import { LIMITS } from '@/config/constants';
 
 export function generateUniqueId(prefix: string): string {
-  const random = Math.random()
-    .toString(36)
-    .slice(LIMITS.RANDOM_ID_START_INDEX, LIMITS.RANDOM_ID_START_INDEX + LIMITS.ID_RANDOM_LENGTH);
-  return `${prefix}_${Date.now()}_${random}`;
+  if (typeof crypto.randomUUID === 'function') {
+    return `${prefix}_${crypto.randomUUID()}`;
+  }
+  const bytes = crypto.getRandomValues(new Uint8Array(LIMITS.ID_RANDOM_BYTE_LENGTH));
+  const suffix = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(LIMITS.HEX_BYTE_PAD_LENGTH, '0'),
+  ).join('');
+  return `${prefix}_${Date.now()}_${suffix}`;
 }

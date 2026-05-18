@@ -1,5 +1,5 @@
 import { Comment, HistoryItem, Task, Settings, AIConfig } from '../src/types';
-import { LANGUAGES } from '../src/config/constants';
+import { AI, LANGUAGES, RETRY, THEME } from '../src/config/constants';
 
 export const mockComment = (overrides: Partial<Comment> = {}): Comment => ({
   id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
@@ -56,21 +56,28 @@ export const mockAIConfig = (overrides: Partial<AIConfig> = {}): AIConfig => ({
   ...overrides,
 });
 
-export const mockSettings = (overrides: Partial<Settings> = {}): Settings => ({
-  maxComments: 100,
-  language: LANGUAGES.DEFAULT,
-  aiModel: mockAIConfig(),
-  analyzerPromptTemplate: '',
-  selectorRetryAttempts: 3,
-  selectorCache: [],
-  domAnalysisConfig: {
-    initialDepth: 3,
-    expandDepth: 2,
-    maxDepth: 10,
-  },
-  developerMode: false,
-  ...overrides,
-});
+export const mockSettings = (overrides: Partial<Settings> = {}): Settings => {
+  const defaults: Settings = {
+    maxComments: 100,
+    aiTimeout: AI.DEFAULT_TIMEOUT,
+    language: LANGUAGES.DEFAULT,
+    theme: THEME.DEFAULT,
+    normalizeTimestamps: false,
+    exportPostContentInMarkdown: false,
+    aiModel: mockAIConfig(),
+    analyzerPromptTemplate: '',
+    selectorRetryAttempts: RETRY.SELECTOR_ATTEMPTS,
+    selectorCache: [],
+    crawlingConfigs: [],
+    domAnalysisConfig: {
+      initialDepth: 3,
+      expandDepth: 2,
+      maxDepth: 10,
+    },
+    developerMode: false,
+  };
+  return { ...defaults, ...overrides } as Settings;
+};
 
 export const mockDomStructure = (): string =>
   `
@@ -102,15 +109,19 @@ export const mockApiResponse = (content: string): { content: string; tokensUsed:
 });
 
 export const mockAnalysisResult = () => ({
-  summary: 'Test analysis summary',
-  sentiment: {
-    positive: 0.6,
-    neutral: 0.3,
-    negative: 0.1,
+  markdown: 'Test analysis summary',
+  summary: {
+    totalComments: 10,
+    sentimentDistribution: {
+      positive: 6,
+      neutral: 3,
+      negative: 1,
+    },
+    hotComments: [],
+    keyInsights: ['Insight 1', 'Insight 2'],
   },
-  topics: ['topic1', 'topic2', 'topic3'],
-  keyInsights: ['Insight 1', 'Insight 2'],
   tokensUsed: 500,
+  generatedAt: Date.now(),
 });
 
 export const mockScraperConfig = () => ({

@@ -10,10 +10,14 @@ import type { Settings } from '../src/types';
 
 const i18nMock = vi.hoisted(() => ({
   changeLanguage: vi.fn(),
+  t: vi.fn((key: string) => key),
 }));
 
 vi.mock('../src/utils/i18n', () => ({
   default: i18nMock,
+  changeLanguage: i18nMock.changeLanguage,
+  loadLocaleResource: vi.fn(async () => undefined),
+  t: i18nMock.t ?? ((key: string) => key),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -109,6 +113,17 @@ describe('BasicSettings', () => {
       }),
     );
   });
+
+  it('ignores invalid max comments input', () => {
+    const settings = createSettings();
+    const onSettingsChange = vi.fn();
+
+    render(<BasicSettings settings={settings} onSettingsChange={onSettingsChange} />);
+
+    fireEvent.change(screen.getByDisplayValue('100'), { target: { value: '' } });
+
+    expect(onSettingsChange).not.toHaveBeenCalled();
+  });
 });
 
 describe('AdvancedSettings', () => {
@@ -116,7 +131,16 @@ describe('AdvancedSettings', () => {
     vi.clearAllMocks();
   });
 
-  it('updates timeout, dom analysis config, and developer mode', () => {
+  it('updates timeout, dom analysis config, and developer mode', async () => {
+    // mock settings getter for this test if needed
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      vi.spyOn(chrome.storage.local, 'get').mockImplementation(() =>
+        Promise.resolve({
+          LOG_LEVEL_KEY: 'DEBUG',
+        } as Record<string, string>),
+      );
+    }
+
     const settings = createSettings();
     const onSettingsChange = vi.fn();
 
@@ -171,7 +195,16 @@ describe('AdvancedSettings', () => {
     );
   });
 
-  it('falls back to default dom analysis values when config is missing', () => {
+  it('falls back to default dom analysis values when config is missing', async () => {
+    // mock settings getter for this test if needed
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      vi.spyOn(chrome.storage.local, 'get').mockImplementation(() =>
+        Promise.resolve({
+          LOG_LEVEL_KEY: 'DEBUG',
+        } as Record<string, string>),
+      );
+    }
+
     const settings = createSettings({
       domAnalysisConfig: undefined as unknown as Settings['domAnalysisConfig'],
     });
@@ -189,5 +222,27 @@ describe('AdvancedSettings', () => {
         },
       }),
     );
+  });
+
+  it('ignores invalid advanced numeric input', async () => {
+    // mock settings getter for this test if needed
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      vi.spyOn(chrome.storage.local, 'get').mockImplementation(() =>
+        Promise.resolve({
+          LOG_LEVEL_KEY: 'DEBUG',
+        } as Record<string, string>),
+      );
+    }
+
+    const settings = createSettings();
+    const onSettingsChange = vi.fn();
+
+    render(<AdvancedSettings settings={settings} onSettingsChange={onSettingsChange} />);
+
+    for (const input of screen.getAllByRole('spinbutton')) {
+      fireEvent.change(input, { target: { value: '' } });
+    }
+
+    expect(onSettingsChange).not.toHaveBeenCalled();
   });
 });

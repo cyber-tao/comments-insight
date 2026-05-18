@@ -43,7 +43,6 @@ export function useHistoryList({
   const [historyTotalPages, setHistoryTotalPages] = useState(0);
 
   const listRequestSeqRef = useRef(0);
-  const historyItemCacheRef = useRef<Map<string, unknown>>(new Map());
   const selectedHistoryIdRef = useRef(selectedHistoryId);
   const onClearSelectedItemRef = useRef(onClearSelectedItem);
 
@@ -129,7 +128,6 @@ export function useHistoryList({
       try {
         await ExtensionAPI.deleteHistory(id);
 
-        historyItemCacheRef.current.delete(id);
         if (selectedHistoryIdRef.current === id) {
           onClearSelectedItemRef.current();
         }
@@ -162,7 +160,6 @@ export function useHistoryList({
           setHistoryPage(1);
           setSearchQuery('');
           setActiveSearchQuery('');
-          historyItemCacheRef.current.clear();
           onResetListScroll();
         }
       } catch (error) {
@@ -183,7 +180,6 @@ export function useHistoryList({
     historyTotal,
     historyTotalPages,
     listRequestSeqRef,
-    historyItemCacheRef,
     loadHistory,
     handleSearch,
     handleDelete,

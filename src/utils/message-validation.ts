@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Message, ProgressStage } from '@/types';
 import { ExtensionError, ErrorCode } from './errors';
+import { settingsPatchSchema } from '@/utils/storage-validation';
 
 const nonEmptyString = z.string().trim().min(1);
 const looseObjectSchema = z.object({}).passthrough();
@@ -33,7 +34,7 @@ const messagePayloadSchemas: Partial<Record<Message['type'], z.ZodTypeAny>> = {
     })
     .optional(),
   SAVE_SETTINGS: z.object({
-    settings: looseObjectSchema,
+    settings: settingsPatchSchema,
   }),
   IMPORT_SETTINGS: z.object({
     data: nonEmptyString,
@@ -69,11 +70,11 @@ const messagePayloadSchemas: Partial<Record<Message['type'], z.ZodTypeAny>> = {
   EXTRACTION_PROGRESS: z
     .object({
       taskId: nonEmptyString,
-      progress: z.number().optional(),
+      progress: z.number().finite().min(0).max(100).optional(),
       message: z.string().optional(),
       stage: progressStageSchema.optional(),
-      current: z.number().optional(),
-      total: z.number().optional(),
+      current: z.number().finite().nonnegative().optional(),
+      total: z.number().finite().positive().optional(),
       data: z.unknown().optional(),
     })
     .superRefine((payload, context) => {

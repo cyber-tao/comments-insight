@@ -8,7 +8,7 @@ export async function handleGetSettings(
   context: HandlerContext,
 ): Promise<SettingsResponse> {
   Logger.debug('[SettingsHandler] Getting settings');
-  const settings = await context.storageManager.getSettings();
+  const settings = await context.settingsStore.getSettings();
   Logger.debug('[SettingsHandler] Settings retrieved', { settings });
   return { settings };
 }
@@ -23,7 +23,7 @@ export async function handleSaveSettings(
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Settings data is required');
   }
 
-  await context.storageManager.saveSettings(settings);
+  await context.settingsStore.saveSettings(settings);
   return { success: true };
 }
 
@@ -37,7 +37,7 @@ export async function handleImportSettings(
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Settings import data is required');
   }
 
-  await context.storageManager.importSettings(data);
+  await context.settingsStore.importSettings(data);
   return { success: true };
 }
 
@@ -51,7 +51,7 @@ export async function handleCacheSelector(
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Hostname and selector required');
   }
 
-  await context.storageManager.updateSelectorCache(hostname, selector);
+  await context.settingsStore.updateSelectorCache(hostname, selector);
   return { success: true };
 }
 
@@ -63,7 +63,7 @@ export async function handleGetCrawlingConfig(
   if (!domain) {
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Domain is required');
   }
-  const config = await context.storageManager.getCrawlingConfig(domain);
+  const config = await context.crawlingConfigStore.getCrawlingConfig(domain);
   return { config };
 }
 
@@ -75,7 +75,7 @@ export async function handleSaveCrawlingConfig(
   if (!config || !config.domain) {
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Valid config with domain is required');
   }
-  await context.storageManager.saveCrawlingConfig(config);
+  await context.crawlingConfigStore.saveCrawlingConfig(config);
   return { success: true };
 }
 
@@ -83,7 +83,7 @@ export async function handleSyncCrawlingConfigs(
   _message: Extract<Message, { type: 'SYNC_CRAWLING_CONFIGS' }>,
   context: HandlerContext,
 ): Promise<{ success: boolean; added: number; updated: number }> {
-  const result = await context.storageManager.syncCrawlingConfigs();
+  const result = await context.crawlingConfigStore.syncCrawlingConfigs();
   return { success: true, ...result };
 }
 
@@ -97,10 +97,10 @@ export async function handleUpdateFieldValidation(
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Domain and fieldValidation are required');
   }
 
-  const config = await context.storageManager.getCrawlingConfig(domain);
+  const config = await context.crawlingConfigStore.getCrawlingConfig(domain);
   if (config) {
     config.fieldValidation = fieldValidation;
-    await context.storageManager.saveCrawlingConfig(config);
+    await context.crawlingConfigStore.saveCrawlingConfig(config);
     Logger.debug('[SettingsHandler] Field validation updated', { domain });
   }
 

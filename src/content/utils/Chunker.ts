@@ -16,9 +16,10 @@ export class Chunker {
     rootNode: SimplifiedNode,
     maxTokens: number = AI.DEFAULT_CONTEXT_WINDOW,
   ): string[] {
+    const simplifier = new DOMSimplifier();
     if (!rootNode.children || rootNode.children.length === 0) {
       // If no children or not expanded, return the whole thing (it's likely small or empty)
-      return [DOMSimplifier.toStringFormat(rootNode)];
+      return [simplifier.nodeToString(rootNode)];
     }
 
     const chunks: string[] = [];
@@ -26,7 +27,6 @@ export class Chunker {
     let currentSize = 0;
 
     const maxChars = maxTokens * TOKENIZER.CHARS_PER_TOKEN;
-    const simplifier = DOMSimplifier.getInstance();
 
     // Calculate wrapper overhead (open tag + close tag)
     // We create a temporary node without children to measure overhead

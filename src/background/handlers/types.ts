@@ -1,12 +1,26 @@
 import { TaskManager } from '../TaskManager';
 import { AIService } from '../AIService';
-import { StorageManager } from '../StorageManager';
+import { CommentAnalyzer } from '../ai/CommentAnalyzer';
+import { TimestampNormalizer } from '../ai/TimestampNormalizer';
+import { SettingsStore } from '../storage/SettingsStore';
+import { HistoryStore } from '../storage/HistoryStore';
+import { EncryptionService } from '../storage/EncryptionService';
+import { LogStore } from '../storage/LogStore';
+import { TokenStatsStore } from '../storage/TokenStatsStore';
+import { CrawlingConfigStore } from '../storage/CrawlingConfigStore';
 import { Task, Comment, SelectorMap } from '../../types';
 
 export interface HandlerContext {
   taskManager: TaskManager;
   aiService: AIService;
-  storageManager: StorageManager;
+  commentAnalyzer: CommentAnalyzer;
+  timestampNormalizer: TimestampNormalizer;
+  settingsStore: SettingsStore;
+  historyStore: HistoryStore;
+  encryptionService: EncryptionService;
+  logStore: LogStore;
+  tokenStatsStore: TokenStatsStore;
+  crawlingConfigStore: CrawlingConfigStore;
   sender?: chrome.runtime.MessageSender;
 }
 

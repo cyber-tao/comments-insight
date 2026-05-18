@@ -12,6 +12,22 @@ const outputPath = path.resolve(distPath, outputFileName);
 const zipCompressionLevel = 9;
 const zipModifiedTime = new Date('1980-01-01T00:00:00Z');
 
+// Files that should never ship to the Web Store. Source maps in particular
+// would expose internals, and the packaged archive itself must not be nested.
+const excludedExtensions = new Set(['.map']);
+const excludedFiles = new Set([outputFileName]);
+
+function shouldIncludeFile(relativePath) {
+  if (excludedFiles.has(relativePath)) {
+    return false;
+  }
+  const ext = path.extname(relativePath).toLowerCase();
+  if (excludedExtensions.has(ext)) {
+    return false;
+  }
+  return true;
+}
+
 async function collectZippableFiles(directory, rootDirectory = directory) {
   const files = {};
   const entries = await fs.readdir(directory, { withFileTypes: true });
@@ -20,7 +36,7 @@ async function collectZippableFiles(directory, rootDirectory = directory) {
     const fullPath = path.join(directory, entry.name);
     const relativePath = path.relative(rootDirectory, fullPath).split(path.sep).join('/');
 
-    if (relativePath === outputFileName) {
+    if (!shouldIncludeFile(relativePath)) {
       continue;
     }
 

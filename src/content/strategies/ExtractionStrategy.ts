@@ -18,8 +18,8 @@ export interface ExtractionStrategy {
   ): Promise<Comment[]>;
 
   /**
-   * 清理资源
-   * 可选方法，用于释放策略持有的资源
+   * Clean up resources
+   * Optional method to release resources held by the strategy
    */
   cleanup?(): void;
 }

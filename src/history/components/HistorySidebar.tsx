@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
+import { VList } from 'virtua';
 import { type HistoryListEntry } from '../hooks/useHistoryData';
 
 interface HistorySidebarProps {
@@ -11,13 +12,8 @@ interface HistorySidebarProps {
   searchQuery: string;
   selectedHistoryId: string | null;
   listContainerRef: React.RefObject<HTMLDivElement | null>;
-  historyListItemHeight: number;
-  listTotalHeight: number;
-  listOffsetY: number;
-  visibleHistoryEntries: HistoryListEntry[];
   onSearchQueryChange: (value: string) => void;
   onSearch: () => void;
-  onScroll: (scrollTop: number) => void;
   onSelectHistoryItem: (item: HistoryListEntry) => void;
   onDeleteHistoryItem: (id: string) => void;
   onClearAll: () => void;
@@ -34,13 +30,8 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   searchQuery,
   selectedHistoryId,
   listContainerRef,
-  historyListItemHeight,
-  listTotalHeight,
-  listOffsetY,
-  visibleHistoryEntries,
   onSearchQueryChange,
   onSearch,
-  onScroll,
   onSelectHistoryItem,
   onDeleteHistoryItem,
   onClearAll,
@@ -48,6 +39,42 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   formatDate,
 }) => {
   const { t } = useTranslation();
+
+  const renderItem = (item: HistoryListEntry): React.ReactElement => (
+    <div
+      key={item.id}
+      onClick={() => onSelectHistoryItem(item)}
+      className="p-4 cursor-pointer transition-all"
+      style={{
+        backgroundColor: selectedHistoryId === item.id ? 'var(--bg-selected)' : 'transparent',
+        borderBottom: '1px solid var(--border-primary)',
+      }}
+    >
+      <div className="flex items-start gap-3 mb-2">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold truncate mb-1" style={{ color: 'var(--text-primary)' }}>
+            {item.title}
+          </h3>
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            {formatDate(item.extractedAt)}
+          </p>
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDeleteHistoryItem(item.id);
+          }}
+          className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+          style={{ color: 'var(--accent-danger)' }}
+        >
+          🗑️
+        </button>
+      </div>
+      <div className="flex gap-4 text-xs" style={{ color: 'var(--text-muted)' }}>
+        <span className="flex items-center gap-1">🌐 {item.platform}</span>
+      </div>
+    </div>
+  );
 
   return (
     <div
@@ -105,11 +132,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
         </div>
       </div>
 
-      <div
-        ref={listContainerRef}
-        className="flex-1 overflow-y-auto"
-        onScroll={(event) => onScroll(event.currentTarget.scrollTop)}
-      >
+      <div ref={listContainerRef} className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="p-6 text-center" style={{ color: 'var(--text-muted)' }}>
             <div className="animate-pulse">⏳ {t('common.loading')}</div>
@@ -120,50 +143,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
             <p>{t('history.noHistory')}</p>
           </div>
         ) : (
-          <div style={{ height: listTotalHeight, position: 'relative' }}>
-            <div style={{ transform: `translateY(${listOffsetY}px)` }}>
-              {visibleHistoryEntries.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => onSelectHistoryItem(item)}
-                  className="p-4 cursor-pointer transition-all"
-                  style={{
-                    minHeight: historyListItemHeight,
-                    backgroundColor:
-                      selectedHistoryId === item.id ? 'var(--bg-selected)' : 'transparent',
-                    borderBottom: '1px solid var(--border-primary)',
-                  }}
-                >
-                  <div className="flex items-start gap-3 mb-2">
-                    <div className="flex-1 min-w-0">
-                      <h3
-                        className="font-semibold truncate mb-1"
-                        style={{ color: 'var(--text-primary)' }}
-                      >
-                        {item.title}
-                      </h3>
-                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                        {formatDate(item.extractedAt)}
-                      </p>
-                    </div>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteHistoryItem(item.id);
-                      }}
-                      className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
-                      style={{ color: 'var(--accent-danger)' }}
-                    >
-                      🗑️
-                    </button>
-                  </div>
-                  <div className="flex gap-4 text-xs" style={{ color: 'var(--text-muted)' }}>
-                    <span className="flex items-center gap-1">🌐 {item.platform}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <VList className="virtua-list">{history.map((item) => renderItem(item))}</VList>
         )}
       </div>
 

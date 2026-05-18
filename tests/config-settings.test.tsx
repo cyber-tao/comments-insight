@@ -99,18 +99,23 @@ function createSettings(configs: CrawlingConfig[] = []): Settings {
 }
 
 describe('ConfigSettings', () => {
+  const showToast = vi.fn();
+
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal(
-      'confirm',
-      vi.fn(() => true),
-    );
     vi.stubGlobal('alert', vi.fn());
     vi.stubGlobal('fetch', vi.fn());
   });
 
   it('renders empty state and validates export selection', () => {
-    render(<ConfigSettings settings={createSettings()} onSettingsChange={vi.fn()} />);
+    render(
+      <ConfigSettings
+        settings={createSettings()}
+        onSettingsChange={vi.fn()}
+        showToast={showToast}
+        confirm={vi.fn(async () => true)}
+      />,
+    );
 
     expect(screen.getByText('options.crawlingConfigs.noConfigs')).toBeTruthy();
     fireEvent.click(screen.getByText('options.crawlingConfigs.exportConfig'));
@@ -119,10 +124,13 @@ describe('ConfigSettings', () => {
 
   it('supports add, save, edit cancel, and delete flows', () => {
     const onSettingsChange = vi.fn();
+    const confirmDelete = vi.fn(async () => true);
     render(
       <ConfigSettings
         settings={createSettings([createConfig()])}
         onSettingsChange={onSettingsChange}
+        showToast={showToast}
+        confirm={confirmDelete}
       />,
     );
 
@@ -145,8 +153,13 @@ describe('ConfigSettings', () => {
     expect(screen.getByText('example.com')).toBeTruthy();
 
     fireEvent.click(screen.getByText('options.crawlingConfigs.delete'));
-    expect(confirm).toHaveBeenCalledWith('options.crawlingConfigs.confirmDelete');
-    expect(onSettingsChange).toHaveBeenCalledWith({ crawlingConfigs: [] });
+    expect(confirmDelete).toHaveBeenCalledWith({
+      message: 'options.crawlingConfigs.confirmDelete',
+      confirmLabel: 'common.delete',
+      cancelLabel: 'common.cancel',
+      destructive: true,
+    });
+    return waitFor(() => expect(onSettingsChange).toHaveBeenCalledWith({ crawlingConfigs: [] }));
   });
 
   it('updates lastUpdated only when config content changes on manual save', () => {
@@ -159,6 +172,8 @@ describe('ConfigSettings', () => {
         <ConfigSettings
           settings={createSettings([createConfig({ lastUpdated: 1700000000000 })])}
           onSettingsChange={onSettingsChange}
+          showToast={showToast}
+          confirm={vi.fn(async () => true)}
         />,
       );
 
@@ -202,6 +217,8 @@ describe('ConfigSettings', () => {
           }),
         ])}
         onSettingsChange={vi.fn()}
+        showToast={showToast}
+        confirm={vi.fn(async () => true)}
       />,
     );
 
@@ -235,6 +252,8 @@ describe('ConfigSettings', () => {
       <ConfigSettings
         settings={createSettings([createConfig()])}
         onSettingsChange={onSettingsChange}
+        showToast={showToast}
+        confirm={vi.fn(async () => true)}
       />,
     );
 

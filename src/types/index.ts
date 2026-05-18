@@ -239,12 +239,10 @@ export {
   type ExportMessage,
 } from './messages';
 
-export {
-  type PortMessage,
-  type PortMessageResponse,
-  type PortMessageErrorResponse,
-  type MessageHandler,
-  type PortMessageHandler,
-  type ExtractionResult,
-  type TaskResolver,
+export type {
+  PortMessage,
+  PortMessageResponse,
+  PortMessageErrorResponse,
+  MessageHandler,
+  PortMessageHandler,
 } from './handlers';

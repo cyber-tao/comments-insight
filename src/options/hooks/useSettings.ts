@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TIMING } from '@/config/constants';
 import { Settings } from '@/types';
-import i18n from '@/utils/i18n';
+import { changeLanguage } from '@/utils/i18n';
 import { useToast } from '@/hooks/useToast';
 import { Logger } from '@/utils/logger';
 import { ExtensionAPI } from '@/utils/extension-api';
@@ -42,7 +42,7 @@ export function useSettings() {
           Logger.debug('[useSettings] Setting language to', {
             language: settings.language,
           });
-          i18n.changeLanguage(settings.language);
+          void changeLanguage(settings.language);
         }
         setTimeout(() => setIsInitialLoad(false), TIMING.MICRO_WAIT_MS);
       } else {

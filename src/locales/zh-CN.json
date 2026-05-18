@@ -128,6 +128,8 @@
     "importSettings": "导入设置",
     "saveSettings": "保存设置",
     "advancedSettings": "高级设置",
+    "outputLevel": "日志输出等级",
+    "outputLevelHint": "控制系统日志的最低记录等级",
     "aiTimeout": "AI 请求超时 (秒)",
     "saving": "保存中...",
     "savedSuccess": "设置保存成功！",
@@ -166,6 +168,9 @@
     "configureApiFirst": "请先配置 API URL 和 API 密钥",
     "modelsFound": "发现 {{count}} 个模型",
     "noModelsFound": "未找到模型或 API 不支持模型列表",
+    "searchModels": "输入搜索模型...",
+    "noMatchingModels": "没有匹配的模型",
+    "matchingModelsCount": "{{filtered}} / {{total}} 个模型",
     "fetchModelsFailed": "获取模型失败",
     "configureAllFields": "请配置所有必填字段",
     "crawlingConfigs": {
@@ -368,7 +373,11 @@
     "extractionFailed": "提取失败：{{error}}",
     "analysisFailed": "分析失败：{{error}}",
     "commentsCount": "（{{count}} 条评论）",
-    "commentsAnalyzed": "（已分析 {{count}} 条评论）"
+    "commentsAnalyzed": "（已分析 {{count}} 条评论）",
+    "configGenerationCompleted": "配置生成完成：\"{{title}}\"",
+    "configGenerationFailed": "配置生成失败：{{error}}",
+    "viewResults": "查看结果",
+    "dismiss": "关闭"
   },
   "export": {
     "depth": "深度",

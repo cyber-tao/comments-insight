@@ -27,11 +27,14 @@ vi.mock('../src/utils/logger', () => ({
   },
 }));
 
+const mockNotificationService = {
+  showTaskCompleted: vi.fn(),
+  showTaskFailed: vi.fn(),
+  setupNotificationHandlers: vi.fn(),
+};
+
 vi.mock('../src/background/NotificationService', () => ({
-  NotificationService: {
-    showTaskCompleted: vi.fn(),
-    showTaskFailed: vi.fn(),
-  },
+  NotificationService: vi.fn().mockImplementation(() => mockNotificationService),
 }));
 
 describe('TaskManager', () => {
@@ -41,7 +44,7 @@ describe('TaskManager', () => {
     vi.clearAllMocks();
     mockStorageGet.mockResolvedValue({});
     mockStorageSet.mockResolvedValue(undefined);
-    taskManager = new TaskManager();
+    taskManager = new TaskManager(mockNotificationService as any);
   });
 
   describe('initialize', () => {
@@ -83,7 +86,9 @@ describe('TaskManager', () => {
         },
       });
 
-      const persistentTaskManager = new TaskManager({ enablePersistence: true });
+      const persistentTaskManager = new TaskManager(mockNotificationService as any, {
+        enablePersistence: true,
+      });
       await persistentTaskManager.initialize();
 
       const runningTask = persistentTaskManager.getTask('task_running');
@@ -128,7 +133,9 @@ describe('TaskManager', () => {
         },
       });
 
-      const persistentTaskManager = new TaskManager({ enablePersistence: true });
+      const persistentTaskManager = new TaskManager(mockNotificationService as any, {
+        enablePersistence: true,
+      });
       await persistentTaskManager.initialize();
 
       const recovered = persistentTaskManager.recoverInterruptedTask('task_running');
@@ -148,7 +155,9 @@ describe('TaskManager', () => {
         },
       });
 
-      const persistentTaskManager = new TaskManager({ enablePersistence: true });
+      const persistentTaskManager = new TaskManager(mockNotificationService as any, {
+        enablePersistence: true,
+      });
 
       await expect(persistentTaskManager.initialize()).resolves.toBeUndefined();
       expect(persistentTaskManager.getAllTasks()).toHaveLength(0);
@@ -200,7 +209,9 @@ describe('TaskManager', () => {
         },
       });
 
-      const persistentTaskManager = new TaskManager({ enablePersistence: true });
+      const persistentTaskManager = new TaskManager(mockNotificationService as any, {
+        enablePersistence: true,
+      });
       await persistentTaskManager.initialize();
 
       expect(persistentTaskManager.getTask('task_valid')).toBeDefined();
@@ -212,7 +223,7 @@ describe('TaskManager', () => {
     it('should create a task with correct initial state', () => {
       const taskId = taskManager.createTask('extract', 'https://example.com', 'Generic');
 
-      expect(taskId).toMatch(/^task_\d+_[a-z0-9]+$/);
+      expect(taskId).toMatch(/^task_/);
 
       const task = taskManager.getTask(taskId);
       expect(task).toBeDefined();
@@ -223,12 +234,42 @@ describe('TaskManager', () => {
       expect(task?.progress).toBe(0);
     });
 
+    it('should create unique crypto-backed task ids', () => {
+      const taskId1 = taskManager.createTask('extract', 'https://a.com', 'Generic');
+      const taskId2 = taskManager.createTask('extract', 'https://b.com', 'Generic');
+
+      expect(taskId1).toMatch(/^task_/);
+      expect(taskId2).toMatch(/^task_/);
+      expect(taskId1).not.toBe(taskId2);
+    });
+
     it('should create multiple tasks', () => {
       const taskId1 = taskManager.createTask('extract', 'https://a.com', 'YouTube');
       const taskId2 = taskManager.createTask('analyze', 'https://b.com', 'Twitter');
 
       expect(taskId1).not.toBe(taskId2);
       expect(taskManager.getAllTasks()).toHaveLength(2);
+    });
+
+    it('should warn when task update notifications fail unexpectedly', async () => {
+      const loggerModule =
+        await vi.importActual<typeof import('../src/utils/logger')>('../src/utils/logger');
+      const warnSpy = vi.spyOn(loggerModule.Logger, 'warn').mockImplementation(() => undefined);
+      mockSendMessage.mockRejectedValueOnce(new Error('unexpected failure'));
+
+      try {
+        const taskId = taskManager.createTask('extract', 'https://example.com', 'Generic');
+        await taskManager.startTask(taskId);
+
+        await vi.waitFor(() => {
+          expect(warnSpy).toHaveBeenCalledWith('[TaskManager] Failed to notify task update', {
+            taskId: expect.stringMatching(/^task_/),
+            error: 'unexpected failure',
+          });
+        });
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 

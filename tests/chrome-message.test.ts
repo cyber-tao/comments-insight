@@ -143,9 +143,8 @@ describe('chrome-message', () => {
       await expect(promise).rejects.toThrow('Message timeout');
 
       // Now call the callback - should be ignored due to settled flag
-      if (capturedCallback) {
-        capturedCallback({ data: 'late response' });
-      }
+      const lateCallback = capturedCallback as ((response: unknown) => void) | null;
+      lateCallback?.({ data: 'late response' });
       // If settled flag works correctly, no additional errors or state changes
     });
 
@@ -266,15 +265,14 @@ describe('chrome-message', () => {
       await expect(promise).rejects.toThrow('Message timeout');
 
       // Late callback should be ignored
-      if (capturedCallback) {
-        capturedCallback({ data: 'too late' });
-      }
+      const lateCallback = capturedCallback as ((response: unknown) => void) | null;
+      lateCallback?.({ data: 'too late' });
     });
   });
 
   describe('sendMessageVoid', () => {
     it('should send message and resolve without returning data', async () => {
-      const testMessage: Message = { type: 'CANCEL_TASK' };
+      const testMessage: Message = { type: 'CANCEL_TASK', payload: { taskId: 'task-1' } };
 
       mockChrome.runtime.sendMessage.mockImplementation(
         (_message: Message, callback: () => void) => {
@@ -292,7 +290,7 @@ describe('chrome-message', () => {
     });
 
     it('should reject on timeout for void message', async () => {
-      const testMessage: Message = { type: 'CANCEL_TASK' };
+      const testMessage: Message = { type: 'CANCEL_TASK', payload: { taskId: 'task-1' } };
 
       mockChrome.runtime.sendMessage.mockImplementation(() => {
         // Never call callback
@@ -306,7 +304,7 @@ describe('chrome-message', () => {
     });
 
     it('should reject on chrome.runtime.lastError for void message', async () => {
-      const testMessage: Message = { type: 'CANCEL_TASK' };
+      const testMessage: Message = { type: 'CANCEL_TASK', payload: { taskId: 'task-1' } };
       const errorMessage = 'Service worker inactive';
 
       mockChrome.runtime.sendMessage.mockImplementation(
@@ -320,7 +318,7 @@ describe('chrome-message', () => {
     });
 
     it('should handle settled flag for void messages', async () => {
-      const testMessage: Message = { type: 'CANCEL_TASK' };
+      const testMessage: Message = { type: 'CANCEL_TASK', payload: { taskId: 'task-1' } };
       let capturedCallback: (() => void) | null = null;
 
       mockChrome.runtime.sendMessage.mockImplementation(
@@ -336,13 +334,12 @@ describe('chrome-message', () => {
       await expect(promise).rejects.toThrow('Message timeout');
 
       // Late callback should be ignored
-      if (capturedCallback) {
-        capturedCallback();
-      }
+      const lateCallback = capturedCallback as (() => void) | null;
+      lateCallback?.();
     });
 
     it('should use default timeout when not specified', async () => {
-      const testMessage: Message = { type: 'CANCEL_TASK' };
+      const testMessage: Message = { type: 'CANCEL_TASK', payload: { taskId: 'task-1' } };
 
       mockChrome.runtime.sendMessage.mockImplementation(() => {
         // Never call callback
@@ -371,9 +368,9 @@ describe('chrome-message', () => {
     it('should work with different message types', async () => {
       const messages: Message[] = [
         { type: 'GET_SETTINGS' },
-        { type: 'SAVE_SETTINGS', payload: { maxComments: 100 } },
+        { type: 'SAVE_SETTINGS', payload: { settings: { maxComments: 100 } } },
         { type: 'START_EXTRACTION', payload: { url: 'https://example.com' } },
-        { type: 'CANCEL_TASK' },
+        { type: 'CANCEL_TASK', payload: { taskId: 'task-1' } },
         { type: 'GET_HISTORY' },
       ];
 

@@ -14,7 +14,8 @@
  * ```
  */
 
-import { LOG_PREFIX, STORAGE, DEFAULTS, LOG_LEVELS, LOG_SANITIZE } from '@/config/constants';
+import { LOG_PREFIX, STORAGE, DEFAULTS, LOG_LEVELS } from '@/config/constants';
+import { sanitizeLogObject, sanitizeLogText } from './log-sanitize';
 import { Mutex } from './promise';
 
 interface StoredSettings {
@@ -293,51 +294,12 @@ export class Logger {
     return logLevelIndex >= currentLevelIndex;
   }
 
-  private static maskValue(value: string): string {
-    if (value.length <= LOG_SANITIZE.MASK_VISIBLE_CHARS * 2) {
-      return LOG_SANITIZE.MASK_CHAR.repeat(value.length);
-    }
-    const prefix = value.slice(0, LOG_SANITIZE.MASK_VISIBLE_CHARS);
-    const suffix = value.slice(-LOG_SANITIZE.MASK_VISIBLE_CHARS);
-    const maskLength = Math.min(value.length - LOG_SANITIZE.MASK_VISIBLE_CHARS * 2, 8);
-    return `${prefix}${LOG_SANITIZE.MASK_CHAR.repeat(maskLength)}${suffix}`;
-  }
-
   private static sanitize(text: string): string {
-    let result = text;
-    for (const pattern of LOG_SANITIZE.API_KEY_PATTERNS) {
-      const regex = new RegExp(pattern.source, pattern.flags);
-      result = result.replace(regex, (match) => this.maskValue(match));
-    }
-    return result;
+    return sanitizeLogText(text);
   }
 
   private static sanitizeObject(obj: Record<string, unknown>): Record<string, unknown> {
-    const result: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(obj)) {
-      const lowerKey = key.toLowerCase();
-      const isSensitive = LOG_SANITIZE.SENSITIVE_FIELD_NAMES.some((field) =>
-        lowerKey.includes(field.toLowerCase()),
-      );
-      if (isSensitive && typeof value === 'string' && value.length > 0) {
-        result[key] = this.maskValue(value);
-      } else if (typeof value === 'string') {
-        result[key] = this.sanitize(value);
-      } else if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-        result[key] = this.sanitizeObject(value as Record<string, unknown>);
-      } else if (Array.isArray(value)) {
-        result[key] = value.map((item) =>
-          item !== null && typeof item === 'object'
-            ? this.sanitizeObject(item as Record<string, unknown>)
-            : typeof item === 'string'
-              ? this.sanitize(item)
-              : item,
-        );
-      } else {
-        result[key] = value;
-      }
-    }
-    return result;
+    return sanitizeLogObject(obj);
   }
 
   private static logToConsole(entry: LogEntry): void {
@@ -397,25 +359,24 @@ export class Logger {
   }
 
   private static async appendSystemLogKey(logKey: string): Promise<void> {
-    const release = await this.logMutex.acquire();
-    try {
-      const index = await this.getSystemLogIndex();
-      const next = index.includes(logKey) ? index : [...index, logKey];
+    return this.logMutex.withLock(async () => {
+      try {
+        const index = await this.getSystemLogIndex();
+        const next = index.includes(logKey) ? index : [...index, logKey];
 
-      if (next.length > this.config.maxStoredLogs) {
-        const toRemove = next.slice(0, next.length - this.config.maxStoredLogs);
-        const kept = next.slice(next.length - this.config.maxStoredLogs);
-        await chrome.storage.local.remove(toRemove);
-        await this.setSystemLogIndex(kept);
-        return;
+        if (next.length > this.config.maxStoredLogs) {
+          const toRemove = next.slice(0, next.length - this.config.maxStoredLogs);
+          const kept = next.slice(next.length - this.config.maxStoredLogs);
+          await chrome.storage.local.remove(toRemove);
+          await this.setSystemLogIndex(kept);
+          return;
+        }
+
+        await this.setSystemLogIndex(next);
+      } catch (error) {
+        console.error('[Logger] Cleanup error:', error);
       }
-
-      await this.setSystemLogIndex(next);
-    } catch (error) {
-      console.error('[Logger] Cleanup error:', error);
-    } finally {
-      release();
-    }
+    });
   }
 
   static async getLogs(level?: LogLevel, limit?: number): Promise<LogEntry[]> {

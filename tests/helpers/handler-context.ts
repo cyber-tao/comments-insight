@@ -4,7 +4,10 @@ export function createMockHandlerContext(overrides: Partial<HandlerContext> = {}
   return {
     taskManager: {} as HandlerContext['taskManager'],
     aiService: {} as HandlerContext['aiService'],
-    storageManager: {} as HandlerContext['storageManager'],
+    settingsStore: {} as HandlerContext['settingsStore'],
+    historyStore: {} as HandlerContext['historyStore'],
+    encryptionService: {} as HandlerContext['encryptionService'],
+    logStore: {} as HandlerContext['logStore'],
     sender: { tab: { id: 1 } },
     ...overrides,
   } as HandlerContext;

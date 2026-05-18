@@ -75,9 +75,14 @@ function createHistoryItem(overrides: Partial<HistoryItem> = {}): HistoryItem {
     postContent: 'Post content',
     analysis: {
       markdown: '# Analysis Title',
-      summary: 'summary',
-      sentiment: 'positive',
-      keywords: ['alpha'],
+      summary: {
+        totalComments: 2,
+        sentimentDistribution: { positive: 1, neutral: 1, negative: 0 },
+        hotComments: [],
+        keyInsights: ['alpha'],
+      },
+      tokensUsed: 10,
+      generatedAt: 1700000000000,
     },
     ...overrides,
   };
@@ -101,7 +106,6 @@ describe('HistorySidebar', () => {
   it('forwards search, selection, delete, clear and paging actions', () => {
     const onSearchQueryChange = vi.fn();
     const onSearch = vi.fn();
-    const onScroll = vi.fn();
     const onSelectHistoryItem = vi.fn();
     const onDeleteHistoryItem = vi.fn();
     const onClearAll = vi.fn();
@@ -119,13 +123,8 @@ describe('HistorySidebar', () => {
         searchQuery="initial"
         selectedHistoryId="1"
         listContainerRef={listContainerRef}
-        historyListItemHeight={108}
-        listTotalHeight={216}
-        listOffsetY={0}
-        visibleHistoryEntries={[firstEntry]}
         onSearchQueryChange={onSearchQueryChange}
         onSearch={onSearch}
-        onScroll={onScroll}
         onSelectHistoryItem={onSelectHistoryItem}
         onDeleteHistoryItem={onDeleteHistoryItem}
         onClearAll={onClearAll}
@@ -157,11 +156,6 @@ describe('HistorySidebar', () => {
     fireEvent.click(screen.getAllByText('🗑️')[0]);
     expect(onDeleteHistoryItem).toHaveBeenCalledWith('1');
 
-    fireEvent.scroll(listContainerRef.current as HTMLDivElement, {
-      target: { scrollTop: 64 },
-    });
-    expect(onScroll).toHaveBeenCalledWith(64);
-
     fireEvent.click(screen.getByText('← common.previous'));
     const previousUpdater = onHistoryPageChange.mock.calls[0][0] as (current: number) => number;
     expect(previousUpdater(2)).toBe(1);
@@ -187,13 +181,8 @@ describe('HistorySidebar', () => {
         searchQuery=""
         selectedHistoryId={null}
         listContainerRef={listContainerRef}
-        historyListItemHeight={108}
-        listTotalHeight={0}
-        listOffsetY={0}
-        visibleHistoryEntries={[]}
         onSearchQueryChange={vi.fn()}
         onSearch={vi.fn()}
-        onScroll={vi.fn()}
         onSelectHistoryItem={vi.fn()}
         onDeleteHistoryItem={vi.fn()}
         onClearAll={vi.fn()}
@@ -214,13 +203,8 @@ describe('HistorySidebar', () => {
         searchQuery=""
         selectedHistoryId={null}
         listContainerRef={listContainerRef}
-        historyListItemHeight={108}
-        listTotalHeight={0}
-        listOffsetY={0}
-        visibleHistoryEntries={[]}
         onSearchQueryChange={vi.fn()}
         onSearch={vi.fn()}
-        onScroll={vi.fn()}
         onSelectHistoryItem={vi.fn()}
         onDeleteHistoryItem={vi.fn()}
         onClearAll={vi.fn()}
@@ -264,7 +248,6 @@ describe('HistoryDetailPanel', () => {
         onSortByChange={vi.fn()}
         onCommentsPerPageChange={vi.fn()}
         onCurrentPageChange={vi.fn()}
-        renderCommentTree={vi.fn()}
         formatDate={() => 'formatted-date'}
       />,
     );
@@ -296,7 +279,6 @@ describe('HistoryDetailPanel', () => {
         onSortByChange={vi.fn()}
         onCommentsPerPageChange={vi.fn()}
         onCurrentPageChange={vi.fn()}
-        renderCommentTree={vi.fn()}
         formatDate={() => 'formatted-date'}
       />,
     );
@@ -328,7 +310,6 @@ describe('HistoryDetailPanel', () => {
         onSortByChange={vi.fn()}
         onCommentsPerPageChange={vi.fn()}
         onCurrentPageChange={vi.fn()}
-        renderCommentTree={vi.fn()}
         formatDate={() => 'formatted-date'}
       />,
     );
@@ -366,7 +347,6 @@ describe('HistoryDetailPanel', () => {
         onSortByChange={vi.fn()}
         onCommentsPerPageChange={vi.fn()}
         onCurrentPageChange={vi.fn()}
-        renderCommentTree={vi.fn()}
         formatDate={() => 'formatted-date'}
       />,
     );
@@ -417,7 +397,6 @@ describe('HistoryDetailPanel', () => {
         onSortByChange={vi.fn()}
         onCommentsPerPageChange={vi.fn()}
         onCurrentPageChange={vi.fn()}
-        renderCommentTree={vi.fn()}
         formatDate={() => 'formatted-date'}
       />,
     );
@@ -464,7 +443,6 @@ describe('HistoryDetailPanel', () => {
         onSortByChange={vi.fn()}
         onCommentsPerPageChange={vi.fn()}
         onCurrentPageChange={vi.fn()}
-        renderCommentTree={vi.fn()}
         formatDate={() => 'formatted-date'}
       />,
     );
@@ -487,7 +465,6 @@ describe('HistoryDetailPanel', () => {
     const onSortByChange = vi.fn();
     const onCommentsPerPageChange = vi.fn();
     const onCurrentPageChange = vi.fn();
-    const renderCommentTree = vi.fn().mockReturnValue(<div>rendered-tree</div>);
 
     render(
       <HistoryDetailPanel
@@ -514,7 +491,6 @@ describe('HistoryDetailPanel', () => {
         onSortByChange={onSortByChange}
         onCommentsPerPageChange={onCommentsPerPageChange}
         onCurrentPageChange={onCurrentPageChange}
-        renderCommentTree={renderCommentTree}
         formatDate={() => 'formatted-date'}
       />,
     );
@@ -547,8 +523,7 @@ describe('HistoryDetailPanel', () => {
     const nextUpdater = onCurrentPageChange.mock.calls[1][0] as (current: number) => number;
     expect(nextUpdater(2)).toBe(3);
 
-    expect(renderCommentTree).toHaveBeenCalledWith(selectedItem.comments);
-    expect(screen.getByText('rendered-tree')).toBeTruthy();
+    expect(screen.getByText('user-1')).toBeTruthy();
     expect(screen.getByText('search:12/2')).toBeTruthy();
     expect(screen.getByText('show:11-12/12')).toBeTruthy();
   });

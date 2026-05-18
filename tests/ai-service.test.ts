@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AIService } from '../src/background/AIService';
-import { mockAIConfig, mockComments } from './fixtures';
+import { CommentAnalyzer } from '../src/background/ai/CommentAnalyzer';
+import { mockAIConfig, mockComment, mockComments } from './fixtures';
 import { ErrorCode } from '../src/utils/errors';
-import { AI } from '../src/config/constants';
+import { AI, TEXT } from '../src/config/constants';
 
 // Mock chrome API
 vi.stubGlobal('chrome', {
@@ -27,11 +28,17 @@ vi.mock('../src/utils/logger', () => ({
   },
 }));
 
-// Mock StorageManager
-const mockStorageManager = {
+// Mock Stores
+const mockSettingsStore = {
   getSettings: vi.fn().mockResolvedValue({ developerMode: false }),
-  saveAiLog: vi.fn().mockResolvedValue(undefined),
+};
+
+const mockTokenStatsStore = {
   recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+};
+
+const mockLogStore = {
+  saveAiLog: vi.fn().mockResolvedValue(undefined),
 };
 
 // Mock fetch
@@ -51,13 +58,17 @@ const createStreamingResponse = (chunks: string[]) => ({
 
 describe('AIService', () => {
   let aiService: AIService;
+  let commentAnalyzer: CommentAnalyzer;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     aiService = new AIService(
-      mockStorageManager as unknown as ConstructorParameters<typeof AIService>[0],
+      mockSettingsStore as unknown as ConstructorParameters<typeof AIService>[0],
+      mockLogStore as unknown as ConstructorParameters<typeof AIService>[1],
+      mockTokenStatsStore as unknown as ConstructorParameters<typeof AIService>[2],
     );
+    commentAnalyzer = new CommentAnalyzer(aiService);
   });
 
   afterEach(() => {
@@ -132,7 +143,7 @@ describe('AIService', () => {
         tokensUsed: 42,
         finishReason: 'stop',
       });
-      expect(mockStorageManager.recordTokenUsage).toHaveBeenCalledWith(42);
+      expect(mockTokenStatsStore.recordTokenUsage).toHaveBeenCalledWith(42);
       expect(streamProgress).toHaveBeenCalledWith(
         expect.objectContaining({ chunksReceived: 2, charactersReceived: 'Hello world'.length }),
       );
@@ -182,6 +193,58 @@ describe('AIService', () => {
       await vi.runAllTimersAsync();
       await rejection;
       expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
+    it('should skip malformed SSE frames without aborting the stream', async () => {
+      mockFetch.mockResolvedValue(
+        createStreamingResponse([
+          'data: {"choices":[{"delta":{"content":"Hello "},"finish_reason":null}]}\n\n',
+          'data: {not-json\n\n',
+          'data: {"choices":[{"delta":{"content":"world"},"finish_reason":"stop"}],"usage":{"total_tokens":10}}\n\n',
+          'data: [DONE]\n\n',
+        ]),
+      );
+
+      const config = mockAIConfig();
+      const result = await aiService.callAI({ prompt: 'Test', config });
+
+      expect(result.content).toBe('Hello world');
+      expect(result.tokensUsed).toBe(10);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('should cancel the reader when the stream throws', async () => {
+      const cancel = vi.fn().mockResolvedValue(undefined);
+      const body = {
+        getReader: () => {
+          let calls = 0;
+          return {
+            read: vi.fn().mockImplementation(() => {
+              calls += 1;
+              if (calls === 1) {
+                return Promise.resolve({
+                  value: new TextEncoder().encode(
+                    'data: {"choices":[{"delta":{"content":"partial"},"finish_reason":null}]}\n\n',
+                  ),
+                  done: false,
+                });
+              }
+              return Promise.reject(new Error('network reset'));
+            }),
+            cancel,
+            releaseLock: vi.fn(),
+          };
+        },
+      };
+      mockFetch.mockResolvedValue({ ok: true, body });
+
+      const config = mockAIConfig();
+      const promise = aiService.callAI({ prompt: 'Test', config });
+      const rejection = expect(promise).rejects.toThrow();
+      await vi.runAllTimersAsync();
+      await rejection;
+
+      expect(cancel).toHaveBeenCalled();
     });
 
     it('should append /chat/completions to API URL if missing', async () => {
@@ -372,7 +435,7 @@ describe('AIService', () => {
       await vi.runAllTimersAsync();
       await promise;
 
-      expect(mockStorageManager.recordTokenUsage).toHaveBeenCalledWith(150);
+      expect(mockTokenStatsStore.recordTokenUsage).toHaveBeenCalledWith(150);
     });
   });
 
@@ -467,7 +530,7 @@ describe('AIService', () => {
       const comments = mockComments(5);
       const config = mockAIConfig();
 
-      const promise = aiService.analyzeComments(comments, config, 'Analyze these comments');
+      const promise = commentAnalyzer.analyzeComments(comments, config, 'Analyze these comments');
 
       await vi.runAllTimersAsync();
       const result = await promise;
@@ -496,12 +559,101 @@ describe('AIService', () => {
 
       const config = mockAIConfig();
 
-      const promise = aiService.analyzeComments([], config, 'Analyze');
+      const promise = commentAnalyzer.analyzeComments([], config, 'Analyze');
 
       await vi.runAllTimersAsync();
       const result = await promise;
 
       expect(result.summary.totalComments).toBe(0);
+    });
+
+    it('should analyze a single oversized comment after truncating content to fit context', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: 'Analysis' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 100 },
+        }),
+      });
+
+      const config = mockAIConfig({ contextWindowSize: 2000, maxOutputTokens: 1 });
+      const oversizedContent = 'x'.repeat(5000);
+      const comments = [
+        mockComment({
+          id: 'oversized-content',
+          content: oversizedContent,
+          replies: [],
+        }),
+      ];
+
+      const promise = commentAnalyzer.analyzeComments(comments, config, 'Analyze');
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      const fetchCall = mockFetch.mock.calls[0];
+      const body = JSON.parse(fetchCall[1].body);
+      const userMessage = body.messages.find(
+        (message: { role: string }) => message.role === 'user',
+      );
+      expect(userMessage.content).toContain(TEXT.TRUNCATED_SUFFIX);
+      expect(userMessage.content).not.toContain(oversizedContent);
+      expect(result.summary.totalComments).toBe(1);
+    });
+
+    it('should reject when every comment is too large to fit after truncation', async () => {
+      const config = mockAIConfig({ contextWindowSize: 2000, maxOutputTokens: 1 });
+      const comments = [
+        mockComment({
+          id: 'oversized-metadata',
+          content: 'root',
+          replies: mockComments(300, { content: 'reply content '.repeat(20) }),
+        }),
+      ];
+
+      await expect(
+        commentAnalyzer.analyzeComments(comments, config, 'Analyze'),
+      ).rejects.toMatchObject({
+        code: ErrorCode.AI_INVALID_RESPONSE,
+        message: TEXT.NO_ANALYZABLE_COMMENTS,
+      });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should skip unfit comments and analyze remaining comments', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: 'Analysis' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 100 },
+        }),
+      });
+
+      const config = mockAIConfig({ contextWindowSize: 2000, maxOutputTokens: 1 });
+      const skippedComment = mockComment({
+        id: 'oversized-metadata',
+        content: 'root',
+        replies: mockComments(300, { content: 'reply content '.repeat(20) }),
+      });
+      const keptComment = mockComment({ id: 'kept-comment', content: 'small comment' });
+
+      const promise = commentAnalyzer.analyzeComments(
+        [skippedComment, keptComment],
+        config,
+        'Analyze',
+      );
+
+      await vi.runAllTimersAsync();
+      const result = await promise;
+
+      const fetchCall = mockFetch.mock.calls[0];
+      const body = JSON.parse(fetchCall[1].body);
+      const userMessage = body.messages.find(
+        (message: { role: string }) => message.role === 'user',
+      );
+      expect(userMessage.content).toContain('small comment');
+      expect(userMessage.content).not.toContain('reply content');
+      expect(result.summary.totalComments).toBe(1);
     });
 
     it('should pass metadata to prompt', async () => {
@@ -522,7 +674,7 @@ describe('AIService', () => {
         title: 'Test Video',
       };
 
-      const promise = aiService.analyzeComments(
+      const promise = commentAnalyzer.analyzeComments(
         comments,
         config,
         'Analyze {platform} comments from {url} titled {title}',
@@ -549,7 +701,7 @@ describe('AIService', () => {
       const comments = mockComments(5);
       const config = mockAIConfig();
 
-      const promise = aiService.analyzeComments(
+      const promise = commentAnalyzer.analyzeComments(
         comments,
         config,
         'Analyze',
@@ -578,7 +730,7 @@ describe('AIService', () => {
       const config = mockAIConfig();
       const progress = vi.fn();
 
-      await aiService.analyzeComments(
+      await commentAnalyzer.analyzeComments(
         comments,
         config,
         'Analyze these comments',

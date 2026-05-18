@@ -1,4 +1,4 @@
-import { ICONS, TEXT, RETRY } from '@/config/constants';
+import { ICONS, RETRY } from '@/config/constants';
 import i18n from './i18n';
 import { Logger } from './logger';
 
@@ -423,7 +423,7 @@ export class ErrorHandler {
       await chrome.notifications.create({
         type: 'basic',
         iconUrl: chrome.runtime.getURL(ICONS.ICON_128),
-        title: TEXT.ERROR_TITLE,
+        title: i18n.t('common.appName'),
         message: message,
         priority: 2,
       });

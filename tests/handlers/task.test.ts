@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleGetTaskStatus, handleCancelTask } from '../../src/background/handlers/task';
 import { ExtensionError } from '../../src/utils/errors';
 import type { Message, Task } from '../../src/types';
+import type { HandlerContext } from '../../src/background/handlers/types';
 
 describe('Task Handlers', () => {
   const mockTaskManager = {
@@ -12,7 +13,8 @@ describe('Task Handlers', () => {
 
   const context = {
     taskManager: mockTaskManager,
-  };
+  } as unknown as HandlerContext;
+  const sendMessageMock = vi.fn();
 
   const mockTask: Task = {
     id: 'task-123',
@@ -28,11 +30,11 @@ describe('Task Handlers', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    global.chrome = {
+    vi.stubGlobal('chrome', {
       tabs: {
-        sendMessage: vi.fn(),
+        sendMessage: sendMessageMock,
       },
-    } as unknown as typeof chrome;
+    });
   });
 
   describe('handleGetTaskStatus', () => {
@@ -105,7 +107,7 @@ describe('Task Handlers', () => {
       };
 
       mockTaskManager.getTask.mockReturnValue(extractTask);
-      global.chrome.tabs.sendMessage.mockResolvedValue(undefined);
+      sendMessageMock.mockResolvedValue(undefined);
 
       const message: Extract<Message, { type: 'CANCEL_TASK' }> = {
         type: 'CANCEL_TASK',
@@ -116,7 +118,7 @@ describe('Task Handlers', () => {
 
       expect(result).toEqual({ success: true });
       expect(mockTaskManager.getTask).toHaveBeenCalledWith('task-123');
-      expect(global.chrome.tabs.sendMessage).toHaveBeenCalledWith(1, {
+      expect(sendMessageMock).toHaveBeenCalledWith(1, {
         type: 'CANCEL_EXTRACTION',
         payload: { taskId: 'task-123' },
       });
@@ -140,7 +142,7 @@ describe('Task Handlers', () => {
 
       expect(result).toEqual({ success: true });
       expect(mockTaskManager.getTask).toHaveBeenCalledWith('task-456');
-      expect(global.chrome.tabs.sendMessage).not.toHaveBeenCalled();
+      expect(sendMessageMock).not.toHaveBeenCalled();
       expect(mockTaskManager.cancelTask).toHaveBeenCalledWith('task-456');
     });
 
@@ -152,7 +154,7 @@ describe('Task Handlers', () => {
       };
 
       mockTaskManager.getTask.mockReturnValue(configTask);
-      global.chrome.tabs.sendMessage.mockResolvedValue(undefined);
+      sendMessageMock.mockResolvedValue(undefined);
 
       const message: Extract<Message, { type: 'CANCEL_TASK' }> = {
         type: 'CANCEL_TASK',
@@ -163,7 +165,7 @@ describe('Task Handlers', () => {
 
       expect(result).toEqual({ success: true });
       expect(mockTaskManager.getTask).toHaveBeenCalledWith('task-789');
-      expect(global.chrome.tabs.sendMessage).toHaveBeenCalledWith(2, {
+      expect(sendMessageMock).toHaveBeenCalledWith(2, {
         type: 'CANCEL_EXTRACTION',
         payload: { taskId: 'task-789' },
       });
@@ -184,7 +186,7 @@ describe('Task Handlers', () => {
       const message = {
         type: 'CANCEL_TASK' as const,
         payload: undefined,
-      } as Extract<Message, { type: 'CANCEL_TASK' }>;
+      } as unknown as Extract<Message, { type: 'CANCEL_TASK' }>;
 
       expect(() => handleCancelTask(message, context)).toThrow(ExtensionError);
       expect(() => handleCancelTask(message, context)).toThrow('Task ID is required');
@@ -198,7 +200,7 @@ describe('Task Handlers', () => {
       };
 
       mockTaskManager.getTask.mockReturnValue(extractTask);
-      global.chrome.tabs.sendMessage.mockRejectedValue(new Error('Content script not found'));
+      sendMessageMock.mockRejectedValue(new Error('Content script not found'));
 
       const message: Extract<Message, { type: 'CANCEL_TASK' }> = {
         type: 'CANCEL_TASK',
@@ -242,7 +244,7 @@ describe('Task Handlers', () => {
       const result = handleCancelTask(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(global.chrome.tabs.sendMessage).not.toHaveBeenCalled();
+      expect(sendMessageMock).not.toHaveBeenCalled();
       expect(mockTaskManager.cancelTask).toHaveBeenCalledWith('task-123');
     });
   });

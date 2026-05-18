@@ -1,7 +1,9 @@
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode, createAIError, createNetworkError } from '../../utils/errors';
 import { LIMITS, LOG_PREFIX, TEXT } from '@/config/constants';
-import type { StorageManager } from '../StorageManager';
+import { sanitizeLogText } from '@/utils/log-sanitize';
+import type { SettingsStore } from '../storage/SettingsStore';
+import type { LogStore } from '../storage/LogStore';
 
 export class AIErrorHandler {
   static classifyHTTPError(status: number, errorText: string, model: string): never {
@@ -108,28 +110,35 @@ export class AIErrorHandler {
   }
 
   static async logToFile(
-    storageManager: StorageManager,
+    logStore: LogStore,
     type: 'extraction' | 'analysis',
     data: { prompt: string; response: string; timestamp: number },
+    settingsStore?: SettingsStore,
   ): Promise<void> {
+    const sanitizedPrompt = sanitizeLogText(data.prompt);
+    const sanitizedResponse = sanitizeLogText(data.response);
+
     Logger.debug(`[AI_LOG_${type.toUpperCase()}]`, {
       timestamp: data.timestamp,
       type,
-      prompt: data.prompt.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + TEXT.PREVIEW_SUFFIX,
-      response: data.response.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + TEXT.PREVIEW_SUFFIX,
+      prompt: sanitizedPrompt.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + TEXT.PREVIEW_SUFFIX,
+      response:
+        sanitizedResponse.substring(0, LIMITS.LOG_PROMPT_PREVIEW_LENGTH) + TEXT.PREVIEW_SUFFIX,
       promptLength: data.prompt.length,
       responseLength: data.response.length,
     });
 
     try {
-      const settings = await storageManager.getSettings();
-      if (!settings.developerMode) return;
+      if (settingsStore) {
+        const settings = await settingsStore.getSettings();
+        if (!settings.developerMode) return;
+      }
       const logKey = `${LOG_PREFIX.AI}${type}_${data.timestamp}`;
-      await storageManager.saveAiLog(logKey, {
+      await logStore.saveAiLog(logKey, {
         type,
         timestamp: data.timestamp,
-        prompt: data.prompt,
-        response: data.response,
+        prompt: sanitizedPrompt,
+        response: sanitizedResponse,
       });
     } catch (error) {
       Logger.error('[AIErrorHandler] Failed to save log', { error });
@@ -137,7 +146,8 @@ export class AIErrorHandler {
   }
 
   static classifyCallError(
-    storageManager: StorageManager,
+    settingsStore: SettingsStore,
+    logStore: LogStore,
     error: unknown,
     signal: AbortSignal | undefined,
     effectiveTimeout: number,
@@ -164,11 +174,16 @@ export class AIErrorHandler {
           message: error.message,
         });
       }
-      this.logToFile(storageManager, this.determineLogType(prompt), {
-        prompt,
-        response: error.message,
-        timestamp: Date.now(),
-      }).catch((e) => Logger.warn('Failed to log to file', { error: e }));
+      this.logToFile(
+        logStore,
+        this.determineLogType(prompt),
+        {
+          prompt,
+          response: error.message,
+          timestamp: Date.now(),
+        },
+        settingsStore,
+      ).catch((e) => Logger.warn('Failed to log to file', { error: e }));
       throw error;
     }
 
@@ -179,11 +194,16 @@ export class AIErrorHandler {
     }
 
     Logger.error('[AIErrorHandler] AI call failed', { error });
-    this.logToFile(storageManager, this.determineLogType(prompt), {
-      prompt,
-      response: error instanceof Error ? error.message : String(error),
-      timestamp: Date.now(),
-    }).catch((e) => Logger.warn('Failed to log to file', { error: e }));
+    this.logToFile(
+      logStore,
+      this.determineLogType(prompt),
+      {
+        prompt,
+        response: error instanceof Error ? error.message : String(error),
+        timestamp: Date.now(),
+      },
+      settingsStore,
+    ).catch((e) => Logger.warn('Failed to log to file', { error: e }));
     throw error;
   }
 }

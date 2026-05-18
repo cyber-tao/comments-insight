@@ -28,6 +28,7 @@ describe('misc handlers - content script injection', () => {
   });
 
   const mockQuery = vi.fn(async () => [{ id: 1 }]);
+  const mockTabsGet = vi.fn(async () => ({ id: 1, url: 'https://example.com/post' }));
 
   beforeEach(() => {
     injected = false;
@@ -37,6 +38,7 @@ describe('misc handlers - content script injection', () => {
       tabs: {
         sendMessage: mockSendMessage,
         query: mockQuery,
+        get: mockTabsGet,
       },
       scripting: {
         executeScript: mockExecuteScript,
@@ -71,6 +73,18 @@ describe('misc handlers - content script injection', () => {
     );
 
     expect(res.success).toBe(true);
+    expect(mockExecuteScript).not.toHaveBeenCalled();
+  });
+
+  it('should short-circuit on restricted URLs without retrying injection', async () => {
+    mockTabsGet.mockResolvedValueOnce({ id: 1, url: 'chrome://extensions' });
+
+    const res = await handleEnsureContentScript(
+      { type: 'ENSURE_CONTENT_SCRIPT' } as Extract<Message, { type: 'ENSURE_CONTENT_SCRIPT' }>,
+      createMockHandlerContext(),
+    );
+
+    expect(res.success).toBe(false);
     expect(mockExecuteScript).not.toHaveBeenCalled();
   });
 });

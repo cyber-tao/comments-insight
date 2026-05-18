@@ -6,6 +6,7 @@ import { PAGINATION, UI_LIMITS } from '@/config/constants';
 import { type HistoryItem, type Comment, type TaskProgress } from '@/types';
 import { exportAnalysisAsMarkdown, exportCommentsAsCSV } from '@/utils/export';
 import { formatTaskProgressMessage } from '@/utils/task-progress-display';
+import { CommentTree } from './CommentTree';
 
 interface HistoryDetailPanelProps {
   selectedItem: HistoryItem | null;
@@ -33,7 +34,6 @@ interface HistoryDetailPanelProps {
   onSortByChange: (value: 'time' | 'likes' | 'replies') => void;
   onCommentsPerPageChange: (value: number) => void;
   onCurrentPageChange: (updater: (current: number) => number) => void;
-  renderCommentTree: (comments: Comment[], depth?: number) => React.ReactNode;
   formatDate: (timestamp: number) => string;
 }
 
@@ -63,7 +63,6 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
   onSortByChange,
   onCommentsPerPageChange,
   onCurrentPageChange,
-  renderCommentTree,
   formatDate,
 }) => {
   const { t } = useTranslation();
@@ -444,7 +443,10 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                 <p>{commentSearchTerm ? t('history.noCommentsFound') : t('history.noComments')}</p>
               </div>
             ) : (
-              renderCommentTree(paginatedComments)
+              <CommentTree
+                key={`${selectedItem.id}-${commentSearchTerm}-${currentPage}`}
+                comments={paginatedComments}
+              />
             )}
 
             {totalPages > 1 && (

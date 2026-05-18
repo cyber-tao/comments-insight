@@ -2,7 +2,7 @@
  * Prompt templates for AI-driven comment analysis
  */
 
-import { TEMPLATE, LANGUAGES } from '@/config/constants';
+import { TEMPLATE, LANGUAGES, ANALYSIS_FORMAT } from '@/config/constants';
 
 /**
  * Default analysis prompt template
@@ -115,24 +115,28 @@ export function buildAnalysisPrompt(
     language?: string;
   },
 ): string {
-  // Generate language instruction using language name
   const langCode = metadata?.language || LANGUAGES.DEFAULT;
   const langConfig = LANGUAGES.SUPPORTED.find((l) => l.code === langCode);
   const langName = langConfig?.name || langCode;
   const languageInstruction = `\n\n## Language Requirement:\nYou MUST write the entire analysis in ${langName}.`;
+  const analysisDateTime = metadata?.datetime || new Date().toISOString();
+  const promptTemplate = template.includes(TEMPLATE.COMMENTS_DATA_PLACEHOLDER)
+    ? template
+    : template + TEMPLATE.COMMENTS_DATA_FALLBACK_SECTION;
 
   const prompt =
-    template
-      .replace(/{comments_data}/g, commentsData)
-      .replace(/{date_time}/g, metadata?.datetime || new Date().toISOString())
-      .replace(/{datetime}/g, metadata?.datetime || new Date().toISOString())
+    promptTemplate
+      .split(TEMPLATE.COMMENTS_DATA_PLACEHOLDER)
+      .join(commentsData)
+      .replace(/{date_time}/g, analysisDateTime)
+      .replace(/{datetime}/g, analysisDateTime)
       .replace(/{post_time}/g, metadata?.videoTime || 'N/A')
       .replace(/{video_time}/g, metadata?.videoTime || 'N/A')
       .replace(/{platform}/g, metadata?.platform || 'Unknown Platform')
       .replace(/{url}/g, metadata?.url || 'N/A')
-      .replace(/{title}/g, metadata?.title || 'Untitled')
+      .replace(/{title}/g, metadata?.title || ANALYSIS_FORMAT.UNKNOWN_TITLE)
       .replace(/{post_content}/g, metadata?.postContent || 'N/A')
-      .replace('{total_comments}', String(metadata?.totalComments || 0)) + languageInstruction;
+      .replace(/{total_comments}/g, String(metadata?.totalComments || 0)) + languageInstruction;
 
   return prompt;
 }
@@ -144,12 +148,10 @@ export function buildAnalysisPrompt(
  * @returns True if valid
  */
 export function validatePromptTemplate(template: string): boolean {
-  // Must contain comments_data placeholder
-  if (!template.includes('{comments_data}')) {
+  if (!template.includes(TEMPLATE.COMMENTS_DATA_PLACEHOLDER)) {
     return false;
   }
 
-  // Should be reasonable length
   if (template.length < TEMPLATE.MIN_LENGTH || template.length > TEMPLATE.MAX_LENGTH) {
     return false;
   }
@@ -168,7 +170,7 @@ export function getAvailablePlaceholders(): Array<{
 }> {
   return [
     {
-      key: '{comments_data}',
+      key: TEMPLATE.COMMENTS_DATA_PLACEHOLDER,
       description: 'Comments data in dense text format (required)',
       detailedDescription:
         'The complete comments data structure in a dense text format (table-like), including all comment fields like username, content, timestamp, likes, and nested replies. This format is optimized for token efficiency.',

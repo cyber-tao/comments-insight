@@ -151,3 +151,34 @@ export type Message =
   | GenerateCrawlingConfigMessage;
 
 export type MessageType = Message['type'];
+
+export interface ExtractionResponse {
+  success: boolean;
+  error?: string;
+  comments?: Comment[];
+  postInfo?: {
+    url?: string;
+    title?: string;
+    videoTime?: string;
+    postContent?: string;
+  };
+}
+
+export interface ConfigGenerationResponse {
+  success: boolean;
+  error?: string;
+}
+
+export interface DomStructureResponse {
+  success: boolean;
+  domStructure?: string;
+  textSamples?: string[];
+  error?: string;
+}
+
+export interface SelectorTestResponse {
+  success: boolean;
+  total?: number;
+  items?: string[];
+  error?: string;
+}

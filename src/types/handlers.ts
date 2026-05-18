@@ -54,20 +54,3 @@ export type MessageHandler<T extends Message = Message, R = unknown> = (
  * Port message handler function type
  */
 export type PortMessageHandler = (port: chrome.runtime.Port, message: PortMessage) => Promise<void>;
-
-/**
- * Extraction result type
- */
-export interface ExtractionResult {
-  tokensUsed: number;
-  commentsCount: number;
-  title?: string;
-}
-
-/**
- * Promise resolver type for async task completion
- */
-export interface TaskResolver<T = ExtractionResult> {
-  resolve: (value: T) => void;
-  reject: (reason?: Error) => void;
-}

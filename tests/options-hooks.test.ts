@@ -29,6 +29,7 @@ const loggerMock = vi.hoisted(() => ({
 
 const i18nMock = vi.hoisted(() => ({
   changeLanguage: vi.fn(),
+  t: vi.fn((key: string) => key),
 }));
 
 const translationMock = vi.hoisted(() => ({
@@ -54,6 +55,9 @@ vi.mock('../src/utils/logger', () => ({
 
 vi.mock('../src/utils/i18n', () => ({
   default: i18nMock,
+  changeLanguage: i18nMock.changeLanguage,
+  loadLocaleResource: vi.fn(async () => undefined),
+  t: i18nMock.t ?? ((key: string) => key),
 }));
 
 vi.mock('react-i18next', () => ({

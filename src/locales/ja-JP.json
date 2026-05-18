@@ -151,6 +151,8 @@
     "importSettings": "設定をインポート",
     "saveSettings": "設定を保存",
     "advancedSettings": "詳細設定",
+    "outputLevel": "ログ出力レベル",
+    "outputLevelHint": "システムログの最小重大度レベルを制御します",
     "aiTimeout": "AIリクエストタイムアウト (秒)",
     "saving": "保存中...",
     "savedSuccess": "設定が正常に保存されました！",
@@ -189,6 +191,9 @@
     "configureApiFirst": "API URLとAPIキーを先に設定してください",
     "modelsFound": "{{count}}個のモデルが見つかりました",
     "noModelsFound": "モデルが見つからないか、APIがモデル一覧をサポートしていません",
+    "searchModels": "モデルを検索...",
+    "noMatchingModels": "一致するモデルがありません",
+    "matchingModelsCount": "{{filtered}} / {{total}} モデル",
     "fetchModelsFailed": "モデルの取得に失敗しました",
     "configureAllFields": "すべての必須フィールドを設定してください",
     "crawlingConfigs": {
@@ -391,7 +396,11 @@
     "extractionFailed": "抽出に失敗しました：{{error}}",
     "analysisFailed": "分析に失敗しました：{{error}}",
     "commentsCount": "（{{count}}件のコメント）",
-    "commentsAnalyzed": "（{{count}}件のコメントを分析）"
+    "commentsAnalyzed": "（{{count}}件のコメントを分析）",
+    "configGenerationCompleted": "設定生成完了：\"{{title}}\"",
+    "configGenerationFailed": "設定生成失敗：{{error}}",
+    "viewResults": "結果を見る",
+    "dismiss": "閉じる"
   },
   "export": {
     "depth": "深度",

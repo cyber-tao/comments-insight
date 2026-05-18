@@ -128,6 +128,8 @@
     "importSettings": "Import Settings",
     "saveSettings": "Save Settings",
     "advancedSettings": "Advanced Settings",
+    "outputLevel": "Log Output Level",
+    "outputLevelHint": "Controls the minimum severity level for system logs",
     "aiTimeout": "AI Request Timeout (seconds)",
     "saving": "Saving...",
     "savedSuccess": "Settings saved successfully!",
@@ -166,6 +168,9 @@
     "configureApiFirst": "Please configure API URL and API Key first",
     "modelsFound": "Found {{count}} models",
     "noModelsFound": "No models found or API does not support model listing",
+    "searchModels": "Type to search models...",
+    "noMatchingModels": "No matching models",
+    "matchingModelsCount": "{{filtered}} / {{total}} models",
     "fetchModelsFailed": "Failed to fetch models",
     "configureAllFields": "Please configure all required fields",
     "crawlingConfigs": {
@@ -368,7 +373,11 @@
     "extractionFailed": "Extraction failed: {{error}}",
     "analysisFailed": "Analysis failed: {{error}}",
     "commentsCount": " ({{count}} comments)",
-    "commentsAnalyzed": " ({{count}} comments analyzed)"
+    "commentsAnalyzed": " ({{count}} comments analyzed)",
+    "configGenerationCompleted": "Config generation completed for \"{{title}}\"",
+    "configGenerationFailed": "Config generation failed: {{error}}",
+    "viewResults": "View Results",
+    "dismiss": "Dismiss"
   },
   "export": {
     "depth": "Depth",

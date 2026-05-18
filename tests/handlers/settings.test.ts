@@ -11,18 +11,23 @@ import { ExtensionError } from '../../src/utils/errors';
 import type { Message, Settings, CrawlingConfig } from '../../src/types';
 
 describe('Settings Handlers', () => {
-  const mockStorageManager = {
+  const mockSettingsStore = {
     getSettings: vi.fn(),
     saveSettings: vi.fn(),
     importSettings: vi.fn(),
     updateSelectorCache: vi.fn(),
+  };
+
+  const mockCrawlingConfigStore = {
     getCrawlingConfig: vi.fn(),
     saveCrawlingConfig: vi.fn(),
-  } as unknown as Record<string, ReturnType<typeof vi.fn>>;
+    syncCrawlingConfigs: vi.fn(),
+  };
 
   const context = {
-    storageManager: mockStorageManager,
-  };
+    settingsStore: mockSettingsStore,
+    crawlingConfigStore: mockCrawlingConfigStore,
+  } as unknown as import('../../src/background/handlers/types').HandlerContext;
 
   const mockSettings: Settings = {
     maxComments: 100,
@@ -30,20 +35,42 @@ describe('Settings Handlers', () => {
       apiUrl: 'https://api.example.com',
       apiKey: 'test-key',
       model: 'gpt-4',
+      contextWindowSize: 200000,
+      maxOutputTokens: 4096,
+      temperature: 1,
+      topP: 0.95,
     },
     aiTimeout: 120000,
     analyzerPromptTemplate: 'Analyze these comments',
     language: 'en',
+    theme: 'system',
+    normalizeTimestamps: false,
+    exportPostContentInMarkdown: false,
     selectorRetryAttempts: 3,
     selectorCache: [],
     crawlingConfigs: [],
     domAnalysisConfig: {
+      initialDepth: 5,
+      expandDepth: 3,
       maxDepth: 10,
-      maxNodes: 1000,
-      ignoreSelectors: ['script', 'style'],
     },
     developerMode: false,
   };
+
+  const createCrawlingConfig = (overrides: Partial<CrawlingConfig> = {}): CrawlingConfig => ({
+    id: 'cfg_youtube',
+    domain: 'youtube.com',
+    siteName: 'YouTube',
+    container: { selector: '.comments', type: 'css' },
+    item: { selector: '.comment-item', type: 'css' },
+    fields: [
+      { name: 'username', rule: { selector: '.author', type: 'css' } },
+      { name: 'content', rule: { selector: '.content', type: 'css' } },
+      { name: 'timestamp', rule: { selector: '.timestamp', type: 'css' } },
+    ],
+    lastUpdated: 1,
+    ...overrides,
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -51,25 +78,23 @@ describe('Settings Handlers', () => {
 
   describe('handleGetSettings', () => {
     it('should return settings successfully', async () => {
-      mockStorageManager.getSettings.mockResolvedValue(mockSettings);
+      mockSettingsStore.getSettings.mockResolvedValue(mockSettings);
 
       const message: Extract<Message, { type: 'GET_SETTINGS' }> = {
         type: 'GET_SETTINGS',
-        payload: {},
       };
 
       const result = await handleGetSettings(message, context);
 
       expect(result).toEqual({ settings: mockSettings });
-      expect(mockStorageManager.getSettings).toHaveBeenCalledOnce();
+      expect(mockSettingsStore.getSettings).toHaveBeenCalledOnce();
     });
 
     it('should return default settings when storage is empty', async () => {
-      mockStorageManager.getSettings.mockResolvedValue(mockSettings);
+      mockSettingsStore.getSettings.mockResolvedValue(mockSettings);
 
       const message: Extract<Message, { type: 'GET_SETTINGS' }> = {
         type: 'GET_SETTINGS',
-        payload: {},
       };
 
       const result = await handleGetSettings(message, context);
@@ -81,7 +106,7 @@ describe('Settings Handlers', () => {
 
   describe('handleSaveSettings', () => {
     it('should save settings successfully', async () => {
-      mockStorageManager.saveSettings.mockResolvedValue(undefined);
+      mockSettingsStore.saveSettings.mockResolvedValue(undefined);
 
       const partialSettings = {
         maxComments: 200,
@@ -96,14 +121,14 @@ describe('Settings Handlers', () => {
       const result = await handleSaveSettings(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(mockStorageManager.saveSettings).toHaveBeenCalledWith(partialSettings);
+      expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith(partialSettings);
     });
 
     it('should throw error when settings are missing', async () => {
-      const message: Extract<Message, { type: 'SAVE_SETTINGS' }> = {
+      const message = {
         type: 'SAVE_SETTINGS',
         payload: {},
-      };
+      } as unknown as Extract<Message, { type: 'SAVE_SETTINGS' }>;
 
       await expect(handleSaveSettings(message, context)).rejects.toThrow(ExtensionError);
       await expect(handleSaveSettings(message, context)).rejects.toThrow(
@@ -112,10 +137,10 @@ describe('Settings Handlers', () => {
     });
 
     it('should throw error when settings is null', async () => {
-      const message: Extract<Message, { type: 'SAVE_SETTINGS' }> = {
+      const message = {
         type: 'SAVE_SETTINGS',
         payload: { settings: null },
-      };
+      } as unknown as Extract<Message, { type: 'SAVE_SETTINGS' }>;
 
       await expect(handleSaveSettings(message, context)).rejects.toThrow(
         'Settings data is required',
@@ -123,7 +148,7 @@ describe('Settings Handlers', () => {
     });
 
     it('should save empty settings object', async () => {
-      mockStorageManager.saveSettings.mockResolvedValue(undefined);
+      mockSettingsStore.saveSettings.mockResolvedValue(undefined);
 
       const message: Extract<Message, { type: 'SAVE_SETTINGS' }> = {
         type: 'SAVE_SETTINGS',
@@ -133,13 +158,13 @@ describe('Settings Handlers', () => {
       const result = await handleSaveSettings(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(mockStorageManager.saveSettings).toHaveBeenCalledWith({});
+      expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith({});
     });
   });
 
   describe('handleImportSettings', () => {
     it('should import settings successfully', async () => {
-      mockStorageManager.importSettings.mockResolvedValue(undefined);
+      mockSettingsStore.importSettings.mockResolvedValue(undefined);
 
       const message: Extract<Message, { type: 'IMPORT_SETTINGS' }> = {
         type: 'IMPORT_SETTINGS',
@@ -149,7 +174,7 @@ describe('Settings Handlers', () => {
       const result = await handleImportSettings(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(mockStorageManager.importSettings).toHaveBeenCalledWith('{"maxComments":200}');
+      expect(mockSettingsStore.importSettings).toHaveBeenCalledWith('{"maxComments":200}');
     });
 
     it('should throw error when import data is missing', async () => {
@@ -161,13 +186,13 @@ describe('Settings Handlers', () => {
       await expect(handleImportSettings(message, context)).rejects.toThrow(
         'Settings import data is required',
       );
-      expect(mockStorageManager.importSettings).not.toHaveBeenCalled();
+      expect(mockSettingsStore.importSettings).not.toHaveBeenCalled();
     });
   });
 
   describe('handleCacheSelector', () => {
     it('should cache selector successfully', async () => {
-      mockStorageManager.updateSelectorCache.mockResolvedValue(undefined);
+      mockSettingsStore.updateSelectorCache.mockResolvedValue(undefined);
 
       const message: Extract<Message, { type: 'CACHE_SELECTOR' }> = {
         type: 'CACHE_SELECTOR',
@@ -180,7 +205,7 @@ describe('Settings Handlers', () => {
       const result = await handleCacheSelector(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(mockStorageManager.updateSelectorCache).toHaveBeenCalledWith(
+      expect(mockSettingsStore.updateSelectorCache).toHaveBeenCalledWith(
         'youtube.com',
         '.comment-item',
       );
@@ -233,7 +258,7 @@ describe('Settings Handlers', () => {
       const message = {
         type: 'CACHE_SELECTOR' as const,
         payload: undefined,
-      } as Extract<Message, { type: 'CACHE_SELECTOR' }>;
+      } as unknown as Extract<Message, { type: 'CACHE_SELECTOR' }>;
 
       await expect(handleCacheSelector(message, context)).rejects.toThrow(
         'Hostname and selector required',
@@ -243,20 +268,9 @@ describe('Settings Handlers', () => {
 
   describe('handleGetCrawlingConfig', () => {
     it('should get crawling config successfully', async () => {
-      const mockConfig: CrawlingConfig = {
-        domain: 'youtube.com',
-        name: 'YouTube',
-        selectors: {
-          container: '.comments',
-          item: '.comment-item',
-          author: '.author',
-          content: '.content',
-          timestamp: '.timestamp',
-        },
-        urlPattern: 'https://youtube.com/*',
-      };
+      const mockConfig = createCrawlingConfig();
 
-      mockStorageManager.getCrawlingConfig.mockResolvedValue(mockConfig);
+      mockCrawlingConfigStore.getCrawlingConfig.mockResolvedValue(mockConfig);
 
       const message: Extract<Message, { type: 'GET_CRAWLING_CONFIG' }> = {
         type: 'GET_CRAWLING_CONFIG',
@@ -266,11 +280,11 @@ describe('Settings Handlers', () => {
       const result = await handleGetCrawlingConfig(message, context);
 
       expect(result).toEqual({ config: mockConfig });
-      expect(mockStorageManager.getCrawlingConfig).toHaveBeenCalledWith('youtube.com');
+      expect(mockCrawlingConfigStore.getCrawlingConfig).toHaveBeenCalledWith('youtube.com');
     });
 
     it('should return null when config not found', async () => {
-      mockStorageManager.getCrawlingConfig.mockResolvedValue(null);
+      mockCrawlingConfigStore.getCrawlingConfig.mockResolvedValue(null);
 
       const message: Extract<Message, { type: 'GET_CRAWLING_CONFIG' }> = {
         type: 'GET_CRAWLING_CONFIG',
@@ -296,7 +310,7 @@ describe('Settings Handlers', () => {
       const message = {
         type: 'GET_CRAWLING_CONFIG' as const,
         payload: undefined,
-      } as Extract<Message, { type: 'GET_CRAWLING_CONFIG' }>;
+      } as unknown as Extract<Message, { type: 'GET_CRAWLING_CONFIG' }>;
 
       await expect(handleGetCrawlingConfig(message, context)).rejects.toThrow('Domain is required');
     });
@@ -304,20 +318,20 @@ describe('Settings Handlers', () => {
 
   describe('handleSaveCrawlingConfig', () => {
     it('should save crawling config successfully', async () => {
-      mockStorageManager.saveCrawlingConfig.mockResolvedValue(undefined);
+      mockCrawlingConfigStore.saveCrawlingConfig.mockResolvedValue(undefined);
 
-      const config: CrawlingConfig = {
+      const config = createCrawlingConfig({
+        id: 'cfg_reddit',
         domain: 'reddit.com',
-        name: 'Reddit',
-        selectors: {
-          container: '.commentarea',
-          item: '.comment',
-          author: '.author',
-          content: '.body',
-          timestamp: 'time',
-        },
-        urlPattern: 'https://reddit.com/*',
-      };
+        siteName: 'Reddit',
+        container: { selector: '.commentarea', type: 'css' },
+        item: { selector: '.comment', type: 'css' },
+        fields: [
+          { name: 'username', rule: { selector: '.author', type: 'css' } },
+          { name: 'content', rule: { selector: '.body', type: 'css' } },
+          { name: 'timestamp', rule: { selector: 'time', type: 'css' } },
+        ],
+      });
 
       const message: Extract<Message, { type: 'SAVE_CRAWLING_CONFIG' }> = {
         type: 'SAVE_CRAWLING_CONFIG',
@@ -327,14 +341,14 @@ describe('Settings Handlers', () => {
       const result = await handleSaveCrawlingConfig(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(mockStorageManager.saveCrawlingConfig).toHaveBeenCalledWith(config);
+      expect(mockCrawlingConfigStore.saveCrawlingConfig).toHaveBeenCalledWith(config);
     });
 
     it('should throw error when config is missing', async () => {
-      const message: Extract<Message, { type: 'SAVE_CRAWLING_CONFIG' }> = {
+      const message = {
         type: 'SAVE_CRAWLING_CONFIG',
         payload: {},
-      };
+      } as unknown as Extract<Message, { type: 'SAVE_CRAWLING_CONFIG' }>;
 
       await expect(handleSaveCrawlingConfig(message, context)).rejects.toThrow(ExtensionError);
       await expect(handleSaveCrawlingConfig(message, context)).rejects.toThrow(
@@ -343,10 +357,7 @@ describe('Settings Handlers', () => {
     });
 
     it('should throw error when config domain is missing', async () => {
-      const invalidConfig = {
-        name: 'Invalid',
-        selectors: {},
-      } as CrawlingConfig;
+      const invalidConfig = createCrawlingConfig({ domain: '' });
 
       const message: Extract<Message, { type: 'SAVE_CRAWLING_CONFIG' }> = {
         type: 'SAVE_CRAWLING_CONFIG',
@@ -359,10 +370,10 @@ describe('Settings Handlers', () => {
     });
 
     it('should throw error when config is null', async () => {
-      const message: Extract<Message, { type: 'SAVE_CRAWLING_CONFIG' }> = {
+      const message = {
         type: 'SAVE_CRAWLING_CONFIG',
         payload: { config: null },
-      };
+      } as unknown as Extract<Message, { type: 'SAVE_CRAWLING_CONFIG' }>;
 
       await expect(handleSaveCrawlingConfig(message, context)).rejects.toThrow(
         'Valid config with domain is required',

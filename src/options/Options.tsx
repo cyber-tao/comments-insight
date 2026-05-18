@@ -7,6 +7,7 @@ import { AIModelSettings } from './components/AIModelSettings';
 import { AdvancedSettings } from './components/AdvancedSettings';
 import { ConfigSettings } from './components/ConfigSettings';
 import { useTheme } from '@/hooks/useTheme';
+import { useConfirm } from '@/hooks/useConfirm';
 
 type Tab = 'extension' | 'crawling';
 
@@ -23,6 +24,7 @@ const Options: React.FC = () => {
   } = useSettings();
   const [activeTab, setActiveTab] = useState<Tab>('extension');
   const { setTheme } = useTheme();
+  const { confirm, ConfirmHost } = useConfirm();
 
   if (!settings) {
     return (
@@ -111,6 +113,7 @@ const Options: React.FC = () => {
               settings={settings}
               onSettingsChange={handleSettingsChange}
               showToast={toast.showToast}
+              confirm={confirm}
             />
           )}
         </div>
@@ -121,6 +124,7 @@ const Options: React.FC = () => {
           </div>
         )}
       </div>
+      <ConfirmHost />
     </>
   );
 };

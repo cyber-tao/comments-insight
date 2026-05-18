@@ -1,3 +1,122 @@
+import { LIMITS } from '@/config/constants';
+
+export interface DeepQueryOptions {
+  maxResults?: number;
+  maxVisited?: number;
+  signal?: AbortSignal;
+}
+
+interface DeepQueryContext {
+  maxResults: number;
+  maxVisited: number;
+  results: Element[];
+  seen: Set<Element>;
+  signal?: AbortSignal;
+  visited: number;
+}
+
+function normalizeDeepSelector(selector: string): string | null {
+  const trimmedSelector = selector.trim();
+  if (!trimmedSelector || trimmedSelector.length > LIMITS.SELECTOR_QUERY_MAX_LENGTH) {
+    return null;
+  }
+  return trimmedSelector;
+}
+
+function createDeepQueryContext(options: DeepQueryOptions): DeepQueryContext {
+  return {
+    maxResults: options.maxResults ?? LIMITS.DOM_QUERY_MAX_RESULTS,
+    maxVisited: options.maxVisited ?? LIMITS.DOM_QUERY_MAX_VISITED,
+    results: [],
+    seen: new Set<Element>(),
+    signal: options.signal,
+    visited: 0,
+  };
+}
+
+function shouldStopDeepQuery(context: DeepQueryContext): boolean {
+  return (
+    context.signal?.aborted === true ||
+    context.results.length >= context.maxResults ||
+    context.visited >= context.maxVisited
+  );
+}
+
+function visitDeepQueryElement(context: DeepQueryContext): boolean {
+  if (shouldStopDeepQuery(context)) {
+    return false;
+  }
+  context.visited += 1;
+  return context.visited <= context.maxVisited;
+}
+
+function safeQuerySelectorAll(root: Document | Element | ShadowRoot, selector: string): Element[] {
+  try {
+    return Array.from(root.querySelectorAll(selector));
+  } catch {
+    return [];
+  }
+}
+
+function addDeepQueryResult(context: DeepQueryContext, element: Element): void {
+  if (!visitDeepQueryElement(context) || context.seen.has(element)) {
+    return;
+  }
+  context.seen.add(element);
+  context.results.push(element);
+}
+
+function collectDeepQueryResults(
+  root: Document | Element | ShadowRoot,
+  selector: string,
+  context: DeepQueryContext,
+): void {
+  if (shouldStopDeepQuery(context)) {
+    return;
+  }
+
+  for (const element of safeQuerySelectorAll(root, selector)) {
+    addDeepQueryResult(context, element);
+    if (shouldStopDeepQuery(context)) {
+      return;
+    }
+  }
+
+  if (root instanceof Element && root.shadowRoot) {
+    collectDeepQueryResults(root.shadowRoot, selector, context);
+  }
+
+  const split = splitSelector(selector);
+  if (split.rest) {
+    for (const candidate of safeQuerySelectorAll(root, split.current)) {
+      if (!visitDeepQueryElement(context)) {
+        return;
+      }
+      collectDeepQueryResults(candidate, split.rest, context);
+      const shadowRoot = getShadowRoot(candidate);
+      if (shadowRoot) {
+        collectDeepQueryResults(shadowRoot, split.rest, context);
+      }
+      if (shouldStopDeepQuery(context)) {
+        return;
+      }
+    }
+  }
+
+  for (const element of safeQuerySelectorAll(root, '*')) {
+    if (!visitDeepQueryElement(context)) {
+      return;
+    }
+    const shadowRoot = getShadowRoot(element);
+    if (shadowRoot) {
+      collectDeepQueryResults(shadowRoot, selector, context);
+    }
+    if (shouldStopDeepQuery(context)) {
+      return;
+    }
+  }
+}
+
 interface ShadowRootHost {
   shadowRoot?: ShadowRoot | null;
 }
@@ -9,115 +128,24 @@ export function getShadowRoot(element: Element): ShadowRoot | null {
 export function querySelectorDeep(
   root: Document | Element | ShadowRoot,
   selector: string,
+  options: DeepQueryOptions = {},
 ): Element | null {
-  const trimmedSelector = selector.trim();
-  if (!trimmedSelector) {
-    return null;
-  }
-
-  let directHit: Element | null = null;
-  try {
-    directHit = root.querySelector(trimmedSelector);
-  } catch {
-    directHit = null;
-  }
-  if (directHit) {
-    return directHit;
-  }
-
-  const split = splitSelector(trimmedSelector);
-  if (split.rest) {
-    let candidates: Element[] = [];
-    try {
-      candidates = Array.from(root.querySelectorAll(split.current));
-    } catch {
-      candidates = [];
-    }
-
-    for (const candidate of candidates) {
-      const fromLightDom = querySelectorDeep(candidate, split.rest);
-      if (fromLightDom) {
-        return fromLightDom;
-      }
-
-      const shadowRoot = getShadowRoot(candidate);
-      if (shadowRoot) {
-        const fromShadow = querySelectorDeep(shadowRoot, split.rest);
-        if (fromShadow) {
-          return fromShadow;
-        }
-      }
-    }
-  }
-
-  if (root instanceof Element && root.shadowRoot) {
-    const withinShadow = querySelectorDeep(root.shadowRoot, trimmedSelector);
-    if (withinShadow) {
-      return withinShadow;
-    }
-  }
-
-  const elements = root.querySelectorAll('*');
-  for (const el of Array.from(elements)) {
-    const shadowRoot = getShadowRoot(el);
-    if (shadowRoot) {
-      const found = querySelectorDeep(shadowRoot, trimmedSelector);
-      if (found) {
-        return found;
-      }
-    }
-  }
-
-  return null;
+  return querySelectorAllDeep(root, selector, { ...options, maxResults: 1 })[0] || null;
 }
 
 export function querySelectorAllDeep(
   root: Document | Element | ShadowRoot,
   selector: string,
+  options: DeepQueryOptions = {},
 ): Element[] {
-  const trimmedSelector = selector.trim();
+  const trimmedSelector = normalizeDeepSelector(selector);
   if (!trimmedSelector) {
     return [];
   }
 
-  const results: Element[] = [];
-  try {
-    results.push(...Array.from(root.querySelectorAll(trimmedSelector)));
-  } catch {
-    // ignore
-  }
-
-  if (root instanceof Element && root.shadowRoot) {
-    results.push(...querySelectorAllDeep(root.shadowRoot, trimmedSelector));
-  }
-
-  const split = splitSelector(trimmedSelector);
-  if (split.rest) {
-    let candidates: Element[] = [];
-    try {
-      candidates = Array.from(root.querySelectorAll(split.current));
-    } catch {
-      candidates = [];
-    }
-
-    for (const candidate of candidates) {
-      results.push(...querySelectorAllDeep(candidate, split.rest));
-      const shadowRoot = getShadowRoot(candidate);
-      if (shadowRoot) {
-        results.push(...querySelectorAllDeep(shadowRoot, split.rest));
-      }
-    }
-  }
-
-  const descendants = root.querySelectorAll('*');
-  for (const el of Array.from(descendants)) {
-    const shadowRoot = getShadowRoot(el);
-    if (shadowRoot) {
-      results.push(...querySelectorAllDeep(shadowRoot, trimmedSelector));
-    }
-  }
-
-  return Array.from(new Set(results));
+  const context = createDeepQueryContext(options);
+  collectDeepQueryResults(root, trimmedSelector, context);
+  return context.results;
 }
 
 export function queryXPathAll(root: Document | Element | ShadowRoot, selector: string): Element[] {

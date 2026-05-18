@@ -7,6 +7,7 @@ import {
   querySelectorAllDeep,
   queryXPathAll,
 } from '../src/utils/dom-query';
+import { LIMITS } from '../src/config/constants';
 
 describe('dom-query', () => {
   describe('splitSelector', () => {
@@ -312,6 +313,26 @@ describe('dom-query', () => {
       const results = querySelectorAllDeep(document, '[invalid');
 
       expect(results).toEqual([]);
+    });
+
+    it('should reject selectors beyond the query length limit', () => {
+      document.body.innerHTML = '<div id="target">Content</div>';
+      const oversizedSelector = `#${'x'.repeat(LIMITS.SELECTOR_QUERY_MAX_LENGTH)}`;
+
+      expect(querySelectorDeep(document, oversizedSelector)).toBeNull();
+      expect(querySelectorAllDeep(document, oversizedSelector)).toEqual([]);
+    });
+
+    it('should respect maxResults for deep queries', () => {
+      document.body.innerHTML = `
+        <div class="item">1</div>
+        <div class="item">2</div>
+        <div class="item">3</div>
+      `;
+
+      const results = querySelectorAllDeep(document, '.item', { maxResults: 2 });
+
+      expect(results).toHaveLength(2);
     });
   });
 

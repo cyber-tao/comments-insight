@@ -10,7 +10,6 @@ import {
   EXTRACTION_PROGRESS,
   DATE_TIME,
   ANALYSIS_FORMAT,
-  STORAGE,
   TIMEOUT,
   TIMING,
   TEXT,
@@ -30,17 +29,6 @@ interface ScraperAnalysisResult {
     needsExpand: boolean;
   };
   confidence: number;
-}
-
-interface StoredVerifiedAIModel {
-  apiUrl?: string;
-  apiKey?: string;
-  model?: string;
-  contextWindowSize?: number;
-  maxOutputTokens?: number;
-  temperature?: number;
-  topP?: number;
-  verifiedAt?: number;
 }
 
 interface StartExtractionResponse {
@@ -265,12 +253,12 @@ export async function handleStartExtraction(
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'URL is required');
   }
 
-  const domain = getDomain(url) || 'unknown';
+  const domain = getDomain(url) || TEXT.UNKNOWN;
 
   // Get maxComments from settings if not provided
   let finalMaxComments = maxComments;
   if (!finalMaxComments) {
-    const settings = await context.storageManager.getSettings();
+    const settings = await context.settingsStore.getSettings();
     finalMaxComments = settings.maxComments || DEFAULTS.MAX_COMMENTS;
   }
 
@@ -343,69 +331,69 @@ export async function handleExtractionCompleted(
 
   if (success) {
     if (comments && comments.length > 0) {
-      if (task) {
-        let normalizedComments = comments;
-        let normalizedPostTime = postInfo?.videoTime;
-        try {
-          const settings = await context.storageManager.getSettings();
-          if (settings.normalizeTimestamps) {
-            const totalCount = comments.length + (postInfo?.videoTime ? 1 : 0);
-            context.taskManager.updateTaskProgress(
-              taskId,
-              EXTRACTION_PROGRESS.NORMALIZING,
-              `normalizing:0:${totalCount}`,
-            );
-            const pad = (value: number) => value.toString().padStart(DATE_TIME.PAD_LENGTH, '0');
-            const now = new Date();
-            const referenceTime = `${now.getFullYear()}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${pad(
-              now.getMonth() + DATE_TIME.MONTH_OFFSET,
-            )}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${pad(now.getDate())}T${pad(
-              now.getHours(),
-            )}${DATE_TIME.DISPLAY_TIME_SEPARATOR}${pad(now.getMinutes())}`;
-            normalizedComments = await context.aiService.normalizeCommentTimestamps(
-              comments,
-              settings.aiModel,
-              referenceTime,
-              settings.aiTimeout,
-            );
-            normalizedPostTime = await context.aiService.normalizeSingleTimestamp(
-              postInfo?.videoTime,
-              settings.aiModel,
-              referenceTime,
-              settings.aiTimeout,
-            );
-            context.taskManager.updateTaskProgress(
-              taskId,
-              EXTRACTION_PROGRESS.NORMALIZING,
-              `normalizing:${totalCount}:${totalCount}`,
-            );
-          }
-        } catch (error) {
-          Logger.warn('[ExtractionHandler] Timestamp normalization failed', { error });
-        }
-
-        const historyItem = {
-          id: generateUniqueId('history'),
-          url: postInfo?.url || task.url,
-          title: postInfo?.title || 'Untitled',
-          platform: task.platform || 'unknown',
-          videoTime: normalizedPostTime,
-          postContent: postInfo?.postContent,
-          extractedAt: Date.now(),
-          commentsCount: normalizedComments.length,
-          comments: normalizedComments,
-        };
-        try {
-          await context.storageManager.saveHistory(historyItem);
-        } catch (saveError) {
-          Logger.error('[ExtractionHandler] Failed to save extraction history', { saveError });
-          const historyError = new ExtensionError(
-            ErrorCode.STORAGE_WRITE_ERROR,
-            'Failed to save extraction history',
+      let normalizedComments = comments;
+      let normalizedPostTime = postInfo?.videoTime;
+      try {
+        const settings = await context.settingsStore.getSettings();
+        if (settings.normalizeTimestamps) {
+          const totalCount = comments.length + (postInfo?.videoTime ? 1 : 0);
+          context.taskManager.updateTaskProgress(
+            taskId,
+            EXTRACTION_PROGRESS.NORMALIZING,
+            `normalizing:0:${totalCount}`,
           );
-          context.taskManager.failTask(taskId, historyError.message);
-          return { success: false };
+          const pad = (value: number) => value.toString().padStart(DATE_TIME.PAD_LENGTH, '0');
+          const now = new Date();
+          const referenceTime = `${now.getFullYear()}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${pad(
+            now.getMonth() + DATE_TIME.MONTH_OFFSET,
+          )}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${pad(now.getDate())}T${pad(
+            now.getHours(),
+          )}${DATE_TIME.DISPLAY_TIME_SEPARATOR}${pad(now.getMinutes())}`;
+          normalizedComments = await context.timestampNormalizer.normalizeCommentTimestamps(
+            comments,
+            settings.aiModel,
+            referenceTime,
+            settings.aiTimeout,
+          );
+          normalizedPostTime = await context.timestampNormalizer.normalizeSingleTimestamp(
+            postInfo?.videoTime,
+            settings.aiModel,
+            referenceTime,
+            settings.aiTimeout,
+          );
+          context.taskManager.updateTaskProgress(
+            taskId,
+            EXTRACTION_PROGRESS.NORMALIZING,
+            `normalizing:${totalCount}:${totalCount}`,
+          );
         }
+      } catch (normalizationError) {
+        Logger.warn('[ExtractionHandler] Timestamp normalization failed', {
+          error: normalizationError,
+        });
+      }
+
+      const historyItem = {
+        id: generateUniqueId('history'),
+        url: postInfo?.url || task.url,
+        title: postInfo?.title || TEXT.UNTITLED,
+        platform: task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM,
+        videoTime: normalizedPostTime,
+        postContent: postInfo?.postContent,
+        extractedAt: Date.now(),
+        commentsCount: normalizedComments.length,
+        comments: normalizedComments,
+      };
+      try {
+        await context.historyStore.saveHistory(historyItem);
+      } catch (saveError) {
+        Logger.error('[ExtractionHandler] Failed to save extraction history', { saveError });
+        const historyError = new ExtensionError(
+          ErrorCode.STORAGE_WRITE_ERROR,
+          'Failed to save extraction history',
+        );
+        context.taskManager.failTask(taskId, historyError.message);
+        return { success: false };
       }
     }
 
@@ -431,7 +419,7 @@ export async function handleStartConfigGeneration(
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'URL is required');
   }
 
-  const domain = getDomain(url) || 'unknown';
+  const domain = getDomain(url) || TEXT.UNKNOWN;
 
   const tabId = await resolveTabId(payloadTabId, context.sender?.tab?.id);
   if (!tabId) {
@@ -514,7 +502,7 @@ export async function handleAIAnalyzeStructure(
   }
 
   try {
-    const settings = await context.storageManager.getSettings();
+    const settings = await context.settingsStore.getSettings();
     // The caller (AIStrategy) manages chunking and token limits.
     // We directly call AI service here.
 
@@ -566,7 +554,7 @@ export async function handleGenerateCrawlingConfig(
   }
 
   try {
-    const settings = await context.storageManager.getSettings();
+    const settings = await context.settingsStore.getSettings();
 
     // Call AI to generate config JSON
     const response = await context.aiService.callAI({
@@ -632,64 +620,13 @@ export async function handleStartAnalysis(
   }
 
   const finalUrl = metadata?.url;
-  const domain = finalUrl ? getDomain(finalUrl) || 'unknown' : 'unknown';
+  const domain = finalUrl ? getDomain(finalUrl) || TEXT.UNKNOWN : TEXT.UNKNOWN;
 
-  const taskId = context.taskManager.createTask('analyze', finalUrl || 'unknown', domain);
+  const taskId = context.taskManager.createTask('analyze', finalUrl || TEXT.UNKNOWN, domain);
 
   context.taskManager.setExecutor(taskId, async (task: Task, signal: AbortSignal) => {
-    const settings = await context.storageManager.getSettings();
-    let analysisModel = settings.aiModel;
-    const hasPrimaryApiKey =
-      typeof analysisModel?.apiKey === 'string' && analysisModel.apiKey.trim().length > 0;
-
-    if (!hasPrimaryApiKey) {
-      try {
-        const raw = await chrome.storage.local.get(STORAGE.LAST_VERIFIED_AI_MODEL_KEY);
-        const fallback = raw[STORAGE.LAST_VERIFIED_AI_MODEL_KEY] as
-          | StoredVerifiedAIModel
-          | undefined;
-        const fallbackKey =
-          typeof fallback?.apiKey === 'string' && fallback.apiKey.trim().length > 0
-            ? fallback.apiKey
-            : '';
-
-        if (fallbackKey) {
-          const sameApiUrl =
-            typeof fallback?.apiUrl === 'string' &&
-            fallback.apiUrl.trim().length > 0 &&
-            fallback.apiUrl.trim() === (analysisModel.apiUrl || '').trim();
-
-          if (sameApiUrl || !analysisModel.apiUrl) {
-            analysisModel = {
-              ...analysisModel,
-              apiUrl: analysisModel.apiUrl || fallback?.apiUrl || '',
-              model: analysisModel.model || fallback?.model || '',
-              apiKey: fallbackKey,
-              contextWindowSize:
-                analysisModel.contextWindowSize || fallback?.contextWindowSize || 0,
-              maxOutputTokens:
-                analysisModel.maxOutputTokens || fallback?.maxOutputTokens || undefined,
-              temperature:
-                typeof analysisModel.temperature === 'number'
-                  ? analysisModel.temperature
-                  : typeof fallback?.temperature === 'number'
-                    ? fallback.temperature
-                    : analysisModel.temperature,
-              topP:
-                typeof analysisModel.topP === 'number'
-                  ? analysisModel.topP
-                  : typeof fallback?.topP === 'number'
-                    ? fallback.topP
-                    : analysisModel.topP,
-            };
-          }
-        }
-      } catch (fallbackError) {
-        Logger.warn('[ExtractionHandler] Failed to load fallback AI model config', {
-          fallbackError,
-        });
-      }
-    }
+    const settings = await context.settingsStore.getSettings();
+    const analysisModel = settings.aiModel;
 
     context.taskManager.updateDetailedProgress(taskId, {
       stage: 'analyzing',
@@ -706,23 +643,23 @@ export async function handleStartAnalysis(
     let postContent = ANALYSIS_FORMAT.UNKNOWN_CONTENT;
 
     if (historyId) {
-      const historyItem = await context.storageManager.getHistoryItem(historyId);
+      const historyItem = await context.historyStore.getHistoryItem(historyId);
       if (historyItem) {
-        platform = historyItem.platform || 'Unknown Platform';
-        url = historyItem.url || 'N/A';
-        title = historyItem.title || 'Untitled';
-        videoTime = historyItem.videoTime || 'N/A';
-        postContent = historyItem.postContent || 'N/A';
+        platform = historyItem.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
+        url = historyItem.url || ANALYSIS_FORMAT.UNKNOWN_URL;
+        title = historyItem.title || TEXT.UNTITLED;
+        videoTime = historyItem.videoTime || ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
+        postContent = historyItem.postContent || ANALYSIS_FORMAT.UNKNOWN_CONTENT;
       }
     } else {
-      platform = task.platform || 'Unknown Platform';
-      url = task.url || 'N/A';
+      platform = task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
+      url = task.url || ANALYSIS_FORMAT.UNKNOWN_URL;
       title = metadata?.title || title;
       videoTime = metadata?.videoTime || videoTime;
       postContent = metadata?.postContent || postContent;
     }
 
-    const result = await context.aiService.analyzeComments(
+    const result = await context.commentAnalyzer.analyzeComments(
       comments,
       analysisModel,
       settings.analyzerPromptTemplate,
@@ -752,18 +689,18 @@ export async function handleStartAnalysis(
 
     try {
       if (historyId) {
-        const historyItem = await context.storageManager.getHistoryItem(historyId);
+        const historyItem = await context.historyStore.getHistoryItem(historyId);
         if (historyItem) {
           historyItem.analysis = result;
           historyItem.analyzedAt = Date.now();
-          await context.storageManager.saveHistory(historyItem);
+          await context.historyStore.saveHistory(historyItem);
         }
       } else {
-        await context.storageManager.saveHistory({
+        await context.historyStore.saveHistory({
           id: generateUniqueId('history'),
           url: task.url,
           title: `Analysis ${new Date().toLocaleString()}`,
-          platform: task.platform || 'unknown',
+          platform: task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM,
           postContent: metadata?.postContent,
           extractedAt: Date.now(),
           commentsCount: comments.length,
@@ -798,7 +735,7 @@ export async function handleAIExtractContent(
   }
 
   try {
-    const settings = await context.storageManager.getSettings();
+    const settings = await context.settingsStore.getSettings();
     const allComments: Comment[] = [];
 
     const tasks = chunks.map((chunk, i) => async () => {

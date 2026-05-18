@@ -13,7 +13,6 @@ import { ExtensionError, ErrorCode } from '@/utils/errors';
 import {
   EXTRACTION_PROGRESS,
   MESSAGES,
-  TEXT,
   TIMING,
   DOM,
   LIKES,
@@ -21,9 +20,9 @@ import {
   REGEX,
 } from '@/config/constants';
 import { sendMessage } from '@/utils/chrome-message';
-import { isExtractionActive } from '../extractionState';
 import { querySelectorAllDeep, querySelectorDeep } from '@/utils/dom-query';
 import { generateCommentHash } from '@/utils/comment-hash';
+import { checkAborted, abortableDelay } from '../utils/abort';
 
 export class ConfiguredStrategy implements ExtractionStrategy {
   private validationRecorded = false;
@@ -35,17 +34,6 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
   cleanup(): void {
     // No specific resources to cleanup for this strategy
-  }
-
-  private checkAborted(signal?: AbortSignal): void {
-    if (signal?.aborted || !isExtractionActive()) {
-      throw new ExtensionError(
-        ErrorCode.TASK_CANCELLED,
-        TEXT.EXTRACTION_CANCELLED_BY_USER,
-        {},
-        false,
-      );
-    }
   }
 
   async execute(
@@ -70,7 +58,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
     if (!container) {
       // Try waiting
-      await this.delay(TIMING.SHORT_WAIT_MS, signal);
+      await abortableDelay(TIMING.SHORT_WAIT_MS, signal);
       container = querySelectorDeep(document, containerSelector);
       if (!container) {
         throw new ExtensionError(
@@ -93,10 +81,11 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       maxComments,
     );
 
+    this.validationRecorded = false;
     this.recordFieldValidation(container);
 
     while (allComments.length < maxComments) {
-      this.checkAborted(signal);
+      checkAborted(signal);
 
       if (noNewCommentsCount >= DOM.NO_NEW_COMMENTS_THRESHOLD) {
         break;
@@ -124,7 +113,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
         // Scroll element into view to trigger lazy loading before extraction
         (itemElement as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
-        await this.delay(TIMING.SCROLL_PAUSE_MS, signal);
+        await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal);
 
         const comment = await this.extractCommentFromElement(
           itemElement as HTMLElement,
@@ -184,110 +173,18 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     signal?: AbortSignal,
   ): Promise<Comment | null> {
     try {
-      this.checkAborted(signal);
+      checkAborted(signal);
 
-      const username = this.extractField(
-        element,
-        this.config.fields.find((f) => f.name === 'username'),
-      );
-      const content = this.extractField(
-        element,
-        this.config.fields.find((f) => f.name === 'content'),
-      );
-      // ... fields extraction ...
+      const comment = this.buildCommentFromElement(element, this.config.fields, platform);
+      if (!comment) return null;
 
-      // Log basic extraction just to be sure we are looking at the right element
-
-      // ... (existing code) ...
-
-      const timestamp =
-        this.extractField(
-          element,
-          this.config.fields.find((f) => f.name === 'timestamp'),
-        ) || ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
-      const likesStr =
-        this.extractField(
-          element,
-          this.config.fields.find((f) => f.name === 'likes'),
-        ) || '0';
-
-      if (!username && !content) return null;
-
-      const comment: Comment = {
-        id: '',
-        username: username || ANALYSIS_FORMAT.UNKNOWN_USERNAME,
-        content: content || '',
-        timestamp,
-        likes: this.parseLikes(likesStr),
-        platform,
-        replies: [],
-      };
-
-      // Handle Replies
       if (this.config.replies) {
-        const replyConfig = this.config.replies;
-
-        // 1. Check for expand button
-        if (replyConfig.expandBtn) {
-          const expandBtn = querySelectorDeep(
-            element,
-            replyConfig.expandBtn.selector,
-          ) as HTMLElement;
-          if (expandBtn) {
-            Logger.info('[ReplyDebug] Found expand button', {
-              selector: replyConfig.expandBtn.selector,
-              text: expandBtn.textContent || '',
-            });
-
-            // Get current reply count before clicking
-            const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
-            const currentReplyCount = replyContainer
-              ? querySelectorAllDeep(replyContainer, replyConfig.item.selector).length
-              : 0;
-
-            // Scroll into view to trigger lazy loading and ensure clickability
-            expandBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            await this.delay(TIMING.SCROLL_INTO_VIEW_WAIT_MS, signal);
-
-            // Click to expand
-            try {
-              expandBtn.click();
-              Logger.info('[ReplyDebug] Clicked expand button', { currentReplyCount });
-
-              // Smart wait: Poll for reply count to INCREASE
-              await this.waitForReplies(element, replyConfig, currentReplyCount, signal);
-            } catch (e: unknown) {
-              if (e instanceof ExtensionError && e.code === ErrorCode.TASK_CANCELLED) {
-                throw e;
-              }
-
-              Logger.error('[ReplyDebug] Failed to click expand button', {
-                error: e instanceof Error ? e.message : String(e),
-              });
-            }
-          }
-        }
-
-        // 2. Find reply container
-        const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
-        if (replyContainer) {
-          const replyItems = querySelectorAllDeep(replyContainer, replyConfig.item.selector);
-          if (replyItems.length > 0)
-            Logger.info(`[ReplyDebug] Found ${replyItems.length} reply items`);
-
-          for (const replyItem of replyItems) {
-            const reply = await this.extractReplyFromElement(
-              replyItem as HTMLElement,
-              platform,
-              replyConfig,
-              0,
-              signal,
-            );
-            if (reply) {
-              comment.replies.push(reply);
-            }
-          }
-        }
+        comment.replies = await this.extractRepliesFromElement(
+          element,
+          platform,
+          this.config.replies,
+          signal,
+        );
       }
 
       return comment;
@@ -310,36 +207,48 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     depth: number = 0,
     signal?: AbortSignal,
   ): Promise<Comment | null> {
-    this.checkAborted(signal);
+    checkAborted(signal);
 
     if (depth >= DOM.MAX_REPLY_DEPTH) {
       Logger.warn('[ConfiguredStrategy] Max reply depth reached', { depth });
       return null;
     }
 
-    const username = this.extractField(
+    const comment = this.buildCommentFromElement(element, replyConfig.fields, platform);
+    if (!comment) return null;
+
+    comment.id = generateCommentHash(comment);
+
+    comment.replies = await this.extractRepliesFromElement(
       element,
-      replyConfig.fields.find((f) => f.name === 'username'),
+      platform,
+      replyConfig,
+      signal,
+      depth + 1,
     );
-    const content = this.extractField(
-      element,
-      replyConfig.fields.find((f) => f.name === 'content'),
-    );
-    // ...
-    const timestamp =
-      this.extractField(
-        element,
-        replyConfig.fields.find((f) => f.name === 'timestamp'),
-      ) || ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
-    const likesStr =
-      this.extractField(
-        element,
-        replyConfig.fields.find((f) => f.name === 'likes'),
-      ) || '0';
+
+    return comment;
+  }
+
+  private buildCommentFromElement(
+    element: HTMLElement,
+    fields: FieldSelector[],
+    platform: Platform,
+  ): Comment | null {
+    const getFieldValue = (name: string): string | null => {
+      const field = fields.find((f) => f.name === name);
+      return field ? this.extractField(element, field) : null;
+    };
+
+    const username = getFieldValue('username');
+    const content = getFieldValue('content');
 
     if (!username && !content) return null;
 
-    const comment: Comment = {
+    const timestamp = getFieldValue('timestamp') || ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
+    const likesStr = getFieldValue('likes') || '0';
+
+    return {
       id: '',
       username: username || ANALYSIS_FORMAT.UNKNOWN_USERNAME,
       content: content || '',
@@ -348,60 +257,88 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       platform,
       replies: [],
     };
-    comment.id = generateCommentHash(comment);
+  }
 
-    // Recursive Reply Extraction
+  private async extractRepliesFromElement(
+    element: HTMLElement,
+    platform: Platform,
+    replyConfig: ReplyConfig,
+    signal?: AbortSignal,
+    depth: number = 0,
+  ): Promise<Comment[]> {
+    const replies: Comment[] = [];
+
     if (replyConfig.expandBtn) {
       const expandBtn = querySelectorDeep(element, replyConfig.expandBtn.selector) as HTMLElement;
       if (expandBtn) {
-        try {
-          // Get current reply count before clicking
-          const nestedContainer = querySelectorDeep(element, replyConfig.container.selector);
-          const currentNestedCount = nestedContainer
-            ? querySelectorAllDeep(nestedContainer, replyConfig.item.selector).length
-            : 0;
-
-          Logger.info('[ReplyDebug] Found nested expand button', {
-            selector: replyConfig.expandBtn.selector,
-            currentNestedCount,
-          });
-          expandBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          await this.delay(TIMING.SCROLL_INTO_VIEW_WAIT_MS, signal);
-          expandBtn.click();
-          await this.waitForReplies(element, replyConfig, currentNestedCount, signal);
-        } catch (e: unknown) {
-          if (e instanceof ExtensionError && e.code === ErrorCode.TASK_CANCELLED) {
-            throw e;
-          }
-
-          Logger.error('[ReplyDebug] Failed to click nested expand button', {
-            error: e instanceof Error ? e.message : String(e),
-          });
-        }
+        await this.clickExpandButton(element, expandBtn, replyConfig, signal, depth > 0);
       }
     }
 
     const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
     if (replyContainer) {
       const replyItems = querySelectorAllDeep(replyContainer, replyConfig.item.selector);
-      if (replyItems.length > 0)
-        Logger.info(`[ReplyDebug] Found ${replyItems.length} nested replies`);
+      if (replyItems.length > 0) {
+        Logger.info(
+          depth > 0
+            ? `[ReplyDebug] Found ${replyItems.length} nested replies`
+            : `[ReplyDebug] Found ${replyItems.length} reply items`,
+        );
+      }
 
       for (const replyItem of replyItems) {
         const reply = await this.extractReplyFromElement(
           replyItem as HTMLElement,
           platform,
           replyConfig,
-          depth + 1,
+          depth,
           signal,
         );
         if (reply) {
-          comment.replies.push(reply);
+          replies.push(reply);
         }
       }
     }
 
-    return comment;
+    return replies;
+  }
+
+  private async clickExpandButton(
+    element: HTMLElement,
+    expandBtn: HTMLElement,
+    replyConfig: ReplyConfig,
+    signal?: AbortSignal,
+    isNested: boolean = false,
+  ): Promise<void> {
+    const logPrefix = isNested
+      ? '[ReplyDebug] Found nested expand button'
+      : '[ReplyDebug] Found expand button';
+    Logger.info(logPrefix, {
+      selector: replyConfig.expandBtn?.selector,
+      text: expandBtn.textContent || '',
+    });
+
+    const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
+    const currentReplyCount = replyContainer
+      ? querySelectorAllDeep(replyContainer, replyConfig.item.selector).length
+      : 0;
+
+    expandBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await abortableDelay(TIMING.SCROLL_INTO_VIEW_WAIT_MS, signal);
+
+    try {
+      expandBtn.click();
+      Logger.info('[ReplyDebug] Clicked expand button', { currentReplyCount });
+      await this.waitForReplies(element, replyConfig, currentReplyCount, signal);
+    } catch (e: unknown) {
+      if (e instanceof ExtensionError && e.code === ErrorCode.TASK_CANCELLED) {
+        throw e;
+      }
+
+      Logger.error('[ReplyDebug] Failed to click expand button', {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
   }
 
   private recordFieldValidation(container: Element): void {
@@ -491,7 +428,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     const startTime = Date.now();
 
     while (Date.now() - startTime < TIMING.REPLY_POLL_TIMEOUT_MS) {
-      this.checkAborted(signal);
+      checkAborted(signal);
 
       const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
       if (replyContainer) {
@@ -503,50 +440,13 @@ export class ConfiguredStrategy implements ExtractionStrategy {
             to: items.length,
           });
           // Add a tiny extra delay for render stability
-          await this.delay(TIMING.RENDER_STABILITY_WAIT_MS, signal);
+          await abortableDelay(TIMING.RENDER_STABILITY_WAIT_MS, signal);
           return;
         }
       }
-      await this.delay(TIMING.REPLY_POLL_INTERVAL_MS, signal);
+      await abortableDelay(TIMING.REPLY_POLL_INTERVAL_MS, signal);
     }
 
     Logger.debug('[ReplyDebug] Timed out waiting for replies to increase', { initialCount });
-  }
-
-  private delay(ms: number, signal?: AbortSignal): Promise<void> {
-    if (!signal) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
-    }
-
-    return new Promise((resolve, reject) => {
-      if (signal.aborted) {
-        reject(
-          new ExtensionError(
-            ErrorCode.TASK_CANCELLED,
-            TEXT.EXTRACTION_CANCELLED_BY_USER,
-            {},
-            false,
-          ),
-        );
-        return;
-      }
-      const timer = setTimeout(() => {
-        signal.removeEventListener('abort', onAbort);
-        resolve();
-      }, ms);
-      const onAbort = () => {
-        clearTimeout(timer);
-        signal.removeEventListener('abort', onAbort);
-        reject(
-          new ExtensionError(
-            ErrorCode.TASK_CANCELLED,
-            TEXT.EXTRACTION_CANCELLED_BY_USER,
-            {},
-            false,
-          ),
-        );
-      };
-      signal.addEventListener('abort', onAbort, { once: true });
-    });
   }
 }

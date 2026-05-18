@@ -7,6 +7,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AIModelSettings } from '../src/options/components/AIModelSettings';
 import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '../src/utils/prompts';
+import { AI } from '../src/config/constants';
 import type { Settings } from '../src/types';
 
 const extensionApiMock = vi.hoisted(() => ({
@@ -150,8 +151,8 @@ describe('AIModelSettings', () => {
       expect(toast.success).toHaveBeenCalledWith('options.modelsFound');
     });
 
-    const modelSelect = (await screen.findByRole('combobox')) as HTMLSelectElement;
-    expect(modelSelect.value).toBe('gpt-4.1');
+    const modelInput = await screen.findByDisplayValue('gpt-4.1');
+    expect(modelInput).toBeTruthy();
     expect(onSettingsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         aiModel: expect.objectContaining({
@@ -227,5 +228,29 @@ describe('AIModelSettings', () => {
     expect(screen.getByText('{comments_data}')).toBeTruthy();
     expect(screen.getByText('*options.required')).toBeTruthy();
     expect(screen.getByText('options.placeholder_post_content')).toBeTruthy();
+  });
+
+  it('ignores invalid numeric model input and uses the configured default token value', () => {
+    const settings = createSettings({
+      aiModel: {
+        apiUrl: 'https://api.example.com/v1',
+        apiKey: 'secret-key',
+        model: 'gpt-4o-mini',
+        contextWindowSize: 200000,
+        maxOutputTokens: undefined,
+        temperature: 1,
+        topP: 0.95,
+      },
+    });
+    const { onSettingsChange } = renderComponent(settings);
+    const numericInputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
+
+    expect(numericInputs[1].value).toBe(String(AI.DEFAULT_MAX_OUTPUT_TOKENS));
+
+    for (const input of numericInputs) {
+      fireEvent.change(input, { target: { value: '' } });
+    }
+
+    expect(onSettingsChange).not.toHaveBeenCalled();
   });
 });

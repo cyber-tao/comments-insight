@@ -1,12 +1,10 @@
-/**
- * NotificationService handles browser notifications
- */
-import { ICONS, PATHS, TEXT, LIMITS, TIMING } from '@/config/constants';
+import { ICONS, PATHS, LIMITS, TIMING, NOTIFICATION_KEYS } from '@/config/constants';
 import { Logger } from '@/utils/logger';
 import { generateUniqueId } from '@/utils/id-generator';
+import i18n from '@/utils/i18n';
 
 export class NotificationService {
-  static async showTaskCompleted(
+  async showTaskCompleted(
     taskType: 'extract' | 'analyze' | 'config',
     title: string,
     commentsCount?: number,
@@ -16,32 +14,34 @@ export class NotificationService {
       const options = {
         type: 'basic' as const,
         iconUrl: ICONS.ICON_48,
-        title: TEXT.APP_NAME,
+        title: i18n.t('common.appName'),
         message: this.getCompletionMessage(taskType, title, commentsCount),
-        buttons: [{ title: TEXT.VIEW_RESULTS }, { title: TEXT.DISMISS }],
+        buttons: [
+          { title: i18n.t('notification.viewResults', { defaultValue: 'View Results' }) },
+          { title: i18n.t('notification.dismiss', { defaultValue: 'Dismiss' }) },
+        ],
         requireInteraction: true,
       };
 
       await chrome.notifications.create(notificationId, options);
 
       setTimeout(() => {
-        chrome.notifications.clear(notificationId).catch(() => {});
+        chrome.notifications.clear(notificationId).catch((e) => {
+          Logger.debug('[NotificationService] clear failed', { error: e });
+        });
       }, TIMING.NOTIFICATION_AUTOCLEAR_MS);
     } catch (error) {
       Logger.error('[NotificationService] Failed to show notification', { error });
     }
   }
 
-  static async showTaskFailed(
-    taskType: 'extract' | 'analyze' | 'config',
-    error: string,
-  ): Promise<void> {
+  async showTaskFailed(taskType: 'extract' | 'analyze' | 'config', error: string): Promise<void> {
     try {
       const notificationId = generateUniqueId('task_failed');
       const options = {
         type: 'basic' as const,
         iconUrl: ICONS.ICON_48,
-        title: TEXT.TASK_FAILED_TITLE,
+        title: i18n.t('common.appName'),
         message: this.getFailureMessage(taskType, error),
         requireInteraction: false,
       };
@@ -52,13 +52,9 @@ export class NotificationService {
     }
   }
 
-  /**
-   * Handle notification clicks
-   */
-  static setupNotificationHandlers(): void {
+  setupNotificationHandlers(): void {
     chrome.notifications.onClicked.addListener((notificationId) => {
       if (notificationId.startsWith('task_completed_')) {
-        // Open history page
         chrome.tabs.create({
           url: chrome.runtime.getURL(PATHS.HISTORY_PAGE),
         });
@@ -68,7 +64,6 @@ export class NotificationService {
 
     chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
       if (buttonIndex === 0) {
-        // View Results
         chrome.tabs.create({
           url: chrome.runtime.getURL(PATHS.HISTORY_PAGE),
         });
@@ -77,10 +72,7 @@ export class NotificationService {
     });
   }
 
-  /**
-   * Get completion message based on task type
-   */
-  private static getCompletionMessage(
+  private getCompletionMessage(
     taskType: 'extract' | 'analyze' | 'config',
     title: string,
     commentsCount?: number,
@@ -90,32 +82,34 @@ export class NotificationService {
         ? title.substring(0, LIMITS.NOTIFICATION_TITLE_MAX_LENGTH) + '...'
         : title;
 
+    const commentsSuffix = commentsCount
+      ? taskType === 'analyze'
+        ? i18n.t(NOTIFICATION_KEYS.COMMENTS_ANALYZED, { count: commentsCount })
+        : i18n.t(NOTIFICATION_KEYS.COMMENTS_COUNT, { count: commentsCount })
+      : '';
+
     if (taskType === 'extract') {
-      return commentsCount
-        ? `Extraction completed for "${truncatedTitle}" (${commentsCount} comments)`
-        : `Extraction completed for "${truncatedTitle}"`;
+      return i18n.t(NOTIFICATION_KEYS.EXTRACTION_COMPLETED, {
+        title: truncatedTitle,
+        comments: commentsSuffix,
+      });
     }
     if (taskType === 'analyze') {
-      return commentsCount
-        ? `Analysis completed for "${truncatedTitle}" (${commentsCount} comments analyzed)`
-        : `Analysis completed for "${truncatedTitle}"`;
+      return i18n.t(NOTIFICATION_KEYS.ANALYSIS_COMPLETED, {
+        title: truncatedTitle,
+        comments: commentsSuffix,
+      });
     }
-    return `Config generation completed for "${truncatedTitle}"`;
+    return i18n.t(NOTIFICATION_KEYS.CONFIG_GENERATION_COMPLETED, { title: truncatedTitle });
   }
 
-  /**
-   * Get failure message based on task type
-   */
-  private static getFailureMessage(
-    taskType: 'extract' | 'analyze' | 'config',
-    error: string,
-  ): string {
+  private getFailureMessage(taskType: 'extract' | 'analyze' | 'config', error: string): string {
     if (taskType === 'extract') {
-      return `Extraction failed: ${error}`;
+      return i18n.t(NOTIFICATION_KEYS.EXTRACTION_FAILED, { error });
     }
     if (taskType === 'analyze') {
-      return `Analysis failed: ${error}`;
+      return i18n.t(NOTIFICATION_KEYS.ANALYSIS_FAILED, { error });
     }
-    return `Config generation failed: ${error}`;
+    return i18n.t(NOTIFICATION_KEYS.CONFIG_GENERATION_FAILED, { error });
   }
 }

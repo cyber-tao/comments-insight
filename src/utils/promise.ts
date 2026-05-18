@@ -36,6 +36,15 @@ export class Mutex {
     });
   }
 
+  async withLock<T>(fn: () => Promise<T> | T): Promise<T> {
+    const release = await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
   private release() {
     if (this.queue.length > 0) {
       const next = this.queue.shift();

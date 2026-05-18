@@ -9,11 +9,13 @@ import { ConfigList } from './ConfigList';
 import { ConfigImportDialog, ConflictItem, MERGE_FIELDS } from './ConfigImportDialog';
 import { ConfigSyncDialog } from './ConfigSyncDialog';
 import { useConfigImport } from '../hooks/useConfigImport';
+import type { ConfirmFunction } from '@/hooks/useConfirm';
 
 interface Props {
   settings: Settings;
   onSettingsChange: (newSettings: Partial<Settings>) => void;
   showToast: (message: string, type?: 'info' | 'success' | 'error' | 'warning') => void;
+  confirm: ConfirmFunction;
 }
 
 type ExportableCrawlingConfig = Omit<CrawlingConfig, 'fieldValidation'>;
@@ -37,7 +39,12 @@ const toExportableCrawlingConfig = ({
   ...config
 }: CrawlingConfig): ExportableCrawlingConfig => config;
 
-export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange, showToast }) => {
+export const ConfigSettings: React.FC<Props> = ({
+  settings,
+  onSettingsChange,
+  showToast,
+  confirm,
+}) => {
   const { t } = useTranslation();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempConfig, setTempConfig] = useState<CrawlingConfig | null>(null);
@@ -88,10 +95,15 @@ export const ConfigSettings: React.FC<Props> = ({ settings, onSettingsChange, sh
     setEditingId(config.id);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm(t('options.crawlingConfigs.confirmDelete'))) {
-      const newConfigs = configs.filter((c) => c.id !== id);
-      onSettingsChange({ crawlingConfigs: newConfigs });
+  const handleDelete = async (id: string) => {
+    const confirmed = await confirm({
+      message: t('options.crawlingConfigs.confirmDelete'),
+      confirmLabel: t('common.delete'),
+      cancelLabel: t('common.cancel'),
+      destructive: true,
+    });
+    if (confirmed) {
+      onSettingsChange({ crawlingConfigs: configs.filter((c) => c.id !== id) });
     }
   };
 

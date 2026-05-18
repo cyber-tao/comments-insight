@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import Toast, { ToastType } from '../components/Toast';
+import { LIMITS } from '@/config/constants';
 
 interface ToastMessage {
   id: number;
@@ -14,7 +15,12 @@ export const useToast = () => {
   const showToast = useCallback((message: string, type: ToastType = 'info') => {
     const id = nextIdRef.current;
     nextIdRef.current += 1;
-    setToasts((prev) => [...prev, { id, message, type }]);
+    setToasts((prev) => {
+      const next = [...prev, { id, message, type }];
+      // Bound the visible queue so a burst of errors does not stack toasts
+      // off-screen indefinitely; oldest entries are dropped first.
+      return next.length > LIMITS.MAX_TOASTS ? next.slice(next.length - LIMITS.MAX_TOASTS) : next;
+    });
   }, []);
 
   const removeToast = useCallback((id: number) => {

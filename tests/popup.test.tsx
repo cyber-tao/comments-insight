@@ -16,6 +16,7 @@ const extensionApiMock = vi.hoisted(() => ({
 
 const i18nMock = vi.hoisted(() => ({
   changeLanguage: vi.fn(),
+  t: vi.fn((key: string) => key),
 }));
 
 const loggerMock = vi.hoisted(() => ({
@@ -31,6 +32,9 @@ vi.mock('../src/utils/extension-api', () => ({
 
 vi.mock('../src/utils/i18n', () => ({
   default: i18nMock,
+  changeLanguage: i18nMock.changeLanguage,
+  loadLocaleResource: vi.fn(async () => undefined),
+  t: i18nMock.t ?? ((key: string) => key),
 }));
 
 vi.mock('../src/utils/logger', () => ({

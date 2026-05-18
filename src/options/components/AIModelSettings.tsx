@@ -1,10 +1,12 @@
 import * as React from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { API, UI_LIMITS } from '@/config/constants';
+import { AI, API, UI_LIMITS } from '@/config/constants';
 import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
 import { Settings } from '@/types';
 import { ExtensionAPI } from '@/utils/extension-api';
+import { parseFiniteIntegerInput, parseFiniteNumberInput } from '@/utils/number';
+import { SearchableModelSelect } from './SearchableModelSelect';
 
 interface AIModelSettingsProps {
   settings: Settings;
@@ -28,6 +30,11 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
   const [showApiKey, setShowApiKey] = useState(false);
   const [testingModel, setTestingModel] = useState(false);
   const [showPlaceholders, setShowPlaceholders] = useState(false);
+  const maxOutputTokens =
+    typeof settings.aiModel.maxOutputTokens === 'number' &&
+    Number.isFinite(settings.aiModel.maxOutputTokens)
+      ? settings.aiModel.maxOutputTokens
+      : AI.DEFAULT_MAX_OUTPUT_TOKENS;
 
   const handleFetchModels = async () => {
     const config = settings.aiModel;
@@ -160,22 +167,16 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             {t('options.model')}
           </label>
           {availableModels.length > 0 ? (
-            <select
+            <SearchableModelSelect
+              models={availableModels}
               value={settings.aiModel.model}
-              onChange={(e) =>
+              onChange={(model) =>
                 onSettingsChange({
                   ...settings,
-                  aiModel: { ...settings.aiModel, model: e.target.value },
+                  aiModel: { ...settings.aiModel, model },
                 })
               }
-              className="w-full theme-input"
-            >
-              {availableModels.map((model) => (
-                <option key={model} value={model}>
-                  {model}
-                </option>
-              ))}
-            </select>
+            />
           ) : (
             <input
               type="text"
@@ -203,15 +204,19 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             <input
               type="number"
               value={settings.aiModel.contextWindowSize}
-              onChange={(e) =>
+              onChange={(e) => {
+                const contextWindowSize = parseFiniteIntegerInput(e.target.value);
+                if (contextWindowSize === null) {
+                  return;
+                }
                 onSettingsChange({
                   ...settings,
                   aiModel: {
                     ...settings.aiModel,
-                    contextWindowSize: parseInt(e.target.value),
+                    contextWindowSize,
                   },
-                })
-              }
+                });
+              }}
               className="w-full theme-input"
               min="1"
             />
@@ -225,16 +230,20 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             </label>
             <input
               type="number"
-              value={settings.aiModel.maxOutputTokens || 4096}
-              onChange={(e) =>
+              value={maxOutputTokens}
+              onChange={(e) => {
+                const parsedMaxOutputTokens = parseFiniteIntegerInput(e.target.value);
+                if (parsedMaxOutputTokens === null) {
+                  return;
+                }
                 onSettingsChange({
                   ...settings,
                   aiModel: {
                     ...settings.aiModel,
-                    maxOutputTokens: parseInt(e.target.value),
+                    maxOutputTokens: parsedMaxOutputTokens,
                   },
-                })
-              }
+                });
+              }}
               className="w-full theme-input"
               min="1"
             />
@@ -253,15 +262,19 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
               type="number"
               step="0.1"
               value={settings.aiModel.temperature}
-              onChange={(e) =>
+              onChange={(e) => {
+                const temperature = parseFiniteNumberInput(e.target.value);
+                if (temperature === null) {
+                  return;
+                }
                 onSettingsChange({
                   ...settings,
                   aiModel: {
                     ...settings.aiModel,
-                    temperature: parseFloat(e.target.value),
+                    temperature,
                   },
-                })
-              }
+                });
+              }}
               className="w-full theme-input"
               min={UI_LIMITS.TEMPERATURE_MIN}
               max={UI_LIMITS.TEMPERATURE_MAX}
@@ -278,15 +291,19 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
               type="number"
               step="0.1"
               value={settings.aiModel.topP}
-              onChange={(e) =>
+              onChange={(e) => {
+                const topP = parseFiniteNumberInput(e.target.value);
+                if (topP === null) {
+                  return;
+                }
                 onSettingsChange({
                   ...settings,
                   aiModel: {
                     ...settings.aiModel,
-                    topP: parseFloat(e.target.value),
+                    topP,
                   },
-                })
-              }
+                });
+              }}
               className="w-full theme-input"
               min={UI_LIMITS.TOP_P_MIN}
               max={UI_LIMITS.TOP_P_MAX}

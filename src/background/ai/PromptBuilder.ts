@@ -8,6 +8,7 @@ import {
   DEFAULTS,
   AI as AI_CONST,
   TIME_NORMALIZATION,
+  TEXT,
 } from '@/config/constants';
 
 export class PromptBuilder {
@@ -79,7 +80,7 @@ export class PromptBuilder {
       videoTime: metadata?.videoTime || 'N/A',
       platform: metadata?.platform || 'Unknown Platform',
       url: metadata?.url || 'N/A',
-      title: metadata?.title || 'Untitled',
+      title: metadata?.title || TEXT.UNTITLED,
       postContent: metadata?.postContent || 'N/A',
       totalComments,
       language,

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PATHS } from '@/config/constants';
 import { Logger } from '@/utils/logger';
-import i18n from '@/utils/i18n';
+import { changeLanguage } from '@/utils/i18n';
 import { ExtensionAPI } from '@/utils/extension-api';
 import { useTask } from './hooks/useTask';
 import { usePageInfo } from './hooks/usePageInfo';
@@ -39,7 +39,7 @@ const Popup: React.FC = () => {
       const settings = await ExtensionAPI.getSettings();
       if (settings) {
         if (settings.language) {
-          await i18n.changeLanguage(settings.language);
+          await changeLanguage(settings.language);
         }
         if (settings.aiModel?.model) {
           setAIModelName(settings.aiModel.model);

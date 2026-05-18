@@ -12,7 +12,7 @@ export default defineConfig({
       reporter: ['text', 'html', 'lcov'],
       reportsDirectory: './coverage',
       include: ['src/**/*.ts', 'src/**/*.tsx'],
-      exclude: ['src/**/*.d.ts', 'src/**/index.ts', 'src/**/*.test.ts'],
+      exclude: ['src/**/*.d.ts', 'src/**/index.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx'],
     },
   },
   resolve: {

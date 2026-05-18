@@ -1,9 +1,9 @@
 import * as React from 'react';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { HISTORY_UI, PAGINATION } from '@/config/constants';
+import { PAGINATION } from '@/config/constants';
 import { Comment } from '../types';
-import i18n from '../utils/i18n';
+import { changeLanguage } from '../utils/i18n';
 import { useTheme } from '@/hooks/useTheme';
 import { Logger } from '@/utils/logger';
 import { ExtensionAPI } from '@/utils/extension-api';
@@ -12,9 +12,11 @@ import { HistorySidebar } from './components/HistorySidebar';
 import { HistoryDetailPanel } from './components/HistoryDetailPanel';
 import { useHistoryData } from './hooks/useHistoryData';
 import { useHistoryReanalyze } from './hooks/useHistoryReanalyze';
+import { useConfirm } from '@/hooks/useConfirm';
 
 const History: React.FC = () => {
   const { t } = useTranslation();
+  const { confirm, ConfirmHost } = useConfirm();
   const [viewMode, setViewMode] = useState<'comments' | 'analysis'>('analysis');
   const [sortBy, setSortBy] = useState<'time' | 'likes' | 'replies'>('likes');
   const [exportPostContentInMarkdown, setExportPostContentInMarkdown] = useState(false);
@@ -22,12 +24,8 @@ const History: React.FC = () => {
   const [commentSearchTerm, setCommentSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [commentsPerPage, setCommentsPerPage] = useState(PAGINATION.DEFAULT_PER_PAGE);
-  const listContainerRef = React.useRef<HTMLDivElement | null>(null);
-  const [listViewportHeight, setListViewportHeight] = useState(0);
-  const [listScrollTop, setListScrollTop] = useState(0);
-  const resetListScroll = useCallback(() => {
-    setListScrollTop(0);
-  }, []);
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const resetListScroll = useCallback(() => {}, []);
 
   useTheme();
 
@@ -36,7 +34,7 @@ const History: React.FC = () => {
       try {
         const settings = await ExtensionAPI.getSettings();
         if (settings?.language) {
-          await i18n.changeLanguage(settings.language);
+          await changeLanguage(settings.language);
         }
         setExportPostContentInMarkdown(!!settings?.exportPostContentInMarkdown);
       } catch (error) {
@@ -87,16 +85,6 @@ const History: React.FC = () => {
     fetchHistoryItemById,
     setSelectedItem,
   });
-
-  useEffect(() => {
-    const updateViewportHeight = () => {
-      setListViewportHeight(listContainerRef.current?.clientHeight || 0);
-    };
-
-    updateViewportHeight();
-    window.addEventListener('resize', updateViewportHeight);
-    return () => window.removeEventListener('resize', updateViewportHeight);
-  }, []);
 
   const formatDate = (timestamp: number) => {
     return new Date(timestamp).toLocaleString();
@@ -178,121 +166,13 @@ const History: React.FC = () => {
   const totalComments = processedComments.length;
   const totalPages = Math.ceil(totalComments / commentsPerPage);
 
-  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
-
   React.useEffect(() => {
     setCurrentPage(1);
-    setExpandedReplies(new Set());
   }, [commentSearchTerm, selectedItem]);
 
   React.useEffect(() => {
     clearReanalyzeError();
   }, [clearReanalyzeError, selectedHistoryId]);
-
-  const toggleReplies = (commentId: string) => {
-    setExpandedReplies((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(commentId)) {
-        newSet.delete(commentId);
-      } else {
-        newSet.add(commentId);
-      }
-      return newSet;
-    });
-  };
-
-  const renderCommentTree = (comments: Comment[], depth = 0) => {
-    if (depth >= HISTORY_UI.MAX_COMMENT_DEPTH) {
-      return (
-        <div className="ml-4 pl-4 text-xs text-gray-400 italic">Deeply nested replies hidden</div>
-      );
-    }
-
-    return (
-      <div
-        className={`${depth > 0 ? 'ml-4 pl-4' : ''}`}
-        style={depth > 0 ? { borderLeft: '2px solid var(--border-primary)' } : {}}
-      >
-        {comments.map((comment) => {
-          const hasReplies = comment.replies && comment.replies.length > 0;
-          const isExpanded = expandedReplies.has(comment.id);
-
-          return (
-            <div key={comment.id} className="mb-4 animate-fade-in">
-              <div
-                className="p-4 rounded-xl transition-all hover:shadow-md"
-                style={{
-                  backgroundColor: 'var(--bg-tertiary)',
-                  border: '1px solid var(--border-primary)',
-                }}
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm"
-                    style={{ background: 'var(--gradient-primary)' }}
-                  >
-                    {comment.username.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1">
-                    <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
-                      {comment.username}
-                    </span>
-                    <div
-                      className="flex items-center gap-3 text-xs"
-                      style={{ color: 'var(--text-muted)' }}
-                    >
-                      <span>📅 {formatCommentTimestamp(comment.timestamp)}</span>
-                      <span className="flex items-center gap-1">
-                        <span className="text-red-500">❤️</span> {comment.likes}
-                      </span>
-                    </div>
-                  </div>
-                  {hasReplies && (
-                    <button
-                      onClick={() => toggleReplies(comment.id)}
-                      className="px-3 py-1 rounded-full text-xs font-medium transition-all hover:scale-105"
-                      style={{
-                        backgroundColor: isExpanded ? 'var(--accent-primary)' : 'var(--bg-card)',
-                        color: isExpanded ? 'white' : 'var(--text-secondary)',
-                        border: isExpanded ? 'none' : '1px solid var(--border-primary)',
-                      }}
-                    >
-                      {isExpanded ? '▼' : '▶'} 💬{' '}
-                      {comment.replies.length === 1
-                        ? t('history.reply', { count: comment.replies.length })
-                        : t('history.replies', { count: comment.replies.length })}
-                    </button>
-                  )}
-                </div>
-                <p
-                  className="whitespace-pre-wrap leading-relaxed"
-                  style={{ color: 'var(--text-secondary)' }}
-                >
-                  {comment.content}
-                </p>
-              </div>
-              {hasReplies && isExpanded && (
-                <div className="mt-3">{renderCommentTree(comment.replies, depth + 1)}</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const visibleListCount = Math.max(
-    1,
-    Math.ceil(listViewportHeight / HISTORY_UI.LIST_ITEM_HEIGHT) + HISTORY_UI.LIST_OVERSCAN * 2,
-  );
-  const listStartIndex = Math.max(
-    0,
-    Math.floor(listScrollTop / HISTORY_UI.LIST_ITEM_HEIGHT) - HISTORY_UI.LIST_OVERSCAN,
-  );
-  const listEndIndex = Math.min(history.length, listStartIndex + visibleListCount);
-  const visibleHistoryEntries = history.slice(listStartIndex, listEndIndex);
-  const listOffsetY = listStartIndex * HISTORY_UI.LIST_ITEM_HEIGHT;
-  const listTotalHeight = history.length * HISTORY_UI.LIST_ITEM_HEIGHT;
 
   return (
     <div className="flex h-screen" style={{ backgroundColor: 'var(--bg-secondary)' }}>
@@ -305,21 +185,28 @@ const History: React.FC = () => {
         searchQuery={searchQuery}
         selectedHistoryId={selectedHistoryId}
         listContainerRef={listContainerRef}
-        historyListItemHeight={HISTORY_UI.LIST_ITEM_HEIGHT}
-        listTotalHeight={listTotalHeight}
-        listOffsetY={listOffsetY}
-        visibleHistoryEntries={visibleHistoryEntries}
         onSearchQueryChange={setSearchQuery}
         onSearch={handleSearch}
-        onScroll={setListScrollTop}
         onSelectHistoryItem={(item) => {
           void handleSelectHistoryItem(item);
         }}
         onDeleteHistoryItem={(id) => {
-          void handleDelete(id, confirm(t('history.deleteConfirm')));
+          void (async () => {
+            const ok = await confirm({
+              message: t('history.deleteConfirm'),
+              destructive: true,
+            });
+            await handleDelete(id, ok);
+          })();
         }}
         onClearAll={() => {
-          void handleClearAll(confirm(t('history.clearAllConfirm')));
+          void (async () => {
+            const ok = await confirm({
+              message: t('history.clearAllConfirm'),
+              destructive: true,
+            });
+            await handleClearAll(ok);
+          })();
         }}
         onHistoryPageChange={setHistoryPage}
         formatDate={formatDate}
@@ -357,10 +244,10 @@ const History: React.FC = () => {
             setCurrentPage(1);
           }}
           onCurrentPageChange={setCurrentPage}
-          renderCommentTree={renderCommentTree}
           formatDate={formatDate}
         />
       </div>
+      <ConfirmHost />
     </div>
   );
 };

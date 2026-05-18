@@ -3,7 +3,8 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES, UI_LIMITS, THEME } from '@/config/constants';
 import { Settings } from '@/types';
-import i18n from '@/utils/i18n';
+import { changeLanguage } from '@/utils/i18n';
+import { parseFiniteIntegerInput } from '@/utils/number';
 
 interface BasicSettingsProps {
   settings: Settings;
@@ -25,7 +26,11 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
 
   const handleMaxCommentsChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      onSettingsChange({ ...settings, maxComments: parseInt(e.target.value, 10) });
+      const maxComments = parseFiniteIntegerInput(e.target.value);
+      if (maxComments === null) {
+        return;
+      }
+      onSettingsChange({ ...settings, maxComments });
     },
     [settings, onSettingsChange],
   );
@@ -65,7 +70,7 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
           onChange={(e) => {
             const newLang = e.target.value;
             onSettingsChange({ ...settings, language: newLang });
-            i18n.changeLanguage(newLang);
+            void changeLanguage(newLang);
           }}
           className="w-full theme-input"
         >

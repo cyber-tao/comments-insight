@@ -151,6 +151,8 @@
     "importSettings": "Importer les paramètres",
     "saveSettings": "Enregistrer les paramètres",
     "advancedSettings": "Paramètres avancés",
+    "outputLevel": "Niveau de sortie du journal",
+    "outputLevelHint": "Contrôle le niveau de gravité minimum pour les journaux système",
     "aiTimeout": "Délai d'expiration IA (secondes)",
     "saving": "Enregistrement...",
     "savedSuccess": "Paramètres enregistrés avec succès !",
@@ -189,6 +191,9 @@
     "configureApiFirst": "Veuillez d'abord configurer l'URL et la clé API",
     "modelsFound": "{{count}} modèles trouvés",
     "noModelsFound": "Aucun modèle trouvé ou l'API ne prend pas en charge la liste des modèles",
+    "searchModels": "Tapez pour rechercher des modèles...",
+    "noMatchingModels": "Aucun modèle correspondant",
+    "matchingModelsCount": "{{filtered}} / {{total}} modèles",
     "fetchModelsFailed": "Échec de la récupération des modèles",
     "configureAllFields": "Veuillez configurer tous les champs requis",
     "crawlingConfigs": {
@@ -391,7 +396,11 @@
     "extractionFailed": "Échec de l'extraction : {{error}}",
     "analysisFailed": "Échec de l'analyse : {{error}}",
     "commentsCount": " ({{count}} commentaires)",
-    "commentsAnalyzed": " ({{count}} commentaires analysés)"
+    "commentsAnalyzed": " ({{count}} commentaires analysés)",
+    "configGenerationCompleted": "Génération de configuration terminée pour \"{{title}}\"",
+    "configGenerationFailed": "Échec de la génération de configuration : {{error}}",
+    "viewResults": "Voir les résultats",
+    "dismiss": "Fermer"
   },
   "export": {
     "depth": "Profondeur",

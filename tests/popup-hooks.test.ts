@@ -32,6 +32,7 @@ const loggerMock = vi.hoisted(() => ({
   error: vi.fn(),
   warn: vi.fn(),
 }));
+const tabsQueryMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../src/utils/extension-api', () => ({
   ExtensionAPI: extensionApiMock,
@@ -43,7 +44,7 @@ vi.mock('../src/utils/logger', () => ({
 
 vi.stubGlobal('chrome', {
   tabs: {
-    query: vi.fn(),
+    query: tabsQueryMock,
   },
 });
 
@@ -85,9 +86,14 @@ function createHistoryItem(overrides: Partial<HistoryItem> = {}): HistoryItem {
     comments: createComments(),
     analysis: {
       markdown: '# Analysis',
-      summary: 'summary',
-      sentiment: 'positive',
-      keywords: ['alpha'],
+      summary: {
+        totalComments: 1,
+        sentimentDistribution: { positive: 1, neutral: 0, negative: 0 },
+        hotComments: [],
+        keyInsights: ['alpha'],
+      },
+      tokensUsed: 10,
+      generatedAt: 1700000000000,
     },
     ...overrides,
   };
@@ -97,7 +103,7 @@ describe('popup hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
-    vi.mocked(chrome.tabs.query).mockResolvedValue([
+    tabsQueryMock.mockResolvedValue([
       { id: TAB_ID, url: PAGE_URL, title: PAGE_TITLE } as chrome.tabs.Tab,
     ]);
     extensionApiMock.cancelTask.mockResolvedValue(undefined);

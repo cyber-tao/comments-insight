@@ -28,9 +28,12 @@ vi.mock('../src/utils/errors', async (importOriginal) => {
 // Mock handlers
 vi.mock('../src/background/handlers/extraction', () => ({
   handleStartExtraction: vi.fn().mockResolvedValue({ taskId: 'test-task' }),
+  handleStartConfigGeneration: vi.fn().mockResolvedValue({ taskId: 'config-task' }),
   handleAIAnalyzeStructure: vi.fn().mockResolvedValue({ selector: '.comments' }),
   handleAIExtractContent: vi.fn().mockResolvedValue({ comments: [] }),
+  handleGenerateCrawlingConfig: vi.fn().mockResolvedValue({ config: null }),
   handleExtractionCompleted: vi.fn().mockResolvedValue({ success: true }),
+  handleConfigGenerationCompleted: vi.fn().mockResolvedValue({ success: true }),
   handleExtractionProgress: vi.fn().mockReturnValue(undefined),
   handleStartAnalysis: vi.fn().mockResolvedValue({ result: 'analysis' }),
 }));
@@ -39,6 +42,11 @@ vi.mock('../src/background/handlers/settings', () => ({
   handleGetSettings: vi.fn().mockResolvedValue({ maxComments: 100 }),
   handleSaveSettings: vi.fn().mockResolvedValue({ success: true }),
   handleImportSettings: vi.fn().mockResolvedValue({ success: true }),
+  handleCacheSelector: vi.fn().mockResolvedValue({ success: true }),
+  handleGetCrawlingConfig: vi.fn().mockResolvedValue({ config: null }),
+  handleSaveCrawlingConfig: vi.fn().mockResolvedValue({ success: true }),
+  handleSyncCrawlingConfigs: vi.fn().mockResolvedValue({ success: true }),
+  handleUpdateFieldValidation: vi.fn().mockResolvedValue({ success: true }),
 }));
 
 vi.mock('../src/background/handlers/history', () => ({
@@ -71,19 +79,40 @@ const mockTaskManager = {
 
 const mockAIService = {
   callAI: vi.fn(),
+};
+
+const mockCommentAnalyzer = {
   analyzeComments: vi.fn(),
 };
 
-const mockStorageManager = {
+const mockTimestampNormalizer = {
+  normalizeCommentTimestamps: vi.fn(),
+  normalizeSingleTimestamp: vi.fn(),
+};
+
+const mockSettingsStore = {
   getSettings: vi.fn(),
   saveSettings: vi.fn(),
 };
+
+const mockHistoryStore = {};
+const mockEncryptionService = {};
+const mockLogStore = {};
+const mockTokenStatsStore = {};
+const mockCrawlingConfigStore = {};
 
 const createRouter = (): MessageRouter =>
   new MessageRouter(
     mockTaskManager as unknown as ConstructorParameters<typeof MessageRouter>[0],
     mockAIService as unknown as ConstructorParameters<typeof MessageRouter>[1],
-    mockStorageManager as unknown as ConstructorParameters<typeof MessageRouter>[2],
+    mockCommentAnalyzer as unknown as ConstructorParameters<typeof MessageRouter>[2],
+    mockTimestampNormalizer as unknown as ConstructorParameters<typeof MessageRouter>[3],
+    mockSettingsStore as unknown as ConstructorParameters<typeof MessageRouter>[4],
+    mockHistoryStore as unknown as ConstructorParameters<typeof MessageRouter>[5],
+    mockEncryptionService as unknown as ConstructorParameters<typeof MessageRouter>[6],
+    mockLogStore as unknown as ConstructorParameters<typeof MessageRouter>[7],
+    mockTokenStatsStore as unknown as ConstructorParameters<typeof MessageRouter>[8],
+    mockCrawlingConfigStore as unknown as ConstructorParameters<typeof MessageRouter>[9],
   );
 
 const createUnknownMessage = (type: string): Message => ({ type }) as unknown as Message;
@@ -112,7 +141,7 @@ const mockSender: chrome.runtime.MessageSender = {
     active: true,
     pinned: false,
     incognito: false,
-  },
+  } as unknown as chrome.tabs.Tab,
 };
 
 describe('MessageRouter', () => {
@@ -214,6 +243,21 @@ describe('MessageRouter', () => {
       });
     });
 
+    it('should reject invalid SAVE_SETTINGS payload before dispatching', async () => {
+      await expect(
+        router.handleMessage(
+          {
+            type: MESSAGES.SAVE_SETTINGS,
+            payload: { settings: { aiModel: { contextWindowSize: 'bad-value' } } },
+          } as unknown as Message,
+          mockSender,
+        ),
+      ).rejects.toMatchObject({
+        code: ErrorCode.VALIDATION_ERROR,
+        message: expect.stringContaining('Invalid payload for SAVE_SETTINGS'),
+      });
+    });
+
     it('should throw error for unknown message type', async () => {
       await expect(
         router.handleMessage(createUnknownMessage('UNKNOWN_TYPE'), mockSender),
@@ -225,7 +269,10 @@ describe('MessageRouter', () => {
     it('should ignore content script messages', async () => {
       const result1 = await router.handleMessage({ type: MESSAGES.GET_PLATFORM_INFO }, mockSender);
       const result2 = await router.handleMessage({ type: MESSAGES.GET_DOM_STRUCTURE }, mockSender);
-      const result3 = await router.handleMessage({ type: MESSAGES.CANCEL_EXTRACTION }, mockSender);
+      const result3 = await router.handleMessage(
+        { type: MESSAGES.CANCEL_EXTRACTION } as unknown as Message,
+        mockSender,
+      );
 
       expect(result1).toBeUndefined();
       expect(result2).toBeUndefined();

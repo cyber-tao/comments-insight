@@ -43,7 +43,7 @@ const replyConfigSchema = z.object({
   fields: z.array(fieldSelectorSchema),
   expandBtn: selectorRuleSchema.optional(),
 });
-const crawlingConfigSchema = z.object({
+export const crawlingConfigSchema = z.object({
   id: nonEmptyStringSchema,
   domain: nonEmptyStringSchema,
   siteName: z.string().optional(),
@@ -57,7 +57,7 @@ const crawlingConfigSchema = z.object({
   lastUpdated: finiteNumberSchema,
   fieldValidation: z.record(nonEmptyStringSchema, z.enum(['success', 'failed'])).optional(),
 });
-const selectorCacheSchema = z.object({
+export const selectorCacheSchema = z.object({
   domain: nonEmptyStringSchema,
   platform: z.string().optional(),
   selectors: z.object({
@@ -74,7 +74,7 @@ const selectorCacheSchema = z.object({
   lastUsed: finiteNumberSchema,
   successCount: finiteNumberSchema,
 });
-const aiConfigSchema = z.object({
+export const aiConfigSchema = z.object({
   apiUrl: z.string(),
   apiKey: z.string(),
   model: z.string(),
@@ -83,7 +83,7 @@ const aiConfigSchema = z.object({
   temperature: finiteNumberSchema,
   topP: finiteNumberSchema,
 });
-const domAnalysisConfigSchema = z.object({
+export const domAnalysisConfigSchema = z.object({
   initialDepth: finiteNumberSchema,
   expandDepth: finiteNumberSchema,
   maxDepth: finiteNumberSchema,
@@ -170,6 +170,24 @@ const aiLogEntrySchema = z.object({
   prompt: z.string(),
   response: z.string(),
 });
+
+export const settingsPatchSchema = z
+  .object({
+    maxComments: finiteNumberSchema.optional(),
+    aiModel: aiConfigSchema.partial().optional(),
+    aiTimeout: finiteNumberSchema.optional(),
+    analyzerPromptTemplate: z.string().optional(),
+    language: z.string().optional(),
+    theme: z.enum(['light', 'dark', 'system']).optional(),
+    normalizeTimestamps: z.boolean().optional(),
+    exportPostContentInMarkdown: z.boolean().optional(),
+    selectorRetryAttempts: finiteNumberSchema.optional(),
+    selectorCache: z.array(selectorCacheSchema).optional(),
+    crawlingConfigs: z.array(crawlingConfigSchema).optional(),
+    domAnalysisConfig: domAnalysisConfigSchema.partial().optional(),
+    developerMode: z.boolean().optional(),
+  })
+  .strict();
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

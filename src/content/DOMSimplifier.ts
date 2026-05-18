@@ -48,27 +48,8 @@ interface SimplificationOptions {
  * ```
  */
 export class DOMSimplifier {
-  private static instance: DOMSimplifier | null = null;
   private selectorCache = new WeakMap<Element, string>();
   private nodeCount = 0;
-
-  /**
-   * Get the singleton instance of DOMSimplifier
-   * @returns The singleton DOMSimplifier instance
-   */
-  static getInstance(): DOMSimplifier {
-    if (!DOMSimplifier.instance) {
-      DOMSimplifier.instance = new DOMSimplifier();
-    }
-    return DOMSimplifier.instance;
-  }
-
-  /**
-   * Reset the singleton instance (useful for testing)
-   */
-  static resetInstance(): void {
-    DOMSimplifier.instance = null;
-  }
 
   /**
    * Simplify a DOM element to a lightweight structure
@@ -343,33 +324,75 @@ export class DOMSimplifier {
   /**
    * Generate a unique CSS selector for an element
    */
-  private generateSelector(element: Element, knownParentSelector?: string): string {
-    // Check cache first
+  private getCssEscape(): ((value: string) => string) | null {
+    const css = globalThis.CSS as { escape?: (value: string) => string } | undefined;
+    return typeof css?.escape === 'function' ? css.escape.bind(css) : null;
+  }
+
+  private escapeAttributeValue(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  }
+
+  private canUseBareCssIdentifier(value: string): boolean {
+    return /^[A-Za-z_][A-Za-z0-9_-]*$/.test(value);
+  }
+
+  private buildIdSelector(id: string): string {
+    const escape = this.getCssEscape();
+    if (escape) {
+      return `#${escape(id)}`;
+    }
+    if (this.canUseBareCssIdentifier(id)) {
+      return `#${id}`;
+    }
+    return `[id="${this.escapeAttributeValue(id)}"]`;
+  }
+
+  private buildClassSelector(className: string): string {
+    const escape = this.getCssEscape();
+    if (escape) {
+      return `.${escape(className)}`;
+    }
+    if (this.canUseBareCssIdentifier(className)) {
+      return `.${className}`;
+    }
+    return `[class~="${this.escapeAttributeValue(className)}"]`;
+  }
+
+  private generateSelector(
+    element: Element,
+    knownParentSelector?: string,
+    depth: number = 0,
+  ): string {
     if (this.selectorCache.has(element)) {
       return this.selectorCache.get(element)!;
     }
 
+    const maxSelectorDepth = DOM.MAX_SELECTOR_DEPTH;
+    if (depth > maxSelectorDepth) {
+      const fallbackSelector = element.tagName.toLowerCase();
+      this.selectorCache.set(element, fallbackSelector);
+      return fallbackSelector;
+    }
+
     let selector = element.tagName.toLowerCase();
 
-    // Add ID if available (most specific)
     if (element.id) {
-      selector = `#${element.id}`;
+      selector = this.buildIdSelector(element.id);
       this.selectorCache.set(element, selector);
-      return selector; // ID is unique, we can stop here
+      return selector;
     }
 
-    // Add classes if available
     const classes = this.getClasses(element);
     if (classes && classes.length > 0) {
-      selector += '.' + classes.join('.');
+      selector += classes.map((className) => this.buildClassSelector(className)).join('');
     }
 
-    // Add nth-child if needed for uniqueness
     const parent: Element | null = element.parentElement;
     if (parent) {
       const siblings = Array.from(parent.children);
       const index = siblings.indexOf(element);
-      if (siblings.filter((s: Element) => s.tagName === element.tagName).length > 1) {
+      if (siblings.filter((sibling: Element) => sibling.tagName === element.tagName).length > 1) {
         selector += `:nth-child(${index + 1})`;
       }
     }
@@ -378,8 +401,7 @@ export class DOMSimplifier {
     if (knownParentSelector) {
       fullSelector = `${knownParentSelector} > ${selector}`;
     } else if (parent && parent !== document.body) {
-      // Fallback to recursively generating parent selector if not provided
-      fullSelector = `${this.generateSelector(parent)} > ${selector}`;
+      fullSelector = `${this.generateSelector(parent, undefined, depth + 1)} > ${selector}`;
     }
 
     this.selectorCache.set(element, fullSelector);
@@ -464,32 +486,5 @@ export class DOMSimplifier {
     result += `</${node.tag}>`;
 
     return result;
-  }
-
-  /**
-   * Simplify DOM for AI analysis (static method using singleton)
-   * @param element - Root element to simplify
-   * @param options - Simplification options
-   * @returns Simplified node structure
-   */
-  static simplifyForAI(
-    element: Element,
-    options: {
-      maxDepth?: number;
-      maxNodes?: number;
-      includeText?: boolean;
-      ignoreElements?: WeakSet<Element> | Set<Element>;
-    } = {},
-  ): SimplifiedNode {
-    return DOMSimplifier.getInstance().simplifyElement(element, options);
-  }
-
-  /**
-   * Convert simplified node to string format for AI (static method using singleton)
-   * @param node - Simplified node
-   * @returns String representation
-   */
-  static toStringFormat(node: SimplifiedNode): string {
-    return DOMSimplifier.getInstance().nodeToString(node);
   }
 }

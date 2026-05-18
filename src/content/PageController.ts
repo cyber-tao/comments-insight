@@ -3,23 +3,13 @@ import { TIMING, SCROLL, CLICK, TIMEOUT, TEXT } from '@/config/constants';
 import { isExtractionActive } from './extractionState';
 import { Logger } from '../utils/logger';
 import { ErrorCode, ExtensionError } from '../utils/errors';
+import { checkAborted, abortableDelay } from './utils/abort';
 
 /**
  * PageController handles page interactions like scrolling and clicking
  */
 export class PageController {
   constructor(private domAnalyzer?: DOMAnalyzer) {}
-
-  private checkAborted(signal?: AbortSignal): void {
-    if (signal?.aborted) {
-      throw new ExtensionError(
-        ErrorCode.TASK_CANCELLED,
-        TEXT.EXTRACTION_CANCELLED_BY_USER,
-        {},
-        false,
-      );
-    }
-  }
 
   /**
    * Scroll to bottom smoothly to trigger lazy loading
@@ -33,7 +23,7 @@ export class PageController {
     const step = Math.floor(viewportHeight * SCROLL.SCROLL_STEP_RATIO);
 
     while (currentScroll < totalHeight) {
-      this.checkAborted(signal);
+      checkAborted(signal, false);
       if (!isExtractionActive()) return;
       if (Date.now() - startTime > SCROLL.MAX_SCROLL_TIMEOUT_MS) {
         Logger.warn('[PageController] scrollToBottom timed out');
@@ -47,7 +37,7 @@ export class PageController {
       window.scrollTo(0, nextScroll);
       currentScroll = nextScroll;
 
-      await this.wait(TIMING.SCROLL_PAUSE_MS, signal);
+      await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal, false);
 
       const newTotalHeight = document.documentElement.scrollHeight;
       if (newTotalHeight > totalHeight) {
@@ -68,7 +58,7 @@ export class PageController {
     timeoutMs: number = TIMING.SCROLL_DELAY_MS,
     signal?: AbortSignal,
   ): Promise<boolean> {
-    this.checkAborted(signal);
+    checkAborted(signal, false);
 
     return new Promise((resolve, reject) => {
       const observer = new MutationObserver((mutations) => {
@@ -77,7 +67,7 @@ export class PageController {
         );
         if (hasMeaningfulChange) {
           cleanup();
-          this.wait(TIMING.MICRO_WAIT_MS, signal).then(() => resolve(true), reject);
+          abortableDelay(TIMING.MICRO_WAIT_MS, signal, false).then(() => resolve(true), reject);
         }
       });
 
@@ -118,7 +108,7 @@ export class PageController {
     container: Element,
     signal?: AbortSignal,
   ): Promise<{ contentChanged: boolean }> {
-    this.checkAborted(signal);
+    checkAborted(signal, false);
 
     const beforeScrollHeight = container.scrollHeight;
     const beforeChildCount = container.childElementCount;
@@ -137,7 +127,7 @@ export class PageController {
           top: Math.min(currentScrollTop + scrollStep, maxScrollTop),
           behavior: 'smooth',
         });
-        await this.wait(TIMING.SCROLL_PAUSE_MS, signal);
+        await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal, false);
       }
     } else {
       const containerRect = container.getBoundingClientRect();
@@ -151,13 +141,13 @@ export class PageController {
           top: scrollTarget,
           behavior: 'smooth',
         });
-        await this.wait(TIMING.SCROLL_PAUSE_MS, signal);
+        await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal, false);
       } else {
         window.scrollTo({
           top: window.scrollY + SCROLL.CONTAINER_SCROLL_STEP,
           behavior: 'smooth',
         });
-        await this.wait(TIMING.SCROLL_PAUSE_MS, signal);
+        await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal, false);
       }
     }
 
@@ -190,7 +180,7 @@ export class PageController {
     const startTime = Date.now();
 
     while (scrollCount < maxScrolls) {
-      this.checkAborted(signal);
+      checkAborted(signal, false);
       if (!isExtractionActive()) return;
       if (Date.now() - startTime > SCROLL.MAX_SCROLL_TIMEOUT_MS) {
         Logger.warn('[PageController] scrollToLoadMore timed out');
@@ -201,7 +191,7 @@ export class PageController {
 
       window.scrollTo(0, document.documentElement.scrollHeight);
 
-      await this.wait(TIMING.PAGE_INIT_DELAY_MS, signal);
+      await abortableDelay(TIMING.PAGE_INIT_DELAY_MS, signal, false);
 
       const newHeight = document.documentElement.scrollHeight;
 
@@ -230,11 +220,11 @@ export class PageController {
     Logger.info('[PageController] Found expand buttons', { count: buttons.length });
 
     for (const button of buttons) {
-      this.checkAborted(signal);
+      checkAborted(signal, false);
       if (!isExtractionActive()) return;
       try {
         (button as HTMLElement).click();
-        await this.wait(TIMING.SCROLL_BASE_DELAY_MS, signal);
+        await abortableDelay(TIMING.SCROLL_BASE_DELAY_MS, signal, false);
       } catch (error) {
         if (error instanceof ExtensionError && error.code === ErrorCode.TASK_CANCELLED) {
           throw error;
@@ -253,7 +243,7 @@ export class PageController {
     const maxClicks = CLICK.LOAD_MORE_MAX;
 
     while (clickCount < maxClicks) {
-      this.checkAborted(signal);
+      checkAborted(signal, false);
       if (!isExtractionActive()) return;
       const button = document.querySelector(selector) as HTMLElement;
 
@@ -264,7 +254,7 @@ export class PageController {
 
       try {
         button.click();
-        await this.wait(TIMING.AI_RETRY_DELAY_MS, signal);
+        await abortableDelay(TIMING.AI_RETRY_DELAY_MS, signal, false);
         clickCount++;
       } catch (error) {
         if (error instanceof ExtensionError && error.code === ErrorCode.TASK_CANCELLED) {
@@ -293,7 +283,7 @@ export class PageController {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
-      this.checkAborted(signal);
+      checkAborted(signal, false);
       if (!isExtractionActive()) return null;
       // Use Shadow DOM-aware query if available
       const element = this.domAnalyzer
@@ -303,44 +293,10 @@ export class PageController {
       if (element) {
         return element;
       }
-      await this.wait(TIMING.MICRO_WAIT_MS, signal);
+      await abortableDelay(TIMING.MICRO_WAIT_MS, signal, false);
     }
 
     Logger.warn('[PageController] Element not found', { selector });
     return null;
-  }
-
-  /**
-   * Wait for specified milliseconds
-   * @param ms - Milliseconds to wait
-   */
-  private wait(ms: number, signal?: AbortSignal): Promise<void> {
-    if (!signal) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
-    }
-
-    this.checkAborted(signal);
-
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        signal.removeEventListener('abort', onAbort);
-        resolve();
-      }, ms);
-
-      const onAbort = () => {
-        clearTimeout(timer);
-        signal.removeEventListener('abort', onAbort);
-        reject(
-          new ExtensionError(
-            ErrorCode.TASK_CANCELLED,
-            TEXT.EXTRACTION_CANCELLED_BY_USER,
-            {},
-            false,
-          ),
-        );
-      };
-
-      signal.addEventListener('abort', onAbort, { once: true });
-    });
   }
 }

@@ -18,7 +18,8 @@ const baseConfig = {
   apiUrl: 'https://api.example.com/v1',
   apiKey: 'key',
   model: 'demo-model',
-  maxTokens: 100,
+  contextWindowSize: 128000,
+  maxOutputTokens: 100,
   temperature: 0.7,
   topP: 0.9,
 };
@@ -56,9 +57,9 @@ describe('misc handlers - model test', () => {
       >,
       createMockHandlerContext({
         aiService: asAIService(callAI),
-        storageManager: {
+        settingsStore: {
           saveSettings,
-        } as unknown as HandlerContext['storageManager'],
+        } as unknown as HandlerContext['settingsStore'],
       }),
     );
 
@@ -86,9 +87,9 @@ describe('misc handlers - model test', () => {
       >,
       createMockHandlerContext({
         aiService: asAIService(callAI),
-        storageManager: {
+        settingsStore: {
           saveSettings,
-        } as unknown as HandlerContext['storageManager'],
+        } as unknown as HandlerContext['settingsStore'],
       }),
     );
 
@@ -102,6 +103,8 @@ describe('misc handlers - model test', () => {
     const errorMessage = 'Network issue';
     const callAI = vi.fn().mockRejectedValue(new Error(errorMessage));
 
+    const mockSaveSettings = vi.fn();
+
     const res = await handleTestModel(
       { type: 'TEST_MODEL', payload: { config: baseConfig } } as Extract<
         Message,
@@ -109,9 +112,9 @@ describe('misc handlers - model test', () => {
       >,
       createMockHandlerContext({
         aiService: asAIService(callAI),
-        storageManager: {
-          saveSettings: vi.fn(),
-        } as unknown as HandlerContext['storageManager'],
+        settingsStore: {
+          saveSettings: mockSaveSettings,
+        } as unknown as HandlerContext['settingsStore'],
       }),
     );
 

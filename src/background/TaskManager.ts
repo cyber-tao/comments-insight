@@ -4,6 +4,7 @@ import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
 import {
   AI as AI_CONST,
+  CHROME_MESSAGE_ERRORS,
   ERROR_KEYS,
   LIMITS,
   RETRY,
@@ -90,9 +91,14 @@ export class TaskManager {
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
   private isProcessing = false;
   private stateMutex = new Mutex();
+  private pendingTaskUpdates: Map<string, Task> = new Map();
+  private taskUpdateThrottleTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(options?: { enablePersistence?: boolean }) {
-    this.enablePersistence = options?.enablePersistence === true;
+  constructor(
+    private notificationService: NotificationService,
+    config: { enablePersistence?: boolean } = {},
+  ) {
+    this.enablePersistence = config.enablePersistence === true;
   }
 
   async initialize(): Promise<void> {
@@ -246,9 +252,15 @@ export class TaskManager {
     this.currentTaskId = taskId;
 
     Logger.info(`[TaskManager] Task started: ${taskId}`);
-    this.notifyTaskUpdate(task);
+    this.notifyTaskUpdate(task, { immediate: true });
 
-    this.schedulePersist();
+    // Persist running/currentTaskId immediately so a service worker eviction
+    // does not lose track of the active task before the debounce timer fires.
+    try {
+      await this.saveState();
+    } catch (error) {
+      Logger.warn('[TaskManager] Failed to persist running task state', { error });
+    }
   }
 
   /**
@@ -305,49 +317,53 @@ export class TaskManager {
     const elapsed = Date.now() - task.startTime;
     const { stage, current, total, stageMessage, stageMessageKey, stageMessageParams } =
       detailedProgress;
+    const previousStage = task.detailedProgress?.stage;
+    const stageChanged = previousStage !== undefined && previousStage !== stage;
 
-    // Calculate progress percentage based on stage and current/total
+    const RANGES = TASK.PROGRESS_RANGES;
     let progressPercent = 0;
     if (total > 0 && current >= 0) {
       const stageProgress = current / total;
-      // Map stages to progress ranges
       switch (stage) {
         case 'initializing':
-          progressPercent = stageProgress * 5;
+          progressPercent = RANGES.INITIALIZING.START + stageProgress * RANGES.INITIALIZING.RANGE;
           break;
         case 'detecting':
-          progressPercent = 5 + stageProgress * 10;
+          progressPercent = RANGES.DETECTING.START + stageProgress * RANGES.DETECTING.RANGE;
           break;
         case 'analyzing':
           progressPercent =
             task.type === 'analyze'
               ? AI_CONST.ANALYSIS_TASK_PROGRESS_START +
                 stageProgress * AI_CONST.ANALYSIS_TASK_PROGRESS_RANGE
-              : 15 + stageProgress * 10;
+              : RANGES.ANALYZING.START + stageProgress * RANGES.ANALYZING.RANGE;
           break;
         case 'extracting':
-          progressPercent = 25 + stageProgress * 50;
+          progressPercent = RANGES.EXTRACTING.START + stageProgress * RANGES.EXTRACTING.RANGE;
           break;
         case 'scrolling':
-          progressPercent = 75 + stageProgress * 10;
+          progressPercent = RANGES.SCROLLING.START + stageProgress * RANGES.SCROLLING.RANGE;
           break;
         case 'expanding':
-          progressPercent = 85 + stageProgress * 5;
+          progressPercent = RANGES.EXPANDING.START + stageProgress * RANGES.EXPANDING.RANGE;
           break;
         case 'validating':
-          progressPercent = 90 + stageProgress * 5;
+          progressPercent = RANGES.VALIDATING.START + stageProgress * RANGES.VALIDATING.RANGE;
           break;
         case 'complete':
-          progressPercent = 100;
+          progressPercent = RANGES.COMPLETE;
           break;
         default:
-          progressPercent = (current / total) * 100;
+          progressPercent = (current / total) * RANGES.COMPLETE;
       }
     }
 
-    // Estimate remaining time
     let estimatedTimeRemaining = -1;
-    if (progressPercent > 5 && progressPercent < 100 && elapsed > 0) {
+    if (
+      progressPercent > TASK.PROGRESS_ESTIMATE_MIN_PERCENT &&
+      progressPercent < RANGES.COMPLETE &&
+      elapsed > 0
+    ) {
       const rate = progressPercent / elapsed;
       if (Number.isFinite(rate) && rate > 0) {
         const remaining = (100 - progressPercent) / rate;
@@ -378,8 +394,16 @@ export class TaskManager {
       estimatedTimeRemaining,
     });
 
-    this.notifyTaskUpdate(task);
-    this.schedulePersist();
+    // Stage transitions are user-visible milestones — flush them immediately
+    // and persist synchronously so a SW eviction does not lose the new stage.
+    this.notifyTaskUpdate(task, { immediate: stageChanged });
+    if (stageChanged) {
+      this.saveState().catch((error) => {
+        Logger.warn('[TaskManager] Failed to persist task state on stage change', { error });
+      });
+    } else {
+      this.schedulePersist();
+    }
   }
 
   /**
@@ -417,10 +441,10 @@ export class TaskManager {
     });
 
     const notificationTitle = result?.title?.trim() || task.url;
-    NotificationService.showTaskCompleted(task.type, notificationTitle, result?.commentsCount);
+    this.notificationService.showTaskCompleted(task.type, notificationTitle, result?.commentsCount);
 
     this.currentTaskId = null;
-    this.notifyTaskUpdate(task);
+    this.notifyTaskUpdate(task, { immediate: true });
     this.autoCleanFinishedTasks();
     this.saveState().catch((error) => {
       Logger.warn('[TaskManager] Failed to persist completed task state', { error });
@@ -453,10 +477,10 @@ export class TaskManager {
 
     Logger.error(`[TaskManager] Task failed: ${taskId}`, { error });
 
-    NotificationService.showTaskFailed(task.type, error);
+    this.notificationService.showTaskFailed(task.type, error);
 
     this.currentTaskId = null;
-    this.notifyTaskUpdate(task);
+    this.notifyTaskUpdate(task, { immediate: true });
     this.autoCleanFinishedTasks();
     this.saveState().catch((err) => {
       Logger.warn('[TaskManager] Failed to persist failed task state', { error: err });
@@ -501,7 +525,7 @@ export class TaskManager {
     }
 
     Logger.info(`[TaskManager] Task cancelled: ${taskId}`);
-    this.notifyTaskUpdate(task);
+    this.notifyTaskUpdate(task, { immediate: true });
     this.saveState().catch((error) => {
       Logger.warn('[TaskManager] Failed to persist cancelled task state', { error });
     });
@@ -538,8 +562,12 @@ export class TaskManager {
       task.message = undefined;
       task.endTime = undefined;
       this.currentTaskId = taskId;
-      this.notifyTaskUpdate(task);
-      this.schedulePersist();
+      this.notifyTaskUpdate(task, { immediate: true });
+      // Recovery is itself a key transition; persist immediately so the next
+      // service worker eviction does not roll back to "interrupted" state.
+      this.saveState().catch((error) => {
+        Logger.warn('[TaskManager] Failed to persist recovered task state', { error });
+      });
       Logger.info(`[TaskManager] Recovered interrupted task: ${taskId}`);
       return task;
     }
@@ -609,9 +637,15 @@ export class TaskManager {
    * @returns Unique task ID
    */
   private generateTaskId(): string {
-    const start = LIMITS.RANDOM_ID_START_INDEX;
-    const end = LIMITS.RANDOM_ID_START_INDEX + LIMITS.ID_RANDOM_LENGTH;
-    return `task_${Date.now()}_${Math.random().toString(36).slice(start, end)}`;
+    if (typeof crypto.randomUUID === 'function') {
+      return `task_${crypto.randomUUID()}`;
+    }
+
+    const bytes = crypto.getRandomValues(new Uint8Array(LIMITS.ID_RANDOM_BYTE_LENGTH));
+    const suffix = Array.from(bytes, (byte) =>
+      byte.toString(16).padStart(LIMITS.HEX_BYTE_PAD_LENGTH, '0'),
+    ).join('');
+    return `task_${Date.now()}_${suffix}`;
   }
 
   /**
@@ -715,45 +749,81 @@ export class TaskManager {
     if (!this.enablePersistence) {
       return;
     }
-    const release = await this.stateMutex.acquire();
-    try {
-      await ErrorHandler.withRetry(
-        async () => {
-          const state: PersistedTaskState = {
-            tasks: Array.from(this.tasks.values()),
-            queue: [...this.queue],
-            currentTaskId: this.currentTaskId,
-            savedAt: Date.now(),
-          };
-          await chrome.storage.local.set({ [STORAGE.TASK_STATE_KEY]: state });
-        },
-        'TaskManager.saveState',
-        {
-          maxAttempts: RETRY.MAX_ATTEMPTS,
-          initialDelay: RETRY.INITIAL_DELAY_MS,
-          maxDelay: RETRY.MAX_DELAY_MS,
-        },
-      );
-    } catch (error) {
-      Logger.warn('[TaskManager] Failed to persist task state', { error });
-      throw error;
-    } finally {
-      release();
-    }
+    return this.stateMutex.withLock(async () => {
+      try {
+        await ErrorHandler.withRetry(
+          async () => {
+            const state: PersistedTaskState = {
+              tasks: Array.from(this.tasks.values()),
+              queue: [...this.queue],
+              currentTaskId: this.currentTaskId,
+              savedAt: Date.now(),
+            };
+            await chrome.storage.local.set({ [STORAGE.TASK_STATE_KEY]: state });
+          },
+          'TaskManager.saveState',
+          {
+            maxAttempts: RETRY.MAX_ATTEMPTS,
+            initialDelay: RETRY.INITIAL_DELAY_MS,
+            maxDelay: RETRY.MAX_DELAY_MS,
+          },
+        );
+      } catch (error) {
+        Logger.warn('[TaskManager] Failed to persist task state', { error });
+        throw error;
+      }
+    });
   }
 
   /**
    * Notify listeners about task updates
    * @param task - Updated task
    */
-  private notifyTaskUpdate(task: Task): void {
+  private notifyTaskUpdate(task: Task, options: { immediate?: boolean } = {}): void {
+    const taskId = task.id;
+    if (options.immediate) {
+      this.pendingTaskUpdates.delete(taskId);
+      this.flushTaskUpdate(task);
+      return;
+    }
+
+    this.pendingTaskUpdates.set(taskId, task);
+    if (this.taskUpdateThrottleTimer) {
+      return;
+    }
+
+    this.taskUpdateThrottleTimer = setTimeout(() => {
+      this.taskUpdateThrottleTimer = null;
+      const buffered = Array.from(this.pendingTaskUpdates.values());
+      this.pendingTaskUpdates.clear();
+      for (const buffered_task of buffered) {
+        this.flushTaskUpdate(buffered_task);
+      }
+    }, TIMING.TASK_UPDATE_NOTIFY_THROTTLE_MS);
+  }
+
+  private flushTaskUpdate(task: Task): void {
     chrome.runtime
       .sendMessage({
         type: 'TASK_UPDATE',
         payload: task,
       })
-      .catch(() => {
-        // Expected: no listeners active (popup closed)
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        if (
+          message.includes(CHROME_MESSAGE_ERRORS.PORT_CLOSED) ||
+          message.includes(CHROME_MESSAGE_ERRORS.RECEIVING_END_MISSING)
+        ) {
+          Logger.debug('[TaskManager] Task update listener unavailable', {
+            taskId: task.id,
+            error: message,
+          });
+          return;
+        }
+        Logger.warn('[TaskManager] Failed to notify task update', {
+          taskId: task.id,
+          error: message,
+        });
       });
   }
 }

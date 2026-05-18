@@ -78,4 +78,29 @@ export default tseslint.config(
       'no-useless-escape': 'off',
     },
   },
+  {
+    files: ['tests/**/*.{ts,tsx}'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...globals.browser,
+        ...globals.es2021,
+        // Vitest exposes describe/it/expect/etc. as test-time globals via the
+        // built-in setup. Listing them here keeps IDEs and ESLint quiet without
+        // forcing every spec to import them.
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        vi: 'readonly',
+        beforeAll: 'readonly',
+        beforeEach: 'readonly',
+        afterAll: 'readonly',
+        afterEach: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
 );

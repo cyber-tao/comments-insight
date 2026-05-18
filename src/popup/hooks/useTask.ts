@@ -71,6 +71,9 @@ export function useTask(options: UseTaskOptions = {}) {
             message: task.message || task.error,
             detailedProgress: task.detailedProgress,
           };
+          if (isUnmountedRef.current || monitorGenerationRef.current !== currentGeneration) {
+            return;
+          }
           setCurrentTask(updatedTask);
 
           if (task.status === 'running' || task.status === 'pending') {

@@ -151,6 +151,8 @@
     "importSettings": "Importar configuración",
     "saveSettings": "Guardar configuración",
     "advancedSettings": "Configuración avanzada",
+    "outputLevel": "Nivel de salida de registro",
+    "outputLevelHint": "Controla el nivel de gravedad mínimo para los registros del sistema",
     "aiTimeout": "Tiempo de espera de IA (segundos)",
     "saving": "Guardando...",
     "savedSuccess": "¡Configuración guardada exitosamente!",
@@ -189,6 +191,9 @@
     "configureApiFirst": "Por favor, configure primero la URL y la clave API",
     "modelsFound": "Se encontraron {{count}} modelos",
     "noModelsFound": "No se encontraron modelos o la API no admite la lista de modelos",
+    "searchModels": "Escriba para buscar modelos...",
+    "noMatchingModels": "No hay modelos coincidentes",
+    "matchingModelsCount": "{{filtered}} / {{total}} modelos",
     "fetchModelsFailed": "Error al obtener los modelos",
     "configureAllFields": "Por favor, configure todos los campos requeridos",
     "crawlingConfigs": {
@@ -391,7 +396,11 @@
     "extractionFailed": "Falló la extracción: {{error}}",
     "analysisFailed": "Falló el análisis: {{error}}",
     "commentsCount": " ({{count}} comentarios)",
-    "commentsAnalyzed": " ({{count}} comentarios analizados)"
+    "commentsAnalyzed": " ({{count}} comentarios analizados)",
+    "configGenerationCompleted": "Generación de configuración completada para \"{{title}}\"",
+    "configGenerationFailed": "Generación de configuración fallida: {{error}}",
+    "viewResults": "Ver resultados",
+    "dismiss": "Cerrar"
   },
   "export": {
     "depth": "Profundidad",

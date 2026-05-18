@@ -1,7 +1,14 @@
-import { Message, PortMessage } from '../types';
+import { Message, PortMessage, MessageType } from '../types';
 import { TaskManager } from './TaskManager';
 import { AIService } from './AIService';
-import { StorageManager } from './StorageManager';
+import { CommentAnalyzer } from './ai/CommentAnalyzer';
+import { TimestampNormalizer } from './ai/TimestampNormalizer';
+import { SettingsStore } from './storage/SettingsStore';
+import { HistoryStore } from './storage/HistoryStore';
+import { EncryptionService } from './storage/EncryptionService';
+import { LogStore } from './storage/LogStore';
+import { TokenStatsStore } from './storage/TokenStatsStore';
+import { CrawlingConfigStore } from './storage/CrawlingConfigStore';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
 import { MESSAGES } from '@/config/constants';
@@ -51,16 +58,96 @@ function toMessage(message: PortMessage): Message {
   } as Message;
 }
 
+type HandlerFunction<T extends Message = Message> = {
+  bivarianceHack: (message: T, context: HandlerContext) => Promise<unknown> | unknown;
+}['bivarianceHack'];
+
 /**
  * MessageRouter handles all incoming messages and routes them
- * to the appropriate service
+ * to the appropriate service using a registry pattern
  */
 export class MessageRouter {
+  private handlers = new Map<MessageType, HandlerFunction>();
+
+  private context: Omit<HandlerContext, 'sender'>;
+
   constructor(
-    private taskManager: TaskManager,
-    private aiService: AIService,
-    private storageManager: StorageManager,
-  ) {}
+    taskManager: TaskManager,
+    aiService: AIService,
+    commentAnalyzer: CommentAnalyzer,
+    timestampNormalizer: TimestampNormalizer,
+    settingsStore: SettingsStore,
+    historyStore: HistoryStore,
+    encryptionService: EncryptionService,
+    logStore: LogStore,
+    tokenStatsStore: TokenStatsStore,
+    crawlingConfigStore: CrawlingConfigStore,
+  ) {
+    this.context = {
+      taskManager,
+      aiService,
+      commentAnalyzer,
+      timestampNormalizer,
+      settingsStore,
+      historyStore,
+      encryptionService,
+      logStore,
+      tokenStatsStore,
+      crawlingConfigStore,
+    };
+    this.registerHandlers();
+  }
+
+  /**
+   * Register all message handlers in the registry
+   */
+  private registerHandlers(): void {
+    this.register(MESSAGES.PING, miscHandlers.handlePing);
+    this.register(MESSAGES.ENSURE_CONTENT_SCRIPT, miscHandlers.handleEnsureContentScript);
+    this.register(MESSAGES.START_EXTRACTION, extractionHandlers.handleStartExtraction);
+    this.register(MESSAGES.START_CONFIG_GENERATION, extractionHandlers.handleStartConfigGeneration);
+    this.register(MESSAGES.AI_ANALYZE_STRUCTURE, extractionHandlers.handleAIAnalyzeStructure);
+    this.register(MESSAGES.AI_EXTRACT_CONTENT, extractionHandlers.handleAIExtractContent);
+    this.register(
+      MESSAGES.GENERATE_CRAWLING_CONFIG,
+      extractionHandlers.handleGenerateCrawlingConfig,
+    );
+    this.register(MESSAGES.EXTRACTION_COMPLETED, extractionHandlers.handleExtractionCompleted);
+    this.register(
+      MESSAGES.CONFIG_GENERATION_COMPLETED,
+      extractionHandlers.handleConfigGenerationCompleted,
+    );
+    this.register(MESSAGES.EXTRACTION_PROGRESS, extractionHandlers.handleExtractionProgress);
+    this.register(MESSAGES.START_ANALYSIS, extractionHandlers.handleStartAnalysis);
+    this.register(MESSAGES.GET_TASK_STATUS, taskHandlers.handleGetTaskStatus);
+    this.register(MESSAGES.CANCEL_TASK, taskHandlers.handleCancelTask);
+    this.register(MESSAGES.GET_SETTINGS, settingsHandlers.handleGetSettings);
+    this.register(MESSAGES.SAVE_SETTINGS, settingsHandlers.handleSaveSettings);
+    this.register(MESSAGES.IMPORT_SETTINGS, settingsHandlers.handleImportSettings);
+    this.register(MESSAGES.CACHE_SELECTOR, settingsHandlers.handleCacheSelector);
+    this.register(MESSAGES.GET_CRAWLING_CONFIG, settingsHandlers.handleGetCrawlingConfig);
+    this.register(MESSAGES.SAVE_CRAWLING_CONFIG, settingsHandlers.handleSaveCrawlingConfig);
+    this.register(MESSAGES.SYNC_CRAWLING_CONFIGS, settingsHandlers.handleSyncCrawlingConfigs);
+    this.register(MESSAGES.UPDATE_FIELD_VALIDATION, settingsHandlers.handleUpdateFieldValidation);
+    this.register(MESSAGES.GET_HISTORY, historyHandlers.handleGetHistory);
+    this.register(MESSAGES.GET_HISTORY_BY_URL, historyHandlers.handleGetHistoryByUrl);
+    this.register(MESSAGES.EXPORT_DATA, historyHandlers.handleExportData);
+    this.register(MESSAGES.DELETE_HISTORY, historyHandlers.handleDeleteHistory);
+    this.register(MESSAGES.CLEAR_ALL_HISTORY, historyHandlers.handleClearAllHistory);
+    this.register(MESSAGES.GET_AVAILABLE_MODELS, miscHandlers.handleGetAvailableModels);
+    this.register(MESSAGES.TEST_MODEL, miscHandlers.handleTestModel);
+    this.register(MESSAGES.TEST_SELECTOR, miscHandlers.handleTestSelector);
+  }
+
+  /**
+   * Register a handler for a specific message type
+   */
+  private register<T extends MessageType>(
+    type: T,
+    handler: HandlerFunction<Extract<Message, { type: T }>>,
+  ): void {
+    this.handlers.set(type, handler as HandlerFunction);
+  }
 
   /**
    * Handle message from a long-lived port connection
@@ -95,117 +182,26 @@ export class MessageRouter {
     });
 
     const context: HandlerContext = {
-      taskManager: this.taskManager,
-      aiService: this.aiService,
-      storageManager: this.storageManager,
+      ...this.context,
       sender,
     };
 
-    try {
-      switch (validatedMessage.type) {
-        case MESSAGES.PING:
-          return miscHandlers.handlePing(validatedMessage, context);
+    const handler = this.handlers.get(validatedMessage.type);
 
-        case MESSAGES.ENSURE_CONTENT_SCRIPT:
-          return await miscHandlers.handleEnsureContentScript(validatedMessage, context);
-
-        case MESSAGES.START_EXTRACTION:
-          return await extractionHandlers.handleStartExtraction(validatedMessage, context);
-
-        case MESSAGES.START_CONFIG_GENERATION:
-          return await extractionHandlers.handleStartConfigGeneration(validatedMessage, context);
-
-        case MESSAGES.AI_ANALYZE_STRUCTURE:
-          return await extractionHandlers.handleAIAnalyzeStructure(validatedMessage, context);
-
-        case MESSAGES.AI_EXTRACT_CONTENT:
-          return await extractionHandlers.handleAIExtractContent(validatedMessage, context);
-
-        case MESSAGES.GENERATE_CRAWLING_CONFIG:
-          return await extractionHandlers.handleGenerateCrawlingConfig(validatedMessage, context);
-
-        case MESSAGES.EXTRACTION_COMPLETED:
-          return await extractionHandlers.handleExtractionCompleted(validatedMessage, context);
-
-        case MESSAGES.CONFIG_GENERATION_COMPLETED:
-          return await extractionHandlers.handleConfigGenerationCompleted(
-            validatedMessage,
-            context,
-          );
-
-        case MESSAGES.EXTRACTION_PROGRESS:
-          return extractionHandlers.handleExtractionProgress(validatedMessage, context);
-
-        case MESSAGES.START_ANALYSIS:
-          return await extractionHandlers.handleStartAnalysis(validatedMessage, context);
-
-        case MESSAGES.GET_TASK_STATUS:
-          return taskHandlers.handleGetTaskStatus(validatedMessage, context);
-
-        case MESSAGES.CANCEL_TASK:
-          return taskHandlers.handleCancelTask(validatedMessage, context);
-
-        case MESSAGES.GET_SETTINGS:
-          return await settingsHandlers.handleGetSettings(validatedMessage, context);
-
-        case MESSAGES.SAVE_SETTINGS:
-          return await settingsHandlers.handleSaveSettings(validatedMessage, context);
-
-        case MESSAGES.IMPORT_SETTINGS:
-          return await settingsHandlers.handleImportSettings(validatedMessage, context);
-
-        case MESSAGES.CACHE_SELECTOR:
-          return await settingsHandlers.handleCacheSelector(validatedMessage, context);
-
-        case MESSAGES.GET_CRAWLING_CONFIG:
-          return await settingsHandlers.handleGetCrawlingConfig(validatedMessage, context);
-
-        case MESSAGES.SAVE_CRAWLING_CONFIG:
-          return await settingsHandlers.handleSaveCrawlingConfig(validatedMessage, context);
-
-        case MESSAGES.SYNC_CRAWLING_CONFIGS:
-          return await settingsHandlers.handleSyncCrawlingConfigs(validatedMessage, context);
-
-        case MESSAGES.UPDATE_FIELD_VALIDATION:
-          return await settingsHandlers.handleUpdateFieldValidation(validatedMessage, context);
-
-        case MESSAGES.GET_HISTORY:
-          return await historyHandlers.handleGetHistory(validatedMessage, context);
-
-        case MESSAGES.GET_HISTORY_BY_URL:
-          return await historyHandlers.handleGetHistoryByUrl(validatedMessage, context);
-
-        case MESSAGES.EXPORT_DATA:
-          return await historyHandlers.handleExportData(validatedMessage, context);
-
-        case MESSAGES.DELETE_HISTORY:
-          return await historyHandlers.handleDeleteHistory(validatedMessage, context);
-
-        case MESSAGES.CLEAR_ALL_HISTORY:
-          return await historyHandlers.handleClearAllHistory(validatedMessage, context);
-
-        case MESSAGES.GET_AVAILABLE_MODELS:
-          return await miscHandlers.handleGetAvailableModels(validatedMessage, context);
-
-        case MESSAGES.TEST_MODEL:
-          return await miscHandlers.handleTestModel(validatedMessage, context);
-
-        case MESSAGES.TEST_SELECTOR:
-          return await miscHandlers.handleTestSelector(validatedMessage, context);
-
-        // Messages handled by content script, ignored by background
-        case MESSAGES.GET_PLATFORM_INFO:
-        case MESSAGES.GET_DOM_STRUCTURE:
-        case MESSAGES.CANCEL_EXTRACTION:
-          return;
-
-        default:
-          throw new ExtensionError(
-            ErrorCode.VALIDATION_ERROR,
-            `Unknown message type: ${(message as { type: string }).type}`,
-            { type: (message as { type: string }).type },
-          );
+    if (!handler) {
+      if (this.isContentScriptMessage(validatedMessage.type)) {
+        return;
       }
+
+      throw new ExtensionError(
+        ErrorCode.VALIDATION_ERROR,
+        `Unknown message type: ${validatedMessage.type}`,
+        { type: validatedMessage.type },
+      );
+    }
+
+    try {
+      return await handler(validatedMessage, context);
     } catch (error) {
       await ErrorHandler.handleError(
         error as Error,
@@ -213,5 +209,16 @@ export class MessageRouter {
       );
       throw error;
     }
+  }
+
+  /**
+   * Check if a message type is handled by content script
+   */
+  private isContentScriptMessage(type: MessageType): boolean {
+    return (
+      type === MESSAGES.GET_PLATFORM_INFO ||
+      type === MESSAGES.GET_DOM_STRUCTURE ||
+      type === MESSAGES.CANCEL_EXTRACTION
+    );
   }
 }
