@@ -57,6 +57,7 @@ export class AIStrategy implements ExtractionStrategy {
     // 0. Load Settings
     const hostname = getCurrentHostname();
     let domConfig = DOM_ANALYSIS_DEFAULTS;
+    let aiTimeout = AI.DEFAULT_TIMEOUT;
     let aiConfig = {
       contextWindowSize: AI.DEFAULT_CONTEXT_WINDOW,
       maxOutputTokens: AI.DEFAULT_MAX_OUTPUT_TOKENS,
@@ -73,6 +74,9 @@ export class AIStrategy implements ExtractionStrategy {
             contextWindowSize: resp.settings.aiModel.contextWindowSize || AI.DEFAULT_CONTEXT_WINDOW,
             maxOutputTokens: resp.settings.aiModel.maxOutputTokens || AI.DEFAULT_MAX_OUTPUT_TOKENS,
           };
+        }
+        if (typeof resp.settings.aiTimeout === 'number' && resp.settings.aiTimeout > 0) {
+          aiTimeout = resp.settings.aiTimeout;
         }
       }
     } catch (e) {
@@ -110,6 +114,7 @@ export class AIStrategy implements ExtractionStrategy {
       detectMaxNodes,
       maxChunkTokens,
       signal,
+      aiTimeout,
     );
 
     // Check abort status after detection
@@ -261,7 +266,7 @@ export class AIStrategy implements ExtractionStrategy {
             allComments.length,
             maxComments,
           );
-          newComments = await this.extractFromChunks(chunksToProcess, signal);
+          newComments = await this.extractFromChunks(chunksToProcess, signal, aiTimeout);
         }
 
         // Check abort status after AI extraction
@@ -317,6 +322,7 @@ export class AIStrategy implements ExtractionStrategy {
         undefined,
         sectionSelector,
         signal,
+        aiTimeout,
       );
       if (config) {
         await this.saveGeneratedConfig(hostname, config);
@@ -328,7 +334,11 @@ export class AIStrategy implements ExtractionStrategy {
     return result;
   }
 
-  private async extractFromChunks(chunks: string[], signal?: AbortSignal): Promise<Comment[]> {
+  private async extractFromChunks(
+    chunks: string[],
+    signal?: AbortSignal,
+    timeoutMs: number = AI.DEFAULT_TIMEOUT,
+  ): Promise<Comment[]> {
     const allComments: Comment[] = [];
 
     const tasks = chunks.map((chunk, i) => async () => {
@@ -342,6 +352,7 @@ export class AIStrategy implements ExtractionStrategy {
             },
           },
           signal,
+          timeoutMs,
         );
 
         if (response?.error) {
@@ -398,11 +409,15 @@ export class AIStrategy implements ExtractionStrategy {
 
     const hostname = getCurrentHostname();
     let domConfig = DOM_ANALYSIS_DEFAULTS;
+    let aiTimeout = AI.DEFAULT_TIMEOUT;
 
     try {
       const resp = await sendMessage<{ settings: Settings }>({ type: MESSAGES.GET_SETTINGS });
       if (resp?.settings?.domAnalysisConfig) {
         domConfig = resp.settings.domAnalysisConfig;
+      }
+      if (typeof resp?.settings?.aiTimeout === 'number' && resp.settings.aiTimeout > 0) {
+        aiTimeout = resp.settings.aiTimeout;
       }
     } catch (e) {
       Logger.warn('[AIStrategy] Failed to load settings, using defaults', { error: e });
@@ -429,6 +444,7 @@ export class AIStrategy implements ExtractionStrategy {
       onProgress,
       undefined,
       signal,
+      aiTimeout,
     );
     if (config) {
       await this.saveGeneratedConfig(hostname, config, onProgress);

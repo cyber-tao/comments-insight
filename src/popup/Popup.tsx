@@ -66,7 +66,8 @@ const Popup: React.FC = () => {
       await loadVersion();
       await loadBootstrapSettings();
       if (info?.url) {
-        await loadCurrentTask(info.url);
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        await loadCurrentTask(info.url, tab?.id);
       }
     };
     void init();

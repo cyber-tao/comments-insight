@@ -132,6 +132,7 @@ vi.stubGlobal('chrome', {
   },
   tabs: {
     create: vi.fn(),
+    query: vi.fn(),
   },
 });
 
@@ -164,6 +165,9 @@ describe('Popup', () => {
     vi.mocked(chrome.runtime.getURL).mockImplementation(
       (path: string) => `chrome-extension://${path}`,
     );
+    (chrome.tabs.query as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 7, url: 'https://example.com/video' } as chrome.tabs.Tab,
+    ]);
     usePageInfoMock.mockReturnValue({
       loading: false,
       pageInfo: {
@@ -232,7 +236,7 @@ describe('Popup', () => {
     const pageInfoHook = usePageInfoMock.mock.results[0]?.value;
     const taskHook = useTaskMock.mock.results[0]?.value;
     expect(pageInfoHook.loadPageInfo).toHaveBeenCalledOnce();
-    expect(taskHook.loadCurrentTask).toHaveBeenCalledWith('https://example.com/video');
+    expect(taskHook.loadCurrentTask).toHaveBeenCalledWith('https://example.com/video', 7);
     expect(screen.getByText('status:https://example.com/video:extracted')).toBeTruthy();
   });
 

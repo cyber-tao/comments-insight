@@ -42,7 +42,11 @@ const getTools = () => {
   return { domAnalyzer, commentExtractor };
 };
 
-function sendCancelledCompletion(taskId: string, taskType: 'extract' | 'config'): void {
+function sendCancelledCompletion(
+  taskId: string,
+  taskType: 'extract' | 'config',
+  error: string = TEXT.EXTRACTION_CANCELLED_BY_USER,
+): void {
   const type =
     taskType === 'config' ? MESSAGES.CONFIG_GENERATION_COMPLETED : MESSAGES.EXTRACTION_COMPLETED;
   chrome.runtime
@@ -51,7 +55,7 @@ function sendCancelledCompletion(taskId: string, taskType: 'extract' | 'config')
       payload: {
         taskId,
         success: false,
-        error: TEXT.EXTRACTION_CANCELLED_BY_USER,
+        error,
       },
     })
     .catch((e) => {
@@ -148,7 +152,14 @@ async function handleStartExtraction(
 
   Logger.info('[Content] Starting extraction', { taskId });
 
-  const controller = globalExtractionState.beginTask(taskId, 'extract');
+  const { controller, supersededTask } = globalExtractionState.beginTask(taskId, 'extract');
+  if (supersededTask) {
+    sendCancelledCompletion(
+      supersededTask.taskId,
+      supersededTask.taskType,
+      'Extraction superseded by a newer task',
+    );
+  }
 
   try {
     // Use the unified extractor interface
@@ -241,7 +252,14 @@ async function handleStartConfigGeneration(
   const { taskId } = data;
   Logger.info('[Content] Starting config generation', { taskId });
 
-  const controller = globalExtractionState.beginTask(taskId, 'config');
+  const { controller, supersededTask } = globalExtractionState.beginTask(taskId, 'config');
+  if (supersededTask) {
+    sendCancelledCompletion(
+      supersededTask.taskId,
+      supersededTask.taskType,
+      'Extraction superseded by a newer task',
+    );
+  }
 
   try {
     const { domAnalyzer } = getTools();

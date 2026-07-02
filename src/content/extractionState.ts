@@ -5,6 +5,16 @@ const SAFETY_TIMEOUT_MS =
 
 type ContentTaskType = 'extract' | 'config';
 
+export interface SupersededContentTask {
+  taskId: string;
+  taskType: ContentTaskType;
+}
+
+export interface BeginTaskResult {
+  controller: AbortController;
+  supersededTask?: SupersededContentTask;
+}
+
 class ExtractionStateManager {
   private active = false;
   private activeTaskId: string | null = null;
@@ -12,8 +22,13 @@ class ExtractionStateManager {
   private abortController: AbortController | null = null;
   private safetyTimer: ReturnType<typeof setTimeout> | null = null;
 
-  beginTask(taskId: string, taskType: ContentTaskType): AbortController {
+  beginTask(taskId: string, taskType: ContentTaskType): BeginTaskResult {
+    let supersededTask: SupersededContentTask | undefined;
     if (this.abortController && this.activeTaskId !== taskId) {
+      supersededTask = {
+        taskId: this.activeTaskId!,
+        taskType: this.activeTaskType || 'extract',
+      };
       this.abortController.abort();
     }
 
@@ -32,7 +47,7 @@ class ExtractionStateManager {
       this.safetyTimer = null;
     }, SAFETY_TIMEOUT_MS);
 
-    return controller;
+    return { controller, supersededTask };
   }
 
   isCurrentTask(taskId: string, controller: AbortController): boolean {

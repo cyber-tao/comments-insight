@@ -117,7 +117,16 @@ function resolveRunningCompletionTask(
     return task;
   }
 
-  const recoveredTask = context.taskManager.recoverInterruptedTask(taskId);
+  const senderTabId = context.sender?.tab?.id;
+  const maxAgeMs =
+    completionType === 'config'
+      ? TIMEOUT.CONFIG_TASK_COMPLETION_MS
+      : TIMEOUT.EXTRACTION_TASK_COMPLETION_MS;
+  const recoveredTask = context.taskManager.recoverInterruptedTask(taskId, {
+    taskType: completionType === 'config' ? 'config' : 'extract',
+    senderTabId,
+    maxAgeMs,
+  });
   if (recoveredTask?.status === 'running') {
     return recoveredTask;
   }
@@ -330,76 +339,75 @@ export async function handleExtractionCompleted(
   }
 
   if (success) {
-    if (comments && comments.length > 0) {
-      let normalizedComments = comments;
-      let normalizedPostTime = postInfo?.videoTime;
-      try {
-        const settings = await context.settingsStore.getSettings();
-        if (settings.normalizeTimestamps) {
-          const totalCount = comments.length + (postInfo?.videoTime ? 1 : 0);
-          context.taskManager.updateTaskProgress(
-            taskId,
-            EXTRACTION_PROGRESS.NORMALIZING,
-            `normalizing:0:${totalCount}`,
-          );
-          const pad = (value: number) => value.toString().padStart(DATE_TIME.PAD_LENGTH, '0');
-          const now = new Date();
-          const referenceTime = `${now.getFullYear()}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${pad(
-            now.getMonth() + DATE_TIME.MONTH_OFFSET,
-          )}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${pad(now.getDate())}T${pad(
-            now.getHours(),
-          )}${DATE_TIME.DISPLAY_TIME_SEPARATOR}${pad(now.getMinutes())}`;
-          normalizedComments = await context.timestampNormalizer.normalizeCommentTimestamps(
-            comments,
-            settings.aiModel,
-            referenceTime,
-            settings.aiTimeout,
-          );
-          normalizedPostTime = await context.timestampNormalizer.normalizeSingleTimestamp(
-            postInfo?.videoTime,
-            settings.aiModel,
-            referenceTime,
-            settings.aiTimeout,
-          );
-          context.taskManager.updateTaskProgress(
-            taskId,
-            EXTRACTION_PROGRESS.NORMALIZING,
-            `normalizing:${totalCount}:${totalCount}`,
-          );
-        }
-      } catch (normalizationError) {
-        Logger.warn('[ExtractionHandler] Timestamp normalization failed', {
-          error: normalizationError,
-        });
-      }
-
-      const historyItem = {
-        id: generateUniqueId('history'),
-        url: postInfo?.url || task.url,
-        title: postInfo?.title || TEXT.UNTITLED,
-        platform: task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM,
-        videoTime: normalizedPostTime,
-        postContent: postInfo?.postContent,
-        extractedAt: Date.now(),
-        commentsCount: normalizedComments.length,
-        comments: normalizedComments,
-      };
-      try {
-        await context.historyStore.saveHistory(historyItem);
-      } catch (saveError) {
-        Logger.error('[ExtractionHandler] Failed to save extraction history', { saveError });
-        const historyError = new ExtensionError(
-          ErrorCode.STORAGE_WRITE_ERROR,
-          'Failed to save extraction history',
+    const rawComments = comments || [];
+    let normalizedComments = rawComments;
+    let normalizedPostTime = postInfo?.videoTime;
+    try {
+      const settings = await context.settingsStore.getSettings();
+      if (settings.normalizeTimestamps && rawComments.length > 0) {
+        const totalCount = rawComments.length + (postInfo?.videoTime ? 1 : 0);
+        context.taskManager.updateTaskProgress(
+          taskId,
+          EXTRACTION_PROGRESS.NORMALIZING,
+          `normalizing:0:${totalCount}`,
         );
-        context.taskManager.failTask(taskId, historyError.message);
-        return { success: false };
+        const pad = (value: number) => value.toString().padStart(DATE_TIME.PAD_LENGTH, '0');
+        const now = new Date();
+        const referenceTime = `${now.getFullYear()}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${pad(
+          now.getMonth() + DATE_TIME.MONTH_OFFSET,
+        )}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${pad(now.getDate())}T${pad(
+          now.getHours(),
+        )}${DATE_TIME.DISPLAY_TIME_SEPARATOR}${pad(now.getMinutes())}`;
+        normalizedComments = await context.timestampNormalizer.normalizeCommentTimestamps(
+          rawComments,
+          settings.aiModel,
+          referenceTime,
+          settings.aiTimeout,
+        );
+        normalizedPostTime = await context.timestampNormalizer.normalizeSingleTimestamp(
+          postInfo?.videoTime,
+          settings.aiModel,
+          referenceTime,
+          settings.aiTimeout,
+        );
+        context.taskManager.updateTaskProgress(
+          taskId,
+          EXTRACTION_PROGRESS.NORMALIZING,
+          `normalizing:${totalCount}:${totalCount}`,
+        );
       }
+    } catch (normalizationError) {
+      Logger.warn('[ExtractionHandler] Timestamp normalization failed', {
+        error: normalizationError,
+      });
+    }
+
+    const historyItem = {
+      id: generateUniqueId('history'),
+      url: postInfo?.url || task.url,
+      title: postInfo?.title || TEXT.UNTITLED,
+      platform: task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM,
+      videoTime: normalizedPostTime,
+      postContent: postInfo?.postContent,
+      extractedAt: Date.now(),
+      commentsCount: normalizedComments.length,
+      comments: normalizedComments,
+    };
+    try {
+      await context.historyStore.saveHistory(historyItem);
+    } catch (saveError) {
+      Logger.error('[ExtractionHandler] Failed to save extraction history', { saveError });
+      const historyError = new ExtensionError(
+        ErrorCode.STORAGE_WRITE_ERROR,
+        'Failed to save extraction history',
+      );
+      context.taskManager.failTask(taskId, historyError.message);
+      return { success: false };
     }
 
     context.taskManager.completeTask(taskId, {
       tokensUsed: 0,
-      commentsCount: comments?.length || 0,
+      commentsCount: normalizedComments.length,
       title: postInfo?.title || postInfo?.url,
     });
   } else {
@@ -644,13 +652,16 @@ export async function handleStartAnalysis(
 
     if (historyId) {
       const historyItem = await context.historyStore.getHistoryItem(historyId);
-      if (historyItem) {
-        platform = historyItem.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
-        url = historyItem.url || ANALYSIS_FORMAT.UNKNOWN_URL;
-        title = historyItem.title || TEXT.UNTITLED;
-        videoTime = historyItem.videoTime || ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
-        postContent = historyItem.postContent || ANALYSIS_FORMAT.UNKNOWN_CONTENT;
+      if (!historyItem) {
+        throw new ExtensionError(ErrorCode.TASK_NOT_FOUND, `History item not found: ${historyId}`, {
+          historyId,
+        });
       }
+      platform = historyItem.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
+      url = historyItem.url || ANALYSIS_FORMAT.UNKNOWN_URL;
+      title = historyItem.title || TEXT.UNTITLED;
+      videoTime = historyItem.videoTime || ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
+      postContent = historyItem.postContent || ANALYSIS_FORMAT.UNKNOWN_CONTENT;
     } else {
       platform = task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
       url = task.url || ANALYSIS_FORMAT.UNKNOWN_URL;
@@ -690,11 +701,16 @@ export async function handleStartAnalysis(
     try {
       if (historyId) {
         const historyItem = await context.historyStore.getHistoryItem(historyId);
-        if (historyItem) {
-          historyItem.analysis = result;
-          historyItem.analyzedAt = Date.now();
-          await context.historyStore.saveHistory(historyItem);
+        if (!historyItem) {
+          throw new ExtensionError(
+            ErrorCode.TASK_NOT_FOUND,
+            `History item not found: ${historyId}`,
+            { historyId },
+          );
         }
+        historyItem.analysis = result;
+        historyItem.analyzedAt = Date.now();
+        await context.historyStore.saveHistory(historyItem);
       } else {
         await context.historyStore.saveHistory({
           id: generateUniqueId('history'),

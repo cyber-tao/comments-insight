@@ -322,7 +322,7 @@ describe('MessageRouter', () => {
       expect(mockPort.postMessage).toHaveBeenCalledWith({
         id: '',
         response: expect.objectContaining({
-          error: expect.stringContaining('Invalid port message received'),
+          error: expect.stringContaining('correlation ID is required'),
         }),
       });
     });
@@ -340,6 +340,51 @@ describe('MessageRouter', () => {
         response: expect.objectContaining({
           error: expect.stringContaining('Port sender is required'),
         }),
+      });
+    });
+  });
+
+  describe('handlePortMessage', () => {
+    it('deduplicates repeated AI bridge requests by correlation id', async () => {
+      const extractionHandlers = await import('../src/background/handlers/extraction');
+      const handleAIExtractContentMock = vi.mocked(extractionHandlers.handleAIExtractContent);
+      handleAIExtractContentMock.mockImplementation(async () => {
+        await Promise.resolve();
+        return {
+          comments: [
+            { id: 'c1', username: 'u', content: 'x', likes: 0, timestamp: 't', replies: [] },
+          ],
+        };
+      });
+      const firstPort = createMockPort();
+      const secondPort = createMockPort();
+      const message: PortMessage = {
+        id: 'shared-request-id',
+        type: MESSAGES.AI_EXTRACT_CONTENT,
+        payload: { chunks: ['<div>comment</div>'] },
+      };
+
+      await Promise.all([
+        router.handlePortMessage(firstPort, message),
+        router.handlePortMessage(secondPort, message),
+      ]);
+
+      expect(handleAIExtractContentMock).toHaveBeenCalledTimes(1);
+      expect(firstPort.postMessage).toHaveBeenCalledWith({
+        id: 'shared-request-id',
+        response: {
+          comments: [
+            { id: 'c1', username: 'u', content: 'x', likes: 0, timestamp: 't', replies: [] },
+          ],
+        },
+      });
+      expect(secondPort.postMessage).toHaveBeenCalledWith({
+        id: 'shared-request-id',
+        response: {
+          comments: [
+            { id: 'c1', username: 'u', content: 'x', likes: 0, timestamp: 't', replies: [] },
+          ],
+        },
       });
     });
   });

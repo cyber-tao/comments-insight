@@ -173,6 +173,38 @@ describe('popup hooks', () => {
     expect(result.current.currentTask).toBeNull();
   });
 
+  it('useTask matches current task by tab id when multiple tabs share the same url', async () => {
+    extensionApiMock.getTasks.mockResolvedValue([
+      createTask({
+        id: 'task-other-tab',
+        tabId: 99,
+        status: 'running',
+      }),
+      createTask({
+        id: TASK_ID,
+        tabId: TAB_ID,
+        status: 'running',
+      }),
+    ]);
+    extensionApiMock.getTaskStatus.mockResolvedValue(
+      createTask({ id: TASK_ID, tabId: TAB_ID, status: 'running', progress: 55 }),
+    );
+
+    const { result } = renderHook(() => useTask());
+
+    await act(async () => {
+      await result.current.loadCurrentTask(PAGE_URL, TAB_ID);
+      await Promise.resolve();
+    });
+
+    expect(result.current.currentTask).toMatchObject({
+      id: TASK_ID,
+      status: 'running',
+      progress: 55,
+    });
+    expect(extensionApiMock.getTaskStatus).toHaveBeenCalledWith(TASK_ID);
+  });
+
   it('useTask starts extraction once and blocks duplicate starts while pending', async () => {
     vi.useFakeTimers();
     extensionApiMock.getTaskStatus.mockResolvedValue(

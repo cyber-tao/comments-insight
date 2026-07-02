@@ -68,6 +68,8 @@ type HandlerFunction<T extends Message = Message> = {
  */
 export class MessageRouter {
   private handlers = new Map<MessageType, HandlerFunction>();
+  private portMessageInFlight = new Map<string, Promise<unknown>>();
+  private portMessageResponses = new Map<string, unknown>();
 
   private context: Omit<HandlerContext, 'sender'>;
 
@@ -157,14 +159,37 @@ export class MessageRouter {
   async handlePortMessage(port: chrome.runtime.Port, message: PortMessage): Promise<void> {
     const correlationId = message.id;
     try {
-      const response = await this.handleMessage(toMessage(message), ensurePortSender(port.sender));
+      if (typeof correlationId !== 'string' || correlationId.length === 0) {
+        throw new ExtensionError(
+          ErrorCode.VALIDATION_ERROR,
+          'Port message correlation ID is required',
+        );
+      }
+
+      if (this.portMessageResponses.has(correlationId)) {
+        port.postMessage({
+          id: correlationId,
+          response: this.portMessageResponses.get(correlationId),
+        });
+        return;
+      }
+
+      let responsePromise = this.portMessageInFlight.get(correlationId);
+      if (!responsePromise) {
+        responsePromise = this.handleMessage(toMessage(message), ensurePortSender(port.sender));
+        this.portMessageInFlight.set(correlationId, responsePromise);
+      }
+
+      const response = await responsePromise;
+      this.portMessageResponses.set(correlationId, response);
       port.postMessage({ id: correlationId, response });
     } catch (error) {
       Logger.error('[MessageRouter] Port message handling failed', { error, type: message.type });
-      port.postMessage({
-        id: correlationId,
-        response: { error: error instanceof Error ? error.message : String(error) },
-      });
+      const response = { error: error instanceof Error ? error.message : String(error) };
+      this.portMessageResponses.set(correlationId, response);
+      port.postMessage({ id: correlationId, response });
+    } finally {
+      this.portMessageInFlight.delete(correlationId);
     }
   }
 

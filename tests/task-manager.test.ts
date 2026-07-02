@@ -463,6 +463,46 @@ describe('TaskManager', () => {
       expect(taskManager.getTask(secondTaskId)?.status).toBe('completed');
       expect(executionOrder).toEqual(['first', 'second']);
     });
+
+    it('should wait for a cancelled executor to finish before starting the next task', async () => {
+      let resolveFirstTask: () => void = () => undefined;
+      const firstTaskFinished = new Promise<void>((resolve) => {
+        resolveFirstTask = resolve;
+      });
+      const firstTaskId = taskManager.createTask('extract', 'https://a.com', 'Generic');
+      const secondTaskId = taskManager.createTask('analyze', 'https://b.com', 'Generic');
+      const executionOrder: string[] = [];
+
+      taskManager.setExecutor(firstTaskId, async (_task, signal) => {
+        executionOrder.push('first-start');
+        await firstTaskFinished;
+        signal.throwIfAborted?.();
+        return {};
+      });
+      taskManager.setExecutor(secondTaskId, async () => {
+        executionOrder.push('second-start');
+        return {};
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      taskManager.cancelTask(firstTaskId);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(executionOrder).toEqual(['first-start']);
+      expect(taskManager.getTask(secondTaskId)?.status).toBe('pending');
+
+      resolveFirstTask();
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        if (taskManager.getTask(secondTaskId)?.status === 'completed') {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+
+      expect(taskManager.getTask(firstTaskId)?.status).toBe('failed');
+      expect(taskManager.getTask(secondTaskId)?.status).toBe('completed');
+      expect(executionOrder).toEqual(['first-start', 'second-start']);
+    });
   });
 
   describe('failTask', () => {

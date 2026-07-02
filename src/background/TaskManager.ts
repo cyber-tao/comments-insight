@@ -50,6 +50,12 @@ export interface DetailedProgressUpdate {
 /** Function type for task executors */
 type TaskExecutor = (task: Task, signal: AbortSignal) => Promise<TaskResult>;
 
+interface RecoverInterruptedTaskOptions {
+  taskType?: Task['type'];
+  senderTabId?: number;
+  maxAgeMs?: number;
+}
+
 /** Persisted task state for recovery after extension restart */
 interface PersistedTaskState {
   tasks: Task[];
@@ -510,6 +516,7 @@ export class TaskManager {
       this.queue.splice(queueIndex, 1);
     }
 
+    const wasCurrentTask = this.currentTaskId === taskId;
     this.executors.delete(taskId);
 
     this.abortTask(taskId);
@@ -520,16 +527,14 @@ export class TaskManager {
     task.error = i18n.t(ERROR_KEYS.TASK_CANCELLED_BY_USER);
     task.endTime = Date.now();
 
-    if (this.currentTaskId === taskId) {
-      this.currentTaskId = null;
-    }
-
     Logger.info(`[TaskManager] Task cancelled: ${taskId}`);
     this.notifyTaskUpdate(task, { immediate: true });
     this.saveState().catch((error) => {
       Logger.warn('[TaskManager] Failed to persist cancelled task state', { error });
     });
-    this.processQueue();
+    if (!wasCurrentTask) {
+      this.processQueue();
+    }
   }
 
   /**
@@ -541,7 +546,10 @@ export class TaskManager {
     return this.tasks.get(taskId);
   }
 
-  recoverInterruptedTask(taskId: string): Task | undefined {
+  recoverInterruptedTask(
+    taskId: string,
+    options: RecoverInterruptedTaskOptions = {},
+  ): Task | undefined {
     const task = this.tasks.get(taskId);
     if (!task) {
       Logger.warn(`[TaskManager] Task not found: ${taskId}`);
@@ -549,8 +557,21 @@ export class TaskManager {
     }
 
     const interruptedMessage = i18n.t(ERROR_KEYS.TASK_INTERRUPTED_BY_RESTART);
+    const tabMatchesSender =
+      typeof options.senderTabId !== 'number' ||
+      typeof task.tabId !== 'number' ||
+      task.tabId === options.senderTabId;
+    const taskTypeMatches = !options.taskType || task.type === options.taskType;
+    const withinRecoveryWindow =
+      typeof options.maxAgeMs !== 'number' ||
+      typeof task.endTime !== 'number' ||
+      Date.now() - task.endTime <= options.maxAgeMs;
     const canRecoverFromInterruption =
-      task.status === 'failed' && task.error === interruptedMessage;
+      task.status === 'failed' &&
+      task.error === interruptedMessage &&
+      tabMatchesSender &&
+      taskTypeMatches &&
+      withinRecoveryWindow;
 
     if (task.status === 'running') {
       return task;
@@ -698,6 +719,9 @@ export class TaskManager {
         } finally {
           this.executors.delete(nextTaskId);
           this.clearAbortController(nextTaskId);
+          if (this.currentTaskId === nextTaskId) {
+            this.currentTaskId = null;
+          }
         }
       })
       .catch((error) => {

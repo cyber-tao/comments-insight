@@ -137,4 +137,27 @@ describe('ContentAIService', () => {
     await rejection;
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it('uses the provided timeout instead of the default timeout', async () => {
+    const service = new ContentAIService();
+    const promise = service.callAI(
+      {
+        type: 'AI_EXTRACT_CONTENT',
+        payload: { chunks: ['<div>comment</div>'] },
+      },
+      undefined,
+      123,
+    );
+
+    await vi.advanceTimersByTimeAsync(122);
+    await Promise.resolve();
+    let settled = false;
+    promise.catch(() => {
+      settled = true;
+    });
+    expect(settled).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(promise).rejects.toThrow('AI Bridge response timeout');
+  });
 });

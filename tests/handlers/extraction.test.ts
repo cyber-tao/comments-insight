@@ -399,9 +399,100 @@ describe('extraction handlers', () => {
         stageMessageParams: { characters: 512 },
       });
     });
+
+    it('should fail analysis when history target is missing', async () => {
+      const context = createMockContext({
+        historyStore: {
+          ...createMockContext().historyStore,
+          getHistoryItem: vi.fn().mockResolvedValue(null),
+        },
+      } as unknown as Partial<HandlerContext>);
+      const message = {
+        type: 'START_ANALYSIS' as const,
+        payload: {
+          comments: [
+            {
+              id: 'comment_1',
+              username: 'user',
+              content: 'hello',
+              likes: 0,
+              timestamp: new Date().toISOString(),
+              replies: [],
+            },
+          ],
+          historyId: 'history-missing',
+          metadata: { url: 'https://example.com/post', title: 'Post' },
+        },
+      };
+
+      await handleStartAnalysis(message, context);
+      const setExecutorMock = context.taskManager.setExecutor as unknown as {
+        mock: { calls: unknown[][] };
+      };
+      const executor = setExecutorMock.mock.calls[0][1] as (
+        task: { id: string; url: string; platform?: string },
+        signal: AbortSignal,
+      ) => Promise<unknown>;
+
+      await expect(
+        executor(
+          { id: 'task_123', url: 'https://example.com/post', platform: 'example.com' },
+          new AbortController().signal,
+        ),
+      ).rejects.toMatchObject({
+        code: ErrorCode.TASK_NOT_FOUND,
+        message: 'History item not found: history-missing',
+      });
+      expect(context.commentAnalyzer.analyzeComments).not.toHaveBeenCalled();
+    });
   });
 
   describe('completion payload validation', () => {
+    it('should persist successful extraction even when no comments are found', async () => {
+      const context = createMockContext({
+        taskManager: {
+          ...createMockContext().taskManager,
+          getTask: vi.fn().mockReturnValue({
+            id: 'task_123',
+            type: 'extract',
+            status: 'running',
+            url: 'https://example.com',
+            platform: 'example.com',
+            progress: 80,
+            startTime: Date.now(),
+            tokensUsed: 0,
+          }),
+        },
+      } as unknown as Partial<HandlerContext>);
+      const message = {
+        type: 'EXTRACTION_COMPLETED' as const,
+        payload: {
+          taskId: 'task_123',
+          success: true,
+          comments: [],
+          postInfo: {
+            url: 'https://example.com',
+            title: 'No Comments',
+          },
+        },
+      };
+
+      const result = await handleExtractionCompleted(message, context);
+
+      expect(result).toEqual({ success: true });
+      expect(context.historyStore.saveHistory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'No Comments',
+          commentsCount: 0,
+          comments: [],
+        }),
+      );
+      expect(context.taskManager.completeTask).toHaveBeenCalledWith(
+        'task_123',
+        expect.objectContaining({ commentsCount: 0, title: 'No Comments' }),
+      );
+    });
+
     it('should return false for extraction completion without taskId', async () => {
       const context = createMockContext();
       const message = {
@@ -527,6 +618,51 @@ describe('extraction handlers', () => {
       expect(context.historyStore.saveHistory).not.toHaveBeenCalled();
       expect(context.taskManager.completeTask).not.toHaveBeenCalled();
       expect(context.taskManager.failTask).not.toHaveBeenCalled();
+    });
+
+    it('should ignore recovered completion when sender tab does not match task tab', async () => {
+      const context = createMockContext({
+        sender: {
+          tab: { id: 1 },
+        },
+        taskManager: {
+          ...createMockContext().taskManager,
+          getTask: vi.fn().mockReturnValue({
+            id: 'task_123',
+            type: 'extract',
+            status: 'failed',
+            url: 'https://example.com',
+            tabId: 2,
+            platform: 'example.com',
+            progress: 80,
+            startTime: Date.now(),
+            tokensUsed: 0,
+            error: 'Task interrupted by restart',
+            endTime: Date.now(),
+          }),
+          recoverInterruptedTask: vi.fn().mockReturnValue(undefined),
+          completeTask: vi.fn(),
+          failTask: vi.fn(),
+        },
+      } as unknown as Partial<HandlerContext>);
+
+      const message = {
+        type: 'EXTRACTION_COMPLETED' as const,
+        payload: {
+          taskId: 'task_123',
+          success: true,
+          comments: [],
+        },
+      };
+
+      const result = await handleExtractionCompleted(message, context);
+
+      expect(result).toEqual({ success: false });
+      expect(context.taskManager.recoverInterruptedTask).toHaveBeenCalledWith(
+        'task_123',
+        expect.objectContaining({ senderTabId: 1, taskType: 'extract' }),
+      );
+      expect(context.taskManager.completeTask).not.toHaveBeenCalled();
     });
 
     it('should fail recovered config task when completion reports an error', async () => {

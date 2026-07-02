@@ -192,7 +192,11 @@ export class ContentAIService {
     return this.port;
   }
 
-  async callAI<T>(message: Omit<PortMessage, 'id'>, signal?: AbortSignal): Promise<T> {
+  async callAI<T>(
+    message: Omit<PortMessage, 'id'>,
+    signal?: AbortSignal,
+    timeoutMs: number = AI.DEFAULT_TIMEOUT,
+  ): Promise<T> {
     if (signal?.aborted) {
       throw this.createCancelledError();
     }
@@ -218,7 +222,7 @@ export class ContentAIService {
             this.pendingRequests.delete(requestId);
           }
           reject(new Error('AI Bridge response timeout'));
-        }, AI.DEFAULT_TIMEOUT);
+        }, timeoutMs);
 
         abortHandler = () => {
           const pending = this.pendingRequests.get(requestId);

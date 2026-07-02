@@ -104,12 +104,14 @@ export function useTask(options: UseTaskOptions = {}) {
   );
 
   const loadCurrentTask = useCallback(
-    async (tabUrl: string) => {
+    async (tabUrl: string, tabId?: number) => {
       try {
         const tasks = await ExtensionAPI.getTasks();
         const currentUrlTask = tasks.find(
           (task: Task) =>
-            task.url === tabUrl && (task.status === 'running' || task.status === 'pending'),
+            task.url === tabUrl &&
+            (task.status === 'running' || task.status === 'pending') &&
+            (typeof tabId !== 'number' || typeof task.tabId !== 'number' || task.tabId === tabId),
         );
 
         if (currentUrlTask) {

@@ -33,6 +33,7 @@ export class AIConfigGenerator {
     maxNodes: number,
     maxTokens: number,
     signal?: AbortSignal,
+    timeoutMs: number = AI.DEFAULT_TIMEOUT,
   ): Promise<string | null> {
     try {
       checkAborted(signal);
@@ -127,6 +128,7 @@ export class AIConfigGenerator {
               payload: { prompt },
             },
             signal,
+            timeoutMs,
           );
 
           if (response?.data?.selectors?.commentContainer) {
@@ -172,6 +174,7 @@ export class AIConfigGenerator {
     onProgress?: ConfigGenerationCallback,
     knownSectionSelector?: string | null,
     signal?: AbortSignal,
+    timeoutMs: number = AI.DEFAULT_TIMEOUT,
   ): Promise<CrawlingConfig | null> {
     Logger.info('[AIConfigGenerator] Starting intelligent config generation');
     onProgress?.(EXTRACTION_PROGRESS.CONFIG_ANALYZING, 'Analyzing page macro structure...');
@@ -208,6 +211,7 @@ export class AIConfigGenerator {
           payload: { prompt: metaPrompt },
         },
         signal,
+        timeoutMs,
       );
 
       if (response && response.config) {
@@ -232,6 +236,7 @@ export class AIConfigGenerator {
         detectMaxNodes,
         tokenChunks,
         signal,
+        timeoutMs,
       );
     }
 
@@ -273,6 +278,7 @@ export class AIConfigGenerator {
         payload: { prompt },
       },
       signal,
+      timeoutMs,
     );
 
     if (!response || !response.config) {
