@@ -17,17 +17,18 @@ import {
 } from '@/config/constants';
 import { PROMPT_EXTRACT_COMMENTS_FROM_HTML } from '@/utils/prompts';
 import { sendMessage } from '@/utils/chrome-message';
-import { getCurrentHostname } from '@/utils/url';
+import { getCurrentHostname, extractDomain } from '@/utils/url';
 import { runWithConcurrencyLimit } from '@/utils/promise';
 import { generateCommentHash } from '@/utils/comment-hash';
 import { querySelectorDeep } from '@/utils/dom-query';
-import { ContentAIService } from '../services/ContentAIService';
+import { ContentAIService } from '../ContentAIService';
 import { AIConfigGenerator, ConfigGenerationCallback } from './AIConfigGenerator';
 import { checkAborted, abortableDelay } from '../utils/abort';
 
 export class AIStrategy implements ExtractionStrategy {
   private aiService: ContentAIService;
   private configGenerator: AIConfigGenerator;
+  private simplifier = new DOMSimplifier();
 
   constructor(private pageController: PageController) {
     this.aiService = new ContentAIService();
@@ -228,7 +229,7 @@ export class AIStrategy implements ExtractionStrategy {
           const virtualRoot = document.createElement('div');
           virtualRoot.id = 'ai-incremental-batch';
 
-          const simplifier = new DOMSimplifier();
+          const simplifier = this.simplifier;
           const batchSimplifiedNodes = elementsBatch.map((el) =>
             simplifier.simplifyElement(el, {
               maxDepth: domConfig.maxDepth,
@@ -310,7 +311,13 @@ export class AIStrategy implements ExtractionStrategy {
       observer.disconnect();
     }
 
-    onProgress?.(95, 'validating results', 'validating', allComments.length, maxComments);
+    onProgress?.(
+      EXTRACTION_PROGRESS.MAX,
+      'validating results',
+      'validating',
+      allComments.length,
+      maxComments,
+    );
 
     const result = allComments.slice(0, maxComments);
 
@@ -385,7 +392,7 @@ export class AIStrategy implements ExtractionStrategy {
     onProgress?: ProgressCallback | ConfigGenerationCallback,
   ) {
     onProgress?.(CONFIG_GENERATION_PROGRESS.SAVING, 'Saving verified configuration...');
-    const normalizedDomain = hostname.startsWith('www.') ? hostname.slice(4) : hostname;
+    const normalizedDomain = extractDomain(hostname);
     config.domain = normalizedDomain;
     config.id = normalizedDomain + '_' + Date.now();
     config.lastUpdated = Date.now();

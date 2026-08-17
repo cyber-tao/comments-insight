@@ -1,5 +1,5 @@
-import { Logger } from '../../utils/logger';
-import { PortMessage, PortMessageResponse } from '../../types/handlers';
+import { Logger } from '@/utils/logger';
+import { PortMessage, PortMessageResponse } from '@/types/handlers';
 import { AI, TEXT } from '@/config/constants';
 import { ErrorCode, ExtensionError } from '@/utils/errors';
 

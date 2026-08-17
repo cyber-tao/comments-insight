@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ContentAIService } from '../src/content/services/ContentAIService';
+import { ContentAIService } from '../src/content/ContentAIService';
 import { ErrorCode } from '../src/utils/errors';
 import { AI } from '../src/config/constants';
 
