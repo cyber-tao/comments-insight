@@ -167,13 +167,15 @@ Generate a modern, highly interactive, visually stunning, and responsive standal
    - Include all styling in a <style> block and all interactivity in a <script> block.
    - Do NOT load external JS/CSS dependencies from CDNs so it works completely offline and in a sandboxed iframe.
 
-2. **In-Page Navigation & Standard Section IDs**:
-   The page MUST include a sticky/top navigation bar with in-page anchor links matching these exact section IDs, and the page MUST render these corresponding sections:
-   - \`<section id="overview">\`: Executive Summary, KPI Metric Cards (Total Comments, Sentiment %, Engagement, Key Themes).
-   - \`<section id="sentiment">\`: Sentiment Distribution interactive chart (donut/pie/bar chart using SVG or HTML5 Canvas/CSS) with interactive legend and tooltip.
-   - \`<section id="comments">\`: Hot & Top Comments interactive viewer. MUST render comment cards with user names, like badges, sentiment tags, and text. Provide an in-page search input (\`<input type="text" id="comment-search" placeholder="...">\`) and sentiment filter buttons (All / Positive / Negative / Neutral) with working vanilla JS that filters visible comments in real-time.
-   - \`<section id="insights">\`: Key insights, thematic analysis, positive/negative aspects, and user concerns.
-   - \`<section id="recommendations">\`: Actionable takeaways and suggestions.
+2. **Dashboard Layout & Direct Section Visibility**:
+   - The page MUST be laid out as a rich, full vertical dashboard where ALL 5 sections (#overview, #sentiment, #comments, #insights, #recommendations) are visible and fully populated with real synthesized text and data by default (do NOT hide sections behind unselected tabs or leave them empty).
+   - Top sticky navigation bar provides smooth jump links (\`href="#overview"\`, \`href="#sentiment"\`, \`href="#comments"\`, \`href="#insights"\`, \`href="#recommendations"\`).
+   - Every section MUST be thoroughly populated with real content extracted from the Analysis Report and Comments data:
+     - \`<section id="overview">\`: Key metrics cards (total comments, overall sentiment %, engagement, core topics) and executive summary text.
+     - \`<section id="sentiment">\`: Interactive SVG or Canvas donut/bar chart with percentage breakdown, legend, and hover tooltips.
+     - \`<section id="comments">\`: MUST pre-render HTML comment cards for each top comment in {top_comments_data} directly into the DOM. Include author name, likes badge, sentiment label, and comment body. Provide a working search input (\`<input type="text" id="comment-search" placeholder="...">\`) and sentiment filter pills (All / Positive / Negative / Neutral) that filter visible comment cards in real time.
+     - \`<section id="insights">\`: Thematic breakdown cards, positive highlights, user pain points, and perspective analysis.
+     - \`<section id="recommendations">\`: Actionable takeaways and strategic advice.
 
 3. **Link & Navigation Rules**:
    - In-page navigation links MUST use \`href="#overview"\`, \`href="#sentiment"\`, \`href="#comments"\`, \`href="#insights"\`, \`href="#recommendations"\` and include \`html { scroll-behavior: smooth; }\`.

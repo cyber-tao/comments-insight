@@ -177,6 +177,59 @@ const History: React.FC = () => {
     clearReanalyzeError();
   }, [clearReanalyzeError, selectedHistoryId]);
 
+  const isFullscreen =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('fullscreen') === 'true';
+
+  if (isFullscreen) {
+    return (
+      <div
+        className="flex h-screen w-screen flex-col overflow-hidden"
+        style={{ backgroundColor: 'var(--bg-secondary)' }}
+      >
+        <HistoryDetailPanel
+          selectedItem={selectedItem}
+          selectedItemError={selectedItemError}
+          selectedItemLoading={selectedItemLoading}
+          viewMode={viewMode}
+          exportPostContentInMarkdown={exportPostContentInMarkdown}
+          commentSearchTerm={commentSearchTerm}
+          sortBy={sortBy}
+          commentsPerPage={commentsPerPage}
+          currentPage={currentPage}
+          totalComments={totalComments}
+          totalPages={totalPages}
+          paginatedComments={paginatedComments}
+          isReanalyzing={isReanalyzing}
+          reanalyzeError={reanalyzeError}
+          reanalyzeDetailedProgress={reanalyzeDetailedProgress}
+          reanalyzeMessage={reanalyzeMessage}
+          reanalyzeProgress={reanalyzeProgress}
+          reanalyzeTaskId={reanalyzeTaskId}
+          reanalyzingHistoryId={reanalyzingHistoryId}
+          isGeneratingDynamic={isGeneratingDynamic}
+          generateDynamicError={generateDynamicError}
+          onViewModeChange={setViewMode}
+          onReanalyze={() => {
+            void handleReanalyze();
+          }}
+          onGenerateDynamicReport={() => {
+            void handleGenerateDynamicReport();
+          }}
+          onCommentSearchTermChange={setCommentSearchTerm}
+          onSortByChange={setSortBy}
+          onCommentsPerPageChange={(value) => {
+            setCommentsPerPage(value);
+            setCurrentPage(1);
+          }}
+          onCurrentPageChange={setCurrentPage}
+          formatDate={formatDate}
+        />
+        <ConfirmHost />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen" style={{ backgroundColor: 'var(--bg-secondary)' }}>
       <HistorySidebar

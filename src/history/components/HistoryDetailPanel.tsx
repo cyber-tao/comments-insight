@@ -129,13 +129,23 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
   const hasAnalysis = Boolean(selectedItem.analysis?.markdown?.trim());
   const hasDynamicHtml = Boolean(selectedItem.analysis?.dynamicHtml?.trim());
 
+  const isFullscreen =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('fullscreen') === 'true';
+
   const handleOpenInNewTab = () => {
-    if (!selectedItem?.analysis?.dynamicHtml) return;
-    const blob = new Blob([selectedItem.analysis.dynamicHtml], {
-      type: 'text/html;charset=utf-8',
-    });
-    const blobUrl = URL.createObjectURL(blob);
-    window.open(blobUrl, '_blank');
+    if (!selectedItem?.id) return;
+    const url = chrome.runtime.getURL(
+      `src/history/index.html?id=${selectedItem.id}&tab=dynamic&fullscreen=true`,
+    );
+    window.open(url, '_blank');
+  };
+
+  const handleExitFullscreen = () => {
+    if (!selectedItem?.id) return;
+    window.location.href = chrome.runtime.getURL(
+      `src/history/index.html?id=${selectedItem.id}&tab=dynamic`,
+    );
   };
 
   const reanalyzeProgressMessage = formatTaskProgressMessage({
@@ -157,6 +167,81 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
   const activeReanalyzeTitle = reanalyzeTaskId
     ? `${reanalyzeProgressMessage} #${reanalyzeTaskId}`
     : reanalyzeProgressMessage;
+
+  if (isFullscreen && viewMode === 'dynamic' && hasDynamicHtml) {
+    return (
+      <div
+        className="flex flex-col h-screen w-screen overflow-hidden"
+        style={{ backgroundColor: 'var(--bg-secondary)' }}
+      >
+        <div
+          className="p-3 px-6 flex items-center justify-between border-b shadow-sm z-10 flex-shrink-0"
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            borderColor: 'var(--border-primary)',
+          }}
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={handleExitFullscreen}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium border flex items-center gap-1.5 transition-all hover:scale-105"
+              style={{
+                borderColor: 'var(--border-primary)',
+                color: 'var(--text-primary)',
+                backgroundColor: 'var(--bg-tertiary)',
+              }}
+              title={t('history.backToHistory', '返回历史列表')}
+            >
+              <span>←</span>
+              <span>{t('history.backToHistory', '返回历史列表')}</span>
+            </button>
+            <span
+              className="font-semibold text-base truncate max-w-xl"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {selectedItem.title}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {hasAnalysis && (
+              <button
+                onClick={onGenerateDynamicReport}
+                disabled={isGeneratingDynamic || isReanalyzing}
+                className="px-3.5 py-1.5 rounded-lg text-white text-sm font-medium flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                style={{ backgroundColor: 'var(--accent-secondary)' }}
+                title={t('history.regenerateDynamicTooltip', '重新调用AI生成动态网页')}
+              >
+                <span>{isGeneratingDynamic || isReanalyzing ? '⏳' : '🔄'}</span>
+                <span>
+                  {isGeneratingDynamic || isReanalyzing
+                    ? t('history.generatingDynamicReport', '正在生成动态网页...')
+                    : t('history.regenerateDynamicReport', '重新生成网页')}
+                </span>
+              </button>
+            )}
+            <button
+              onClick={() => exportAnalysisAsHTML(selectedItem)}
+              className="px-3.5 py-1.5 rounded-lg text-white text-sm font-medium flex items-center gap-1.5 transition-all hover:scale-105 shadow-sm"
+              style={{ background: 'var(--gradient-primary)' }}
+              title={t('history.exportHtmlTooltip', '导出独立 HTML 网页文件')}
+            >
+              <span>💾</span>
+              <span>{t('history.exportHtml', '导出 HTML')}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 w-full h-full overflow-hidden">
+          <iframe
+            title={selectedItem.title || 'Dynamic Analysis Report'}
+            srcDoc={selectedItem.analysis?.dynamicHtml}
+            sandbox="allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals"
+            className="w-full h-full border-none"
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
