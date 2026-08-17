@@ -119,18 +119,26 @@ API keys are stored locally (reversible encryption/obfuscation) to avoid acciden
 
 ```
 src/
-  background/            # Service Worker: TaskManager, AIService, storage, handlers
-  content/               # Content Scripts: PageController, Extractor strategies
-  popup/                 # Extension Popup UI
-  options/               # Options Page: Settings & Config Management
-  history/               # History Page: Data visualization
-  logs/                  # Debug Logs Viewer
-  config/                # Constants, default scrapers (5 platforms), analysis parameters
-  components/            # Shared UI components (Toast, etc.)
-  hooks/                 # Shared React Hooks (useTheme, useToast)
-  utils/                 # Helpers: Prompts, Logger, Export, validation, task display, etc.
+  background/            # Service Worker
+    ai/                  # AI helpers: CommentAnalyzer, PromptBuilder, TimestampNormalizer
+    handlers/            # Message handlers: extraction, analysis, config, history, settings, task, misc
+    storage/             # Dexie/chrome.storage stores + DataMigrator
+  content/               # Content Scripts
+    handlers/            # Message handlers: extraction, config-generation, dom
+    strategies/          # AIStrategy, ConfiguredStrategy, AIConfigGenerator
+    utils/               # Chunker, abort helpers
+  popup/                 # Extension popup UI
+  options/               # Options page: settings & scraper configs
+  history/               # History page: browsing & re-analysis
+  logs/                  # Debug logs viewer
+  config/
+    constants/           # Themed constants (ai, dom, extraction, timing, ui, ...)
+    default_rules.json   # Default crawling rules bundle
+  components/            # Shared UI components (Toast, ConfirmDialog)
+  hooks/                 # Shared React hooks (useTheme, useToast, useConfirm)
+  utils/                 # Shared utilities (Logger, Export, validation, tokenizer, ...)
   types/                 # TypeScript definitions
-  locales/               # i18n translation files (5 languages)
+  locales/               # i18n translations (en-US, zh-CN, ja-JP, fr-FR, es-ES)
   styles/                # Global CSS with Tailwind
 vite.config.ts          # Build config
 vitest.config.ts        # Test config
@@ -201,7 +209,7 @@ OpenRouter provides access to various AI models, including free options. Here's 
 
 ## ⚙️ Configuration
 
-- **AI Model**: Supports custom models. Defaults include GPT-4, Claude 3 (Opus/Sonnet/Haiku).
+- **AI Model**: Any OpenAI-compatible Chat Completions endpoint (OpenAI, Anthropic, DeepSeek, Kimi, Qwen, OpenRouter, Ollama, vLLM, etc.).
 - **DOM Analysis**: Configure advanced parameters like `initialDepth`, `expandDepth`, and `maxDepth` for complex pages.
 - **Prompts**: Customize labels/placeholders like `{comments_data}`, `{post_content}`, etc.
 - **Developer Mode**: Enable in Settings to see "View AI Logs" and selector testing tools.

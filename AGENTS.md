@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-`src/` contains the extension code. `background/` handles the MV3 service worker, task orchestration, AI calls, message routing, and storage; `content/` contains extraction logic, page control, AI-assisted config generation, and platform strategies; `popup/`, `options/`, `history/`, and `logs/` are the UI entry points. Shared code lives in `components/`, `hooks/`, `types/`, `utils/`, and `styles/`. `tests/` mirrors runtime areas and includes `handlers/` and `helpers/`. `docs/` holds contributor docs such as `docs/e2e-testing.md`; `images/` stores screenshots and store assets. `dist/` is generated output and should be treated as build artifacts.
+`src/` contains the extension code. `background/` handles the MV3 service worker with sub-folders for AI helpers (`ai/`), message handlers (`handlers/`), and persistence (`storage/`); `content/` contains extraction logic and page control, with `handlers/` (dom, extraction, config), `strategies/` (AI/configured/config-generator), and `utils/` (chunker, abort helpers) sub-folders, plus `ContentAIService.ts` as the long-lived AI port bridge. `popup/`, `options/`, `history/`, and `logs/` are the UI entry points. Shared code lives in `components/`, `hooks/`, `types/`, `utils/`, and `styles/`. `config/constants/` groups themed constant modules; `config/default_rules.json` ships default crawling rules. `tests/` mirrors runtime areas and includes `handlers/` and `helpers/`. `docs/` holds contributor docs such as `docs/e2e-testing.md`; `images/` stores screenshots and store assets. `dist/` is generated output and should be treated as build artifacts.
 
 ## Build, Test, and Development Commands
 
@@ -15,6 +15,17 @@ TypeScript is configured in strict mode. Prettier is the formatting source of tr
 ## Architecture & Runtime Guidance
 
 Background tasks should flow through `TaskManager` and expose user-visible state with `TaskProgress` when work is long-running. AI analysis uses streaming Chat Completions, so progress updates should use `stageMessageKey` and `stageMessageParams` for UI-side i18n rather than raw display strings. History persistence is Dexie-backed IndexedDB with a lightweight `historyMetadata` table for paging and search; avoid reintroducing large history indexes in `chrome.storage`. Message boundaries and persisted storage shapes should be validated with the existing Zod helpers before data enters UI or storage code.
+
+### Data storage versioning
+
+User data (Dexie tables, `chrome.storage.local` keys such as `settings`, `task_state`, `token_stats`, encryption salts, and log indexes) must remain readable across upgrades. The current schema version is tracked via `APP_DATA_VERSION.CURRENT` in `src/config/constants/core.ts` and persisted under `STORAGE.APP_DATA_VERSION_KEY`. When introducing a breaking change to a persisted payload:
+
+1. Bump `APP_DATA_VERSION.CURRENT` in `core.ts`.
+2. Add a migration step to the map returned by `DataMigrator.buildDefaultMigrations()` in `src/background/storage/DataMigrator.ts`. Each step should be idempotent and handle absent/partial legacy data.
+3. Preserve existing `STORAGE.*` key names and Dexie table names/indexes; extend rather than rename.
+4. Add a regression test in `tests/storage-compat.test.ts` covering the previous shape.
+
+The migrator runs once on service worker startup (see `src/background/index.ts`) before `TaskManager.initialize()`.
 
 ## Testing Guidelines
 

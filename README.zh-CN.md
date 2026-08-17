@@ -119,18 +119,26 @@ API 密钥存储在本地（经过简单的混淆处理），旨在防止误操�
 
 ```
 src/
-  background/            # Service Worker: 任务管理器、AI 服务、存储、消息处理器
-  content/               # 内容脚本: 页面控制器、提取策略等
-  popup/                 # 扩展程序弹窗 UI
-  options/               # 选项页: 设置与配置管理
-  history/               # 历史记录页: 数据可视化
+  background/            # Service Worker
+    ai/                  # AI 辅助：CommentAnalyzer、PromptBuilder、TimestampNormalizer
+    handlers/            # 消息处理器：extraction、analysis、config、history、settings、task、misc
+    storage/             # Dexie/chrome.storage 存储 + DataMigrator
+  content/               # 内容脚本
+    handlers/            # 消息处理器：extraction、config-generation、dom
+    strategies/          # AIStrategy、ConfiguredStrategy、AIConfigGenerator
+    utils/               # Chunker、abort 辅助
+  popup/                 # 扩展弹窗 UI
+  options/               # 选项页：设置与爬取配置
+  history/               # 历史页：浏览与重新分析
   logs/                  # 调试日志查看器
-  config/                # 常量定义、默认爬虫规则（5个平台）、分析参数
-  components/            # 共用 UI 组件（Toast 等）
-  hooks/                 # 共享 React Hooks（useTheme、useToast）
-  utils/                 # 工具类: 提示词、日志、导出、校验、任务展示等
+  config/
+    constants/           # 按主题分文件的常量（ai、dom、extraction、timing、ui 等）
+    default_rules.json   # 默认爬取规则
+  components/            # 共用 UI 组件（Toast、ConfirmDialog）
+  hooks/                 # 共用 React Hooks（useTheme、useToast、useConfirm）
+  utils/                 # 共用工具（Logger、Export、validation、tokenizer 等）
   types/                 # TypeScript 类型定义
-  locales/               # i18n 翻译文件（5种语言）
+  locales/               # i18n 翻译（en-US、zh-CN、ja-JP、fr-FR、es-ES）
   styles/                # 全局 CSS（含 Tailwind）
 vite.config.ts          # 构建配置
 vitest.config.ts        # 测试配置
@@ -201,10 +209,10 @@ OpenRouter 提供多种 AI 模型访问，包括免费选项。以下是配置�
 
 ## ⚙️ 配置说明
 
-- **AI 模型**: 支持自定义模型。默认列表含 GPT-4, Claude 3 (Opus/Sonnet/Haiku) 等。
+- **AI 模型**: 支持任意 OpenAI 兼容的 Chat Completions 端点（OpenAI、Anthropic、DeepSeek、Kimi、Qwen、OpenRouter、Ollama、vLLM 等）。
 - **DOM 分析**: 针对复杂页面，支持配置 `initialDepth` (初始深度), `expandDepth` (展开深度) 等高级参数。
 - **提示词**: 可通过 `{comments_data}`, `{post_content}` 等占位符自定义分析逻辑。
-- **开发者模式**: 开启后可在弹窗中查看"AI 日志"和选择器测试工具。
+- **开发者模式**: 开启后可在弹窗中查看“AI 日志”和选择器测试工具。
 
 ## 🧱 技术栈
 
