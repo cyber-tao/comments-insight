@@ -80,24 +80,32 @@ describe('Prompts Utils', () => {
   });
 
   describe('PromptBuilder.extractCleanHtml', () => {
-    it('should extract raw HTML if not enclosed in markdown code fences', () => {
+    it('should extract raw HTML and inject navigation helper', () => {
       const html =
         '<!DOCTYPE html><html><head><title>Test</title></head><body><h1>Hello</h1></body></html>';
-      expect(PromptBuilder.extractCleanHtml(html)).toBe(html);
+      const extracted = PromptBuilder.extractCleanHtml(html);
+      expect(extracted).toContain('<!DOCTYPE html>');
+      expect(extracted).toContain('<h1>Hello</h1>');
+      expect(extracted).toContain('scrollIntoView');
     });
 
-    it('should extract HTML wrapped in ```html code fences', () => {
+    it('should extract HTML wrapped in ```html code fences and sanitize chrome-extension links', () => {
       const raw =
-        'Here is your report:\n```html\n<!DOCTYPE html><html><body><h1>Hello</h1></body></html>\n```\nEnjoy!';
+        'Here is your report:\n```html\n<!DOCTYPE html><html><body><a href="chrome-extension://xyz/src/history/index.html?id=123#comments">Comments</a><h1>Hello</h1><a href="https://example.com">Source</a></body></html>\n```\nEnjoy!';
       const extracted = PromptBuilder.extractCleanHtml(raw);
-      expect(extracted).toBe('<!DOCTYPE html><html><body><h1>Hello</h1></body></html>');
+      expect(extracted).toContain('<!DOCTYPE html>');
+      expect(extracted).toContain('href="#comments"');
+      expect(extracted).toContain('target="_blank"');
+      expect(extracted).toContain('rel="noopener noreferrer"');
     });
 
     it('should strip thinking tags', () => {
       const raw =
         '<think>I need to generate a dashboard</think>\n```html\n<!DOCTYPE html><html><body>Dashboard</body></html>\n```';
       const extracted = PromptBuilder.extractCleanHtml(raw);
-      expect(extracted).toBe('<!DOCTYPE html><html><body>Dashboard</body></html>');
+      expect(extracted).toContain('<!DOCTYPE html>');
+      expect(extracted).toContain('Dashboard');
+      expect(extracted).not.toContain('<think>');
     });
   });
 

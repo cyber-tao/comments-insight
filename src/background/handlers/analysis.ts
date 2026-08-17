@@ -153,6 +153,7 @@ export async function handleStartAnalysis(
               },
             });
           },
+          comments,
         );
 
         if (dynamicResult.html) {
@@ -256,6 +257,8 @@ export async function handleGenerateDynamicReport(
       historyItem.commentsCount || historyItem.comments?.length || 0,
       undefined,
       settings.aiTimeout,
+      undefined,
+      historyItem.comments,
     );
 
     if (dynamicResult.html) {

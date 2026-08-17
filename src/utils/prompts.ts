@@ -158,25 +158,31 @@ Generate a modern, highly interactive, visually stunning, and responsive standal
 ## Analysis Report Content:
 {analysis_markdown}
 
+## Top & Representative Comments Data:
+{top_comments_data}
+
 ## Page Design & Feature Requirements:
 1. **Self-Contained Single File**:
    - Output valid HTML5 starting with <!DOCTYPE html> and ending with </html>.
    - Include all styling in a <style> block and all interactivity in a <script> block.
    - Do NOT load external JS/CSS dependencies from CDNs so it works completely offline and in a sandboxed iframe.
 
-2. **Visual & Aesthetic Excellence**:
-   - Modern, premium dashboard design (clean typography, sleek dark/light responsive theme, smooth gradients, subtle glassmorphic card effects, rounded corners, responsive grid).
-   - Eye-catching header with post title, platform badge, published date, analysis timestamp, and quick summary badges.
+2. **In-Page Navigation & Standard Section IDs**:
+   The page MUST include a sticky/top navigation bar with in-page anchor links matching these exact section IDs, and the page MUST render these corresponding sections:
+   - \`<section id="overview">\`: Executive Summary, KPI Metric Cards (Total Comments, Sentiment %, Engagement, Key Themes).
+   - \`<section id="sentiment">\`: Sentiment Distribution interactive chart (donut/pie/bar chart using SVG or HTML5 Canvas/CSS) with interactive legend and tooltip.
+   - \`<section id="comments">\`: Hot & Top Comments interactive viewer. MUST render comment cards with user names, like badges, sentiment tags, and text. Provide an in-page search input (\`<input type="text" id="comment-search" placeholder="...">\`) and sentiment filter buttons (All / Positive / Negative / Neutral) with working vanilla JS that filters visible comments in real-time.
+   - \`<section id="insights">\`: Key insights, thematic analysis, positive/negative aspects, and user concerns.
+   - \`<section id="recommendations">\`: Actionable takeaways and suggestions.
 
-3. **Graphic & Interactive Visualizations**:
-   - **Key Metrics Overview**: KPI cards with visual indicators (Total Comments, Positive %, Negative %, Key Themes).
-   - **Sentiment Distribution Visualization**: A graphic chart (donut/pie/bar chart rendered using pure SVG or HTML5 Canvas/CSS) with interactive tooltip or legend.
-   - **Hot Comments Section**: Interactive comment cards with like counts, user badges, and a quick search/filter input to filter hot comments by keyword or sentiment.
-   - **Key Insights & Themes**: Categorized interactive cards, collapsible accordions or tabbed views for main themes, user concerns, positive & negative feedback, and actionable recommendations.
-   - **Interactive Elements**: Search bar, filter buttons (All / Positive / Negative / Neutral), back-to-top button, smooth transitions on hover and clicks.
+3. **Link & Navigation Rules**:
+   - In-page navigation links MUST use \`href="#overview"\`, \`href="#sentiment"\`, \`href="#comments"\`, \`href="#insights"\`, \`href="#recommendations"\` and include \`html { scroll-behavior: smooth; }\`.
+   - NEVER generate \`chrome-extension://\` or internal extension URLs. All data and comments MUST be embedded and viewable directly within this standalone HTML page.
+   - External links (like original post URL or author link) MUST have \`target="_blank" rel="noopener noreferrer"\`.
 
-4. **Responsiveness**:
-   - Mobile and desktop friendly (fluid layout, flexbox/grid).
+4. **Visual & Aesthetic Excellence**:
+   - Modern, sleek dashboard (dark/light clean aesthetic, smooth gradients, subtle card shadows/glassmorphism, clean typography, responsive flex/grid).
+   - Interactive micro-animations, hover effects on cards and charts, active state on filter buttons.
 
 5. **Language Requirement**:
    - You MUST write all UI texts, labels, summaries, and descriptions in {language_name}.
@@ -198,12 +204,14 @@ export function buildDynamicReportPrompt(
     title?: string;
     totalComments?: number;
     language?: string;
+    topCommentsData?: string;
   },
 ): string {
   const langCode = metadata?.language || LANGUAGES.DEFAULT;
   const langConfig = LANGUAGES.SUPPORTED.find((l) => l.code === langCode);
   const langName = langConfig?.name || langCode;
   const analysisDateTime = metadata?.datetime || new Date().toISOString();
+  const topComments = metadata?.topCommentsData || 'N/A';
 
   let prompt = template
     .replace(/{analysis_markdown}/g, analysisMarkdown)
@@ -215,10 +223,16 @@ export function buildDynamicReportPrompt(
     .replace(/{url}/g, metadata?.url || 'N/A')
     .replace(/{title}/g, metadata?.title || ANALYSIS_FORMAT.UNKNOWN_TITLE)
     .replace(/{total_comments}/g, String(metadata?.totalComments || 0))
-    .replace(/{language_name}/g, langName);
+    .replace(/{language_name}/g, langName)
+    .replace(/{top_comments_data}/g, topComments)
+    .replace(/{comments_data}/g, topComments);
 
   if (!prompt.includes(analysisMarkdown)) {
     prompt += `\n\n## Analysis Markdown:\n${analysisMarkdown}`;
+  }
+
+  if (topComments !== 'N/A' && !prompt.includes(topComments)) {
+    prompt += `\n\n## Top Comments Data:\n${topComments}`;
   }
 
   return prompt;

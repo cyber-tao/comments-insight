@@ -407,13 +407,26 @@ export class CommentAnalyzer {
     signal?: AbortSignal,
     timeout?: number,
     onStreamProgress?: (progress: AIStreamProgress) => void,
+    comments?: Comment[],
   ): Promise<{ html: string; tokensUsed: number }> {
     const resolvedLanguage = language || LANGUAGES.DEFAULT;
     const sanitizedMetadata = this.sanitizeAnalysisMetadata(metadata);
+
+    let topCommentsData: string | undefined;
+    if (comments && comments.length > 0) {
+      const topComments = [...comments]
+        .sort((a, b) => (b.likes || 0) - (a.likes || 0))
+        .slice(0, 20);
+      topCommentsData = PromptBuilder.serializeCommentsDense(topComments).text;
+    }
+
     const prompt = PromptBuilder.buildDynamicReportPromptWrapper(
       analysisMarkdown,
       promptTemplate,
-      sanitizedMetadata,
+      {
+        ...sanitizedMetadata,
+        topCommentsData,
+      },
       totalComments,
       resolvedLanguage,
     );
@@ -421,6 +434,7 @@ export class CommentAnalyzer {
     Logger.info('[CommentAnalyzer] Generating dynamic HTML report', {
       promptLength: prompt.length,
       language: resolvedLanguage,
+      hasTopComments: !!topCommentsData,
     });
 
     const response = await this.aiService.callAI({

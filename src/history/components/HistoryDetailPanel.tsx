@@ -424,7 +424,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                 <iframe
                   title={selectedItem.title || 'Dynamic Analysis Report'}
                   srcDoc={selectedItem.analysis?.dynamicHtml}
-                  sandbox="allow-scripts allow-downloads"
+                  sandbox="allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox"
                   className="w-full h-full border-none"
                   style={{ minHeight: '600px' }}
                 />
