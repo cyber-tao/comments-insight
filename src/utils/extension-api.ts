@@ -1,4 +1,4 @@
-import { MESSAGES, TEXT, TIMEOUT } from '@/config/constants';
+import { MESSAGES, TEXT, AI, STORAGE } from '@/config/constants';
 import type { Comment, HistoryItem, Message, Settings, Task } from '@/types';
 import { sendMessage } from './chrome-message';
 
@@ -104,6 +104,21 @@ async function sendMessageOrThrow<T>(
   return response;
 }
 
+async function getEffectiveAiTimeoutMs(fallbackMs: number = AI.DEFAULT_TIMEOUT): Promise<number> {
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      const stored = await chrome.storage.local.get(STORAGE.SETTINGS_KEY);
+      const settings = stored?.[STORAGE.SETTINGS_KEY] as Settings | undefined;
+      if (settings?.aiTimeout && Number.isFinite(settings.aiTimeout) && settings.aiTimeout > 0) {
+        return settings.aiTimeout + 15000;
+      }
+    }
+  } catch {
+    // fallback to default
+  }
+  return fallbackMs + 15000;
+}
+
 export const ExtensionAPI = {
   async getSettings(): Promise<Settings | null> {
     const response = await sendMessageOrThrow<GetSettingsResponse>({ type: MESSAGES.GET_SETTINGS });
@@ -206,12 +221,13 @@ export const ExtensionAPI = {
   async generateDynamicReport(
     historyId: string,
   ): Promise<{ success?: boolean; dynamicHtml?: string; error?: string }> {
+    const timeoutMs = await getEffectiveAiTimeoutMs();
     return sendMessageOrThrow<{ success?: boolean; dynamicHtml?: string; error?: string }>(
       {
         type: MESSAGES.GENERATE_DYNAMIC_REPORT,
         payload: { historyId },
       },
-      { timeoutMs: TIMEOUT.DYNAMIC_REPORT_RESPONSE_MS },
+      { timeoutMs },
     );
   },
 
@@ -260,12 +276,13 @@ export const ExtensionAPI = {
   },
 
   async testModel(config: Settings['aiModel']): Promise<TestModelResponse> {
+    const timeoutMs = await getEffectiveAiTimeoutMs();
     return sendMessageOrThrow<TestModelResponse>(
       {
         type: MESSAGES.TEST_MODEL,
         payload: { config },
       },
-      { timeoutMs: TIMEOUT.DYNAMIC_REPORT_RESPONSE_MS },
+      { timeoutMs },
     );
   },
 };

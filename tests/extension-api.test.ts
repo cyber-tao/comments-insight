@@ -96,7 +96,7 @@ describe('ExtensionAPI', () => {
             },
           },
         },
-        { timeoutMs: 180000 },
+        { timeoutMs: 135000 },
       ],
     ]);
   });
@@ -156,7 +156,7 @@ describe('ExtensionAPI', () => {
           type: MESSAGES.GENERATE_DYNAMIC_REPORT,
           payload: { historyId: 'history-1' },
         },
-        { timeoutMs: 180000 },
+        { timeoutMs: 135000 },
       ],
       [{ type: MESSAGES.CANCEL_TASK, payload: { taskId: 'task-1' } }],
       [{ type: MESSAGES.DELETE_HISTORY, payload: { id: 'history-1' } }],
