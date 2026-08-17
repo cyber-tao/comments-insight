@@ -1,16 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   handleStartExtraction,
-  handleStartConfigGeneration,
   handleExtractionProgress,
   handleExtractionCompleted,
-  handleConfigGenerationCompleted,
-  handleStartAnalysis,
-  chunkDomText,
 } from '../../src/background/handlers/extraction';
+import {
+  handleStartConfigGeneration,
+  handleConfigGenerationCompleted,
+} from '../../src/background/handlers/config-generation';
 import { HandlerContext } from '../../src/background/handlers/types';
 import { ErrorCode } from '../../src/utils/errors';
-import { AI, TIMEOUT, TEXT } from '../../src/config/constants';
+import { TIMEOUT, TEXT } from '../../src/config/constants';
 
 type TabRemoveInfo = { windowId: number; isWindowClosing: boolean };
 
@@ -308,145 +308,6 @@ describe('extraction handlers', () => {
     });
   });
 
-  describe('handleStartAnalysis', () => {
-    it('should forward AI stream progress to detailed task progress', async () => {
-      const analysisResult = {
-        markdown: '# Analysis Report',
-        summary: {
-          totalComments: 1,
-          sentimentDistribution: { positive: 0, neutral: 100, negative: 0 },
-          topKeywords: [],
-          keyInsights: [],
-          hotComments: [],
-          engagement: { totalLikes: 0, averageLikes: 0, topLikedComment: null },
-        },
-        tokensUsed: 5,
-        generatedAt: Date.now(),
-      };
-      const analyzeComments = vi.fn(async (...args: unknown[]) => {
-        const onProgress = args[7] as (progress: {
-          current: number;
-          total: number;
-          stageMessage: string;
-          stageMessageKey?: string;
-          stageMessageParams?: Record<string, string | number>;
-        }) => void;
-        onProgress({
-          current: 12,
-          total: AI.ANALYSIS_STREAM_BATCH_UNITS,
-          stageMessage: 'receiving model response, 512 chars',
-          stageMessageKey: AI.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
-          stageMessageParams: { characters: 512 },
-        });
-        return analysisResult;
-      });
-      const context = createMockContext({
-        settingsStore: {
-          ...createMockContext().settingsStore,
-          getSettings: vi.fn().mockResolvedValue({
-            maxComments: 100,
-            normalizeTimestamps: true,
-          }),
-        },
-        commentAnalyzer: {
-          analyzeComments,
-        },
-      } as unknown as Partial<HandlerContext>);
-      const message = {
-        type: 'START_ANALYSIS' as const,
-        payload: {
-          comments: [
-            {
-              id: 'comment_1',
-              username: 'user',
-              content: 'hello',
-              likes: 0,
-              timestamp: new Date().toISOString(),
-              replies: [],
-            },
-          ],
-          metadata: { url: 'https://example.com/post', title: 'Post' },
-        },
-      };
-
-      await handleStartAnalysis(message, context);
-      const setExecutorMock = context.taskManager.setExecutor as unknown as {
-        mock: { calls: unknown[][] };
-      };
-      const executor = setExecutorMock.mock.calls[0][1] as (
-        task: { id: string; url: string; platform?: string },
-        signal: AbortSignal,
-      ) => Promise<unknown>;
-
-      await executor(
-        { id: 'task_123', url: 'https://example.com/post', platform: 'example.com' },
-        new AbortController().signal,
-      );
-
-      expect(context.taskManager.updateDetailedProgress).toHaveBeenCalledWith('task_123', {
-        stage: 'analyzing',
-        current: 0,
-        total: AI.ANALYSIS_STREAM_BATCH_UNITS,
-        stageMessage: AI.ANALYSIS_PROGRESS_MESSAGES.WAITING,
-        stageMessageKey: AI.ANALYSIS_PROGRESS_MESSAGE_KEYS.WAITING,
-      });
-      expect(context.taskManager.updateDetailedProgress).toHaveBeenCalledWith('task_123', {
-        stage: 'analyzing',
-        current: 12,
-        total: AI.ANALYSIS_STREAM_BATCH_UNITS,
-        stageMessage: 'receiving model response, 512 chars',
-        stageMessageKey: AI.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
-        stageMessageParams: { characters: 512 },
-      });
-    });
-
-    it('should fail analysis when history target is missing', async () => {
-      const context = createMockContext({
-        historyStore: {
-          ...createMockContext().historyStore,
-          getHistoryItem: vi.fn().mockResolvedValue(null),
-        },
-      } as unknown as Partial<HandlerContext>);
-      const message = {
-        type: 'START_ANALYSIS' as const,
-        payload: {
-          comments: [
-            {
-              id: 'comment_1',
-              username: 'user',
-              content: 'hello',
-              likes: 0,
-              timestamp: new Date().toISOString(),
-              replies: [],
-            },
-          ],
-          historyId: 'history-missing',
-          metadata: { url: 'https://example.com/post', title: 'Post' },
-        },
-      };
-
-      await handleStartAnalysis(message, context);
-      const setExecutorMock = context.taskManager.setExecutor as unknown as {
-        mock: { calls: unknown[][] };
-      };
-      const executor = setExecutorMock.mock.calls[0][1] as (
-        task: { id: string; url: string; platform?: string },
-        signal: AbortSignal,
-      ) => Promise<unknown>;
-
-      await expect(
-        executor(
-          { id: 'task_123', url: 'https://example.com/post', platform: 'example.com' },
-          new AbortController().signal,
-        ),
-      ).rejects.toMatchObject({
-        code: ErrorCode.TASK_NOT_FOUND,
-        message: 'History item not found: history-missing',
-      });
-      expect(context.commentAnalyzer.analyzeComments).not.toHaveBeenCalled();
-    });
-  });
-
   describe('completion payload validation', () => {
     it('should persist successful extraction even when no comments are found', async () => {
       const context = createMockContext({
@@ -732,26 +593,6 @@ describe('extraction handlers', () => {
       expect(result).toEqual({ success: false });
       expect(context.taskManager.completeTask).not.toHaveBeenCalled();
       expect(context.taskManager.failTask).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('chunkDomText', () => {
-    it('should chunk text by token limit', () => {
-      const text = Array(100).fill('line of text').join('\n');
-      const chunks = chunkDomText(text, 500);
-
-      expect(chunks.length).toBeGreaterThan(1);
-      chunks.forEach((chunk) => {
-        expect(chunk.length).toBeGreaterThan(0);
-      });
-    });
-
-    it('should return single chunk for small text', () => {
-      const text = 'small text';
-      const chunks = chunkDomText(text, 1000);
-
-      expect(chunks).toHaveLength(1);
-      expect(chunks[0]).toBe('small text');
     });
   });
 });
