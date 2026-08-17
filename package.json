@@ -23,7 +23,6 @@
     "audit": "bun audit --prod --audit-level=high"
   },
   "dependencies": {
-    "@tailwindcss/typography": "^0.5.19",
     "dexie": "^4.4.1",
     "i18next": "^25.6.3",
     "lz-string": "^1.5.0",
@@ -38,6 +37,7 @@
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.4.0",
     "@eslint/js": "^9.39.4",
+    "@tailwindcss/typography": "^0.5.19",
     "@testing-library/react": "^16.3.2",
     "@types/chrome": "^0.1.31",
     "@types/react": "^19.2.7",
