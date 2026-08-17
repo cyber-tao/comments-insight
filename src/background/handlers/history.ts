@@ -1,6 +1,6 @@
-import { Message, HistoryItem } from '../../types';
+import { Message, HistoryItem } from '@/types';
 import { HandlerContext } from './types';
-import { ExtensionError, ErrorCode } from '../../utils/errors';
+import { ExtensionError, ErrorCode } from '@/utils/errors';
 import { PAGINATION } from '@/config/constants';
 
 interface GetHistoryItemResponse {

@@ -28,14 +28,20 @@ vi.mock('../src/utils/errors', async (importOriginal) => {
 // Mock handlers
 vi.mock('../src/background/handlers/extraction', () => ({
   handleStartExtraction: vi.fn().mockResolvedValue({ taskId: 'test-task' }),
-  handleStartConfigGeneration: vi.fn().mockResolvedValue({ taskId: 'config-task' }),
+  handleExtractionCompleted: vi.fn().mockResolvedValue({ success: true }),
+  handleExtractionProgress: vi.fn().mockReturnValue(undefined),
+}));
+
+vi.mock('../src/background/handlers/analysis', () => ({
+  handleStartAnalysis: vi.fn().mockResolvedValue({ result: 'analysis' }),
   handleAIAnalyzeStructure: vi.fn().mockResolvedValue({ selector: '.comments' }),
   handleAIExtractContent: vi.fn().mockResolvedValue({ comments: [] }),
-  handleGenerateCrawlingConfig: vi.fn().mockResolvedValue({ config: null }),
-  handleExtractionCompleted: vi.fn().mockResolvedValue({ success: true }),
+}));
+
+vi.mock('../src/background/handlers/config-generation', () => ({
+  handleStartConfigGeneration: vi.fn().mockResolvedValue({ taskId: 'config-task' }),
   handleConfigGenerationCompleted: vi.fn().mockResolvedValue({ success: true }),
-  handleExtractionProgress: vi.fn().mockReturnValue(undefined),
-  handleStartAnalysis: vi.fn().mockResolvedValue({ result: 'analysis' }),
+  handleGenerateCrawlingConfig: vi.fn().mockResolvedValue({ config: null }),
 }));
 
 vi.mock('../src/background/handlers/settings', () => ({
@@ -100,20 +106,30 @@ const mockEncryptionService = {};
 const mockLogStore = {};
 const mockTokenStatsStore = {};
 const mockCrawlingConfigStore = {};
+const mockNotificationService = {};
 
 const createRouter = (): MessageRouter =>
-  new MessageRouter(
-    mockTaskManager as unknown as ConstructorParameters<typeof MessageRouter>[0],
-    mockAIService as unknown as ConstructorParameters<typeof MessageRouter>[1],
-    mockCommentAnalyzer as unknown as ConstructorParameters<typeof MessageRouter>[2],
-    mockTimestampNormalizer as unknown as ConstructorParameters<typeof MessageRouter>[3],
-    mockSettingsStore as unknown as ConstructorParameters<typeof MessageRouter>[4],
-    mockHistoryStore as unknown as ConstructorParameters<typeof MessageRouter>[5],
-    mockEncryptionService as unknown as ConstructorParameters<typeof MessageRouter>[6],
-    mockLogStore as unknown as ConstructorParameters<typeof MessageRouter>[7],
-    mockTokenStatsStore as unknown as ConstructorParameters<typeof MessageRouter>[8],
-    mockCrawlingConfigStore as unknown as ConstructorParameters<typeof MessageRouter>[9],
-  );
+  new MessageRouter({
+    taskManager: mockTaskManager as unknown as import('../src/background/TaskManager').TaskManager,
+    aiService: mockAIService as unknown as import('../src/background/AIService').AIService,
+    commentAnalyzer:
+      mockCommentAnalyzer as unknown as import('../src/background/ai/CommentAnalyzer').CommentAnalyzer,
+    timestampNormalizer:
+      mockTimestampNormalizer as unknown as import('../src/background/ai/TimestampNormalizer').TimestampNormalizer,
+    settingsStore:
+      mockSettingsStore as unknown as import('../src/background/storage/SettingsStore').SettingsStore,
+    historyStore:
+      mockHistoryStore as unknown as import('../src/background/storage/HistoryStore').HistoryStore,
+    encryptionService:
+      mockEncryptionService as unknown as import('../src/background/storage/EncryptionService').EncryptionService,
+    logStore: mockLogStore as unknown as import('../src/background/storage/LogStore').LogStore,
+    tokenStatsStore:
+      mockTokenStatsStore as unknown as import('../src/background/storage/TokenStatsStore').TokenStatsStore,
+    crawlingConfigStore:
+      mockCrawlingConfigStore as unknown as import('../src/background/storage/CrawlingConfigStore').CrawlingConfigStore,
+    notificationService:
+      mockNotificationService as unknown as import('../src/background/NotificationService').NotificationService,
+  });
 
 const createUnknownMessage = (type: string): Message => ({ type }) as unknown as Message;
 
@@ -270,7 +286,10 @@ describe('MessageRouter', () => {
       const result1 = await router.handleMessage({ type: MESSAGES.GET_PLATFORM_INFO }, mockSender);
       const result2 = await router.handleMessage({ type: MESSAGES.GET_DOM_STRUCTURE }, mockSender);
       const result3 = await router.handleMessage(
-        { type: MESSAGES.CANCEL_EXTRACTION } as unknown as Message,
+        {
+          type: MESSAGES.CANCEL_EXTRACTION,
+          payload: { taskId: 'task_test' },
+        } as unknown as Message,
         mockSender,
       );
 
@@ -346,8 +365,8 @@ describe('MessageRouter', () => {
 
   describe('handlePortMessage', () => {
     it('deduplicates repeated AI bridge requests by correlation id', async () => {
-      const extractionHandlers = await import('../src/background/handlers/extraction');
-      const handleAIExtractContentMock = vi.mocked(extractionHandlers.handleAIExtractContent);
+      const analysisHandlers = await import('../src/background/handlers/analysis');
+      const handleAIExtractContentMock = vi.mocked(analysisHandlers.handleAIExtractContent);
       handleAIExtractContentMock.mockImplementation(async () => {
         await Promise.resolve();
         return {

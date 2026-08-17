@@ -64,6 +64,11 @@ class ServiceContainer {
     return this.getDefaults()[key];
   }
 
+  getAll(): ServiceInstances {
+    const defaults = this.getDefaults();
+    return { ...defaults, ...this.services } as ServiceInstances;
+  }
+
   set<K extends keyof ServiceInstances>(key: K, instance: ServiceInstances[K]): void {
     this.services[key] = instance;
   }

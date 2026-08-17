@@ -397,11 +397,16 @@ export class AIService {
               Logger.warn('[AIService] Failed to record tokens', { err });
             });
 
-            AIErrorHandler.logToFile(this.logStore, AIErrorHandler.determineLogType(prompt), {
-              prompt,
-              response: content,
-              timestamp: Date.now(),
-            }).catch((e) => Logger.warn('Failed to log to file', { error: e }));
+            AIErrorHandler.logToFile(
+              this.logStore,
+              AIErrorHandler.determineLogType(prompt),
+              {
+                prompt,
+                response: content,
+                timestamp: Date.now(),
+              },
+              this.settingsStore,
+            ).catch((e) => Logger.warn('Failed to log to file', { error: e }));
 
             return { content, tokensUsed, finishReason };
           } catch (error) {

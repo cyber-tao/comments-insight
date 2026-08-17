@@ -1,7 +1,7 @@
-import { Message } from '../../types';
+import { Message } from '@/types';
 import { HandlerContext, TaskStatusResponse, SuccessResponse } from './types';
-import { ExtensionError, ErrorCode } from '../../utils/errors';
-import { Logger } from '../../utils/logger';
+import { ExtensionError, ErrorCode } from '@/utils/errors';
+import { Logger } from '@/utils/logger';
 import { MESSAGES } from '@/config/constants';
 
 export function handleGetTaskStatus(

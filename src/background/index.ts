@@ -1,18 +1,12 @@
 // Service Worker for Comments Insight Extension
 import {
-  getTaskManager,
-  getAIService,
-  getCommentAnalyzer,
-  getTimestampNormalizer,
+  container,
   getSettingsStore,
-  getHistoryStore,
-  getEncryptionService,
-  getLogStore,
+  getTaskManager,
   getNotificationService,
-  getTokenStatsStore,
-  getCrawlingConfigStore,
 } from './ServiceContainer';
 import { MessageRouter } from './MessageRouter';
+import { DataMigrator } from './storage/DataMigrator';
 import { Message } from '../types';
 import { Logger } from '../utils/logger';
 import { STORAGE } from '@/config/constants';
@@ -27,29 +21,19 @@ chrome.storage.local
     Logger.warn('[Background] Failed to clear legacy verified AI model key', { error }),
   );
 
-getTaskManager()
-  .initialize()
-  .then(() => {
-    Logger.info('[Background] TaskManager initialized');
-  })
-  .catch((error) => {
-    Logger.warn('[Background] TaskManager initialization failed', { error });
-  });
+const initPromise = (async () => {
+  try {
+    await new DataMigrator().migrate();
+    await getTaskManager().initialize();
+    Logger.info('[Background] Migration and TaskManager initialized');
+  } catch (error) {
+    Logger.error('[Background] Service worker initialization failed', { error });
+  }
+})();
 
 getNotificationService().setupNotificationHandlers();
 
-const messageRouter = new MessageRouter(
-  getTaskManager(),
-  getAIService(),
-  getCommentAnalyzer(),
-  getTimestampNormalizer(),
-  getSettingsStore(),
-  getHistoryStore(),
-  getEncryptionService(),
-  getLogStore(),
-  getTokenStatsStore(),
-  getCrawlingConfigStore(),
-);
+const messageRouter = new MessageRouter(container.getAll(), { readyPromise: initPromise });
 
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener(() => {

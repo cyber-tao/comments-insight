@@ -1,255 +1,36 @@
-import { Message, Comment, Task, CrawlingConfig } from '../../types';
+import { Message, Task } from '@/types';
 import { HandlerContext } from './types';
-import { Logger } from '../../utils/logger';
-import { ExtensionError, ErrorCode } from '../../utils/errors';
+import { Logger } from '@/utils/logger';
+import { ExtensionError, ErrorCode } from '@/utils/errors';
 import {
-  AI as AI_CONST,
-  CHROME_MESSAGE_ERRORS,
   MESSAGES,
-  DEFAULTS,
+  EXTRACTION_DEFAULTS,
   EXTRACTION_PROGRESS,
   DATE_TIME,
   ANALYSIS_FORMAT,
   TIMEOUT,
-  TIMING,
   TEXT,
 } from '@/config/constants';
-import { getDomain } from '../../utils/url';
-import { generateUniqueId } from '../../utils/id-generator';
-import { Tokenizer } from '../../utils/tokenizer';
+import { getDomain } from '@/utils/url';
+import { generateUniqueId } from '@/utils/id-generator';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
-import { resolveTabId } from '../../utils/tab-helpers';
-import { cleanAndParseJsonObject, cleanAndParseJsonArray } from '../../utils/json-parser';
-
-interface ScraperAnalysisResult {
-  selectors: Record<string, string>;
-  structure: {
-    hasReplies: boolean;
-    repliesNested: boolean;
-    needsExpand: boolean;
-  };
-  confidence: number;
-}
+import { resolveTabId } from '@/utils/chrome-message';
+import {
+  isExpectedAsyncAckError,
+  resolveRunningCompletionTask,
+  waitForTaskCompletion,
+} from './utils/task-completion';
 
 interface StartExtractionResponse {
   taskId: string;
-}
-
-interface StartConfigGenerationResponse {
-  taskId: string;
-}
-
-interface AIAnalyzeStructureResponse {
-  selectors?: Record<string, string>;
-  structure?: {
-    hasReplies: boolean;
-    repliesNested: boolean;
-    needsExpand: boolean;
-  };
-  confidence?: number;
-  data?: ScraperAnalysisResult;
-  error?: string;
 }
 
 interface ProgressResponse {
   success: boolean;
 }
 
-interface StartAnalysisResponse {
-  taskId: string;
-}
-
 interface ExtractionCompletionResponse {
   success: boolean;
-}
-
-interface WaitForTaskCompletionOptions {
-  taskId: string;
-  signal: AbortSignal;
-  context: HandlerContext;
-  tabId: number;
-  timeoutMs: number;
-  timeoutMessage: string;
-  tabClosedMessage: string;
-  cancelWarnLabel: string;
-  timeoutWarnLabel: string;
-}
-
-type PendingTaskResult = { tokensUsed: number; commentsCount: number; title?: string };
-
-export function chunkDomText(
-  structure: string,
-  maxTokens: number,
-  overheadText?: string,
-): string[] {
-  if (overheadText && overheadText.length > 0) {
-    return Tokenizer.chunkTextWithOverhead(structure, maxTokens, overheadText);
-  }
-  return Tokenizer.chunkText(structure, maxTokens);
-}
-
-function notifyCancelExtraction(tabId: number, taskId: string, contextLabel: string): void {
-  chrome.tabs
-    .sendMessage(tabId, {
-      type: MESSAGES.CANCEL_EXTRACTION,
-      payload: { taskId },
-    })
-    .catch((err) => {
-      Logger.warn(contextLabel, { err });
-    });
-}
-
-function isExpectedAsyncAckError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return (
-    message.includes(CHROME_MESSAGE_ERRORS.TIMEOUT) ||
-    message.includes(CHROME_MESSAGE_ERRORS.PORT_CLOSED)
-  );
-}
-
-function resolveRunningCompletionTask(
-  taskId: string,
-  context: HandlerContext,
-  completionType: 'extraction' | 'config',
-): Task | null {
-  const task = context.taskManager.getTask(taskId);
-  if (task?.status === 'running') {
-    return task;
-  }
-
-  const senderTabId = context.sender?.tab?.id;
-  const maxAgeMs =
-    completionType === 'config'
-      ? TIMEOUT.CONFIG_TASK_COMPLETION_MS
-      : TIMEOUT.EXTRACTION_TASK_COMPLETION_MS;
-  const recoveredTask = context.taskManager.recoverInterruptedTask(taskId, {
-    taskType: completionType === 'config' ? 'config' : 'extract',
-    senderTabId,
-    maxAgeMs,
-  });
-  if (recoveredTask?.status === 'running') {
-    return recoveredTask;
-  }
-
-  Logger.warn(`[ExtractionHandler] Ignoring stale ${completionType} completion`, {
-    taskId,
-    status: task?.status,
-    recoveredStatus: recoveredTask?.status,
-  });
-  return null;
-}
-
-function waitForTaskCompletion({
-  taskId,
-  signal,
-  context,
-  tabId,
-  timeoutMs,
-  timeoutMessage,
-  tabClosedMessage,
-  cancelWarnLabel,
-  timeoutWarnLabel,
-}: WaitForTaskCompletionOptions): Promise<PendingTaskResult> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let cleaned = false;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    let pollTimeoutId: ReturnType<typeof setTimeout> | null = null;
-
-    const cleanup = (): void => {
-      if (cleaned) return;
-      cleaned = true;
-      signal.removeEventListener('abort', onAbort);
-      chrome.tabs.onRemoved?.removeListener(onTabRemoved);
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      if (pollTimeoutId) {
-        clearTimeout(pollTimeoutId);
-        pollTimeoutId = null;
-      }
-    };
-
-    const settleResolve = (result: PendingTaskResult): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      cleanup();
-      resolve(result);
-    };
-
-    const settleReject = (error: ExtensionError): void => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      cleanup();
-      reject(error);
-    };
-
-    const onAbort = (): void => {
-      notifyCancelExtraction(tabId, taskId, cancelWarnLabel);
-      settleReject(new ExtensionError(ErrorCode.TASK_CANCELLED, 'Task cancelled by user'));
-    };
-
-    const onTabRemoved = (removedTabId: number): void => {
-      if (removedTabId !== tabId) {
-        return;
-      }
-
-      settleReject(
-        new ExtensionError(ErrorCode.EXTRACTION_FAILED, tabClosedMessage, { taskId, tabId }, false),
-      );
-    };
-
-    const pollTaskStatus = (): void => {
-      if (settled) {
-        return;
-      }
-
-      const task = context.taskManager.getTask(taskId);
-      if (!task) {
-        settleReject(
-          new ExtensionError(ErrorCode.TASK_NOT_FOUND, `Task not found: ${taskId}`, { taskId }),
-        );
-        return;
-      }
-
-      if (task.status === 'completed') {
-        settleResolve({
-          tokensUsed: task.tokensUsed,
-          commentsCount: 0,
-          title: task.url,
-        });
-        return;
-      }
-
-      if (task.status === 'failed') {
-        settleReject(
-          new ExtensionError(ErrorCode.EXTRACTION_FAILED, task.error || 'Task failed', { taskId }),
-        );
-        return;
-      }
-
-      pollTimeoutId = setTimeout(pollTaskStatus, TIMING.POLL_TASK_RUNNING_MS);
-    };
-
-    timeoutId = setTimeout(() => {
-      notifyCancelExtraction(tabId, taskId, timeoutWarnLabel);
-      settleReject(new ExtensionError(ErrorCode.TIMEOUT_ERROR, timeoutMessage));
-    }, timeoutMs);
-
-    if (signal.aborted) {
-      onAbort();
-      return;
-    }
-
-    signal.addEventListener('abort', onAbort);
-    chrome.tabs.onRemoved?.addListener(onTabRemoved);
-    pollTaskStatus();
-  });
 }
 
 export async function handleStartExtraction(
@@ -264,11 +45,10 @@ export async function handleStartExtraction(
 
   const domain = getDomain(url) || TEXT.UNKNOWN;
 
-  // Get maxComments from settings if not provided
   let finalMaxComments = maxComments;
   if (!finalMaxComments) {
     const settings = await context.settingsStore.getSettings();
-    finalMaxComments = settings.maxComments || DEFAULTS.MAX_COMMENTS;
+    finalMaxComments = settings.maxComments || EXTRACTION_DEFAULTS.MAX_COMMENTS;
   }
 
   const tabId = await resolveTabId(payloadTabId, context.sender?.tab?.id);
@@ -289,9 +69,8 @@ export async function handleStartExtraction(
 
     await ensureContentScriptInjected(task.tabId);
 
-    // Send start message to content script (fire and forget pattern from executor perspective)
-    // The content script will reply immediately to acknowledge receipt,
-    // and then send EXTRACTION_COMPLETED later.
+    // Send start message to content script (fire and forget from executor perspective).
+    // The content script acks immediately then reports completion later.
     try {
       await chrome.tabs.sendMessage(task.tabId, {
         type: MESSAGES.START_EXTRACTION,
@@ -303,7 +82,7 @@ export async function handleStartExtraction(
       }
       Logger.debug('[ExtractionHandler] Message ack timeout ignored, waiting for completion');
     }
-    // Hang here until we receive the completion message
+
     return waitForTaskCompletion({
       taskId,
       signal,
@@ -417,173 +196,6 @@ export async function handleExtractionCompleted(
   return { success: true };
 }
 
-export async function handleStartConfigGeneration(
-  message: Extract<Message, { type: 'START_CONFIG_GENERATION' }>,
-  context: HandlerContext,
-): Promise<StartConfigGenerationResponse> {
-  const { url, tabId: payloadTabId } = message.payload || {};
-
-  if (!url) {
-    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'URL is required');
-  }
-
-  const domain = getDomain(url) || TEXT.UNKNOWN;
-
-  const tabId = await resolveTabId(payloadTabId, context.sender?.tab?.id);
-  if (!tabId) {
-    throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
-  }
-
-  Logger.info('[ExtractionHandler] Starting config generation', { domain });
-
-  const taskId = context.taskManager.createTask('config', url, domain, 0, tabId);
-
-  context.taskManager.setExecutor(taskId, async (task: Task, signal: AbortSignal) => {
-    if (!task.tabId) {
-      throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
-    }
-
-    await ensureContentScriptInjected(task.tabId);
-
-    try {
-      await chrome.tabs.sendMessage(task.tabId, {
-        type: MESSAGES.START_CONFIG_GENERATION,
-        payload: { taskId: task.id },
-      });
-    } catch (error) {
-      if (!isExpectedAsyncAckError(error)) {
-        throw error;
-      }
-      Logger.debug('[ExtractionHandler] Message ack timeout ignored, waiting for completion');
-    }
-
-    return waitForTaskCompletion({
-      taskId,
-      signal,
-      context,
-      tabId: task.tabId!,
-      timeoutMs: TIMEOUT.CONFIG_TASK_COMPLETION_MS,
-      timeoutMessage: TEXT.CONFIG_TASK_TIMEOUT,
-      tabClosedMessage: TEXT.TASK_SOURCE_TAB_CLOSED,
-      cancelWarnLabel: '[ExtractionHandler] Failed to send config cancel to content script',
-      timeoutWarnLabel:
-        '[ExtractionHandler] Failed to send config timeout cancel to content script',
-    });
-  });
-
-  return { taskId };
-}
-
-export async function handleConfigGenerationCompleted(
-  message: Extract<Message, { type: 'CONFIG_GENERATION_COMPLETED' }>,
-  context: HandlerContext,
-): Promise<ExtractionCompletionResponse> {
-  const payload = message.payload;
-  if (!payload?.taskId) {
-    Logger.warn('[ExtractionHandler] Invalid config completion payload', { payload });
-    return { success: false };
-  }
-  const { taskId, success, error } = payload;
-  const task = resolveRunningCompletionTask(taskId, context, 'config');
-
-  if (!task) {
-    return { success: false };
-  }
-
-  if (success) {
-    context.taskManager.completeTask(taskId, { tokensUsed: 0, commentsCount: 0 });
-  } else {
-    context.taskManager.failTask(taskId, error || 'Config generation failed');
-  }
-
-  return { success: true };
-}
-
-export async function handleAIAnalyzeStructure(
-  message: Extract<Message, { type: 'AI_ANALYZE_STRUCTURE' }>,
-  context: HandlerContext,
-): Promise<AIAnalyzeStructureResponse> {
-  const { prompt } = message.payload || {};
-
-  if (!prompt) {
-    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Prompt is required');
-  }
-
-  try {
-    const settings = await context.settingsStore.getSettings();
-    // The caller (AIStrategy) manages chunking and token limits.
-    // We directly call AI service here.
-
-    const response = await context.aiService.callAI({
-      prompt,
-      systemPrompt:
-        'You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start with { and end with }.',
-      config: settings.aiModel,
-      timeout: settings.aiTimeout,
-    });
-
-    const aggregated: ScraperAnalysisResult = {
-      selectors: {},
-      structure: { hasReplies: false, repliesNested: true, needsExpand: false },
-      confidence: 0,
-    };
-
-    try {
-      const data = cleanAndParseJsonObject<ScraperAnalysisResult>(response.content);
-      if (data.selectors && typeof data.selectors === 'object') {
-        aggregated.selectors = { ...aggregated.selectors, ...data.selectors };
-      }
-      if (data.structure) aggregated.structure = data.structure;
-      if (typeof data.confidence === 'number')
-        aggregated.confidence = Math.max(aggregated.confidence, data.confidence);
-    } catch (e) {
-      Logger.warn('[ExtractionHandler] Failed to parse AI structure response', {
-        error: e,
-      });
-    }
-
-    return { data: aggregated };
-  } catch (error) {
-    Logger.error('[ExtractionHandler] AI structure analysis failed', { error });
-    return {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
-}
-
-export async function handleGenerateCrawlingConfig(
-  message: Extract<Message, { type: 'GENERATE_CRAWLING_CONFIG' }>,
-  context: HandlerContext,
-): Promise<{ config: CrawlingConfig | null; error?: string }> {
-  const { prompt } = message.payload || {};
-
-  if (!prompt) {
-    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Prompt is required');
-  }
-
-  try {
-    const settings = await context.settingsStore.getSettings();
-
-    // Call AI to generate config JSON
-    const response = await context.aiService.callAI({
-      prompt,
-      systemPrompt:
-        'You are a config generator. Return ONLY valid JSON matching the CrawlingConfig interface. No markdown.',
-      config: settings.aiModel,
-      timeout: settings.aiTimeout,
-    });
-
-    const config = cleanAndParseJsonObject<CrawlingConfig>(response.content);
-    return { config };
-  } catch (error) {
-    Logger.error('[ExtractionHandler] Config generation failed', { error });
-    return {
-      config: null,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
-}
-
 export async function handleExtractionProgress(
   message: Extract<Message, { type: 'EXTRACTION_PROGRESS' }>,
   context: HandlerContext,
@@ -614,183 +226,4 @@ export async function handleExtractionProgress(
   }
 
   return { success: true };
-}
-
-export async function handleStartAnalysis(
-  message: Extract<Message, { type: 'START_ANALYSIS' }>,
-
-  context: HandlerContext,
-): Promise<StartAnalysisResponse> {
-  const { comments, metadata, historyId } = message.payload || {};
-
-  if (!comments || !Array.isArray(comments)) {
-    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Comments array is required');
-  }
-
-  const finalUrl = metadata?.url;
-  const domain = finalUrl ? getDomain(finalUrl) || TEXT.UNKNOWN : TEXT.UNKNOWN;
-
-  const taskId = context.taskManager.createTask('analyze', finalUrl || TEXT.UNKNOWN, domain);
-
-  context.taskManager.setExecutor(taskId, async (task: Task, signal: AbortSignal) => {
-    const settings = await context.settingsStore.getSettings();
-    const analysisModel = settings.aiModel;
-
-    context.taskManager.updateDetailedProgress(taskId, {
-      stage: 'analyzing',
-      current: 0,
-      total: AI_CONST.ANALYSIS_STREAM_BATCH_UNITS,
-      stageMessage: AI_CONST.ANALYSIS_PROGRESS_MESSAGES.WAITING,
-      stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.WAITING,
-    });
-
-    let platform = ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
-    let url = ANALYSIS_FORMAT.UNKNOWN_URL;
-    let title = ANALYSIS_FORMAT.UNKNOWN_TITLE;
-    let videoTime = ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
-    let postContent = ANALYSIS_FORMAT.UNKNOWN_CONTENT;
-
-    if (historyId) {
-      const historyItem = await context.historyStore.getHistoryItem(historyId);
-      if (!historyItem) {
-        throw new ExtensionError(ErrorCode.TASK_NOT_FOUND, `History item not found: ${historyId}`, {
-          historyId,
-        });
-      }
-      platform = historyItem.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
-      url = historyItem.url || ANALYSIS_FORMAT.UNKNOWN_URL;
-      title = historyItem.title || TEXT.UNTITLED;
-      videoTime = historyItem.videoTime || ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
-      postContent = historyItem.postContent || ANALYSIS_FORMAT.UNKNOWN_CONTENT;
-    } else {
-      platform = task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
-      url = task.url || ANALYSIS_FORMAT.UNKNOWN_URL;
-      title = metadata?.title || title;
-      videoTime = metadata?.videoTime || videoTime;
-      postContent = metadata?.postContent || postContent;
-    }
-
-    const result = await context.commentAnalyzer.analyzeComments(
-      comments,
-      analysisModel,
-      settings.analyzerPromptTemplate,
-      settings.language,
-      {
-        platform,
-        url,
-        title,
-        videoTime,
-        postContent,
-      },
-      signal,
-      settings.aiTimeout,
-      (progress) => {
-        context.taskManager.updateDetailedProgress(taskId, {
-          stage: 'analyzing',
-          current: progress.current,
-          total: progress.total,
-          stageMessage: progress.stageMessage,
-          stageMessageKey: progress.stageMessageKey,
-          stageMessageParams: progress.stageMessageParams,
-        });
-      },
-    );
-
-    context.taskManager.updateTaskProgress(taskId, 75);
-
-    try {
-      if (historyId) {
-        const historyItem = await context.historyStore.getHistoryItem(historyId);
-        if (!historyItem) {
-          throw new ExtensionError(
-            ErrorCode.TASK_NOT_FOUND,
-            `History item not found: ${historyId}`,
-            { historyId },
-          );
-        }
-        historyItem.analysis = result;
-        historyItem.analyzedAt = Date.now();
-        await context.historyStore.saveHistory(historyItem);
-      } else {
-        await context.historyStore.saveHistory({
-          id: generateUniqueId('history'),
-          url: task.url,
-          title: `Analysis ${new Date().toLocaleString()}`,
-          platform: task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM,
-          postContent: metadata?.postContent,
-          extractedAt: Date.now(),
-          commentsCount: comments.length,
-          comments,
-          analysis: result,
-          analyzedAt: Date.now(),
-        });
-      }
-    } catch (saveError) {
-      Logger.error('[ExtractionHandler] Failed to save analysis history', { saveError });
-      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save analysis history');
-    }
-
-    return {
-      tokensUsed: result.tokensUsed,
-      commentsCount: comments.length,
-      title,
-    };
-  });
-
-  return { taskId };
-}
-
-export async function handleAIExtractContent(
-  message: Extract<Message, { type: 'AI_EXTRACT_CONTENT' }>,
-  context: HandlerContext,
-): Promise<{ comments: Comment[]; error?: string }> {
-  const { chunks, systemPrompt } = message.payload || {};
-
-  if (!chunks || !Array.isArray(chunks) || chunks.length === 0) {
-    return { comments: [], error: 'No chunks provided' };
-  }
-
-  try {
-    const settings = await context.settingsStore.getSettings();
-    const allComments: Comment[] = [];
-
-    const tasks = chunks.map((chunk, i) => async () => {
-      if (!chunk.trim()) return [];
-      try {
-        const response = await context.aiService.callAI({
-          prompt: chunk,
-          systemPrompt: systemPrompt || 'You are a data extractor. Return JSON only.',
-          config: settings.aiModel,
-          timeout: settings.aiTimeout,
-        });
-
-        const chunkComments = cleanAndParseJsonArray<Partial<Comment>>(response.content);
-        chunkComments.forEach((c, idx) => {
-          if (!c.id) c.id = `ai_${Date.now()}_${i}_${idx}`;
-          if (!c.likes) c.likes = 0;
-          if (!c.replies) c.replies = [];
-        });
-        return chunkComments as Comment[];
-      } catch (e) {
-        Logger.warn('[ExtractionHandler] Failed to extract from chunk', { index: i, error: e });
-        return [];
-      }
-    });
-
-    const { runWithConcurrencyLimit } = await import('../../utils/promise');
-    const { AI } = await import('@/config/constants');
-    const results = await runWithConcurrencyLimit(tasks, AI.MAX_CONCURRENT_REQUESTS || 3);
-
-    for (const chunkComments of results) {
-      allComments.push(...chunkComments);
-    }
-
-    return { comments: allComments };
-  } catch (error) {
-    Logger.error('[ExtractionHandler] AI extraction failed', { error });
-    return {
-      comments: [],
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
-  }
 }

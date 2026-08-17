@@ -1,7 +1,7 @@
-import { Message, CrawlingConfig } from '../../types';
+import { Message, CrawlingConfig } from '@/types';
 import { HandlerContext, SettingsResponse, SuccessResponse } from './types';
-import { Logger } from '../../utils/logger';
-import { ExtensionError, ErrorCode } from '../../utils/errors';
+import { Logger } from '@/utils/logger';
+import { ExtensionError, ErrorCode } from '@/utils/errors';
 
 export async function handleGetSettings(
   _message: Extract<Message, { type: 'GET_SETTINGS' }>,
