@@ -1,8 +1,25 @@
 import { Message } from '../types';
 import { CHROME_MESSAGE_ERRORS, TIMEOUT } from '@/config/constants';
+import { Logger } from './logger';
 
 interface MessageOptions {
   timeoutMs?: number;
+}
+
+export async function resolveTabId(
+  payloadTabId?: number,
+  senderTabId?: number,
+): Promise<number | undefined> {
+  const tabId = payloadTabId || senderTabId;
+  if (tabId) return tabId;
+
+  try {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    return activeTab?.id;
+  } catch (error) {
+    Logger.error('[ChromeMessage] Failed to get active tab', { error });
+    return undefined;
+  }
 }
 
 export function sendMessage<T = unknown>(

@@ -136,24 +136,37 @@ export function useTask(options: UseTaskOptions = {}) {
     [monitorTask],
   );
 
-  const ensureContentScript = useCallback(async () => {
-    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-    const tabId = tabs[0]?.id;
-    if (!tabId) {
-      throw new Error('No active tab');
+  const getActiveTabId = useCallback(async (): Promise<number | undefined> => {
+    try {
+      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+      return tabs[0]?.id;
+    } catch {
+      return undefined;
     }
-
-    await ExtensionAPI.ensureContentScript(tabId);
   }, []);
 
-  const startExtraction = async (url: string): Promise<string | null> => {
+  const ensureContentScript = useCallback(
+    async (tabId?: number) => {
+      const targetTabId = tabId ?? (await getActiveTabId());
+      if (!targetTabId) {
+        throw new Error('No active tab');
+      }
+
+      await ExtensionAPI.ensureContentScript(targetTabId);
+      return targetTabId;
+    },
+    [getActiveTabId],
+  );
+
+  const startExtraction = async (url: string, tabId?: number): Promise<string | null> => {
     if (isStartingRef.current || hasActiveTask(currentTask)) {
       return null;
     }
 
     isStartingRef.current = true;
+    let targetTabId = tabId;
     try {
-      await ensureContentScript();
+      targetTabId = await ensureContentScript(tabId);
     } catch (_error) {
       Logger.error('[useTask] Failed to inject content script');
       isStartingRef.current = false;
@@ -161,7 +174,7 @@ export function useTask(options: UseTaskOptions = {}) {
     }
 
     try {
-      const response = await ExtensionAPI.startExtraction(url);
+      const response = await ExtensionAPI.startExtraction(url, targetTabId);
 
       if (response?.taskId) {
         setCurrentTask({
@@ -189,14 +202,15 @@ export function useTask(options: UseTaskOptions = {}) {
     }
   };
 
-  const startConfigGeneration = async (url: string): Promise<string | null> => {
+  const startConfigGeneration = async (url: string, tabId?: number): Promise<string | null> => {
     if (isStartingRef.current || hasActiveTask(currentTask)) {
       return null;
     }
 
     isStartingRef.current = true;
+    let targetTabId = tabId;
     try {
-      await ensureContentScript();
+      targetTabId = await ensureContentScript(tabId);
     } catch (_error) {
       Logger.error('[useTask] Failed to inject content script');
       isStartingRef.current = false;
@@ -204,7 +218,7 @@ export function useTask(options: UseTaskOptions = {}) {
     }
 
     try {
-      const response = await ExtensionAPI.startConfigGeneration(url);
+      const response = await ExtensionAPI.startConfigGeneration(url, targetTabId);
 
       if (response?.taskId) {
         setCurrentTask({

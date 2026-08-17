@@ -42,7 +42,7 @@ export default function Logs() {
 
   const handleClearAll = async () => {
     const confirmed = await confirm({
-      message: 'logs.confirmClearLogs',
+      message: t('logs.confirmClearLogs'),
       destructive: true,
     });
     if (!confirmed) return;
@@ -68,7 +68,7 @@ export default function Logs() {
   const handleDeleteLog = async (key: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const confirmed = await confirm({
-      message: 'logs.confirmDeleteLog',
+      message: t('logs.confirmDeleteLog'),
       destructive: true,
     });
     if (!confirmed) return;

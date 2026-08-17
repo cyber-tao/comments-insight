@@ -27,7 +27,22 @@ const coreCommentSchema = z.object({
 
 const historyExportSchema = z.object({ type: z.literal('settings') });
 
-const messagePayloadSchemas: Partial<Record<Message['type'], z.ZodTypeAny>> = {
+const optionalUndefinedPayload = z.undefined().optional();
+const taskIdPayload = z.object({ taskId: nonEmptyString });
+
+const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
+  PING: optionalUndefinedPayload,
+  GET_PLATFORM_INFO: optionalUndefinedPayload,
+  GET_SETTINGS: optionalUndefinedPayload,
+  GET_DOM_STRUCTURE: optionalUndefinedPayload,
+  SYNC_CRAWLING_CONFIGS: optionalUndefinedPayload,
+  CLEAR_ALL_HISTORY: optionalUndefinedPayload,
+  TASK_UPDATE: z
+    .object({
+      id: nonEmptyString,
+    })
+    .passthrough(),
+  CANCEL_EXTRACTION: taskIdPayload,
   ENSURE_CONTENT_SCRIPT: z
     .object({
       tabId: z.number().int().positive().optional(),
@@ -181,7 +196,11 @@ function formatIssues(error: z.ZodError): string {
 export function validateMessagePayload(message: Message): Message {
   const schema = messagePayloadSchemas[message.type];
   if (!schema) {
-    return message;
+    throw new ExtensionError(
+      ErrorCode.VALIDATION_ERROR,
+      `Unknown message type has no payload schema: ${message.type}`,
+      { type: message.type },
+    );
   }
 
   const result = schema.safeParse(message.payload);

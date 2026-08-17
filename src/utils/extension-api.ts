@@ -177,17 +177,17 @@ export const ExtensionAPI = {
     }
   },
 
-  async startExtraction(url: string): Promise<StartTaskResponse> {
+  async startExtraction(url: string, tabId?: number): Promise<StartTaskResponse> {
     return sendMessageOrThrow<StartTaskResponse>({
       type: MESSAGES.START_EXTRACTION,
-      payload: { url },
+      payload: { url, tabId },
     });
   },
 
-  async startConfigGeneration(url: string): Promise<StartTaskResponse> {
+  async startConfigGeneration(url: string, tabId?: number): Promise<StartTaskResponse> {
     return sendMessageOrThrow<StartTaskResponse>({
       type: MESSAGES.START_CONFIG_GENERATION,
-      payload: { url },
+      payload: { url, tabId },
     });
   },
 

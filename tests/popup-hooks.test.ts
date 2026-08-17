@@ -225,7 +225,7 @@ describe('popup hooks', () => {
       currentWindow: true,
     });
     expect(extensionApiMock.ensureContentScript).toHaveBeenCalledWith(TAB_ID);
-    expect(extensionApiMock.startExtraction).toHaveBeenCalledWith(PAGE_URL);
+    expect(extensionApiMock.startExtraction).toHaveBeenCalledWith(PAGE_URL, TAB_ID);
     expect(result.current.currentTask).toMatchObject({
       id: TASK_ID,
       type: 'extract',
