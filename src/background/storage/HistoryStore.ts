@@ -1,7 +1,7 @@
-import { Comment, HistoryItem } from '../../types';
+import { Comment, HistoryItem } from '@/types';
 import { HISTORY, PAGINATION } from '@/config/constants';
-import { Logger } from '../../utils/logger';
-import { ExtensionError, ErrorCode } from '../../utils/errors';
+import { Logger } from '@/utils/logger';
+import { ExtensionError, ErrorCode } from '@/utils/errors';
 import Dexie, { type Table } from 'dexie';
 
 type HistoryMetadata = Pick<
@@ -261,7 +261,14 @@ export class HistoryStore {
   ) {
     try {
       const lowerQuery = query.toLowerCase();
-      const matchingItems = await this.getMatchingHistoryItems(lowerQuery);
+      // Try to skip the expensive comment-body scan when the cheap metadata
+      // pass already contains enough hits to satisfy the requested page. This
+      // gives an approximate total for shallow pages but avoids scanning up
+      // to SEARCH_FULL_SCAN_HARD_CAP full history rows on every keystroke.
+      const skipCommentScanThreshold = (page + 1) * pageSize;
+      const matchingItems = await this.getMatchingHistoryItems(lowerQuery, {
+        skipCommentScanThreshold,
+      });
 
       const total = matchingItems.length;
       const totalPages = Math.ceil(total / pageSize);
@@ -317,10 +324,6 @@ export class HistoryStore {
     }
   }
 
-  invalidateSortedIndexCache(): void {
-    // No-op for IndexedDB
-  }
-
   private async enforceHistoryLimit(): Promise<void> {
     const total = await db.historyMetadata.count();
     if (total <= HISTORY.MAX_ITEMS) {
@@ -342,7 +345,10 @@ export class HistoryStore {
     }
   }
 
-  private async getMatchingHistoryItems(lowerQuery: string): Promise<HistoryItem[]> {
+  private async getMatchingHistoryItems(
+    lowerQuery: string,
+    options: { skipCommentScanThreshold?: number } = {},
+  ): Promise<HistoryItem[]> {
     // Two-phase metadata-first search:
     //   1. Cheap pass over metadata index (no cap) → IDs matched by url/title/etc.
     //   2. Bounded scan over recent history rows for comment-body matches.
@@ -354,31 +360,42 @@ export class HistoryStore {
       .toArray();
     const matchedIds = new Set(metadataMatches.map((entry) => entry.id));
 
-    let scanned = 0;
-    let truncated = false;
-    await db.history
-      .orderBy('extractedAt')
-      .reverse()
-      .until(() => {
-        if (scanned >= HISTORY.SEARCH_FULL_SCAN_HARD_CAP) {
-          truncated = true;
-          return true;
-        }
-        return false;
-      })
-      .each((item) => {
-        scanned += 1;
-        if (matchedIds.has(item.id)) {
-          return;
-        }
-        if (item.comments?.some((comment) => commentMatchesQuery(comment, lowerQuery))) {
-          matchedIds.add(item.id);
-        }
-      });
+    const skipThreshold = options.skipCommentScanThreshold;
+    const canSkipCommentScan =
+      typeof skipThreshold === 'number' && skipThreshold > 0 && matchedIds.size >= skipThreshold;
 
-    if (truncated) {
-      Logger.warn('[HistoryStore] Comment search truncated at scan cap', {
-        cap: HISTORY.SEARCH_FULL_SCAN_HARD_CAP,
+    if (!canSkipCommentScan) {
+      let scanned = 0;
+      let truncated = false;
+      await db.history
+        .orderBy('extractedAt')
+        .reverse()
+        .until(() => {
+          if (scanned >= HISTORY.SEARCH_FULL_SCAN_HARD_CAP) {
+            truncated = true;
+            return true;
+          }
+          return false;
+        })
+        .each((item) => {
+          scanned += 1;
+          if (matchedIds.has(item.id)) {
+            return;
+          }
+          if (item.comments?.some((comment) => commentMatchesQuery(comment, lowerQuery))) {
+            matchedIds.add(item.id);
+          }
+        });
+
+      if (truncated) {
+        Logger.warn('[HistoryStore] Comment search truncated at scan cap', {
+          cap: HISTORY.SEARCH_FULL_SCAN_HARD_CAP,
+          metadataMatches: metadataMatches.length,
+        });
+      }
+    } else {
+      Logger.debug('[HistoryStore] Skipped comment scan: metadata already fills requested page', {
+        skipThreshold,
         metadataMatches: metadataMatches.length,
       });
     }

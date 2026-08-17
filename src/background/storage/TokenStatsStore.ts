@@ -1,5 +1,5 @@
 import { STORAGE } from '@/config/constants';
-import { Logger } from '../../utils/logger';
+import { Logger } from '@/utils/logger';
 import { Mutex } from '@/utils/promise';
 
 export interface TokenStats {
