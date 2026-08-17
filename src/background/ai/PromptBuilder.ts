@@ -5,7 +5,7 @@ import { DataNormalizer } from './DataNormalizer';
 import {
   ANALYSIS_FORMAT,
   LANGUAGES,
-  DEFAULTS,
+  SENTIMENT_DEFAULTS,
   AI as AI_CONST,
   TIME_NORMALIZATION,
   TEXT,
@@ -76,7 +76,7 @@ export class PromptBuilder {
     language: string = LANGUAGES.DEFAULT,
   ): string {
     return buildAnalysisPrompt(commentsData, template, {
-      datetime: new Date().toISOString(),
+      datetime: metadata?.datetime || new Date().toISOString(),
       videoTime: metadata?.videoTime || 'N/A',
       platform: metadata?.platform || 'Unknown Platform',
       url: metadata?.url || 'N/A',
@@ -106,11 +106,11 @@ export class PromptBuilder {
     return {
       totalComments: comments.length,
       sentimentDistribution: {
-        positive: typeof positive === 'number' ? positive : DEFAULTS.SENTIMENT_POSITIVE,
-        negative: typeof negative === 'number' ? negative : DEFAULTS.SENTIMENT_NEGATIVE,
-        neutral: typeof neutral === 'number' ? neutral : DEFAULTS.SENTIMENT_NEUTRAL,
+        positive: typeof positive === 'number' ? positive : SENTIMENT_DEFAULTS.SENTIMENT_POSITIVE,
+        negative: typeof negative === 'number' ? negative : SENTIMENT_DEFAULTS.SENTIMENT_NEGATIVE,
+        neutral: typeof neutral === 'number' ? neutral : SENTIMENT_DEFAULTS.SENTIMENT_NEUTRAL,
       },
-      hotComments: comments.slice(0, DEFAULTS.HOT_COMMENTS_PREVIEW),
+      hotComments: comments.slice(0, SENTIMENT_DEFAULTS.HOT_COMMENTS_PREVIEW),
       keyInsights: [],
     };
   }

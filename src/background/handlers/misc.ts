@@ -1,10 +1,10 @@
-import { Message } from '../../types';
-import { HandlerContext, PingResponse } from './types';
-import { Logger } from '../../utils/logger';
-import { ExtensionError, ErrorCode } from '../../utils/errors';
+import { Message } from '@/types';
+import { HandlerContext, PingResponse, SelectorTestResponse } from './types';
+import { Logger } from '@/utils/logger';
+import { ExtensionError, ErrorCode } from '@/utils/errors';
 import { LIMITS, MESSAGES, TEXT } from '@/config/constants';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
-import { resolveTabId } from '../../utils/tab-helpers';
+import { resolveTabId } from '@/utils/chrome-message';
 
 export interface ModelsResponse {
   models: string[];
@@ -15,13 +15,6 @@ export interface TestModelResponse {
   success: boolean;
   message?: string;
   response?: string;
-  error?: string;
-}
-
-export interface SelectorTestResponse {
-  success: boolean;
-  total?: number;
-  items?: string[];
   error?: string;
 }
 
@@ -86,22 +79,6 @@ export async function handleTestModel(
 
     if (response && response.content) {
       context.aiService.rememberVerifiedConfig(config);
-
-      try {
-        await context.settingsStore.saveSettings({
-          aiModel: config,
-        });
-      } catch (saveError) {
-        Logger.error('[MiscHandler] Model test succeeded but settings persistence failed', {
-          saveError,
-        });
-        return {
-          success: false,
-          error:
-            'Model call succeeded, but failed to persist AI model settings: ' +
-            (saveError instanceof Error ? saveError.message : 'Unknown error'),
-        };
-      }
 
       return {
         success: true,

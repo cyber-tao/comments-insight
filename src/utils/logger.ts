@@ -14,7 +14,7 @@
  * ```
  */
 
-import { LOG_PREFIX, STORAGE, DEFAULTS, LOG_LEVELS } from '@/config/constants';
+import { LOG_PREFIX, STORAGE, LOG_DEFAULTS, LOG_LEVELS } from '@/config/constants';
 import { sanitizeLogObject, sanitizeLogText } from './log-sanitize';
 import { Mutex } from './promise';
 
@@ -118,7 +118,7 @@ export class Logger {
     minLevel: LogLevel.INFO,
     enableConsole: true,
     enableStorage: false,
-    maxStoredLogs: DEFAULTS.LOGS_MAX_STORED,
+    maxStoredLogs: LOG_DEFAULTS.LOGS_MAX_STORED,
   };
 
   private static isDevelopment = false;
@@ -330,7 +330,8 @@ export class Logger {
 
   private static async logToStorage(entry: LogEntry): Promise<void> {
     try {
-      const logKey = `${LOG_PREFIX.SYSTEM}${entry.level.toLowerCase()}_${entry.timestamp}`;
+      const uniqueSuffix = Math.random().toString(36).substring(2, 7);
+      const logKey = `${LOG_PREFIX.SYSTEM}${entry.level.toLowerCase()}_${entry.timestamp}_${uniqueSuffix}`;
       await chrome.storage.local.set({
         [logKey]: entry,
       });

@@ -42,7 +42,8 @@ describe('misc handlers - model test', () => {
     } as unknown as typeof chrome);
   });
 
-  it('should return success when model responds', async () => {
+  it('should return success when model responds without persisting settings', async () => {
+    const rememberVerifiedConfig = vi.fn();
     const callAI = vi.fn().mockResolvedValue({
       content: 'OK',
       tokensUsed: 5,
@@ -56,7 +57,10 @@ describe('misc handlers - model test', () => {
         { type: 'TEST_MODEL' }
       >,
       createMockHandlerContext({
-        aiService: asAIService(callAI),
+        aiService: {
+          callAI,
+          rememberVerifiedConfig,
+        } as unknown as HandlerContext['aiService'],
         settingsStore: {
           saveSettings,
         } as unknown as HandlerContext['settingsStore'],
@@ -64,39 +68,11 @@ describe('misc handlers - model test', () => {
     );
 
     expect(callAI).toHaveBeenCalled();
-    expect(saveSettings).toHaveBeenCalledWith({
-      aiModel: baseConfig,
-    });
+    expect(rememberVerifiedConfig).toHaveBeenCalledWith(baseConfig);
+    expect(saveSettings).not.toHaveBeenCalled();
     expect(res.success).toBe(true);
     expect(res.response).toBe('OK');
     expect(res.message).toBe('Model is working correctly');
-  });
-
-  it('should fail when persisting tested config fails', async () => {
-    const callAI = vi.fn().mockResolvedValue({
-      content: 'OK',
-      tokensUsed: 5,
-      finishReason: 'stop',
-    });
-    const saveSettings = vi.fn().mockRejectedValue(new Error('persist failed'));
-
-    const res = await handleTestModel(
-      { type: 'TEST_MODEL', payload: { config: baseConfig } } as Extract<
-        Message,
-        { type: 'TEST_MODEL' }
-      >,
-      createMockHandlerContext({
-        aiService: asAIService(callAI),
-        settingsStore: {
-          saveSettings,
-        } as unknown as HandlerContext['settingsStore'],
-      }),
-    );
-
-    expect(callAI).toHaveBeenCalled();
-    expect(saveSettings).toHaveBeenCalled();
-    expect(res.success).toBe(false);
-    expect(res.error).toContain('failed to persist AI model settings');
   });
 
   it('should append hint on failure', async () => {
