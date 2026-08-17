@@ -18,8 +18,8 @@ import { sendMessage } from '@/utils/chrome-message';
 import { getCurrentHostname } from '@/utils/url';
 import { DOMSimplifier } from '../DOMSimplifier';
 import { Tokenizer } from '@/utils/tokenizer';
-import { ContentAIService } from '../services/ContentAIService';
-import { querySelectorAllDeep, querySelectorDeep } from '@/utils/dom-query';
+import { ContentAIService } from '../ContentAIService';
+import { querySelectorAllDeep, querySelectorDeep, queryXPathAll } from '@/utils/dom-query';
 import { checkAborted } from '../utils/abort';
 
 export type ConfigGenerationCallback = (progress: number, message: string) => void;
@@ -306,14 +306,17 @@ export class AIConfigGenerator {
       'Verifying AI-generated schema on live page...',
     );
     try {
-      const items = querySelectorAllDeep(document, config.item.selector, {
-        maxResults: LIMITS.SELECTOR_TEST_MAX_RESULTS,
-        signal,
-      });
+      const items =
+        config.item.type === 'xpath'
+          ? queryXPathAll(document, config.item.selector).slice(0, LIMITS.SELECTOR_TEST_MAX_RESULTS)
+          : querySelectorAllDeep(document, config.item.selector, {
+              maxResults: LIMITS.SELECTOR_TEST_MAX_RESULTS,
+              signal,
+            });
       if (items.length === 0) {
         Logger.warn(
           '[AIConfigGenerator] Self-correction failed: Generated config item selector found NO elements.',
-          { selector: config.item.selector },
+          { selector: config.item.selector, type: config.item.type },
         );
         throw new ExtensionError(
           ErrorCode.DOM_ANALYSIS_FAILED,
@@ -324,9 +327,12 @@ export class AIConfigGenerator {
         `[AIConfigGenerator] Self-correction passed: Found ${items.length} items using AI generated selector.`,
       );
     } catch (err) {
+      if (err instanceof ExtensionError) {
+        throw err;
+      }
       throw new ExtensionError(
         ErrorCode.DOM_ANALYSIS_FAILED,
-        'Invalid CSS selector syntax from AI: ' +
+        `Invalid ${config.item.type === 'xpath' ? 'XPath' : 'CSS'} selector syntax from AI: ` +
           (err instanceof Error ? err.message : String(err)),
       );
     }

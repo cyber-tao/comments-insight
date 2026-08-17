@@ -6,6 +6,7 @@ import {
   FieldSelector,
   FieldValidationStatus,
   ReplyConfig,
+  SelectorRule,
 } from '../../types';
 import { PageController } from '../PageController';
 import { Logger } from '../../utils/logger';
@@ -20,9 +21,29 @@ import {
   REGEX,
 } from '@/config/constants';
 import { sendMessage } from '@/utils/chrome-message';
-import { querySelectorAllDeep, querySelectorDeep } from '@/utils/dom-query';
+import { querySelectorAllDeep, querySelectorDeep, queryXPathAll } from '@/utils/dom-query';
 import { generateCommentHash } from '@/utils/comment-hash';
 import { checkAborted, abortableDelay } from '../utils/abort';
+
+function findElementByRule(
+  context: Document | Element,
+  rule?: SelectorRule | null,
+): Element | null {
+  if (!rule || !rule.selector) return null;
+  if (rule.type === 'xpath') {
+    const results = queryXPathAll(context, rule.selector);
+    return results.length > 0 ? results[0] : null;
+  }
+  return querySelectorDeep(context, rule.selector);
+}
+
+function findElementsByRule(context: Document | Element, rule?: SelectorRule | null): Element[] {
+  if (!rule || !rule.selector) return [];
+  if (rule.type === 'xpath') {
+    return queryXPathAll(context, rule.selector);
+  }
+  return querySelectorAllDeep(context, rule.selector);
+}
 
 export class ConfiguredStrategy implements ExtractionStrategy {
   private validationRecorded = false;
@@ -53,17 +74,16 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       maxComments,
     );
 
-    const containerSelector = this.config.container.selector;
-    let container = querySelectorDeep(document, containerSelector);
+    let container = findElementByRule(document, this.config.container);
 
     if (!container) {
       // Try waiting
       await abortableDelay(TIMING.SHORT_WAIT_MS, signal);
-      container = querySelectorDeep(document, containerSelector);
+      container = findElementByRule(document, this.config.container);
       if (!container) {
         throw new ExtensionError(
           ErrorCode.DOM_ANALYSIS_FAILED,
-          `Comment container not found: ${containerSelector}`,
+          `Comment container not found: ${this.config.container.selector}`,
         );
       }
     }
@@ -91,8 +111,8 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         break;
       }
 
-      // 1. Extract visible items (use deep query for Shadow DOM support)
-      const items = querySelectorAllDeep(container, this.config.item.selector);
+      // 1. Extract visible items (use deep query for Shadow DOM support and xpath)
+      const items = findElementsByRule(container, this.config.item);
       let added = 0;
 
       for (const itemElement of items) {
@@ -106,13 +126,15 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         // If this element is nested inside another element that ALSO matches the item selector,
         // then it is a child/reply, not a top-level comment. We should skip it here.
         // It will be extracted when we process its parent.
-        const parentItem = itemElement.parentElement?.closest(this.config.item.selector);
-        if (parentItem && container.contains(parentItem)) {
-          continue;
+        if (this.config.item.type !== 'xpath') {
+          const parentItem = itemElement.parentElement?.closest(this.config.item.selector);
+          if (parentItem && container.contains(parentItem)) {
+            continue;
+          }
         }
 
         // Scroll element into view to trigger lazy loading before extraction
-        (itemElement as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        (itemElement as HTMLElement).scrollIntoView?.({ behavior: 'smooth', block: 'center' });
         await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal);
 
         const comment = await this.extractCommentFromElement(
@@ -153,7 +175,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       const { contentChanged } = await this.pageController.scrollContainer(container, signal);
 
       // Re-query container in case of re-render
-      const newContainer = querySelectorDeep(document, containerSelector);
+      const newContainer = findElementByRule(document, this.config.container);
       if (newContainer) {
         container = newContainer;
       }
@@ -269,15 +291,15 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     const replies: Comment[] = [];
 
     if (replyConfig.expandBtn) {
-      const expandBtn = querySelectorDeep(element, replyConfig.expandBtn.selector) as HTMLElement;
+      const expandBtn = findElementByRule(element, replyConfig.expandBtn) as HTMLElement;
       if (expandBtn) {
         await this.clickExpandButton(element, expandBtn, replyConfig, signal, depth > 0);
       }
     }
 
-    const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
+    const replyContainer = findElementByRule(element, replyConfig.container);
     if (replyContainer) {
-      const replyItems = querySelectorAllDeep(replyContainer, replyConfig.item.selector);
+      const replyItems = findElementsByRule(replyContainer, replyConfig.item);
       if (replyItems.length > 0) {
         Logger.info(
           depth > 0
@@ -318,12 +340,12 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       text: expandBtn.textContent || '',
     });
 
-    const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
+    const replyContainer = findElementByRule(element, replyConfig.container);
     const currentReplyCount = replyContainer
-      ? querySelectorAllDeep(replyContainer, replyConfig.item.selector).length
+      ? findElementsByRule(replyContainer, replyConfig.item).length
       : 0;
 
-    expandBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    expandBtn.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
     await abortableDelay(TIMING.SCROLL_INTO_VIEW_WAIT_MS, signal);
 
     try {
@@ -349,12 +371,12 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
     validation['container'] = container ? 'success' : 'failed';
 
-    const firstItem = querySelectorDeep(container, this.config.item.selector);
+    const firstItem = findElementByRule(container, this.config.item);
     validation['item'] = firstItem ? 'success' : 'failed';
 
     if (firstItem) {
       for (const field of this.config.fields) {
-        const result = querySelectorDeep(firstItem, field.rule.selector);
+        const result = findElementByRule(firstItem, field.rule);
         validation[field.name] = result ? 'success' : 'failed';
       }
     }
@@ -362,25 +384,25 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     if (this.config.replies) {
       const replyConfig = this.config.replies;
       if (firstItem) {
-        const replyContainer = querySelectorDeep(firstItem, replyConfig.container.selector);
+        const replyContainer = findElementByRule(firstItem, replyConfig.container);
         validation['replies.container'] = replyContainer ? 'success' : 'failed';
         if (replyContainer) {
-          const replyItem = querySelectorDeep(replyContainer, replyConfig.item.selector);
+          const replyItem = findElementByRule(replyContainer, replyConfig.item);
           validation['replies.item'] = replyItem ? 'success' : 'failed';
         }
         if (replyConfig.expandBtn?.selector) {
-          const expandBtn = querySelectorDeep(firstItem, replyConfig.expandBtn.selector);
+          const expandBtn = findElementByRule(firstItem, replyConfig.expandBtn);
           validation['replies.expandBtn'] = expandBtn ? 'success' : 'failed';
         }
       }
     }
 
     if (this.config.videoTime?.selector) {
-      const el = querySelectorDeep(document, this.config.videoTime.selector);
+      const el = findElementByRule(document, this.config.videoTime);
       validation['videoTime'] = el ? 'success' : 'failed';
     }
     if (this.config.postContent?.selector) {
-      const el = querySelectorDeep(document, this.config.postContent.selector);
+      const el = findElementByRule(document, this.config.postContent);
       validation['postContent'] = el ? 'success' : 'failed';
     }
 
@@ -397,9 +419,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
   private extractField(context: HTMLElement, field?: FieldSelector): string | null {
     if (!field) return null;
 
-    // Support multiple comma-separated selectors in one rule (standard CSS)
-    // Use querySelectorDeep for Shadow DOM support
-    const element = querySelectorDeep(context, field.rule.selector);
+    const element = findElementByRule(context, field.rule);
     if (!element) return null;
 
     if (field.attribute) {
@@ -430,9 +450,9 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     while (Date.now() - startTime < TIMING.REPLY_POLL_TIMEOUT_MS) {
       checkAborted(signal);
 
-      const replyContainer = querySelectorDeep(element, replyConfig.container.selector);
+      const replyContainer = findElementByRule(element, replyConfig.container);
       if (replyContainer) {
-        const items = querySelectorAllDeep(replyContainer, replyConfig.item.selector);
+        const items = findElementsByRule(replyContainer, replyConfig.item);
         // Wait for reply count to INCREASE from initial count
         if (items.length > initialCount) {
           Logger.info('[ReplyDebug] Reply count increased', {

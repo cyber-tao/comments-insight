@@ -141,11 +141,15 @@ export class CommentExtractor {
         return acc;
       }
 
+      const validReplies = Array.isArray(comment.replies)
+        ? this.validateComments(comment.replies, platform)
+        : [];
+
       acc.push({
         ...comment,
         platform, // Ensure platform is set
-        likes: Math.max(0, comment.likes || 0), // Ensure non-negative
-        replies: comment.replies || [], // Ensure replies array exists
+        likes: Math.max(0, typeof comment.likes === 'number' ? comment.likes : 0),
+        replies: validReplies,
       });
 
       return acc;
