@@ -1,21 +1,14 @@
 import { Message, PortMessage, MessageType } from '../types';
-import { TaskManager } from './TaskManager';
-import { AIService } from './AIService';
-import { CommentAnalyzer } from './ai/CommentAnalyzer';
-import { TimestampNormalizer } from './ai/TimestampNormalizer';
-import { SettingsStore } from './storage/SettingsStore';
-import { HistoryStore } from './storage/HistoryStore';
-import { EncryptionService } from './storage/EncryptionService';
-import { LogStore } from './storage/LogStore';
-import { TokenStatsStore } from './storage/TokenStatsStore';
-import { CrawlingConfigStore } from './storage/CrawlingConfigStore';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
 import { MESSAGES } from '@/config/constants';
 import { HandlerContext } from './handlers/types';
+import type { ServiceInstances } from './ServiceContainer';
 import { validateMessagePayload } from '@/utils/message-validation';
 
 import * as extractionHandlers from './handlers/extraction';
+import * as analysisHandlers from './handlers/analysis';
+import * as configGenerationHandlers from './handlers/config-generation';
 import * as settingsHandlers from './handlers/settings';
 import * as historyHandlers from './handlers/history';
 import * as taskHandlers from './handlers/task';
@@ -69,35 +62,24 @@ type HandlerFunction<T extends Message = Message> = {
 export class MessageRouter {
   private handlers = new Map<MessageType, HandlerFunction>();
   private portMessageInFlight = new Map<string, Promise<unknown>>();
-  private portMessageResponses = new Map<string, unknown>();
+  private readyPromise?: Promise<unknown>;
 
   private context: Omit<HandlerContext, 'sender'>;
 
-  constructor(
-    taskManager: TaskManager,
-    aiService: AIService,
-    commentAnalyzer: CommentAnalyzer,
-    timestampNormalizer: TimestampNormalizer,
-    settingsStore: SettingsStore,
-    historyStore: HistoryStore,
-    encryptionService: EncryptionService,
-    logStore: LogStore,
-    tokenStatsStore: TokenStatsStore,
-    crawlingConfigStore: CrawlingConfigStore,
-  ) {
-    this.context = {
-      taskManager,
-      aiService,
-      commentAnalyzer,
-      timestampNormalizer,
-      settingsStore,
-      historyStore,
-      encryptionService,
-      logStore,
-      tokenStatsStore,
-      crawlingConfigStore,
-    };
+  constructor(services: ServiceInstances, options?: { readyPromise?: Promise<unknown> }) {
+    this.context = { ...services };
+    this.readyPromise = options?.readyPromise;
     this.registerHandlers();
+  }
+
+  private async ensureReady(): Promise<void> {
+    if (this.readyPromise) {
+      try {
+        await this.readyPromise;
+      } catch {
+        // Initialization errors are logged at startup; don't throw from guard
+      }
+    }
   }
 
   /**
@@ -107,20 +89,23 @@ export class MessageRouter {
     this.register(MESSAGES.PING, miscHandlers.handlePing);
     this.register(MESSAGES.ENSURE_CONTENT_SCRIPT, miscHandlers.handleEnsureContentScript);
     this.register(MESSAGES.START_EXTRACTION, extractionHandlers.handleStartExtraction);
-    this.register(MESSAGES.START_CONFIG_GENERATION, extractionHandlers.handleStartConfigGeneration);
-    this.register(MESSAGES.AI_ANALYZE_STRUCTURE, extractionHandlers.handleAIAnalyzeStructure);
-    this.register(MESSAGES.AI_EXTRACT_CONTENT, extractionHandlers.handleAIExtractContent);
+    this.register(
+      MESSAGES.START_CONFIG_GENERATION,
+      configGenerationHandlers.handleStartConfigGeneration,
+    );
+    this.register(MESSAGES.AI_ANALYZE_STRUCTURE, analysisHandlers.handleAIAnalyzeStructure);
+    this.register(MESSAGES.AI_EXTRACT_CONTENT, analysisHandlers.handleAIExtractContent);
     this.register(
       MESSAGES.GENERATE_CRAWLING_CONFIG,
-      extractionHandlers.handleGenerateCrawlingConfig,
+      configGenerationHandlers.handleGenerateCrawlingConfig,
     );
     this.register(MESSAGES.EXTRACTION_COMPLETED, extractionHandlers.handleExtractionCompleted);
     this.register(
       MESSAGES.CONFIG_GENERATION_COMPLETED,
-      extractionHandlers.handleConfigGenerationCompleted,
+      configGenerationHandlers.handleConfigGenerationCompleted,
     );
     this.register(MESSAGES.EXTRACTION_PROGRESS, extractionHandlers.handleExtractionProgress);
-    this.register(MESSAGES.START_ANALYSIS, extractionHandlers.handleStartAnalysis);
+    this.register(MESSAGES.START_ANALYSIS, analysisHandlers.handleStartAnalysis);
     this.register(MESSAGES.GET_TASK_STATUS, taskHandlers.handleGetTaskStatus);
     this.register(MESSAGES.CANCEL_TASK, taskHandlers.handleCancelTask);
     this.register(MESSAGES.GET_SETTINGS, settingsHandlers.handleGetSettings);
@@ -157,6 +142,7 @@ export class MessageRouter {
    * @param message - Port message with correlation ID
    */
   async handlePortMessage(port: chrome.runtime.Port, message: PortMessage): Promise<void> {
+    await this.ensureReady();
     const correlationId = message.id;
     try {
       if (typeof correlationId !== 'string' || correlationId.length === 0) {
@@ -166,14 +152,6 @@ export class MessageRouter {
         );
       }
 
-      if (this.portMessageResponses.has(correlationId)) {
-        port.postMessage({
-          id: correlationId,
-          response: this.portMessageResponses.get(correlationId),
-        });
-        return;
-      }
-
       let responsePromise = this.portMessageInFlight.get(correlationId);
       if (!responsePromise) {
         responsePromise = this.handleMessage(toMessage(message), ensurePortSender(port.sender));
@@ -181,12 +159,10 @@ export class MessageRouter {
       }
 
       const response = await responsePromise;
-      this.portMessageResponses.set(correlationId, response);
       port.postMessage({ id: correlationId, response });
     } catch (error) {
       Logger.error('[MessageRouter] Port message handling failed', { error, type: message.type });
       const response = { error: error instanceof Error ? error.message : String(error) };
-      this.portMessageResponses.set(correlationId, response);
       port.postMessage({ id: correlationId, response });
     } finally {
       this.portMessageInFlight.delete(correlationId);
@@ -200,6 +176,7 @@ export class MessageRouter {
    * @returns Response data
    */
   async handleMessage(message: Message, sender: chrome.runtime.MessageSender): Promise<unknown> {
+    await this.ensureReady();
     const validatedMessage = validateMessagePayload(message);
 
     Logger.debug('[MessageRouter] Handling message', {
