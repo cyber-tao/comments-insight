@@ -296,7 +296,7 @@ describe('analysis handlers', () => {
       });
     });
 
-    it('should successfully generate dynamic HTML report and save to history', async () => {
+    it('should successfully create task and execute dynamic HTML generation', async () => {
       const { handleGenerateDynamicReport } = await import('@/background/handlers/analysis');
       const mockHistoryItem = {
         id: 'hist_1',
@@ -311,7 +311,15 @@ describe('analysis handlers', () => {
         },
       };
 
+      let executorFn: any;
       const localContext = createMockContext({
+        taskManager: {
+          ...createMockContext().taskManager,
+          createTask: vi.fn().mockReturnValue('task_dynamic_123'),
+          setExecutor: vi.fn().mockImplementation((_taskId, fn) => {
+            executorFn = fn;
+          }),
+        },
         historyStore: {
           ...createMockContext().historyStore,
           getHistoryItem: vi.fn().mockResolvedValue(mockHistoryItem),
@@ -333,7 +341,17 @@ describe('analysis handlers', () => {
       const response = await handleGenerateDynamicReport(message, localContext);
 
       expect(response.success).toBe(true);
-      expect(response.dynamicHtml).toBe('<!DOCTYPE html><html><body>Dashboard</body></html>');
+      expect(response.taskId).toBe('task_dynamic_123');
+      expect(localContext.taskManager.createTask).toHaveBeenCalledWith(
+        'analyze',
+        'https://example.com',
+        'example.com',
+      );
+      expect(localContext.taskManager.setExecutor).toHaveBeenCalled();
+
+      // Execute the task executor
+      const taskResult = await executorFn({ id: 'task_dynamic_123' }, new AbortController().signal);
+      expect(taskResult.tokensUsed).toBe(50);
       expect(localContext.historyStore.saveHistory).toHaveBeenCalledWith(
         expect.objectContaining({
           analysis: expect.objectContaining({

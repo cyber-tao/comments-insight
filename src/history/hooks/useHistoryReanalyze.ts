@@ -157,7 +157,7 @@ export function useHistoryReanalyze({
   const [generateDynamicError, setGenerateDynamicError] = useState('');
 
   const handleGenerateDynamicReport = useCallback(async () => {
-    if (!selectedItem || isGeneratingDynamic) {
+    if (!selectedItem || isGeneratingDynamic || isReanalyzing) {
       return;
     }
 
@@ -166,7 +166,15 @@ export function useHistoryReanalyze({
 
     try {
       const response = await ExtensionAPI.generateDynamicReport(selectedItem.id);
-      if (response.success && response.dynamicHtml) {
+      if (response.success && response.taskId) {
+        setIsReanalyzing(true);
+        setReanalyzeProgress(0);
+        setReanalyzeDetailedProgress(null);
+        setReanalyzeMessage(null);
+        setReanalyzingHistoryId(selectedItem.id);
+        setReanalyzeTaskId(response.taskId);
+        monitorReanalyzeTask(response.taskId, selectedItem.id);
+      } else if (response.success && response.dynamicHtml) {
         const refreshed = await fetchHistoryItemById(selectedItem.id, { force: true });
         if (!isUnmountedRef.current) {
           setSelectedItem(refreshed);
@@ -188,7 +196,15 @@ export function useHistoryReanalyze({
         setIsGeneratingDynamic(false);
       }
     }
-  }, [fetchHistoryItemById, isGeneratingDynamic, selectedItem, setSelectedItem, t]);
+  }, [
+    fetchHistoryItemById,
+    isGeneratingDynamic,
+    isReanalyzing,
+    monitorReanalyzeTask,
+    selectedItem,
+    setSelectedItem,
+    t,
+  ]);
 
   return {
     clearReanalyzeError,

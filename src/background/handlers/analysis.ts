@@ -214,10 +214,17 @@ export async function handleStartAnalysis(
   return { taskId };
 }
 
+export interface GenerateDynamicReportResponse {
+  success: boolean;
+  taskId?: string;
+  dynamicHtml?: string;
+  error?: string;
+}
+
 export async function handleGenerateDynamicReport(
   message: Extract<Message, { type: 'GENERATE_DYNAMIC_REPORT' }>,
   context: HandlerContext,
-): Promise<{ success: boolean; dynamicHtml?: string; error?: string }> {
+): Promise<GenerateDynamicReportResponse> {
   const { historyId } = message.payload || {};
 
   if (!historyId) {
@@ -238,12 +245,23 @@ export async function handleGenerateDynamicReport(
     );
   }
 
-  const settings = await context.settingsStore.getSettings();
-  const analysisModel = settings.aiModel;
+  const domain = historyItem.url ? getDomain(historyItem.url) || TEXT.UNKNOWN : TEXT.UNKNOWN;
+  const taskId = context.taskManager.createTask('analyze', historyItem.url || TEXT.UNKNOWN, domain);
 
-  try {
+  context.taskManager.setExecutor(taskId, async (_task: Task, signal: AbortSignal) => {
+    const settings = await context.settingsStore.getSettings();
+    const analysisModel = settings.aiModel;
+
+    context.taskManager.updateDetailedProgress(taskId, {
+      stage: 'analyzing',
+      current: 10,
+      total: 100,
+      stageMessage: AI_CONST.ANALYSIS_PROGRESS_MESSAGES.GENERATING_DYNAMIC,
+      stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.GENERATING_DYNAMIC,
+    });
+
     const dynamicResult = await context.commentAnalyzer.generateDynamicHtml(
-      historyItem.analysis.markdown,
+      historyItem.analysis!.markdown,
       analysisModel,
       settings.dynamicReportPromptTemplate,
       settings.language,
@@ -255,27 +273,50 @@ export async function handleGenerateDynamicReport(
         postContent: historyItem.postContent,
       },
       historyItem.commentsCount || historyItem.comments?.length || 0,
-      undefined,
+      signal,
       settings.aiTimeout,
-      undefined,
+      (progress) => {
+        context.taskManager.updateDetailedProgress(taskId, {
+          stage: 'analyzing',
+          current: Math.min(95, 10 + Math.floor(progress.charactersReceived / 100)),
+          total: 100,
+          stageMessage: `${AI_CONST.ANALYSIS_PROGRESS_MESSAGES.GENERATING_DYNAMIC}, ${progress.charactersReceived} ${AI_CONST.ANALYSIS_PROGRESS_MESSAGES.CHARS_LABEL}`,
+          stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
+          stageMessageParams: {
+            [AI_CONST.ANALYSIS_PROGRESS_PARAM_KEYS.CHARACTERS]: progress.charactersReceived,
+          },
+        });
+      },
       historyItem.comments,
     );
 
-    if (dynamicResult.html) {
-      historyItem.analysis.dynamicHtml = dynamicResult.html;
-      historyItem.analysis.tokensUsed += dynamicResult.tokensUsed;
-      await context.historyStore.saveHistory(historyItem);
-      return { success: true, dynamicHtml: dynamicResult.html };
+    if (!dynamicResult.html) {
+      throw new ExtensionError(ErrorCode.AI_INVALID_RESPONSE, 'Empty HTML received from model');
     }
 
-    return { success: false, error: 'Empty HTML received' };
-  } catch (error) {
-    Logger.error('[AnalysisHandler] Failed to generate dynamic report', { error });
+    const latestItem = (await context.historyStore.getHistoryItem(historyId)) || historyItem;
+    if (latestItem.analysis) {
+      latestItem.analysis.dynamicHtml = dynamicResult.html;
+      latestItem.analysis.tokensUsed =
+        (latestItem.analysis.tokensUsed || 0) + dynamicResult.tokensUsed;
+    }
+    await context.historyStore.saveHistory(latestItem);
+
+    context.taskManager.updateDetailedProgress(taskId, {
+      stage: 'complete',
+      current: 100,
+      total: 100,
+      stageMessage: AI_CONST.ANALYSIS_PROGRESS_MESSAGES.DYNAMIC_COMPLETE,
+      stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.DYNAMIC_COMPLETE,
+    });
+
     return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      tokensUsed: dynamicResult.tokensUsed,
+      title: latestItem.title,
     };
-  }
+  });
+
+  return { success: true, taskId };
 }
 
 export async function handleAIAnalyzeStructure(

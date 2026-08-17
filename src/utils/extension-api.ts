@@ -220,15 +220,16 @@ export const ExtensionAPI = {
 
   async generateDynamicReport(
     historyId: string,
-  ): Promise<{ success?: boolean; dynamicHtml?: string; error?: string }> {
-    const timeoutMs = await getEffectiveAiTimeoutMs();
-    return sendMessageOrThrow<{ success?: boolean; dynamicHtml?: string; error?: string }>(
-      {
-        type: MESSAGES.GENERATE_DYNAMIC_REPORT,
-        payload: { historyId },
-      },
-      { timeoutMs },
-    );
+  ): Promise<{ success?: boolean; taskId?: string; dynamicHtml?: string; error?: string }> {
+    return sendMessageOrThrow<{
+      success?: boolean;
+      taskId?: string;
+      dynamicHtml?: string;
+      error?: string;
+    }>({
+      type: MESSAGES.GENERATE_DYNAMIC_REPORT,
+      payload: { historyId },
+    });
   },
 
   async cancelTask(taskId: string): Promise<SuccessResponse> {
