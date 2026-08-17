@@ -96,6 +96,7 @@ describe('ExtensionAPI', () => {
             },
           },
         },
+        { timeoutMs: 180000 },
       ],
     ]);
   });
@@ -107,6 +108,7 @@ describe('ExtensionAPI', () => {
       .mockResolvedValueOnce({ taskId: 'extract-1' })
       .mockResolvedValueOnce({ taskId: 'config-1' })
       .mockResolvedValueOnce({ taskId: 'analysis-1' })
+      .mockResolvedValueOnce({ success: true, dynamicHtml: '<html></html>' })
       .mockResolvedValueOnce({ success: true })
       .mockResolvedValueOnce({ success: true })
       .mockResolvedValueOnce({ success: true });
@@ -126,6 +128,10 @@ describe('ExtensionAPI', () => {
         metadata: { url: 'https://example.com/post' },
       }),
     ).toEqual({ taskId: 'analysis-1' });
+    expect(await ExtensionAPI.generateDynamicReport('history-1')).toEqual({
+      success: true,
+      dynamicHtml: '<html></html>',
+    });
     expect(await ExtensionAPI.cancelTask('task-1')).toEqual({ success: true });
     expect(await ExtensionAPI.deleteHistory('history-1')).toEqual({ success: true });
     expect(await ExtensionAPI.clearAllHistory()).toEqual({ success: true });
@@ -144,6 +150,13 @@ describe('ExtensionAPI', () => {
             metadata: { url: 'https://example.com/post' },
           },
         },
+      ],
+      [
+        {
+          type: MESSAGES.GENERATE_DYNAMIC_REPORT,
+          payload: { historyId: 'history-1' },
+        },
+        { timeoutMs: 180000 },
       ],
       [{ type: MESSAGES.CANCEL_TASK, payload: { taskId: 'task-1' } }],
       [{ type: MESSAGES.DELETE_HISTORY, payload: { id: 'history-1' } }],

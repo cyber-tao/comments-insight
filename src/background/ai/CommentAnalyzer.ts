@@ -416,7 +416,7 @@ export class CommentAnalyzer {
     if (comments && comments.length > 0) {
       const topComments = [...comments]
         .sort((a, b) => (b.likes || 0) - (a.likes || 0))
-        .slice(0, 20);
+        .slice(0, 10);
       topCommentsData = PromptBuilder.serializeCommentsDense(topComments).text;
     }
 

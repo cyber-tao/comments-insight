@@ -1,4 +1,4 @@
-import { MESSAGES, TEXT } from '@/config/constants';
+import { MESSAGES, TEXT, TIMEOUT } from '@/config/constants';
 import type { Comment, HistoryItem, Message, Settings, Task } from '@/types';
 import { sendMessage } from './chrome-message';
 
@@ -89,8 +89,13 @@ interface StartAnalysisResponse {
   taskId?: string;
 }
 
-async function sendMessageOrThrow<T>(message: Message): Promise<T> {
-  const response = await sendMessage<T & { error?: string }>(message);
+async function sendMessageOrThrow<T>(
+  message: Message,
+  options?: { timeoutMs?: number },
+): Promise<T> {
+  const response = options
+    ? await sendMessage<T & { error?: string }>(message, options)
+    : await sendMessage<T & { error?: string }>(message);
 
   if (response && typeof response === 'object' && typeof response.error === 'string') {
     throw new Error(response.error);
@@ -201,10 +206,13 @@ export const ExtensionAPI = {
   async generateDynamicReport(
     historyId: string,
   ): Promise<{ success?: boolean; dynamicHtml?: string; error?: string }> {
-    return sendMessageOrThrow<{ success?: boolean; dynamicHtml?: string; error?: string }>({
-      type: MESSAGES.GENERATE_DYNAMIC_REPORT,
-      payload: { historyId },
-    });
+    return sendMessageOrThrow<{ success?: boolean; dynamicHtml?: string; error?: string }>(
+      {
+        type: MESSAGES.GENERATE_DYNAMIC_REPORT,
+        payload: { historyId },
+      },
+      { timeoutMs: TIMEOUT.DYNAMIC_REPORT_RESPONSE_MS },
+    );
   },
 
   async cancelTask(taskId: string): Promise<SuccessResponse> {
@@ -252,9 +260,12 @@ export const ExtensionAPI = {
   },
 
   async testModel(config: Settings['aiModel']): Promise<TestModelResponse> {
-    return sendMessageOrThrow<TestModelResponse>({
-      type: MESSAGES.TEST_MODEL,
-      payload: { config },
-    });
+    return sendMessageOrThrow<TestModelResponse>(
+      {
+        type: MESSAGES.TEST_MODEL,
+        payload: { config },
+      },
+      { timeoutMs: TIMEOUT.DYNAMIC_REPORT_RESPONSE_MS },
+    );
   },
 };
