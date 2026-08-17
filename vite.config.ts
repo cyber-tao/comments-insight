@@ -18,6 +18,7 @@ export default defineConfig({
         options: 'src/options/index.html',
         history: 'src/history/index.html',
         logs: 'src/logs/index.html',
+        sandbox: 'src/sandbox/index.html',
       },
     },
   },

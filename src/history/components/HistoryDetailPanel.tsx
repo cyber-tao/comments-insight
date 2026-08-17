@@ -11,6 +11,7 @@ import {
 } from '@/utils/export';
 import { formatTaskProgressMessage } from '@/utils/task-progress-display';
 import { CommentTree } from './CommentTree';
+import { DynamicReportViewer } from './DynamicReportViewer';
 
 interface HistoryDetailPanelProps {
   selectedItem: HistoryItem | null;
@@ -232,11 +233,9 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
         </div>
 
         <div className="flex-1 w-full h-full overflow-hidden">
-          <iframe
+          <DynamicReportViewer
             title={selectedItem.title || 'Dynamic Analysis Report'}
-            srcDoc={selectedItem.analysis?.dynamicHtml}
-            sandbox="allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox allow-modals"
-            className="w-full h-full border-none"
+            html={selectedItem.analysis?.dynamicHtml || ''}
           />
         </div>
       </div>
@@ -506,11 +505,9 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                   minHeight: '600px',
                 }}
               >
-                <iframe
+                <DynamicReportViewer
                   title={selectedItem.title || 'Dynamic Analysis Report'}
-                  srcDoc={selectedItem.analysis?.dynamicHtml}
-                  sandbox="allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox"
-                  className="w-full h-full border-none"
+                  html={selectedItem.analysis?.dynamicHtml || ''}
                   style={{ minHeight: '600px' }}
                 />
               </div>

@@ -527,4 +527,54 @@ describe('HistoryDetailPanel', () => {
     expect(screen.getByText('search:12/2')).toBeTruthy();
     expect(screen.getByText('show:11-12/12')).toBeTruthy();
   });
+
+  it('renders DynamicReportViewer using sandbox iframe and handles postMessage', () => {
+    const selectedItem = createHistoryItem({
+      analysis: {
+        markdown: '# Analysis',
+        dynamicHtml: '<html><body><h1>Dashboard</h1></body></html>',
+        tokensUsed: 100,
+        generatedAt: 123,
+        summary: {
+          totalComments: 1,
+          sentimentDistribution: { positive: 100, negative: 0, neutral: 0 },
+          hotComments: [],
+          keyInsights: [],
+        },
+      },
+    });
+
+    render(
+      <HistoryDetailPanel
+        selectedItem={selectedItem}
+        selectedItemError={null}
+        selectedItemLoading={false}
+        viewMode="dynamic"
+        exportPostContentInMarkdown={false}
+        commentSearchTerm=""
+        sortBy="likes"
+        commentsPerPage={PAGINATION.OPTIONS[0]}
+        currentPage={1}
+        totalComments={1}
+        totalPages={1}
+        paginatedComments={selectedItem.comments}
+        isReanalyzing={false}
+        reanalyzeError={null}
+        reanalyzeProgress={null}
+        reanalyzeTaskId={null}
+        reanalyzingHistoryId={null}
+        onViewModeChange={vi.fn()}
+        onReanalyze={vi.fn()}
+        onCommentSearchTermChange={vi.fn()}
+        onSortByChange={vi.fn()}
+        onCommentsPerPageChange={vi.fn()}
+        onCurrentPageChange={vi.fn()}
+        formatDate={() => 'formatted-date'}
+      />,
+    );
+
+    const iframe = screen.getByTitle('History Title');
+    expect(iframe).toBeTruthy();
+    expect(iframe.getAttribute('src')).toContain('src/sandbox/index.html');
+  });
 });
