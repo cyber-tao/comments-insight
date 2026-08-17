@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildAnalysisPrompt,
+  buildDynamicReportPrompt,
   validatePromptTemplate,
   getAvailablePlaceholders,
   DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
+  DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
 } from '../src/utils/prompts';
+import { PromptBuilder } from '../src/background/ai/PromptBuilder';
 
 describe('Prompts Utils', () => {
   describe('buildAnalysisPrompt', () => {
@@ -48,6 +51,53 @@ describe('Prompts Utils', () => {
         language: 'zh-CN',
       });
       expect(result).toContain('write the entire analysis in 中文');
+    });
+  });
+
+  describe('buildDynamicReportPrompt', () => {
+    const mockMarkdown = '# Sentiment Analysis\nPositive: 70%';
+    const mockMetadata = {
+      datetime: '2023-01-01T00:00:00Z',
+      platform: 'YouTube',
+      url: 'https://youtube.com/watch?v=123',
+      title: 'Awesome Video',
+      totalComments: 50,
+      language: 'zh-CN',
+    };
+
+    it('should replace placeholders in dynamic report prompt', () => {
+      const result = buildDynamicReportPrompt(
+        mockMarkdown,
+        DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
+        mockMetadata,
+      );
+      expect(result).toContain(mockMarkdown);
+      expect(result).toContain('YouTube');
+      expect(result).toContain('Awesome Video');
+      expect(result).toContain('50');
+      expect(result).toContain('<!DOCTYPE html>');
+    });
+  });
+
+  describe('PromptBuilder.extractCleanHtml', () => {
+    it('should extract raw HTML if not enclosed in markdown code fences', () => {
+      const html =
+        '<!DOCTYPE html><html><head><title>Test</title></head><body><h1>Hello</h1></body></html>';
+      expect(PromptBuilder.extractCleanHtml(html)).toBe(html);
+    });
+
+    it('should extract HTML wrapped in ```html code fences', () => {
+      const raw =
+        'Here is your report:\n```html\n<!DOCTYPE html><html><body><h1>Hello</h1></body></html>\n```\nEnjoy!';
+      const extracted = PromptBuilder.extractCleanHtml(raw);
+      expect(extracted).toBe('<!DOCTYPE html><html><body><h1>Hello</h1></body></html>');
+    });
+
+    it('should strip thinking tags', () => {
+      const raw =
+        '<think>I need to generate a dashboard</think>\n```html\n<!DOCTYPE html><html><body>Dashboard</body></html>\n```';
+      const extracted = PromptBuilder.extractCleanHtml(raw);
+      expect(extracted).toBe('<!DOCTYPE html><html><body>Dashboard</body></html>');
     });
   });
 

@@ -172,6 +172,25 @@ ${item.analysis.markdown}
 }
 
 /**
+ * Export dynamic analysis as standalone HTML
+ * @param item - History item with dynamicHtml
+ * @param filename - Output filename
+ */
+export function exportAnalysisAsHTML(item: HistoryItem, filename?: string): void {
+  if (!item.analysis?.dynamicHtml) {
+    throw new Error(t('export.noDynamicHtmlAvailable'));
+  }
+
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[:.]/g, '-')
+    .substring(0, LIMITS.EXPORT_ISO_TIMESTAMP_LENGTH);
+  const defaultFilename = `${sanitizeFilename(item.title)}_dynamic_report_${timestamp}.html`;
+
+  downloadFile(item.analysis.dynamicHtml, filename || defaultFilename, 'text/html;charset=utf-8');
+}
+
+/**
  * Download file helper
  * @param content - File content
  * @param filename - Filename

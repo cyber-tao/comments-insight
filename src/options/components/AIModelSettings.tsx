@@ -2,7 +2,10 @@ import * as React from 'react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AI, API, UI_LIMITS } from '@/config/constants';
-import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
+import {
+  DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
+  DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
+} from '@/utils/prompts';
 import { Settings } from '@/types';
 import { ExtensionAPI } from '@/utils/extension-api';
 import { parseFiniteIntegerInput, parseFiniteNumberInput } from '@/utils/number';
@@ -30,6 +33,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
   const [showApiKey, setShowApiKey] = useState(false);
   const [testingModel, setTestingModel] = useState(false);
   const [showPlaceholders, setShowPlaceholders] = useState(false);
+  const [showDynamicPlaceholders, setShowDynamicPlaceholders] = useState(false);
   const maxOutputTokens =
     typeof settings.aiModel.maxOutputTokens === 'number' &&
     Number.isFinite(settings.aiModel.maxOutputTokens)
@@ -401,6 +405,119 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
               </div>
             )}
           </div>
+        </div>
+
+        <div className="mt-8 pt-6 border-t border-[var(--border-primary)]">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                {t('options.generateDynamicReport', '动态分析网页生成')}
+              </h3>
+              <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                {t(
+                  'options.generateDynamicReportDesc',
+                  '分析完成后，通过独立的第二次 LLM API 调用生成图形化响应式动态单页看板（避免单次调用超出上下文或输出限制）。',
+                )}
+              </p>
+            </div>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={settings.generateDynamicReport !== false}
+                onChange={(e) =>
+                  onSettingsChange({
+                    ...settings,
+                    generateDynamicReport: e.target.checked,
+                  })
+                }
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+            </label>
+          </div>
+
+          {settings.generateDynamicReport !== false && (
+            <div className="mt-4">
+              <div className="flex justify-between items-center mb-2">
+                <label
+                  className="block text-sm font-medium"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  {t('options.dynamicReportPromptTemplate', '动态分析网页提示词模板')}
+                </label>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSettingsChange({
+                      ...settings,
+                      dynamicReportPromptTemplate: DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
+                    })
+                  }
+                  className="text-xs underline theme-link"
+                >
+                  {t('options.resetTemplate')}
+                </button>
+              </div>
+              <textarea
+                value={
+                  settings.dynamicReportPromptTemplate || DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE
+                }
+                onChange={(e) =>
+                  onSettingsChange({
+                    ...settings,
+                    dynamicReportPromptTemplate: e.target.value,
+                  })
+                }
+                className="w-full theme-input font-mono text-sm"
+                rows={UI_LIMITS.PROMPT_TEXTAREA_ROWS}
+              />
+
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDynamicPlaceholders(!showDynamicPlaceholders)}
+                  className="text-sm theme-link flex items-center gap-1"
+                >
+                  <span>{showDynamicPlaceholders ? '▼' : '▶'}</span>
+                  <span>{t('options.availablePlaceholders')}</span>
+                </button>
+
+                {showDynamicPlaceholders && (
+                  <div
+                    className="mt-3 p-4 rounded-lg"
+                    style={{
+                      backgroundColor: 'var(--bg-tertiary)',
+                      border: '1px solid var(--border-primary)',
+                    }}
+                  >
+                    <div className="space-y-3">
+                      <PlaceholderItem
+                        code="{analysis_markdown}"
+                        required
+                        t={t}
+                        descKey="placeholder_analysis_markdown"
+                      />
+                      <PlaceholderItem code="{date_time}" t={t} descKey="placeholder_date_time" />
+                      <PlaceholderItem code="{post_time}" t={t} descKey="placeholder_post_time" />
+                      <PlaceholderItem
+                        code="{post_content}"
+                        t={t}
+                        descKey="placeholder_post_content"
+                      />
+                      <PlaceholderItem code="{platform}" t={t} descKey="placeholder_platform" />
+                      <PlaceholderItem code="{url}" t={t} descKey="placeholder_url" />
+                      <PlaceholderItem code="{title}" t={t} descKey="placeholder_title" />
+                      <PlaceholderItem
+                        code="{total_comments}"
+                        t={t}
+                        descKey="placeholder_total_comments"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </section>
     </>

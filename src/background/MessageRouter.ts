@@ -106,6 +106,7 @@ export class MessageRouter {
     );
     this.register(MESSAGES.EXTRACTION_PROGRESS, extractionHandlers.handleExtractionProgress);
     this.register(MESSAGES.START_ANALYSIS, analysisHandlers.handleStartAnalysis);
+    this.register(MESSAGES.GENERATE_DYNAMIC_REPORT, analysisHandlers.handleGenerateDynamicReport);
     this.register(MESSAGES.GET_TASK_STATUS, taskHandlers.handleGetTaskStatus);
     this.register(MESSAGES.CANCEL_TASK, taskHandlers.handleCancelTask);
     this.register(MESSAGES.GET_SETTINGS, settingsHandlers.handleGetSettings);

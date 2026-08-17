@@ -101,6 +101,12 @@ export type AnalysisMessage =
         };
       };
     }
+  | {
+      type: 'GENERATE_DYNAMIC_REPORT';
+      payload: {
+        historyId: string;
+      };
+    }
   | { type: 'AI_ANALYZE_STRUCTURE'; payload: { prompt: string } }
   | { type: 'AI_EXTRACT_CONTENT'; payload: { chunks: string[]; systemPrompt?: string } };
 

@@ -17,7 +17,7 @@ import { useConfirm } from '@/hooks/useConfirm';
 const History: React.FC = () => {
   const { t } = useTranslation();
   const { confirm, ConfirmHost } = useConfirm();
-  const [viewMode, setViewMode] = useState<'comments' | 'analysis'>('analysis');
+  const [viewMode, setViewMode] = useState<'comments' | 'analysis' | 'dynamic'>('analysis');
   const [sortBy, setSortBy] = useState<'time' | 'likes' | 'replies'>('likes');
   const [exportPostContentInMarkdown, setExportPostContentInMarkdown] = useState(false);
 
@@ -80,6 +80,9 @@ const History: React.FC = () => {
     reanalyzeProgress,
     reanalyzeTaskId,
     reanalyzingHistoryId,
+    isGeneratingDynamic,
+    generateDynamicError,
+    handleGenerateDynamicReport,
   } = useHistoryReanalyze({
     selectedItem,
     fetchHistoryItemById,
@@ -233,9 +236,14 @@ const History: React.FC = () => {
           reanalyzeProgress={reanalyzeProgress}
           reanalyzeTaskId={reanalyzeTaskId}
           reanalyzingHistoryId={reanalyzingHistoryId}
+          isGeneratingDynamic={isGeneratingDynamic}
+          generateDynamicError={generateDynamicError}
           onViewModeChange={setViewMode}
           onReanalyze={() => {
             void handleReanalyze();
+          }}
+          onGenerateDynamicReport={() => {
+            void handleGenerateDynamicReport();
           }}
           onCommentSearchTermChange={setCommentSearchTerm}
           onSortByChange={setSortBy}

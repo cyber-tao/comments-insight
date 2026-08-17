@@ -137,6 +137,7 @@ const commentSchema: z.ZodType<Comment> = z.lazy(() =>
 );
 const analysisResultSchema: z.ZodType<AnalysisResult> = z.object({
   markdown: z.string(),
+  dynamicHtml: z.string().optional(),
   summary: z.object({
     totalComments: finiteNumberSchema,
     sentimentDistribution: z.object({
@@ -177,6 +178,8 @@ export const settingsPatchSchema = z
     aiModel: aiConfigSchema.partial().optional(),
     aiTimeout: finiteNumberSchema.optional(),
     analyzerPromptTemplate: z.string().optional(),
+    generateDynamicReport: z.boolean().optional(),
+    dynamicReportPromptTemplate: z.string().optional(),
     language: z.string().optional(),
     theme: z.enum(['light', 'dark', 'system']).optional(),
     normalizeTimestamps: z.boolean().optional(),
@@ -234,6 +237,14 @@ export function sanitizeStoredSettings(value: unknown): Partial<Settings> {
 
   if (typeof raw.analyzerPromptTemplate === 'string') {
     sanitized.analyzerPromptTemplate = raw.analyzerPromptTemplate;
+  }
+
+  if (typeof raw.generateDynamicReport === 'boolean') {
+    sanitized.generateDynamicReport = raw.generateDynamicReport;
+  }
+
+  if (typeof raw.dynamicReportPromptTemplate === 'string') {
+    sanitized.dynamicReportPromptTemplate = raw.dynamicReportPromptTemplate;
   }
 
   if (typeof raw.language === 'string') {

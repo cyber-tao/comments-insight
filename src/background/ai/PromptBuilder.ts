@@ -1,5 +1,5 @@
 import { Comment, AnalysisResult } from '../../types';
-import { buildAnalysisPrompt } from '../../utils/prompts';
+import { buildAnalysisPrompt, buildDynamicReportPrompt } from '../../utils/prompts';
 import { Tokenizer } from '../../utils/tokenizer';
 import { DataNormalizer } from './DataNormalizer';
 import {
@@ -85,6 +85,61 @@ export class PromptBuilder {
       totalComments,
       language,
     });
+  }
+
+  static buildDynamicReportPromptWrapper(
+    analysisMarkdown: string,
+    template?: string,
+    metadata?: {
+      platform?: string;
+      url?: string;
+      title?: string;
+      datetime?: string;
+      videoTime?: string;
+    },
+    totalComments: number = 0,
+    language: string = LANGUAGES.DEFAULT,
+  ): string {
+    return buildDynamicReportPrompt(analysisMarkdown, template, {
+      datetime: metadata?.datetime || new Date().toISOString(),
+      videoTime: metadata?.videoTime || 'N/A',
+      platform: metadata?.platform || 'Unknown Platform',
+      url: metadata?.url || 'N/A',
+      title: metadata?.title || TEXT.UNTITLED,
+      totalComments,
+      language,
+    });
+  }
+
+  static extractCleanHtml(content: string): string {
+    let text = DataNormalizer.removeThinkTags(content).trim();
+
+    // Check for markdown code blocks ```html ... ```
+    const codeBlockMatch = text.match(/```(?:html|xml)?\s*([\s\S]*?)\s*```/i);
+    if (codeBlockMatch) {
+      text = codeBlockMatch[1].trim();
+    }
+
+    // Ensure it starts with <!DOCTYPE html or <html
+    const docTypeIndex = text.search(/<!DOCTYPE html/i);
+    if (docTypeIndex !== -1) {
+      if (docTypeIndex > 0) {
+        text = text.substring(docTypeIndex);
+      }
+    } else {
+      const htmlTagIndex = text.search(/<html/i);
+      if (htmlTagIndex > 0) {
+        text = text.substring(htmlTagIndex);
+      }
+    }
+
+    // Cut off any trailing commentary after </html>
+    const htmlEndIndex = text.search(/<\/html>/i);
+    if (htmlEndIndex !== -1) {
+      text = text.substring(0, htmlEndIndex + 7);
+    }
+
+    return text.trim();
   }
 
   static extractSummaryFromMarkdown(

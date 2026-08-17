@@ -176,6 +176,8 @@ export interface Settings {
   aiModel: AIConfig;
   aiTimeout: number; // Timeout in milliseconds
   analyzerPromptTemplate: string;
+  generateDynamicReport?: boolean;
+  dynamicReportPromptTemplate?: string;
   language: string; // Language code (e.g., 'zh-CN', 'en-US')
   theme: 'light' | 'dark' | 'system'; // Theme setting
   normalizeTimestamps: boolean;
@@ -189,6 +191,7 @@ export interface Settings {
 
 export interface AnalysisResult {
   markdown: string;
+  dynamicHtml?: string;
   summary: {
     totalComments: number;
     sentimentDistribution: {

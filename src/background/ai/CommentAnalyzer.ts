@@ -396,4 +396,47 @@ export class CommentAnalyzer {
 
     return batches;
   }
+
+  async generateDynamicHtml(
+    analysisMarkdown: string,
+    config: AIConfig,
+    promptTemplate?: string,
+    language?: string,
+    metadata?: AnalysisMetadata,
+    totalComments: number = 0,
+    signal?: AbortSignal,
+    timeout?: number,
+    onStreamProgress?: (progress: AIStreamProgress) => void,
+  ): Promise<{ html: string; tokensUsed: number }> {
+    const resolvedLanguage = language || LANGUAGES.DEFAULT;
+    const sanitizedMetadata = this.sanitizeAnalysisMetadata(metadata);
+    const prompt = PromptBuilder.buildDynamicReportPromptWrapper(
+      analysisMarkdown,
+      promptTemplate,
+      sanitizedMetadata,
+      totalComments,
+      resolvedLanguage,
+    );
+
+    Logger.info('[CommentAnalyzer] Generating dynamic HTML report', {
+      promptLength: prompt.length,
+      language: resolvedLanguage,
+    });
+
+    const response = await this.aiService.callAI({
+      prompt,
+      systemPrompt:
+        'You are an expert web developer and UI designer. Output ONLY valid, standalone, self-contained HTML5 code without markdown fences.',
+      config,
+      signal,
+      timeout,
+      onStreamProgress,
+    });
+
+    const html = PromptBuilder.extractCleanHtml(response.content);
+    return {
+      html,
+      tokensUsed: response.tokensUsed,
+    };
+  }
 }

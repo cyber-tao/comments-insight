@@ -4,7 +4,11 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { PAGINATION, UI_LIMITS } from '@/config/constants';
 import { type HistoryItem, type Comment, type TaskProgress } from '@/types';
-import { exportAnalysisAsMarkdown, exportCommentsAsCSV } from '@/utils/export';
+import {
+  exportAnalysisAsMarkdown,
+  exportAnalysisAsHTML,
+  exportCommentsAsCSV,
+} from '@/utils/export';
 import { formatTaskProgressMessage } from '@/utils/task-progress-display';
 import { CommentTree } from './CommentTree';
 
@@ -12,7 +16,7 @@ interface HistoryDetailPanelProps {
   selectedItem: HistoryItem | null;
   selectedItemError: string | null;
   selectedItemLoading: boolean;
-  viewMode: 'analysis' | 'comments';
+  viewMode: 'analysis' | 'dynamic' | 'comments';
   exportPostContentInMarkdown: boolean;
   commentSearchTerm: string;
   sortBy: 'time' | 'likes' | 'replies';
@@ -28,8 +32,11 @@ interface HistoryDetailPanelProps {
   reanalyzeProgress: number | null;
   reanalyzeTaskId: string | null;
   reanalyzingHistoryId: string | null;
-  onViewModeChange: (mode: 'analysis' | 'comments') => void;
+  isGeneratingDynamic?: boolean;
+  generateDynamicError?: string | null;
+  onViewModeChange: (mode: 'analysis' | 'dynamic' | 'comments') => void;
   onReanalyze: () => void;
+  onGenerateDynamicReport?: () => void;
   onCommentSearchTermChange: (value: string) => void;
   onSortByChange: (value: 'time' | 'likes' | 'replies') => void;
   onCommentsPerPageChange: (value: number) => void;
@@ -57,8 +64,11 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
   reanalyzeProgress,
   reanalyzeTaskId,
   reanalyzingHistoryId,
+  isGeneratingDynamic = false,
+  generateDynamicError = null,
   onViewModeChange,
   onReanalyze,
+  onGenerateDynamicReport,
   onCommentSearchTermChange,
   onSortByChange,
   onCommentsPerPageChange,
@@ -117,6 +127,17 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
     UI_LIMITS.PROGRESS_MAX_PERCENT,
   );
   const hasAnalysis = Boolean(selectedItem.analysis?.markdown?.trim());
+  const hasDynamicHtml = Boolean(selectedItem.analysis?.dynamicHtml?.trim());
+
+  const handleOpenInNewTab = () => {
+    if (!selectedItem?.analysis?.dynamicHtml) return;
+    const blob = new Blob([selectedItem.analysis.dynamicHtml], {
+      type: 'text/html;charset=utf-8',
+    });
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank');
+  };
+
   const reanalyzeProgressMessage = formatTaskProgressMessage({
     type: 'analyze',
     detailedProgress: reanalyzeDetailedProgress,
@@ -205,6 +226,17 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
             }}
           >
             📊 {t('history.analysis')}
+          </button>
+          <button
+            onClick={() => onViewModeChange('dynamic')}
+            className={`px-5 py-3 font-medium text-sm transition-all border-b-2 ${
+              viewMode === 'dynamic' ? 'border-blue-500 text-blue-500' : 'border-transparent'
+            }`}
+            style={{
+              color: viewMode === 'dynamic' ? undefined : 'var(--text-tertiary)',
+            }}
+          >
+            🌐 {t('history.dynamicReport', '动态看板')}
           </button>
           <button
             onClick={() => onViewModeChange('comments')}
@@ -312,6 +344,129 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                 </div>
               )}
             </div>
+          </div>
+        ) : viewMode === 'dynamic' ? (
+          <div className="animate-fade-in flex flex-col h-full">
+            <div className="mb-4 flex justify-between items-center flex-wrap gap-2">
+              <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+                {t('history.dynamicReport', '动态看板')}
+              </h3>
+              <div className="flex items-center gap-2">
+                {hasAnalysis && (
+                  <button
+                    onClick={onGenerateDynamicReport}
+                    disabled={isGeneratingDynamic || isReanalyzing}
+                    className="px-4 py-2 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-all shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: 'var(--accent-secondary)' }}
+                    title={
+                      hasDynamicHtml
+                        ? t('history.regenerateDynamicTooltip', '重新调用AI生成动态网页')
+                        : t('history.generateDynamicTooltip', '调用AI生成动态网页')
+                    }
+                  >
+                    <span>{isGeneratingDynamic ? '⏳' : hasDynamicHtml ? '🔄' : '✨'}</span>
+                    <span>
+                      {isGeneratingDynamic
+                        ? t('history.generatingDynamicReport', '正在生成动态网页...')
+                        : hasDynamicHtml
+                          ? t('history.regenerateDynamicReport', '重新生成网页')
+                          : t('history.generateDynamicReport', '生成动态网页')}
+                    </span>
+                  </button>
+                )}
+                {hasDynamicHtml && (
+                  <>
+                    <button
+                      onClick={handleOpenInNewTab}
+                      className="px-4 py-2 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-all hover:scale-105 shadow-md"
+                      style={{ backgroundColor: '#3b82f6' }}
+                      title={t('history.openInNewTabTooltip', '在新标签页全屏查看')}
+                    >
+                      <span>🖥️</span>
+                      <span>{t('history.openInNewTab', '新标签页打开')}</span>
+                    </button>
+                    <button
+                      onClick={() => exportAnalysisAsHTML(selectedItem)}
+                      className="px-4 py-2 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-all hover:scale-105 shadow-md"
+                      style={{ background: 'var(--gradient-primary)' }}
+                      title={t('history.exportHtmlTooltip', '导出独立 HTML 网页文件')}
+                    >
+                      <span>💾</span>
+                      <span>{t('history.exportHtml', '导出 HTML')}</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {generateDynamicError && (
+              <div
+                className="mb-4 p-3 rounded-lg text-sm"
+                style={{
+                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                  color: 'var(--accent-danger)',
+                  border: '1px solid rgba(239, 68, 68, 0.25)',
+                }}
+              >
+                {generateDynamicError}
+              </div>
+            )}
+
+            {hasDynamicHtml ? (
+              <div
+                className="flex-1 w-full rounded-xl overflow-hidden shadow-lg border"
+                style={{
+                  borderColor: 'var(--border-primary)',
+                  backgroundColor: 'var(--bg-card)',
+                  minHeight: '600px',
+                }}
+              >
+                <iframe
+                  title={selectedItem.title || 'Dynamic Analysis Report'}
+                  srcDoc={selectedItem.analysis?.dynamicHtml}
+                  sandbox="allow-scripts allow-downloads"
+                  className="w-full h-full border-none"
+                  style={{ minHeight: '600px' }}
+                />
+              </div>
+            ) : hasAnalysis ? (
+              <div
+                className="theme-card p-12 text-center"
+                style={{ backgroundColor: 'var(--bg-card)' }}
+              >
+                <p className="text-5xl mb-4">✨</p>
+                <h4 className="text-lg font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+                  {t('history.noDynamicReportYet', '暂无动态可视化网页')}
+                </h4>
+                <p className="text-sm max-w-md mx-auto mb-6" style={{ color: 'var(--text-muted)' }}>
+                  {t(
+                    'history.generateDynamicReportDesc',
+                    '当前已包含分析报告。点击下方按钮，AI 将根据分析报告为您生成图形化、动态交互式、响应式展现的单页看板。',
+                  )}
+                </p>
+                <button
+                  onClick={onGenerateDynamicReport}
+                  disabled={isGeneratingDynamic || isReanalyzing}
+                  className="px-6 py-3 rounded-xl text-white font-medium inline-flex items-center gap-2 transition-all hover:scale-105 shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
+                  style={{ background: 'var(--gradient-primary)' }}
+                >
+                  <span>{isGeneratingDynamic ? '⏳' : '✨'}</span>
+                  <span>
+                    {isGeneratingDynamic
+                      ? t('history.generatingDynamicReport', '正在生成动态网页...')
+                      : t('history.generateDynamicReport', '生成动态分析网页')}
+                  </span>
+                </button>
+              </div>
+            ) : (
+              <div
+                className="theme-card p-12 text-center"
+                style={{ backgroundColor: 'var(--bg-card)' }}
+              >
+                <p className="text-5xl mb-3">🔍</p>
+                <p style={{ color: 'var(--text-muted)' }}>{t('history.noAnalysis')}</p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="animate-fade-in">

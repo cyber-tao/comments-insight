@@ -41,6 +41,8 @@ export const AI = {
     WAITING: 'waiting for model response',
     RECEIVING: 'receiving model response',
     COMPLETE: 'model response received',
+    GENERATING_DYNAMIC: 'generating dynamic visual report',
+    DYNAMIC_COMPLETE: 'dynamic visual report generated',
     BATCH_LABEL: 'batch',
     CHARS_LABEL: 'chars',
   },
@@ -50,6 +52,8 @@ export const AI = {
     RECEIVING_BATCH: 'popup.analysisProgressReceivingBatch',
     COMPLETE: 'popup.analysisProgressComplete',
     COMPLETE_BATCH: 'popup.analysisProgressCompleteBatch',
+    GENERATING_DYNAMIC: 'popup.generatingDynamicReport',
+    DYNAMIC_COMPLETE: 'popup.dynamicReportComplete',
   },
   ANALYSIS_PROGRESS_COMPACT_MESSAGE_KEYS: {
     WAITING: 'popup.analysisProgressWaitingCompact',
@@ -57,6 +61,8 @@ export const AI = {
     RECEIVING_BATCH: 'popup.analysisProgressReceivingBatchCompact',
     COMPLETE: 'popup.analysisProgressCompleteCompact',
     COMPLETE_BATCH: 'popup.analysisProgressCompleteBatchCompact',
+    GENERATING_DYNAMIC: 'popup.generatingDynamicReportCompact',
+    DYNAMIC_COMPLETE: 'popup.dynamicReportCompleteCompact',
   },
   ANALYSIS_PROGRESS_PARAM_KEYS: {
     CHARACTERS: 'characters',

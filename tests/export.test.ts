@@ -119,4 +119,47 @@ describe('Export Utils', () => {
       expect(() => exportAnalysisAsMarkdown(noAnalysisItem)).toThrow();
     });
   });
+
+  describe('exportAnalysisAsHTML', () => {
+    const mockHistoryItem: HistoryItem = {
+      id: '1',
+      url: 'http://example.com',
+      platform: 'Test',
+      title: 'Test Post',
+      extractedAt: Date.now(),
+      analyzedAt: Date.now(),
+      commentsCount: 10,
+      comments: [],
+      analysis: {
+        markdown: '# Analysis',
+        dynamicHtml: '<!DOCTYPE html><html><body><h1>Dashboard</h1></body></html>',
+        summary: {
+          totalComments: 10,
+          sentimentDistribution: { positive: 5, negative: 3, neutral: 2 },
+          hotComments: [],
+          keyInsights: [],
+        },
+        tokensUsed: 100,
+        generatedAt: Date.now(),
+      },
+    };
+
+    it('should generate HTML file and trigger download', async () => {
+      const { exportAnalysisAsHTML } = await import('../src/utils/export');
+      exportAnalysisAsHTML(mockHistoryItem);
+
+      expect(mockCreateElement).toHaveBeenCalledWith('a');
+      const link = mockCreateElement.mock.results[0].value;
+      expect(link.download).toContain('.html');
+    });
+
+    it('should throw error if no dynamicHtml available', async () => {
+      const { exportAnalysisAsHTML } = await import('../src/utils/export');
+      const noHtmlItem = {
+        ...mockHistoryItem,
+        analysis: { ...mockHistoryItem.analysis!, dynamicHtml: undefined },
+      };
+      expect(() => exportAnalysisAsHTML(noHtmlItem)).toThrow();
+    });
+  });
 });

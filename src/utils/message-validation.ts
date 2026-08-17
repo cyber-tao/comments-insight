@@ -131,6 +131,9 @@ const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
     language: z.string().optional(),
     metadata: looseObjectSchema.optional(),
   }),
+  GENERATE_DYNAMIC_REPORT: z.object({
+    historyId: nonEmptyString,
+  }),
   AI_ANALYZE_STRUCTURE: z.object({
     prompt: nonEmptyString,
   }),

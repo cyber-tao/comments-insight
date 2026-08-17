@@ -142,6 +142,89 @@ export function buildAnalysisPrompt(
 }
 
 /**
+ * Default dynamic HTML report prompt template
+ */
+export const DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE = `You are an expert UI/UX designer and frontend web engineer.
+Generate a modern, highly interactive, visually stunning, and responsive standalone single-page HTML report based on the provided comment analysis data.
+
+## Post & Analysis Information:
+- **Title**: {title}
+- **Platform**: {platform}
+- **URL**: {url}
+- **Post Published**: {post_time}
+- **Analysis Time**: {date_time}
+- **Total Comments Analyzed**: {total_comments}
+
+## Analysis Report Content:
+{analysis_markdown}
+
+## Page Design & Feature Requirements:
+1. **Self-Contained Single File**:
+   - Output valid HTML5 starting with <!DOCTYPE html> and ending with </html>.
+   - Include all styling in a <style> block and all interactivity in a <script> block.
+   - Do NOT load external JS/CSS dependencies from CDNs so it works completely offline and in a sandboxed iframe.
+
+2. **Visual & Aesthetic Excellence**:
+   - Modern, premium dashboard design (clean typography, sleek dark/light responsive theme, smooth gradients, subtle glassmorphic card effects, rounded corners, responsive grid).
+   - Eye-catching header with post title, platform badge, published date, analysis timestamp, and quick summary badges.
+
+3. **Graphic & Interactive Visualizations**:
+   - **Key Metrics Overview**: KPI cards with visual indicators (Total Comments, Positive %, Negative %, Key Themes).
+   - **Sentiment Distribution Visualization**: A graphic chart (donut/pie/bar chart rendered using pure SVG or HTML5 Canvas/CSS) with interactive tooltip or legend.
+   - **Hot Comments Section**: Interactive comment cards with like counts, user badges, and a quick search/filter input to filter hot comments by keyword or sentiment.
+   - **Key Insights & Themes**: Categorized interactive cards, collapsible accordions or tabbed views for main themes, user concerns, positive & negative feedback, and actionable recommendations.
+   - **Interactive Elements**: Search bar, filter buttons (All / Positive / Negative / Neutral), back-to-top button, smooth transitions on hover and clicks.
+
+4. **Responsiveness**:
+   - Mobile and desktop friendly (fluid layout, flexbox/grid).
+
+5. **Language Requirement**:
+   - You MUST write all UI texts, labels, summaries, and descriptions in {language_name}.
+
+## Output Format:
+Output ONLY the raw standalone HTML code. Do NOT include markdown code blocks, do NOT include conversational text before or after. Start directly with <!DOCTYPE html>.`;
+
+/**
+ * Build dynamic HTML report prompt
+ */
+export function buildDynamicReportPrompt(
+  analysisMarkdown: string,
+  template: string = DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
+  metadata?: {
+    datetime?: string;
+    videoTime?: string;
+    platform?: string;
+    url?: string;
+    title?: string;
+    totalComments?: number;
+    language?: string;
+  },
+): string {
+  const langCode = metadata?.language || LANGUAGES.DEFAULT;
+  const langConfig = LANGUAGES.SUPPORTED.find((l) => l.code === langCode);
+  const langName = langConfig?.name || langCode;
+  const analysisDateTime = metadata?.datetime || new Date().toISOString();
+
+  let prompt = template
+    .replace(/{analysis_markdown}/g, analysisMarkdown)
+    .replace(/{date_time}/g, analysisDateTime)
+    .replace(/{datetime}/g, analysisDateTime)
+    .replace(/{post_time}/g, metadata?.videoTime || 'N/A')
+    .replace(/{video_time}/g, metadata?.videoTime || 'N/A')
+    .replace(/{platform}/g, metadata?.platform || 'Unknown Platform')
+    .replace(/{url}/g, metadata?.url || 'N/A')
+    .replace(/{title}/g, metadata?.title || ANALYSIS_FORMAT.UNKNOWN_TITLE)
+    .replace(/{total_comments}/g, String(metadata?.totalComments || 0))
+    .replace(/{language_name}/g, langName);
+
+  if (!prompt.includes(analysisMarkdown)) {
+    prompt += `\n\n## Analysis Markdown:\n${analysisMarkdown}`;
+  }
+
+  return prompt;
+}
+
+/**
  * Validate prompt template
  * Checks if template contains required placeholders
  * @param template - Template to validate

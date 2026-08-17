@@ -104,7 +104,7 @@ export async function handleStartAnalysis(
       (progress) => {
         context.taskManager.updateDetailedProgress(taskId, {
           stage: 'analyzing',
-          current: progress.current,
+          current: Math.floor(progress.current * 0.7),
           total: progress.total,
           stageMessage: progress.stageMessage,
           stageMessageKey: progress.stageMessageKey,
@@ -113,7 +113,63 @@ export async function handleStartAnalysis(
       },
     );
 
-    context.taskManager.updateTaskProgress(taskId, 75);
+    context.taskManager.updateTaskProgress(taskId, 70);
+
+    // Stage 2: Generate dynamic visual HTML webpage if enabled (separate LLM API call)
+    if (settings.generateDynamicReport !== false && result.markdown) {
+      context.taskManager.updateDetailedProgress(taskId, {
+        stage: 'analyzing',
+        current: 75,
+        total: 100,
+        stageMessage: AI_CONST.ANALYSIS_PROGRESS_MESSAGES.GENERATING_DYNAMIC,
+        stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.GENERATING_DYNAMIC,
+      });
+
+      try {
+        const dynamicResult = await context.commentAnalyzer.generateDynamicHtml(
+          result.markdown,
+          analysisModel,
+          settings.dynamicReportPromptTemplate,
+          settings.language,
+          {
+            platform,
+            url,
+            title,
+            videoTime,
+            postContent,
+          },
+          comments.length,
+          signal,
+          settings.aiTimeout,
+          (progress) => {
+            context.taskManager.updateDetailedProgress(taskId, {
+              stage: 'analyzing',
+              current: Math.min(95, 75 + Math.floor(progress.charactersReceived / 100)),
+              total: 100,
+              stageMessage: `${AI_CONST.ANALYSIS_PROGRESS_MESSAGES.GENERATING_DYNAMIC}, ${progress.charactersReceived} ${AI_CONST.ANALYSIS_PROGRESS_MESSAGES.CHARS_LABEL}`,
+              stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
+              stageMessageParams: {
+                [AI_CONST.ANALYSIS_PROGRESS_PARAM_KEYS.CHARACTERS]: progress.charactersReceived,
+              },
+            });
+          },
+        );
+
+        if (dynamicResult.html) {
+          result.dynamicHtml = dynamicResult.html;
+          result.tokensUsed += dynamicResult.tokensUsed;
+        }
+      } catch (dynamicError) {
+        Logger.warn(
+          '[AnalysisHandler] Dynamic HTML report generation failed, continuing with markdown only',
+          {
+            error: dynamicError instanceof Error ? dynamicError.message : String(dynamicError),
+          },
+        );
+      }
+    }
+
+    context.taskManager.updateTaskProgress(taskId, 95);
 
     try {
       if (historyId) {
@@ -155,6 +211,68 @@ export async function handleStartAnalysis(
   });
 
   return { taskId };
+}
+
+export async function handleGenerateDynamicReport(
+  message: Extract<Message, { type: 'GENERATE_DYNAMIC_REPORT' }>,
+  context: HandlerContext,
+): Promise<{ success: boolean; dynamicHtml?: string; error?: string }> {
+  const { historyId } = message.payload || {};
+
+  if (!historyId) {
+    throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'History ID is required');
+  }
+
+  const historyItem = await context.historyStore.getHistoryItem(historyId);
+  if (!historyItem) {
+    throw new ExtensionError(ErrorCode.TASK_NOT_FOUND, `History item not found: ${historyId}`, {
+      historyId,
+    });
+  }
+
+  if (!historyItem.analysis?.markdown) {
+    throw new ExtensionError(
+      ErrorCode.VALIDATION_ERROR,
+      'Analysis report does not exist for this history item',
+    );
+  }
+
+  const settings = await context.settingsStore.getSettings();
+  const analysisModel = settings.aiModel;
+
+  try {
+    const dynamicResult = await context.commentAnalyzer.generateDynamicHtml(
+      historyItem.analysis.markdown,
+      analysisModel,
+      settings.dynamicReportPromptTemplate,
+      settings.language,
+      {
+        platform: historyItem.platform,
+        url: historyItem.url,
+        title: historyItem.title,
+        videoTime: historyItem.videoTime,
+        postContent: historyItem.postContent,
+      },
+      historyItem.commentsCount || historyItem.comments?.length || 0,
+      undefined,
+      settings.aiTimeout,
+    );
+
+    if (dynamicResult.html) {
+      historyItem.analysis.dynamicHtml = dynamicResult.html;
+      historyItem.analysis.tokensUsed += dynamicResult.tokensUsed;
+      await context.historyStore.saveHistory(historyItem);
+      return { success: true, dynamicHtml: dynamicResult.html };
+    }
+
+    return { success: false, error: 'Empty HTML received' };
+  } catch (error) {
+    Logger.error('[AnalysisHandler] Failed to generate dynamic report', { error });
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
 }
 
 export async function handleAIAnalyzeStructure(

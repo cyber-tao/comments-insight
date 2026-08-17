@@ -187,7 +187,7 @@ describe('analysis handlers', () => {
         'task_analysis_123',
         {
           stage: 'analyzing',
-          current: 12,
+          current: 8,
           total: 100,
           stageMessage: 'receiving model response, 512 chars',
           stageMessageKey: 'receiving',
@@ -268,6 +268,80 @@ describe('analysis handlers', () => {
       expect(result).toBeDefined();
       expect(result.data?.selectors).toEqual({ container: '.comments' });
       expect(result.data?.confidence).toBe(0.9);
+    });
+  });
+
+  describe('handleGenerateDynamicReport', () => {
+    it('should throw validation error if historyId is missing', async () => {
+      const { handleGenerateDynamicReport } = await import('@/background/handlers/analysis');
+      const message = {
+        type: 'GENERATE_DYNAMIC_REPORT' as const,
+        payload: {} as any,
+      };
+
+      await expect(handleGenerateDynamicReport(message, context)).rejects.toMatchObject({
+        code: ErrorCode.VALIDATION_ERROR,
+      });
+    });
+
+    it('should throw task not found if history item does not exist', async () => {
+      const { handleGenerateDynamicReport } = await import('@/background/handlers/analysis');
+      const message = {
+        type: 'GENERATE_DYNAMIC_REPORT' as const,
+        payload: { historyId: 'not_found' },
+      };
+
+      await expect(handleGenerateDynamicReport(message, context)).rejects.toMatchObject({
+        code: ErrorCode.TASK_NOT_FOUND,
+      });
+    });
+
+    it('should successfully generate dynamic HTML report and save to history', async () => {
+      const { handleGenerateDynamicReport } = await import('@/background/handlers/analysis');
+      const mockHistoryItem = {
+        id: 'hist_1',
+        url: 'https://example.com',
+        title: 'Example',
+        platform: 'example',
+        commentsCount: 10,
+        analysis: {
+          markdown: '# Analysis Markdown',
+          tokensUsed: 100,
+          generatedAt: Date.now(),
+        },
+      };
+
+      const localContext = createMockContext({
+        historyStore: {
+          ...createMockContext().historyStore,
+          getHistoryItem: vi.fn().mockResolvedValue(mockHistoryItem),
+          saveHistory: vi.fn().mockResolvedValue('hist_1'),
+        },
+        commentAnalyzer: {
+          generateDynamicHtml: vi.fn().mockResolvedValue({
+            html: '<!DOCTYPE html><html><body>Dashboard</body></html>',
+            tokensUsed: 50,
+          }),
+        },
+      } as unknown as Partial<HandlerContext>);
+
+      const message = {
+        type: 'GENERATE_DYNAMIC_REPORT' as const,
+        payload: { historyId: 'hist_1' },
+      };
+
+      const response = await handleGenerateDynamicReport(message, localContext);
+
+      expect(response.success).toBe(true);
+      expect(response.dynamicHtml).toBe('<!DOCTYPE html><html><body>Dashboard</body></html>');
+      expect(localContext.historyStore.saveHistory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          analysis: expect.objectContaining({
+            dynamicHtml: '<!DOCTYPE html><html><body>Dashboard</body></html>',
+            tokensUsed: 150,
+          }),
+        }),
+      );
     });
   });
 });

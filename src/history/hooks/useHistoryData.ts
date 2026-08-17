@@ -8,7 +8,7 @@ export type { HistoryListEntry };
 interface UseHistoryDataOptions {
   listContainerRef: React.RefObject<HTMLDivElement | null>;
   onResetListScroll: () => void;
-  onSelectViewMode: (mode: 'analysis' | 'comments') => void;
+  onSelectViewMode: (mode: 'analysis' | 'dynamic' | 'comments') => void;
 }
 
 export function useHistoryData({
@@ -40,7 +40,8 @@ export function useHistoryData({
     }
 
     const target = list.history.find((entry) => entry.id === id);
-    const preferredTab = tab === 'analysis' || tab === 'comments' ? tab : undefined;
+    const preferredTab =
+      tab === 'analysis' || tab === 'dynamic' || tab === 'comments' ? tab : undefined;
     if (target) {
       void handleSelectHistoryItem(target, preferredTab);
       return;

@@ -5,7 +5,7 @@ import { Logger } from '@/utils/logger';
 import type { HistoryListEntry } from './useHistoryList';
 
 interface UseHistoryDetailOptions {
-  onSelectViewMode: (mode: 'analysis' | 'comments') => void;
+  onSelectViewMode: (mode: 'analysis' | 'dynamic' | 'comments') => void;
 }
 
 export function useHistoryDetail({ onSelectViewMode }: UseHistoryDetailOptions) {
@@ -57,7 +57,7 @@ export function useHistoryDetail({ onSelectViewMode }: UseHistoryDetailOptions) 
   );
 
   const selectHistoryItemById = useCallback(
-    async (id: string, preferredTab?: 'analysis' | 'comments') => {
+    async (id: string, preferredTab?: 'analysis' | 'dynamic' | 'comments') => {
       const url = new URL(window.location.href);
       let urlChanged = false;
       if (url.searchParams.get('id') !== id) {
@@ -100,7 +100,7 @@ export function useHistoryDetail({ onSelectViewMode }: UseHistoryDetailOptions) 
   );
 
   const handleSelectHistoryItem = useCallback(
-    async (entry: HistoryListEntry, preferredTab?: 'analysis' | 'comments') => {
+    async (entry: HistoryListEntry, preferredTab?: 'analysis' | 'dynamic' | 'comments') => {
       await selectHistoryItemById(entry.id, preferredTab);
     },
     [selectHistoryItemById],

@@ -153,6 +153,43 @@ export function useHistoryReanalyze({
     }
   }, [isReanalyzing, monitorReanalyzeTask, resetReanalyzeState, selectedItem, t]);
 
+  const [isGeneratingDynamic, setIsGeneratingDynamic] = useState(false);
+  const [generateDynamicError, setGenerateDynamicError] = useState('');
+
+  const handleGenerateDynamicReport = useCallback(async () => {
+    if (!selectedItem || isGeneratingDynamic) {
+      return;
+    }
+
+    setGenerateDynamicError('');
+    setIsGeneratingDynamic(true);
+
+    try {
+      const response = await ExtensionAPI.generateDynamicReport(selectedItem.id);
+      if (response.success && response.dynamicHtml) {
+        const refreshed = await fetchHistoryItemById(selectedItem.id, { force: true });
+        if (!isUnmountedRef.current) {
+          setSelectedItem(refreshed);
+        }
+      } else {
+        setGenerateDynamicError(
+          response.error || t('history.generateDynamicFailed', '生成动态网页失败'),
+        );
+      }
+    } catch (error) {
+      Logger.error('[History] Failed to generate dynamic report', { error });
+      setGenerateDynamicError(
+        error instanceof Error
+          ? error.message
+          : t('history.generateDynamicFailed', '生成动态网页失败'),
+      );
+    } finally {
+      if (!isUnmountedRef.current) {
+        setIsGeneratingDynamic(false);
+      }
+    }
+  }, [fetchHistoryItemById, isGeneratingDynamic, selectedItem, setSelectedItem, t]);
+
   return {
     clearReanalyzeError,
     handleReanalyze,
@@ -163,5 +200,8 @@ export function useHistoryReanalyze({
     reanalyzeProgress,
     reanalyzeTaskId,
     reanalyzingHistoryId,
+    isGeneratingDynamic,
+    generateDynamicError,
+    handleGenerateDynamicReport,
   };
 }

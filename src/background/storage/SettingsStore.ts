@@ -9,7 +9,10 @@ import {
   DOM_ANALYSIS_DEFAULTS,
 } from '@/config/constants';
 import DEFAULT_CRAWLING_RULES from '@/config/default_rules.json';
-import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
+import {
+  DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
+  DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
+} from '@/utils/prompts';
 import { Logger } from '@/utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '@/utils/errors';
 import type { EncryptionService } from './EncryptionService';
@@ -31,6 +34,8 @@ export const DEFAULT_SETTINGS: Settings = {
   normalizeTimestamps: false,
   exportPostContentInMarkdown: false,
   analyzerPromptTemplate: DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
+  generateDynamicReport: true,
+  dynamicReportPromptTemplate: DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
   language: LANGUAGES.DEFAULT,
   theme: THEME.DEFAULT,
   selectorRetryAttempts: RETRY.SELECTOR_ATTEMPTS,
@@ -137,6 +142,14 @@ export class SettingsStore {
       typeof stored.analyzerPromptTemplate === 'string'
         ? stored.analyzerPromptTemplate
         : DEFAULT_SETTINGS.analyzerPromptTemplate;
+    merged.generateDynamicReport =
+      typeof stored.generateDynamicReport === 'boolean'
+        ? stored.generateDynamicReport
+        : DEFAULT_SETTINGS.generateDynamicReport;
+    merged.dynamicReportPromptTemplate =
+      typeof stored.dynamicReportPromptTemplate === 'string'
+        ? stored.dynamicReportPromptTemplate
+        : DEFAULT_SETTINGS.dynamicReportPromptTemplate;
     merged.language =
       typeof stored.language === 'string' ? stored.language : DEFAULT_SETTINGS.language;
     merged.theme =

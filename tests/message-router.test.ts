@@ -34,6 +34,7 @@ vi.mock('../src/background/handlers/extraction', () => ({
 
 vi.mock('../src/background/handlers/analysis', () => ({
   handleStartAnalysis: vi.fn().mockResolvedValue({ result: 'analysis' }),
+  handleGenerateDynamicReport: vi.fn().mockResolvedValue({ success: true }),
   handleAIAnalyzeStructure: vi.fn().mockResolvedValue({ selector: '.comments' }),
   handleAIExtractContent: vi.fn().mockResolvedValue({ comments: [] }),
 }));

@@ -216,14 +216,15 @@ describe('AIModelSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: /👁/ }));
     expect(apiKeyInput.type).toBe('text');
 
-    fireEvent.click(screen.getByRole('button', { name: 'options.resetTemplate' }));
+    const resetButtons = screen.getAllByRole('button', { name: 'options.resetTemplate' });
+    fireEvent.click(resetButtons[0]);
     expect(onSettingsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         analyzerPromptTemplate: DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
       }),
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /options.availablePlaceholders/i }));
+    fireEvent.click(screen.getAllByRole('button', { name: /options.availablePlaceholders/i })[0]);
 
     expect(screen.getByText('{comments_data}')).toBeTruthy();
     expect(screen.getByText('*options.required')).toBeTruthy();
