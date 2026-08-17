@@ -1,21 +1,18 @@
 import { Task, Platform, ProgressStage, TaskProgressMessageParams } from '../types';
 import { NotificationService } from './NotificationService';
 import { Logger } from '../utils/logger';
-import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
+import { ExtensionError, ErrorCode } from '../utils/errors';
 import {
-  AI as AI_CONST,
   CHROME_MESSAGE_ERRORS,
   ERROR_KEYS,
   LIMITS,
-  RETRY,
-  STORAGE,
+  MESSAGES,
   TASK,
   TIMING,
-  TIMEOUT,
 } from '@/config/constants';
 import i18n from '@/utils/i18n';
-import { Mutex } from '@/utils/promise';
-import { sanitizePersistedTaskState } from '@/utils/storage-validation';
+import { TaskPersistence } from './TaskPersistence';
+import { TaskProgressCalculator } from './TaskProgressCalculator';
 
 /**
  * Result returned when a task completes successfully.
@@ -56,14 +53,6 @@ interface RecoverInterruptedTaskOptions {
   maxAgeMs?: number;
 }
 
-/** Persisted task state for recovery after extension restart */
-interface PersistedTaskState {
-  tasks: Task[];
-  queue: string[];
-  currentTaskId: string | null;
-  savedAt: number;
-}
-
 /**
  * TaskManager handles the creation, execution, and lifecycle of tasks
  * in the Comments Insight extension.
@@ -93,27 +82,32 @@ export class TaskManager {
   private currentTaskId: string | null = null;
   private abortControllers: Map<string, AbortController> = new Map();
   private executors: Map<string, TaskExecutor> = new Map();
-  private readonly enablePersistence: boolean;
-  private persistTimer: ReturnType<typeof setTimeout> | null = null;
   private isProcessing = false;
-  private stateMutex = new Mutex();
   private pendingTaskUpdates: Map<string, Task> = new Map();
   private taskUpdateThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly persistence: TaskPersistence;
 
   constructor(
     private notificationService: NotificationService,
     config: { enablePersistence?: boolean } = {},
   ) {
-    this.enablePersistence = config.enablePersistence === true;
+    this.persistence = new TaskPersistence({
+      enabled: config.enablePersistence === true,
+      getSnapshot: () => ({
+        tasks: Array.from(this.tasks.values()),
+        queue: [...this.queue],
+        currentTaskId: this.currentTaskId,
+      }),
+    });
   }
 
   async initialize(): Promise<void> {
-    if (!this.enablePersistence) {
+    if (!this.persistence.isEnabled()) {
       return;
     }
 
     try {
-      const state = await this.loadState();
+      const state = await this.persistence.load();
       if (!state) {
         return;
       }
@@ -127,7 +121,7 @@ export class TaskManager {
 
       for (const task of this.tasks.values()) {
         if (task.status === 'pending' || task.status === 'running') {
-          this.markTaskInterruptedByRestart(task, now);
+          this.persistence.markInterruptedByRestart(task, now);
           changed = true;
         }
       }
@@ -142,19 +136,11 @@ export class TaskManager {
       }
 
       if (changed) {
-        await this.saveState();
+        await this.persistence.save();
       }
     } catch (error) {
       Logger.warn('[TaskManager] Failed to initialize task state', { error });
     }
-  }
-
-  private markTaskInterruptedByRestart(task: Task, interruptedAt: number): void {
-    task.status = 'failed';
-    task.error = i18n.t(ERROR_KEYS.TASK_INTERRUPTED_BY_RESTART);
-    task.message = task.error;
-    task.detailedProgress = undefined;
-    task.endTime = interruptedAt;
   }
 
   /**
@@ -326,61 +312,16 @@ export class TaskManager {
     const previousStage = task.detailedProgress?.stage;
     const stageChanged = previousStage !== undefined && previousStage !== stage;
 
-    const RANGES = TASK.PROGRESS_RANGES;
-    let progressPercent = 0;
-    if (total > 0 && current >= 0) {
-      const stageProgress = current / total;
-      switch (stage) {
-        case 'initializing':
-          progressPercent = RANGES.INITIALIZING.START + stageProgress * RANGES.INITIALIZING.RANGE;
-          break;
-        case 'detecting':
-          progressPercent = RANGES.DETECTING.START + stageProgress * RANGES.DETECTING.RANGE;
-          break;
-        case 'analyzing':
-          progressPercent =
-            task.type === 'analyze'
-              ? AI_CONST.ANALYSIS_TASK_PROGRESS_START +
-                stageProgress * AI_CONST.ANALYSIS_TASK_PROGRESS_RANGE
-              : RANGES.ANALYZING.START + stageProgress * RANGES.ANALYZING.RANGE;
-          break;
-        case 'extracting':
-          progressPercent = RANGES.EXTRACTING.START + stageProgress * RANGES.EXTRACTING.RANGE;
-          break;
-        case 'scrolling':
-          progressPercent = RANGES.SCROLLING.START + stageProgress * RANGES.SCROLLING.RANGE;
-          break;
-        case 'expanding':
-          progressPercent = RANGES.EXPANDING.START + stageProgress * RANGES.EXPANDING.RANGE;
-          break;
-        case 'validating':
-          progressPercent = RANGES.VALIDATING.START + stageProgress * RANGES.VALIDATING.RANGE;
-          break;
-        case 'complete':
-          progressPercent = RANGES.COMPLETE;
-          break;
-        default:
-          progressPercent = (current / total) * RANGES.COMPLETE;
-      }
-    }
-
-    let estimatedTimeRemaining = -1;
-    if (
-      progressPercent > TASK.PROGRESS_ESTIMATE_MIN_PERCENT &&
-      progressPercent < RANGES.COMPLETE &&
-      elapsed > 0
-    ) {
-      const rate = progressPercent / elapsed;
-      if (Number.isFinite(rate) && rate > 0) {
-        const remaining = (100 - progressPercent) / rate;
-        if (Number.isFinite(remaining) && remaining >= 0) {
-          estimatedTimeRemaining = Math.ceil(remaining / TIMEOUT.MS_PER_SEC);
-        }
-      }
-    }
+    const { progressPercent, estimatedTimeRemaining } = TaskProgressCalculator.calculate({
+      taskType: task.type,
+      stage,
+      current,
+      total,
+      elapsed,
+    });
 
     // Update task
-    task.progress = Math.min(100, Math.max(0, progressPercent));
+    task.progress = progressPercent;
     task.message = `${stage}:${current}:${total}`;
     task.detailedProgress = {
       stage,
@@ -735,68 +676,11 @@ export class TaskManager {
   }
 
   private schedulePersist(): void {
-    if (!this.enablePersistence) {
-      return;
-    }
-    if (this.persistTimer) {
-      return;
-    }
-    this.persistTimer = setTimeout(() => {
-      this.persistTimer = null;
-      this.saveState().catch((error) => {
-        Logger.warn('[TaskManager] Failed to persist task state', { error });
-      });
-    }, TIMING.TASK_STATE_PERSIST_DEBOUNCE_MS);
+    this.persistence.schedule();
   }
 
-  private async loadState(): Promise<PersistedTaskState | null> {
-    try {
-      const result = await chrome.storage.local.get(STORAGE.TASK_STATE_KEY);
-      const state = sanitizePersistedTaskState(result[STORAGE.TASK_STATE_KEY]);
-      if (!state) {
-        return null;
-      }
-
-      return {
-        tasks: state.tasks,
-        queue: state.queue,
-        currentTaskId: state.currentTaskId,
-        savedAt: state.savedAt,
-      };
-    } catch (error) {
-      Logger.warn('[TaskManager] Failed to load task state', { error });
-      return null;
-    }
-  }
-
-  private async saveState(): Promise<void> {
-    if (!this.enablePersistence) {
-      return;
-    }
-    return this.stateMutex.withLock(async () => {
-      try {
-        await ErrorHandler.withRetry(
-          async () => {
-            const state: PersistedTaskState = {
-              tasks: Array.from(this.tasks.values()),
-              queue: [...this.queue],
-              currentTaskId: this.currentTaskId,
-              savedAt: Date.now(),
-            };
-            await chrome.storage.local.set({ [STORAGE.TASK_STATE_KEY]: state });
-          },
-          'TaskManager.saveState',
-          {
-            maxAttempts: RETRY.MAX_ATTEMPTS,
-            initialDelay: RETRY.INITIAL_DELAY_MS,
-            maxDelay: RETRY.MAX_DELAY_MS,
-          },
-        );
-      } catch (error) {
-        Logger.warn('[TaskManager] Failed to persist task state', { error });
-        throw error;
-      }
-    });
+  private saveState(): Promise<void> {
+    return this.persistence.save();
   }
 
   /**
@@ -829,7 +713,7 @@ export class TaskManager {
   private flushTaskUpdate(task: Task): void {
     chrome.runtime
       .sendMessage({
-        type: 'TASK_UPDATE',
+        type: MESSAGES.TASK_UPDATE,
         payload: task,
       })
       .catch((error) => {
