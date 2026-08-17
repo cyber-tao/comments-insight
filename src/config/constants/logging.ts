@@ -5,6 +5,11 @@ export const LOG_PREFIX = {
 
 export const LOG_LEVELS = ['DEBUG', 'INFO', 'WARN', 'ERROR'] as const;
 
+export const LOG_DEFAULTS = {
+  LOGS_MAX_STORED: 100,
+  AI_LOGS_MAX_STORED: 100,
+};
+
 export const LOG_SANITIZE = {
   SENSITIVE_FIELD_NAMES: [
     'apiKey',

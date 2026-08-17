@@ -2,7 +2,7 @@
  * Export utilities for Comments Insight
  */
 import { HistoryItem, Comment } from '../types';
-import { REGEX, DEFAULTS, LIMITS } from '../config/constants';
+import { REGEX, EXPORT_DEFAULTS, LIMITS } from '../config/constants';
 import { t } from './i18n';
 import { formatDateTimeFromTimestamp, formatCommentTimestamp } from './date-formatter';
 
@@ -72,7 +72,7 @@ function sanitizeFilename(filename: string): string {
   return filename
     .replace(REGEX.FILENAME_INVALID, '-')
     .replace(REGEX.WHITESPACE, '_')
-    .substring(0, DEFAULTS.FILENAME_MAX_LENGTH);
+    .substring(0, EXPORT_DEFAULTS.FILENAME_MAX_LENGTH);
 }
 
 const formatDateTime = formatDateTimeFromTimestamp;

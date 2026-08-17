@@ -33,6 +33,10 @@ export const LIKES = {
   MULTIPLIER_M: 1000000,
 };
 
+export const EXPORT_DEFAULTS = {
+  FILENAME_MAX_LENGTH: 100,
+};
+
 export const TOKENIZER = {
   CJK_TOKEN_RATIO: 1.5,
   WORD_TOKEN_RATIO: 1.33,

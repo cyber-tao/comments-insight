@@ -52,21 +52,8 @@ export const LIMITS = {
  * UI input field limits for Options page
  */
 
-export const DEFAULTS = {
-  LOGS_MAX_STORED: 100,
-  AI_LOGS_MAX_STORED: 100,
-  MAX_COMMENTS: 100,
-  TEST_MAX_COMMENTS: 10,
-  FILENAME_MAX_LENGTH: 100,
-  SENTIMENT_POSITIVE: 33,
-  SENTIMENT_NEGATIVE: 33,
-  SENTIMENT_NEUTRAL: 34,
-  HOT_COMMENTS_PREVIEW: 5,
-};
-
 export const STORAGE = {
   SETTINGS_KEY: 'settings',
-  HISTORY_KEY: 'history',
   LAST_VERIFIED_AI_MODEL_KEY: 'last_verified_ai_model',
   ENCRYPTION_SALT_KEY: 'encryption_salt',
   ENCRYPTION_SECRET_KEY: 'encryption_secret',
@@ -76,7 +63,23 @@ export const STORAGE = {
   AI_LOG_INDEX_KEY: 'ai_log_index',
   TASK_STATE_KEY: 'task_state',
   SELECTOR_TESTER_STATE_KEY: 'selector_tester_state',
+  APP_DATA_VERSION_KEY: 'app_data_version',
 };
+
+/**
+ * Application data schema version.
+ * Increment CURRENT when introducing breaking changes to persisted data shapes
+ * (chrome.storage.local payloads or Dexie tables) and add a matching migration
+ * step in DataMigrator.
+ *
+ * Semantics:
+ *   1 = pre-refactor baseline (extension version <= 0.6.0)
+ *   2 = current refactored layout (no persisted-shape change; version bump only)
+ */
+export const APP_DATA_VERSION = {
+  CURRENT: 2,
+  INITIAL: 1,
+} as const;
 
 export const MESSAGES = {
   PING: 'PING',

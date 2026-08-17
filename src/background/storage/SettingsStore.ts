@@ -1,23 +1,23 @@
-import { Settings, AIConfig, CrawlingConfig } from '../../types';
+import { Settings, AIConfig, CrawlingConfig } from '@/types';
 import {
   AI,
   LANGUAGES,
   THEME,
   RETRY,
   STORAGE,
-  DEFAULTS,
+  EXTRACTION_DEFAULTS,
   DOM_ANALYSIS_DEFAULTS,
 } from '@/config/constants';
 import DEFAULT_CRAWLING_RULES from '@/config/default_rules.json';
 import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '@/utils/prompts';
-import { Logger } from '../../utils/logger';
-import { ErrorHandler, ExtensionError, ErrorCode } from '../../utils/errors';
+import { Logger } from '@/utils/logger';
+import { ErrorHandler, ExtensionError, ErrorCode } from '@/utils/errors';
 import type { EncryptionService } from './EncryptionService';
 import { Mutex } from '@/utils/promise';
 import { sanitizeStoredSettings, settingsPatchSchema } from '@/utils/storage-validation';
 
 export const DEFAULT_SETTINGS: Settings = {
-  maxComments: DEFAULTS.MAX_COMMENTS,
+  maxComments: EXTRACTION_DEFAULTS.MAX_COMMENTS,
   aiModel: {
     apiUrl: '',
     apiKey: '',

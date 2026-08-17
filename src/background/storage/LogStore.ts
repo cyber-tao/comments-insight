@@ -1,5 +1,5 @@
-import { STORAGE, DEFAULTS, LIMITS, TEXT } from '@/config/constants';
-import { Logger } from '../../utils/logger';
+import { STORAGE, LOG_DEFAULTS, LIMITS, TEXT } from '@/config/constants';
+import { Logger } from '@/utils/logger';
 import { Mutex } from '@/utils/promise';
 import { sanitizeLogText } from '@/utils/log-sanitize';
 import {
@@ -79,7 +79,7 @@ export class LogStore {
         const storedLogs = next.length > 0 ? await chrome.storage.local.get(next) : {};
         const keysToRemove = new Set<string>();
 
-        while (next.length - keysToRemove.size > DEFAULTS.AI_LOGS_MAX_STORED) {
+        while (next.length - keysToRemove.size > LOG_DEFAULTS.AI_LOGS_MAX_STORED) {
           const oldestKey = next[keysToRemove.size];
           if (typeof oldestKey === 'string') {
             keysToRemove.add(oldestKey);
