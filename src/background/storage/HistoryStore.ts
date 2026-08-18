@@ -102,6 +102,8 @@ function toHistoryReadError(
 }
 
 export class HistoryStore {
+  private itemCountEstimate: number | null = null;
+
   async saveHistory(item: HistoryItem): Promise<void> {
     try {
       await db.transaction('rw', db.history, db.historyMetadata, async () => {
@@ -141,6 +143,7 @@ export class HistoryStore {
         await db.history.clear();
         await db.historyMetadata.clear();
       });
+      this.itemCountEstimate = 0;
       return count;
     } catch (error) {
       Logger.error('[HistoryStore] Failed to clear all history', { error });
@@ -152,14 +155,15 @@ export class HistoryStore {
 
   async getHistoryMetadataPage(page: number = 0, pageSize: number = PAGINATION.DEFAULT_PER_PAGE) {
     try {
-      const total = await db.historyMetadata.count();
+      const ordered = db.historyMetadata.orderBy('extractedAt').reverse();
+      const [total, items] = await Promise.all([
+        ordered.count(),
+        ordered
+          .offset(page * pageSize)
+          .limit(pageSize)
+          .toArray(),
+      ]);
       const totalPages = Math.ceil(total / pageSize);
-      const items = await db.historyMetadata
-        .orderBy('extractedAt')
-        .reverse()
-        .offset(page * pageSize)
-        .limit(pageSize)
-        .toArray();
 
       const entries = items.map(toMetadataEntry);
 
@@ -188,12 +192,16 @@ export class HistoryStore {
         .reverse()
         .filter((entry) => historyMetadataMatchesQuery(entry, lowerQuery));
 
-      const total = await orderedCollection.count();
+      // Count and page slice scan the same filtered collection; running them
+      // concurrently halves the wait instead of two serial cursor passes.
+      const [total, pageItems] = await Promise.all([
+        orderedCollection.count(),
+        orderedCollection
+          .offset(page * pageSize)
+          .limit(pageSize)
+          .toArray(),
+      ]);
       const totalPages = Math.ceil(total / pageSize);
-      const pageItems = await orderedCollection
-        .offset(page * pageSize)
-        .limit(pageSize)
-        .toArray();
 
       const entries = pageItems.map(toMetadataEntry);
 
@@ -227,6 +235,9 @@ export class HistoryStore {
         await db.history.delete(id);
         await db.historyMetadata.delete(id);
       });
+      if (this.itemCountEstimate !== null) {
+        this.itemCountEstimate = Math.max(0, this.itemCountEstimate - 1);
+      }
       Logger.info('[HistoryStore] History item deleted', { id });
     } catch (error) {
       Logger.error('[HistoryStore] Failed to delete history item', { id, error });
@@ -238,8 +249,15 @@ export class HistoryStore {
   }
 
   private async enforceHistoryLimit(): Promise<void> {
-    const total = await db.historyMetadata.count();
-    if (total <= HISTORY.MAX_ITEMS) {
+    // Counting on every save is the dominant cost of saveHistory; keep an
+    // in-memory estimate (seeded lazily) so writes below the limit skip the
+    // count() cursor scan entirely.
+    if (this.itemCountEstimate === null) {
+      this.itemCountEstimate = await db.historyMetadata.count();
+    } else {
+      this.itemCountEstimate += 1;
+    }
+    if (this.itemCountEstimate <= HISTORY.MAX_ITEMS) {
       return;
     }
 
@@ -254,6 +272,7 @@ export class HistoryStore {
         await db.history.bulkDelete(idsToDelete);
         await db.historyMetadata.bulkDelete(idsToDelete);
       });
+      this.itemCountEstimate = HISTORY.MAX_ITEMS;
       Logger.info('[HistoryStore] Pruned old history items', { count: idsToDelete.length });
     }
   }

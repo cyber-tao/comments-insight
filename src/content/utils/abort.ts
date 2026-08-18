@@ -1,5 +1,5 @@
 import { TEXT } from '@/config/constants';
-import { ErrorCode, ExtensionError } from '@/utils/errors';
+import { ErrorCode, ExtensionError } from '@/utils/error-types';
 import { isExtractionActive } from '../extractionState';
 
 /**

@@ -4,7 +4,7 @@ import { PageController } from '../PageController';
 import { DOMSimplifier } from '../DOMSimplifier';
 import { Chunker } from '../utils/Chunker';
 import { Logger } from '../../utils/logger';
-import { ExtensionError, ErrorCode } from '@/utils/errors';
+import { ErrorCode, ExtensionError } from '@/utils/error-types';
 import {
   EXTRACTION_PROGRESS,
   CONFIG_GENERATION_PROGRESS,
@@ -15,7 +15,7 @@ import {
   DOM_ANALYSIS_DEFAULTS,
   SCROLL,
 } from '@/config/constants';
-import { PROMPT_EXTRACT_COMMENTS_FROM_HTML } from '@/utils/prompts';
+import { PROMPT_EXTRACT_COMMENTS_FROM_HTML } from '../prompts';
 import { sendMessage } from '@/utils/chrome-message';
 import { getCurrentHostname, extractDomain } from '@/utils/url';
 import { runWithConcurrencyLimit } from '@/utils/promise';

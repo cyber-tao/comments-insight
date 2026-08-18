@@ -1,7 +1,7 @@
 import { Logger } from '@/utils/logger';
 import { PortMessage, PortMessageResponse } from '@/types/handlers';
 import { AI, TEXT } from '@/config/constants';
-import { ErrorCode, ExtensionError } from '@/utils/errors';
+import { ErrorCode, ExtensionError } from '@/utils/error-types';
 
 type PortState = 'idle' | 'connecting' | 'connected' | 'disconnected';
 

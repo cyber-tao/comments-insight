@@ -2,7 +2,7 @@ import { DOMAnalyzer } from './DOMAnalyzer';
 import { TIMING, SCROLL, CLICK, TIMEOUT, TEXT } from '@/config/constants';
 import { isExtractionActive } from './extractionState';
 import { Logger } from '../utils/logger';
-import { ErrorCode, ExtensionError } from '../utils/errors';
+import { ErrorCode, ExtensionError } from '@/utils/error-types';
 import { checkAborted, abortableDelay } from './utils/abort';
 
 /**

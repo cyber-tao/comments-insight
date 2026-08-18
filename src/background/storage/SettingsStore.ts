@@ -50,8 +50,23 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export class SettingsStore {
   private saveMutex = new Mutex();
+  private settingsCache: Settings | null = null;
 
-  constructor(private readonly encryptionService: EncryptionService) {}
+  constructor(private readonly encryptionService: EncryptionService) {
+    try {
+      // Invalidate the in-process cache whenever the persisted settings
+      // change (including writes from this context), so repeated getSettings
+      // calls skip the storage read + PBKDF2 key derivation.
+      chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName === 'local' && changes[STORAGE.SETTINGS_KEY]) {
+          this.settingsCache = null;
+        }
+      });
+    } catch {
+      // Storage events unavailable (tests/non-extension hosts): cache stays
+      // valid until the next save clears it.
+    }
+  }
 
   private normalizeCrawlingDomain(domain: string): string {
     return domain.trim().toLowerCase();
@@ -59,6 +74,11 @@ export class SettingsStore {
 
   async getSettings(): Promise<Settings> {
     try {
+      if (this.settingsCache) {
+        // Clone so callers can mutate the returned object freely without
+        // poisoning the cache.
+        return structuredClone(this.settingsCache);
+      }
       await this.encryptionService.ensureEncryptionReady();
       Logger.debug('[SettingsStore] Getting settings from storage');
       const result = await chrome.storage.local.get(STORAGE.SETTINGS_KEY);
@@ -90,6 +110,7 @@ export class SettingsStore {
       delete (merged as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig })
         .analyzerModel;
       Logger.debug('[SettingsStore] Settings retrieved successfully');
+      this.settingsCache = structuredClone(merged);
       return merged;
     } catch (error) {
       const wrappedError =
@@ -248,6 +269,7 @@ export class SettingsStore {
       await chrome.storage.local.set({
         [STORAGE.SETTINGS_KEY]: updatedSettings,
       });
+      this.settingsCache = null;
 
       Logger.info('[SettingsStore] Settings saved successfully');
     } catch (error) {

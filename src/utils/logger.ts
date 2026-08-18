@@ -245,14 +245,19 @@ export class Logger {
   private static log(level: LogLevel, message: string, data?: Record<string, unknown>): void {
     if (!this.initialized) {
       this.initializeSync();
+    }
+
+    // Check the level before any async work so dropped logs (the common case
+    // on content-script pages, where production defaults to ERROR) never
+    // trigger a storage roundtrip.
+    if (!this.shouldLog(level)) {
+      return;
+    }
+
+    if (!this.storageConfigLoaded) {
       this.loadStorageConfig().catch((error) => {
         console.warn('[Logger] Failed to load storage config during log call:', error);
       });
-    }
-
-    // Check if this log level should be recorded
-    if (!this.shouldLog(level)) {
-      return;
     }
 
     const sanitizedMessage = this.sanitize(message);

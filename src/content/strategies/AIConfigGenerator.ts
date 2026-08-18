@@ -1,5 +1,5 @@
 import { Logger } from '../../utils/logger';
-import { ExtensionError, ErrorCode } from '@/utils/errors';
+import { ErrorCode, ExtensionError } from '@/utils/error-types';
 import { CrawlingConfig, Settings } from '../../types';
 import {
   EXTRACTION_PROGRESS,
@@ -13,7 +13,7 @@ import {
   PROMPT_DETECT_COMMENTS_SECTION,
   PROMPT_GENERATE_CRAWLING_CONFIG,
   PROMPT_GENERATE_CRAWLING_META_CONFIG,
-} from '@/utils/prompts';
+} from '../prompts';
 import { sendMessage } from '@/utils/chrome-message';
 import { getCurrentHostname } from '@/utils/url';
 import { DOMSimplifier } from '../DOMSimplifier';

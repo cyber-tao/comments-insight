@@ -1,4 +1,5 @@
 import { LIMITS } from '@/config/constants';
+import { Logger } from '@/utils/logger';
 
 export interface DeepQueryOptions {
   maxResults?: number;
@@ -103,12 +104,16 @@ function collectDeepQueryResults(
     }
   }
 
+  // Enumerating '*' only discovers shadow hosts; non-host elements must not
+  // consume the visit budget, otherwise large pages (YouTube-scale element
+  // counts) exhaust DOM_QUERY_MAX_VISITED before any deep shadow root is
+  // reached and results are silently truncated.
   for (const element of safeQuerySelectorAll(root, '*')) {
-    if (!visitDeepQueryElement(context)) {
-      return;
-    }
     const shadowRoot = getShadowRoot(element);
     if (shadowRoot) {
+      if (!visitDeepQueryElement(context)) {
+        return;
+      }
       collectDeepQueryResults(shadowRoot, selector, context);
     }
     if (shouldStopDeepQuery(context)) {
@@ -145,6 +150,17 @@ export function querySelectorAllDeep(
 
   const context = createDeepQueryContext(options);
   collectDeepQueryResults(root, trimmedSelector, context);
+  if (
+    context.visited >= context.maxVisited &&
+    context.results.length < context.maxResults &&
+    context.signal?.aborted !== true
+  ) {
+    Logger.warn('[dom-query] Visit budget exhausted; results may be truncated', {
+      selector: trimmedSelector,
+      visited: context.visited,
+      results: context.results.length,
+    });
+  }
   return context.results;
 }
 

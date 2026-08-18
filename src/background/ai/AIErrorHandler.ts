@@ -133,7 +133,10 @@ export class AIErrorHandler {
         const settings = await settingsStore.getSettings();
         if (!settings.developerMode) return;
       }
-      const logKey = `${LOG_PREFIX.AI}${type}_${data.timestamp}`;
+      // Random suffix: concurrent batches can log within the same millisecond,
+      // and identical keys would silently overwrite each other.
+      const uniqueSuffix = Math.random().toString(36).substring(2, 7);
+      const logKey = `${LOG_PREFIX.AI}${type}_${data.timestamp}_${uniqueSuffix}`;
       await logStore.saveAiLog(logKey, {
         type,
         timestamp: data.timestamp,

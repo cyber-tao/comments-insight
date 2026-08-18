@@ -10,7 +10,7 @@ import {
 } from '../../types';
 import { PageController } from '../PageController';
 import { Logger } from '../../utils/logger';
-import { ExtensionError, ErrorCode } from '@/utils/errors';
+import { ErrorCode, ExtensionError } from '@/utils/error-types';
 import {
   EXTRACTION_PROGRESS,
   MESSAGES,
