@@ -194,6 +194,7 @@
       "syncing": "同步中...",
       "syncSuccess": "配置同步成功！",
       "syncError": "同步失败，请稍后重试。",
+      "syncNoChanges": "远端配置已是最新，无需更新。",
       "syncDialogTitle": "从远程同步",
       "syncDialogDescription": "此操作将从官方仓库获取最新的爬取配置，并与您的本地配置合并。已存在的配置将被更新，新配置将被添加。",
       "syncDialogSourceUrl": "配置来源",

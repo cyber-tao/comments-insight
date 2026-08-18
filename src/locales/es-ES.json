@@ -256,6 +256,7 @@
       "syncing": "Sincronizando...",
       "syncSuccess": "¡Configuraciones sincronizadas exitosamente!",
       "syncError": "Sincronización fallida, por favor intente más tarde.",
+      "syncNoChanges": "Las configuraciones remotas ya están actualizadas.",
       "syncDialogTitle": "Sincronizar desde remoto",
       "syncDialogDescription": "Esta acción obtendrá las últimas configuraciones de rastreo del repositorio oficial y las fusionará con sus configuraciones locales. Las configuraciones existentes se actualizarán y las nuevas se añadirán.",
       "syncDialogSourceUrl": "URL de origen",

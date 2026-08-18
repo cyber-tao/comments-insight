@@ -115,7 +115,6 @@ export class MessageRouter {
     this.register(MESSAGES.CACHE_SELECTOR, settingsHandlers.handleCacheSelector);
     this.register(MESSAGES.GET_CRAWLING_CONFIG, settingsHandlers.handleGetCrawlingConfig);
     this.register(MESSAGES.SAVE_CRAWLING_CONFIG, settingsHandlers.handleSaveCrawlingConfig);
-    this.register(MESSAGES.SYNC_CRAWLING_CONFIGS, settingsHandlers.handleSyncCrawlingConfigs);
     this.register(MESSAGES.UPDATE_FIELD_VALIDATION, settingsHandlers.handleUpdateFieldValidation);
     this.register(MESSAGES.GET_HISTORY, historyHandlers.handleGetHistory);
     this.register(MESSAGES.GET_HISTORY_BY_URL, historyHandlers.handleGetHistoryByUrl);

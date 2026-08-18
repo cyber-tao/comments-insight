@@ -294,8 +294,13 @@ export class SettingsStore {
   async exportSettings(): Promise<string> {
     try {
       const settings = await this.getSettings();
+      // Never export the API key in plaintext: getSettings returns it
+      // decrypted for runtime use, but an exported file may be shared or
+      // attached to bug reports. importSettings merges aiModel over the
+      // current one, so an absent key simply keeps the stored key.
       const { crawlingConfigs: _crawlingConfigs, ...settingsToExport } = settings;
-      return JSON.stringify(settingsToExport, null, 2);
+      const { apiKey: _apiKey, ...aiModelWithoutKey } = settingsToExport.aiModel;
+      return JSON.stringify({ ...settingsToExport, aiModel: aiModelWithoutKey }, null, 2);
     } catch (error) {
       Logger.error('[SettingsStore] Failed to export settings', { error });
       throw new ExtensionError(ErrorCode.STORAGE_READ_ERROR, 'Failed to export settings', {

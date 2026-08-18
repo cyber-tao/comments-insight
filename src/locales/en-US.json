@@ -194,6 +194,7 @@
       "syncing": "Syncing...",
       "syncSuccess": "Configurations synced successfully!",
       "syncError": "Failed to sync configurations. Please try again.",
+      "syncNoChanges": "Remote configurations are already up to date.",
       "syncDialogTitle": "Sync from Remote",
       "syncDialogDescription": "This will fetch the latest crawling configurations from the official repository and merge them with your local configs. Existing configs will be updated, and new ones will be added.",
       "syncDialogSourceUrl": "Source URL",

@@ -256,6 +256,7 @@
       "syncing": "Synchronisation...",
       "syncSuccess": "Configurations synchronisées avec succès !",
       "syncError": "Échec de la synchronisation, veuillez réessayer plus tard.",
+      "syncNoChanges": "Les configurations distantes sont déjà à jour.",
       "syncDialogTitle": "Synchroniser depuis le distant",
       "syncDialogDescription": "Cette action récupère les dernières configurations de scan depuis le dépôt officiel et les fusionne avec vos configurations locales. Les configurations existantes seront mises à jour et les nouvelles seront ajoutées.",
       "syncDialogSourceUrl": "URL source",

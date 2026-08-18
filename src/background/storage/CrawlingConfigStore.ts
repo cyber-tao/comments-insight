@@ -1,11 +1,7 @@
 import { CrawlingConfig } from '../../types';
-import { API } from '@/config/constants';
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode } from '../../utils/errors';
-import {
-  hasCrawlingConfigContentChanged,
-  resolveCrawlingConfigLastUpdated,
-} from '@/utils/crawling-config';
+import { resolveCrawlingConfigLastUpdated } from '@/utils/crawling-config';
 import type { SettingsStore } from './SettingsStore';
 
 export class CrawlingConfigStore {
@@ -38,67 +34,6 @@ export class CrawlingConfigStore {
     } catch (error) {
       Logger.warn('[CrawlingConfigStore] Failed to get crawling config', { error });
       return null;
-    }
-  }
-
-  async syncCrawlingConfigs(): Promise<{ added: number; updated: number }> {
-    let added = 0;
-    let updated = 0;
-    try {
-      const response = await fetch(API.CRAWLING_CONFIGS_RAW_URL);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch remote config: ${response.statusText}`);
-      }
-
-      const remoteConfigs = (await response.json()) as CrawlingConfig[];
-      const settings = await this.settingsStore.getSettings();
-      const currentConfigs = settings.crawlingConfigs || [];
-
-      const merged = [...currentConfigs];
-      for (const remote of remoteConfigs) {
-        const normalizedRemoteDomain = this.normalizeCrawlingDomain(remote.domain);
-        const normalizedRemoteConfig: CrawlingConfig = {
-          ...remote,
-          domain: normalizedRemoteDomain,
-          lastUpdated: typeof remote.lastUpdated === 'number' ? remote.lastUpdated : Date.now(),
-        };
-
-        const indexByDomain = merged.findIndex(
-          (c) => this.normalizeCrawlingDomain(c.domain) === normalizedRemoteDomain,
-        );
-        const indexById = merged.findIndex((c) => c.id === remote.id);
-        const index = indexByDomain >= 0 ? indexByDomain : indexById;
-
-        if (index >= 0) {
-          const existing = merged[index];
-          const mergedConfig: CrawlingConfig = {
-            ...existing,
-            ...normalizedRemoteConfig,
-          };
-          const contentChanged = hasCrawlingConfigContentChanged(existing, mergedConfig);
-          merged[index] = {
-            ...mergedConfig,
-            lastUpdated: resolveCrawlingConfigLastUpdated({
-              previous: existing,
-              next: mergedConfig,
-              preferredLastUpdated: normalizedRemoteConfig.lastUpdated,
-            }),
-          };
-          if (contentChanged) {
-            updated++;
-          }
-        } else {
-          merged.push(normalizedRemoteConfig);
-          added++;
-        }
-      }
-
-      await this.settingsStore.saveSettings({ crawlingConfigs: merged });
-      Logger.info('[CrawlingConfigStore] Crawling configs synced successfully', { added, updated });
-      return { added, updated };
-    } catch (error) {
-      Logger.error('[CrawlingConfigStore] Failed to sync crawling configs', { error });
-      throw error;
     }
   }
 

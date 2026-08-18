@@ -281,6 +281,15 @@ export const ConfigSettings: React.FC<Props> = ({
     const newConfigs = importAdditions.filter((config) => !mergedMap.has(config.domain));
     const merged = [...baseConfigs, ...newConfigs];
     onSettingsChange({ crawlingConfigs: merged });
+    if (isRemoteSync) {
+      showToast(
+        t('options.crawlingConfigs.syncSuccessWithCount', {
+          added: newConfigs.length,
+          updated: mergedMap.size,
+        }),
+        'success',
+      );
+    }
     closeImport();
   };
 
@@ -294,19 +303,10 @@ export const ConfigSettings: React.FC<Props> = ({
       }
       const remoteConfigs = (await response.json()) as unknown[];
 
-      processConfigs(remoteConfigs, true);
-
-      // Check if we have any changes after processing
-      // This part is tricky because processConfigs is async in state updates
-      // but sync in execution. However, state updates won't be reflected immediately.
-      // We can rely on the side effects of processConfigs setting state.
-      // But we need to know if it resulted in no changes to show the alert.
-      // The original code did this check inside the sync function.
-      // Since processConfigs sets state, we can't easily check the result immediately here
-      // without duplicating the logic or returning the result from processConfigs.
-      // Let's modify processConfigs in the hook to return the result or handle the "no changes" alert there?
-      // Or just let the dialog open with empty lists?
-      // The original code showed an alert if no changes.
+      const result = processConfigs(remoteConfigs, true);
+      if (result && result.additions === 0 && result.conflicts === 0) {
+        showToast(t('options.crawlingConfigs.syncNoChanges'), 'info');
+      }
     } catch (error) {
       Logger.error('Failed to sync configs:', { error });
       showToast(t('options.crawlingConfigs.syncError'), 'error');

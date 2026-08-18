@@ -79,14 +79,6 @@ export async function handleSaveCrawlingConfig(
   return { success: true };
 }
 
-export async function handleSyncCrawlingConfigs(
-  _message: Extract<Message, { type: 'SYNC_CRAWLING_CONFIGS' }>,
-  context: HandlerContext,
-): Promise<{ success: boolean; added: number; updated: number }> {
-  const result = await context.crawlingConfigStore.syncCrawlingConfigs();
-  return { success: true, ...result };
-}
-
 export async function handleUpdateFieldValidation(
   message: Extract<Message, { type: 'UPDATE_FIELD_VALIDATION' }>,
   context: HandlerContext,

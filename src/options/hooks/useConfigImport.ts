@@ -111,7 +111,10 @@ export const useConfigImport = (currentConfigs: CrawlingConfig[]) => {
     }
   };
 
-  const processConfigs = (configsToProcess: unknown[], isRemote: boolean) => {
+  const processConfigs = (
+    configsToProcess: unknown[],
+    isRemote: boolean,
+  ): { additions: number; conflicts: number } | null => {
     const validated = configsToProcess.filter(isCrawlingConfig).map(normalizeImportedConfig);
     const dedupedByDomain = new Map<string, CrawlingConfig>();
     for (const config of validated) {
@@ -122,7 +125,7 @@ export const useConfigImport = (currentConfigs: CrawlingConfig[]) => {
     if (uniqueConfigs.length === 0) {
       setImportError(t('options.crawlingConfigs.importNoConfigs'));
       setImportOpen(true);
-      return;
+      return null;
     }
 
     const existingByDomain = new Map(currentConfigs.map((config) => [config.domain, config]));
@@ -156,6 +159,7 @@ export const useConfigImport = (currentConfigs: CrawlingConfig[]) => {
     setImportConflicts(conflicts);
     setIsRemoteSync(isRemote);
     setImportOpen(true);
+    return { additions: additions.length, conflicts: conflicts.length };
   };
 
   const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {

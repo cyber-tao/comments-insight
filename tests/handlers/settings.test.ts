@@ -21,7 +21,6 @@ describe('Settings Handlers', () => {
   const mockCrawlingConfigStore = {
     getCrawlingConfig: vi.fn(),
     saveCrawlingConfig: vi.fn(),
-    syncCrawlingConfigs: vi.fn(),
   };
 
   const context = {

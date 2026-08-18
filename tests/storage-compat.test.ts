@@ -262,6 +262,36 @@ describe('SettingsStore decryption resilience', () => {
     expect(settings.aiModel.apiUrl).toBe('https://api.example.com/v1');
   });
 
+  it('exports settings without the API key and re-imports without clobbering it', async () => {
+    mockStorageGet.mockResolvedValue({
+      [STORAGE.SETTINGS_KEY]: {
+        maxComments: 100,
+        aiModel: {
+          apiUrl: 'https://api.example.com/v1',
+          apiKey: 'enc:secret',
+          model: 'gpt-test',
+        },
+      },
+    });
+    const encryption = createEncryptionServiceMock({
+      decrypt: vi.fn().mockResolvedValue('sk-plaintext-secret'),
+    });
+    const store = new SettingsStore(encryption);
+
+    const exported = JSON.parse(await store.exportSettings());
+    expect(exported.aiModel.apiKey).toBeUndefined();
+    expect(JSON.stringify(exported)).not.toContain('sk-plaintext-secret');
+    expect(exported.aiModel.model).toBe('gpt-test');
+
+    // Re-importing the export must keep the currently stored key (it is
+    // decrypted for the merge and re-encrypted on save, which is value-equal).
+    const importCalls = mockStorageSet.mock.calls;
+    await store.importSettings(JSON.stringify(exported));
+    const savedPayload = importCalls[importCalls.length - 1]?.[0] as Record<string, unknown>;
+    const savedSettings = savedPayload?.[STORAGE.SETTINGS_KEY] as { aiModel: { apiKey: string } };
+    expect(savedSettings.aiModel.apiKey).toBe('enc:sk-plaintext-secret');
+  });
+
   it('creates secret and salt in a single atomic storage write', async () => {
     const { EncryptionService: RealEncryptionService } =
       await import('../src/background/storage/EncryptionService');

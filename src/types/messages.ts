@@ -24,7 +24,6 @@ export type SettingsMessage =
   | { type: 'CACHE_SELECTOR'; payload: { hostname: string; selector: string } }
   | { type: 'GET_CRAWLING_CONFIG'; payload: { domain: string } }
   | { type: 'SAVE_CRAWLING_CONFIG'; payload: { config: CrawlingConfig } }
-  | { type: 'SYNC_CRAWLING_CONFIGS'; payload?: never }
   | {
       type: 'UPDATE_FIELD_VALIDATION';
       payload: { domain: string; fieldValidation: Record<string, FieldValidationStatus> };

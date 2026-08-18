@@ -105,7 +105,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
 ## 🔑 API Key Security Note
 
-API keys are stored locally (reversible encryption/obfuscation) to avoid accidental exposure, but this is **not** a strong security boundary against malware or other extensions.
+API keys are stored locally (reversible encryption/obfuscation) to avoid accidental exposure, and settings exports never include the API key, but this is **not** a strong security boundary against malware or other extensions.
 
 ## 🧱 Architecture
 
