@@ -121,6 +121,7 @@ export const TEXT = {
   EXTRACTION_CANCELLED_BY_USER: 'Extraction cancelled by user',
   EXTRACTION_TASK_TIMEOUT: 'Extraction timed out waiting for completion signal',
   CONFIG_TASK_TIMEOUT: 'Config generation timed out waiting for completion signal',
+  ANALYSIS_TASK_TIMEOUT: 'Analysis timed out and was aborted',
   TASK_SOURCE_TAB_CLOSED: 'Task source tab was closed before completion',
   MODEL_TEST_HINT: 'Please verify API URL, API key, and network connectivity.',
   NO_RESPONSE_FROM_MODEL:

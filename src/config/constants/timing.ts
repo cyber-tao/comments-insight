@@ -33,10 +33,17 @@ export const TIMEOUT = {
   MESSAGE_RESPONSE_MS: 10000,
   EXTRACTION_TASK_COMPLETION_MS: 5 * 60 * 1000,
   CONFIG_TASK_COMPLETION_MS: 3 * 60 * 1000,
+  // Wall clock for analyze tasks (both LLM phases + persistence); extract and
+  // config tasks get their own completion timeouts, analyze needs one too so a
+  // wedged call cannot leave the task running indefinitely.
+  ANALYSIS_TASK_COMPLETION_MS: 30 * 60 * 1000,
   EXTRACTION_SAFETY_MARGIN_MS: 60 * 1000,
   MIN_AI_SECONDS: 30,
   MAX_AI_SECONDS: 600,
   MS_PER_SEC: 1000,
   AVAILABLE_MODELS_FETCH_MS: 15000,
   DYNAMIC_REPORT_RESPONSE_MS: 3 * 60 * 1000,
+  // Headroom added on top of the user's aiTimeout when a UI surface must wait
+  // for a background AI call through the message channel.
+  MESSAGE_OVERHEAD_MS: 15000,
 };

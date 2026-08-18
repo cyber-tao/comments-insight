@@ -173,18 +173,19 @@ export interface RetryConfig {
 
 /**
  * Default retry configuration
+ *
+ * Note: AI_TIMEOUT is deliberately absent. AI timeouts are classified
+ * explicitly by AIErrorHandler.classifyCallError with retryable: false —
+ * the user-configurable aiTimeout is the intended budget, and honoring it
+ * keeps worst-case analysis waits bounded instead of tripling them. Generic
+ * TIMEOUT_ERROR (unclassified native timeouts) remains retryable.
  */
 export const DEFAULT_RETRY_CONFIG: RetryConfig = {
   maxAttempts: 3,
   initialDelay: RETRY.INITIAL_DELAY_MS,
   maxDelay: RETRY.MAX_DELAY_MS,
   backoffMultiplier: 2,
-  retryableErrors: [
-    ErrorCode.NETWORK_ERROR,
-    ErrorCode.AI_TIMEOUT,
-    ErrorCode.TIMEOUT_ERROR,
-    ErrorCode.API_ERROR,
-  ],
+  retryableErrors: [ErrorCode.NETWORK_ERROR, ErrorCode.TIMEOUT_ERROR, ErrorCode.API_ERROR],
 };
 
 /**

@@ -72,9 +72,13 @@ export async function handleTestModel(
   }
 
   try {
+    // Honor the user's aiTimeout so slow local models aren't killed by the
+    // default 120s while the UI is still waiting for them (and vice versa).
+    const settings = await context.settingsStore.getSettings();
     const response = await context.aiService.callAI({
       prompt: 'Hello! Please respond with "OK" if you can read this message.',
       config: config,
+      timeout: settings.aiTimeout,
     });
 
     if (response && response.content) {

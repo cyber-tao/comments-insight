@@ -1,4 +1,4 @@
-import { MESSAGES, TEXT, AI, STORAGE } from '@/config/constants';
+import { MESSAGES, TEXT, AI, TIMEOUT } from '@/config/constants';
 import type { Comment, HistoryItem, Message, Settings, Task } from '@/types';
 import { sendMessage } from './chrome-message';
 
@@ -106,17 +106,16 @@ async function sendMessageOrThrow<T>(
 
 async function getEffectiveAiTimeoutMs(fallbackMs: number = AI.DEFAULT_TIMEOUT): Promise<number> {
   try {
-    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
-      const stored = await chrome.storage.local.get(STORAGE.SETTINGS_KEY);
-      const settings = stored?.[STORAGE.SETTINGS_KEY] as Settings | undefined;
-      if (settings?.aiTimeout && Number.isFinite(settings.aiTimeout) && settings.aiTimeout > 0) {
-        return settings.aiTimeout + 15000;
-      }
+    // Route through the normal GET_SETTINGS message so the value is the same
+    // sanitized/merged settings the background uses, not a raw storage read.
+    const settings = await ExtensionAPI.getSettings();
+    if (settings?.aiTimeout && Number.isFinite(settings.aiTimeout) && settings.aiTimeout > 0) {
+      return settings.aiTimeout + TIMEOUT.MESSAGE_OVERHEAD_MS;
     }
   } catch {
     // fallback to default
   }
-  return fallbackMs + 15000;
+  return fallbackMs + TIMEOUT.MESSAGE_OVERHEAD_MS;
 }
 
 export const ExtensionAPI = {

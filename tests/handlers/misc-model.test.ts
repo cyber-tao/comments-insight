@@ -63,11 +63,12 @@ describe('misc handlers - model test', () => {
         } as unknown as HandlerContext['aiService'],
         settingsStore: {
           saveSettings,
+          getSettings: vi.fn().mockResolvedValue({ aiTimeout: 60000 }),
         } as unknown as HandlerContext['settingsStore'],
       }),
     );
 
-    expect(callAI).toHaveBeenCalled();
+    expect(callAI).toHaveBeenCalledWith(expect.objectContaining({ timeout: 60000 }));
     expect(rememberVerifiedConfig).toHaveBeenCalledWith(baseConfig);
     expect(saveSettings).not.toHaveBeenCalled();
     expect(res.success).toBe(true);
@@ -90,6 +91,7 @@ describe('misc handlers - model test', () => {
         aiService: asAIService(callAI),
         settingsStore: {
           saveSettings: mockSaveSettings,
+          getSettings: vi.fn().mockResolvedValue({ aiTimeout: 60000 }),
         } as unknown as HandlerContext['settingsStore'],
       }),
     );

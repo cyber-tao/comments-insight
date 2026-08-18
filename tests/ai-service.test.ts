@@ -415,6 +415,29 @@ describe('AIService', () => {
       expect(result.content).toBe('Actual response');
     });
 
+    it('does not retry AI timeouts and honors the configured budget once', async () => {
+      mockFetch.mockImplementation(
+        (_url: unknown, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError')),
+            );
+          }),
+      );
+
+      const promise = aiService.callAI({
+        prompt: 'hello',
+        config: mockAIConfig(),
+        timeout: 1000,
+      });
+
+      // Advance past the timeout plus what a retry backoff would need; the
+      // call must fail exactly once with AI_TIMEOUT and never re-fetch.
+      await vi.advanceTimersByTimeAsync(10_000);
+      await expect(promise).rejects.toMatchObject({ code: ErrorCode.AI_TIMEOUT });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
     it('should record token usage after successful call', async () => {
       const mockResponse = {
         ok: true,

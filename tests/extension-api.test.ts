@@ -30,6 +30,8 @@ describe('ExtensionAPI', () => {
       .mockResolvedValueOnce({ config: { domain: 'example.com' } })
       .mockResolvedValueOnce({ data: '{"ok":true}' })
       .mockResolvedValueOnce({ models: ['gpt-4o-mini'] })
+      // testModel fetches settings first to honor the user's aiTimeout
+      .mockResolvedValueOnce({ settings: { aiTimeout: 45000 } })
       .mockResolvedValueOnce({ success: true, response: 'pong' });
 
     expect(await ExtensionAPI.getSettings()).toEqual({ theme: 'dark' });
@@ -81,6 +83,8 @@ describe('ExtensionAPI', () => {
           payload: { apiUrl: 'https://api.example.com', apiKey: 'secret' },
         },
       ],
+      // testModel reads settings first to compute the message timeout
+      [{ type: MESSAGES.GET_SETTINGS }],
       [
         {
           type: MESSAGES.TEST_MODEL,
@@ -96,7 +100,7 @@ describe('ExtensionAPI', () => {
             },
           },
         },
-        { timeoutMs: 135000 },
+        { timeoutMs: 60000 },
       ],
     ]);
   });
@@ -209,9 +213,14 @@ describe('ExtensionAPI', () => {
       () => ExtensionAPI.testModel(config),
     ];
 
-    for (const call of calls) {
-      sendMessageMock.mockResolvedValueOnce({ error: 'background failed' });
-      await expect(call()).rejects.toThrow('background failed');
+    for (let i = 0; i < calls.length; i++) {
+      // testModel (last entry) fetches settings before sending TEST_MODEL,
+      // so the GET_SETTINGS failure propagates through the same envelope.
+      const extraMessages = i === calls.length - 1 ? 1 : 0;
+      for (let j = 0; j <= extraMessages; j++) {
+        sendMessageMock.mockResolvedValueOnce({ error: 'background failed' });
+      }
+      await expect(calls[i]()).rejects.toThrow('background failed');
     }
   });
 });

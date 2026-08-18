@@ -2,7 +2,7 @@ import { Message, Comment, Task, CrawlingConfig } from '@/types';
 import { HandlerContext } from './types';
 import { Logger } from '@/utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
-import { AI as AI_CONST, ANALYSIS_FORMAT, TEXT } from '@/config/constants';
+import { AI as AI_CONST, ANALYSIS_FORMAT, TEXT, TIMEOUT } from '@/config/constants';
 import { getDomain } from '@/utils/url';
 import { generateUniqueId } from '@/utils/id-generator';
 import { runWithConcurrencyLimit } from '@/utils/promise';
@@ -53,159 +53,178 @@ export async function handleStartAnalysis(
     const settings = await context.settingsStore.getSettings();
     const analysisModel = settings.aiModel;
 
-    context.taskManager.updateDetailedProgress(taskId, {
-      stage: 'analyzing',
-      current: 0,
-      total: AI_CONST.ANALYSIS_STREAM_BATCH_UNITS,
-      stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.WAITING,
-    });
-
-    let platform = ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
-    let url = ANALYSIS_FORMAT.UNKNOWN_URL;
-    let title = ANALYSIS_FORMAT.UNKNOWN_TITLE;
-    let videoTime = ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
-    let postContent = ANALYSIS_FORMAT.UNKNOWN_CONTENT;
-
-    if (historyId) {
-      const historyItem = await context.historyStore.getHistoryItem(historyId);
-      if (!historyItem) {
-        throw new ExtensionError(ErrorCode.TASK_NOT_FOUND, `History item not found: ${historyId}`, {
-          historyId,
-        });
-      }
-      platform = historyItem.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
-      url = historyItem.url || ANALYSIS_FORMAT.UNKNOWN_URL;
-      title = historyItem.title || TEXT.UNTITLED;
-      videoTime = historyItem.videoTime || ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
-      postContent = historyItem.postContent || ANALYSIS_FORMAT.UNKNOWN_CONTENT;
-    } else {
-      platform = task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
-      url = task.url || ANALYSIS_FORMAT.UNKNOWN_URL;
-      title = metadata?.title || title;
-      videoTime = metadata?.videoTime || videoTime;
-      postContent = metadata?.postContent || postContent;
-    }
-
-    const result = await context.commentAnalyzer.analyzeComments(
-      comments,
-      analysisModel,
-      settings.analyzerPromptTemplate,
-      settings.language,
-      {
-        platform,
-        url,
-        title,
-        videoTime,
-        postContent,
-      },
-      signal,
-      settings.aiTimeout,
-      (progress) => {
-        context.taskManager.updateDetailedProgress(taskId, {
-          stage: 'analyzing',
-          current: progress.current,
-          total: progress.total,
-          stageMessageKey: progress.stageMessageKey,
-          stageMessageParams: progress.stageMessageParams,
-        });
-      },
-    );
-
-    // Stage 2: Generate dynamic visual HTML webpage if enabled (separate LLM API call)
-    if (settings.generateDynamicReport !== false && result.markdown) {
-      context.taskManager.updateDetailedProgress(taskId, {
-        stage: 'generating',
-        current: 0,
-        total: 100,
-        stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.GENERATING_DYNAMIC,
-      });
-
-      try {
-        const dynamicResult = await context.commentAnalyzer.generateDynamicHtml(
-          result.markdown,
-          analysisModel,
-          settings.dynamicReportPromptTemplate,
-          settings.language,
-          {
-            platform,
-            url,
-            title,
-            videoTime,
-            postContent,
-          },
-          comments.length,
-          signal,
-          settings.aiTimeout,
-          (progress) => {
-            context.taskManager.updateDetailedProgress(taskId, {
-              stage: 'generating',
-              current: Math.min(
-                100,
-                Math.floor(
-                  progress.charactersReceived / AI_CONST.DYNAMIC_REPORT_PROGRESS_CHARS_PER_UNIT,
-                ),
-              ),
-              total: 100,
-              stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
-              stageMessageParams: {
-                [AI_CONST.ANALYSIS_PROGRESS_PARAM_KEYS.CHARACTERS]: progress.charactersReceived,
-              },
-            });
-          },
-          comments,
-        );
-
-        if (dynamicResult.html) {
-          result.dynamicHtml = dynamicResult.html;
-          result.tokensUsed += dynamicResult.tokensUsed;
-        }
-      } catch (dynamicError) {
-        Logger.warn(
-          '[AnalysisHandler] Dynamic HTML report generation failed, continuing with markdown only',
-          {
-            error: dynamicError instanceof Error ? dynamicError.message : String(dynamicError),
-          },
-        );
-      }
-    }
+    // Analyze tasks have no tab to watch, so enforce a wall clock instead of
+    // letting a wedged LLM call leave the task running forever.
+    const wallClock = new AbortController();
+    const wallClockTimer = setTimeout(() => wallClock.abort(), TIMEOUT.ANALYSIS_TASK_COMPLETION_MS);
+    const combinedSignal = AbortSignal.any([signal, wallClock.signal]);
 
     try {
+      context.taskManager.updateDetailedProgress(taskId, {
+        stage: 'analyzing',
+        current: 0,
+        total: AI_CONST.ANALYSIS_STREAM_BATCH_UNITS,
+        stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.WAITING,
+      });
+
+      let platform = ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
+      let url = ANALYSIS_FORMAT.UNKNOWN_URL;
+      let title = ANALYSIS_FORMAT.UNKNOWN_TITLE;
+      let videoTime = ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
+      let postContent = ANALYSIS_FORMAT.UNKNOWN_CONTENT;
+
       if (historyId) {
         const historyItem = await context.historyStore.getHistoryItem(historyId);
         if (!historyItem) {
           throw new ExtensionError(
             ErrorCode.TASK_NOT_FOUND,
             `History item not found: ${historyId}`,
-            { historyId },
+            {
+              historyId,
+            },
           );
         }
-        historyItem.analysis = result;
-        historyItem.analyzedAt = Date.now();
-        await context.historyStore.saveHistory(historyItem);
+        platform = historyItem.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
+        url = historyItem.url || ANALYSIS_FORMAT.UNKNOWN_URL;
+        title = historyItem.title || TEXT.UNTITLED;
+        videoTime = historyItem.videoTime || ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
+        postContent = historyItem.postContent || ANALYSIS_FORMAT.UNKNOWN_CONTENT;
       } else {
-        await context.historyStore.saveHistory({
-          id: generateUniqueId('history'),
-          url: task.url,
-          title: `Analysis ${new Date().toLocaleString()}`,
-          platform: task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM,
-          postContent: metadata?.postContent,
-          extractedAt: Date.now(),
-          commentsCount: comments.length,
-          comments,
-          analysis: result,
-          analyzedAt: Date.now(),
-        });
+        platform = task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
+        url = task.url || ANALYSIS_FORMAT.UNKNOWN_URL;
+        title = metadata?.title || title;
+        videoTime = metadata?.videoTime || videoTime;
+        postContent = metadata?.postContent || postContent;
       }
-    } catch (saveError) {
-      Logger.error('[AnalysisHandler] Failed to save analysis history', { saveError });
-      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save analysis history');
-    }
 
-    return {
-      tokensUsed: result.tokensUsed,
-      commentsCount: comments.length,
-      title,
-    };
+      const result = await context.commentAnalyzer.analyzeComments(
+        comments,
+        analysisModel,
+        settings.analyzerPromptTemplate,
+        settings.language,
+        {
+          platform,
+          url,
+          title,
+          videoTime,
+          postContent,
+        },
+        combinedSignal,
+        settings.aiTimeout,
+        (progress) => {
+          context.taskManager.updateDetailedProgress(taskId, {
+            stage: 'analyzing',
+            current: progress.current,
+            total: progress.total,
+            stageMessageKey: progress.stageMessageKey,
+            stageMessageParams: progress.stageMessageParams,
+          });
+        },
+      );
+
+      // Stage 2: Generate dynamic visual HTML webpage if enabled (separate LLM API call)
+      if (settings.generateDynamicReport !== false && result.markdown) {
+        context.taskManager.updateDetailedProgress(taskId, {
+          stage: 'generating',
+          current: 0,
+          total: 100,
+          stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.GENERATING_DYNAMIC,
+        });
+
+        try {
+          const dynamicResult = await context.commentAnalyzer.generateDynamicHtml(
+            result.markdown,
+            analysisModel,
+            settings.dynamicReportPromptTemplate,
+            settings.language,
+            {
+              platform,
+              url,
+              title,
+              videoTime,
+              postContent,
+            },
+            comments.length,
+            combinedSignal,
+            settings.aiTimeout,
+            (progress) => {
+              context.taskManager.updateDetailedProgress(taskId, {
+                stage: 'generating',
+                current: Math.min(
+                  100,
+                  Math.floor(
+                    progress.charactersReceived / AI_CONST.DYNAMIC_REPORT_PROGRESS_CHARS_PER_UNIT,
+                  ),
+                ),
+                total: 100,
+                stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
+                stageMessageParams: {
+                  [AI_CONST.ANALYSIS_PROGRESS_PARAM_KEYS.CHARACTERS]: progress.charactersReceived,
+                },
+              });
+            },
+            comments,
+          );
+
+          if (dynamicResult.html) {
+            result.dynamicHtml = dynamicResult.html;
+            result.tokensUsed += dynamicResult.tokensUsed;
+          }
+        } catch (dynamicError) {
+          Logger.warn(
+            '[AnalysisHandler] Dynamic HTML report generation failed, continuing with markdown only',
+            {
+              error: dynamicError instanceof Error ? dynamicError.message : String(dynamicError),
+            },
+          );
+        }
+      }
+
+      try {
+        if (historyId) {
+          const historyItem = await context.historyStore.getHistoryItem(historyId);
+          if (!historyItem) {
+            throw new ExtensionError(
+              ErrorCode.TASK_NOT_FOUND,
+              `History item not found: ${historyId}`,
+              { historyId },
+            );
+          }
+          historyItem.analysis = result;
+          historyItem.analyzedAt = Date.now();
+          await context.historyStore.saveHistory(historyItem);
+        } else {
+          await context.historyStore.saveHistory({
+            id: generateUniqueId('history'),
+            url: task.url,
+            title: `Analysis ${new Date().toLocaleString()}`,
+            platform: task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM,
+            postContent: metadata?.postContent,
+            extractedAt: Date.now(),
+            commentsCount: comments.length,
+            comments,
+            analysis: result,
+            analyzedAt: Date.now(),
+          });
+        }
+      } catch (saveError) {
+        Logger.error('[AnalysisHandler] Failed to save analysis history', { saveError });
+        throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save analysis history');
+      }
+
+      return {
+        tokensUsed: result.tokensUsed,
+        commentsCount: comments.length,
+        title,
+      };
+    } catch (error) {
+      if (wallClock.signal.aborted && !signal.aborted) {
+        throw new ExtensionError(ErrorCode.TIMEOUT_ERROR, TEXT.ANALYSIS_TASK_TIMEOUT);
+      }
+      throw error;
+    } finally {
+      clearTimeout(wallClockTimer);
+    }
   });
 
   return { taskId };
