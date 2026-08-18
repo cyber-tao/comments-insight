@@ -23,6 +23,12 @@ const useConfirmMock = vi.hoisted(() =>
 
 const useThemeMock = vi.hoisted(() => vi.fn());
 
+const changeLanguageMock = vi.hoisted(() => vi.fn());
+
+const extensionApiMock = vi.hoisted(() => ({
+  getSettings: vi.fn().mockResolvedValue({ language: 'ja-JP' }),
+}));
+
 vi.mock('../src/utils/logger', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/utils/logger')>();
   return {
@@ -39,9 +45,20 @@ vi.mock('../src/hooks/useTheme', () => ({
   useTheme: useThemeMock,
 }));
 
+vi.mock('../src/utils/extension-api', () => ({
+  ExtensionAPI: extensionApiMock,
+}));
+
+vi.mock('../src/utils/i18n', () => ({
+  default: {},
+  changeLanguage: changeLanguageMock,
+  loadLocaleResource: vi.fn(async () => undefined),
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, defaultText: string) => defaultText,
+    // Keys are already covered by scripts/check-i18n.mjs; tests assert on keys.
+    t: (key: string) => key,
   }),
 }));
 
@@ -91,16 +108,25 @@ describe('Logs Page', () => {
     } as any;
   });
 
+  it('applies the user language preference on mount', async () => {
+    render(<Logs />);
+
+    await waitFor(() => {
+      expect(extensionApiMock.getSettings).toHaveBeenCalled();
+      expect(changeLanguageMock).toHaveBeenCalledWith('ja-JP');
+    });
+  });
+
   it('loads and renders logs successfully', async () => {
     render(<Logs />);
 
     await waitFor(() => {
-      expect(screen.getByText('AI Logs (2)')).toBeTruthy();
-      expect(screen.getByText('System Logs (1)')).toBeTruthy();
+      expect(screen.getByText('logs.filterAI (2)')).toBeTruthy();
+      expect(screen.getByText('logs.filterSystem (1)')).toBeTruthy();
     });
 
     // Switch to System Logs
-    fireEvent.click(screen.getByText('System Logs (1)'));
+    fireEvent.click(screen.getByText('logs.filterSystem (1)'));
     await waitFor(() => {
       expect(screen.getAllByText('system error message').length).toBeGreaterThan(0);
       expect(screen.getByText('Total: 1')).toBeTruthy();
@@ -112,10 +138,10 @@ describe('Logs Page', () => {
     render(<Logs />);
 
     // First we are on AI tab by default, wait for it to load
-    await waitFor(() => expect(screen.getByText('AI Logs (2)')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('logs.filterAI (2)')).toBeTruthy());
 
     // Switch to System Logs
-    fireEvent.click(screen.getByText('System Logs (1)'));
+    fireEvent.click(screen.getByText('logs.filterSystem (1)'));
     await waitFor(() => {
       expect(screen.getAllByText('system error message').length).toBeGreaterThan(0);
     });
@@ -127,9 +153,9 @@ describe('Logs Page', () => {
 
   it('clears logs', async () => {
     render(<Logs />);
-    await waitFor(() => expect(screen.getByText('AI Logs (2)')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('logs.filterAI (2)')).toBeTruthy());
 
-    fireEvent.click(screen.getByText(/Clear All/i));
+    fireEvent.click(screen.getByText(/logs.clearAll/));
 
     await waitFor(() => {
       expect(chrome.storage.local.remove).toHaveBeenCalled();
@@ -142,10 +168,10 @@ describe('Logs Page', () => {
 
   it('handles log item expansion', async () => {
     render(<Logs />);
-    await waitFor(() => expect(screen.getByText('AI Logs (2)')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('logs.filterAI (2)')).toBeTruthy());
 
     // Switch to System Logs to find the system error message
-    fireEvent.click(screen.getByText('System Logs (1)'));
+    fireEvent.click(screen.getByText('logs.filterSystem (1)'));
 
     await waitFor(() =>
       expect(screen.getAllByText('system error message').length).toBeGreaterThan(0),

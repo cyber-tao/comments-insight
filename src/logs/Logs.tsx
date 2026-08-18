@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '@/hooks/useTheme';
 import { useConfirm } from '@/hooks/useConfirm';
 import { Logger, LogLevel } from '@/utils/logger';
+import { changeLanguage } from '@/utils/i18n';
+import { ExtensionAPI } from '@/utils/extension-api';
 import { VList } from 'virtua';
 
 import { useLogs } from './hooks/useLogs';
@@ -39,6 +41,21 @@ export default function Logs() {
   useEffect(() => {
     void loadLogs();
   }, [loadLogs]);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const settings = await ExtensionAPI.getSettings();
+        if (settings?.language) {
+          await changeLanguage(settings.language);
+        }
+      } catch (error) {
+        Logger.error('[Logs] Failed to load settings', { error });
+      }
+    };
+
+    void loadSettings();
+  }, []);
 
   const handleClearAll = async () => {
     const confirmed = await confirm({
@@ -83,13 +100,13 @@ export default function Logs() {
             className={`tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
             onClick={() => setActiveTab('ai')}
           >
-            {t('logs.filterAI', 'AI Logs')} ({aiLogs.length})
+            {t('logs.filterAI')} ({aiLogs.length})
           </button>
           <button
             className={`tab-btn ${activeTab === 'system' ? 'active' : ''}`}
             onClick={() => setActiveTab('system')}
           >
-            {t('logs.filterSystem', 'System Logs')} ({systemLogs.length})
+            {t('logs.filterSystem')} ({systemLogs.length})
           </button>
         </div>
 
@@ -105,15 +122,15 @@ export default function Logs() {
       {activeTab === 'system' && (
         <div className="logs-filters">
           <label className="level-filter-label">
-            <span>{t('logs.level', 'Level')}</span>
+            <span>{t('logs.level')}</span>
             <select
               name="levelFilter"
-              aria-label={t('logs.level', 'Level')}
+              aria-label={t('logs.level')}
               value={levelFilter}
               onChange={(e) => setLevelFilter(e.target.value as 'all' | LogLevel)}
               className="select-input"
             >
-              <option value="all">{t('logs.levelAll', 'All')}</option>
+              <option value="all">{t('logs.levelAll')}</option>
               <option value="DEBUG">DEBUG</option>
               <option value="INFO">INFO</option>
               <option value="WARN">WARN</option>
@@ -135,12 +152,10 @@ export default function Logs() {
 
       <div className="log-list">
         {loading ? (
-          <div className="empty-state">{t('logs.loading', 'Loading logs...')}</div>
+          <div className="empty-state">{t('logs.loading')}</div>
         ) : activeTab === 'ai' ? (
           aiLogs.length === 0 ? (
-            <div className="empty-state">
-              {t('logs.empty', 'No logs found. Logs will appear here after operations.')}
-            </div>
+            <div className="empty-state">{t('logs.empty')}</div>
           ) : (
             <VList className="virtua-list">
               {aiLogs.map((log) => (
@@ -149,9 +164,7 @@ export default function Logs() {
             </VList>
           )
         ) : systemLogs.length === 0 ? (
-          <div className="empty-state">
-            {t('logs.empty', 'No logs found. Logs will appear here after operations.')}
-          </div>
+          <div className="empty-state">{t('logs.empty')}</div>
         ) : (
           <VList className="virtua-list">
             {systemLogs.map((log) => (

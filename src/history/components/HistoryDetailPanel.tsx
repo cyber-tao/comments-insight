@@ -163,8 +163,8 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
     t,
   });
   const idleReanalyzeTitle = hasAnalysis
-    ? t('history.reanalyzeTooltip', '重新发起分析并覆盖当前结果')
-    : t('history.startAnalysisTooltip', '立即开始对评论数据进行AI分析');
+    ? t('history.reanalyzeTooltip')
+    : t('history.startAnalysisTooltip');
   const activeReanalyzeTitle = reanalyzeTaskId
     ? `${reanalyzeProgressMessage} #${reanalyzeTaskId}`
     : reanalyzeProgressMessage;
@@ -191,10 +191,10 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                 color: 'var(--text-primary)',
                 backgroundColor: 'var(--bg-tertiary)',
               }}
-              title={t('history.backToHistory', '返回历史列表')}
+              title={t('history.backToHistory')}
             >
               <span>←</span>
-              <span>{t('history.backToHistory', '返回历史列表')}</span>
+              <span>{t('history.backToHistory')}</span>
             </button>
             <span
               className="font-semibold text-base truncate max-w-xl"
@@ -210,13 +210,13 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                 disabled={isGeneratingDynamic || isReanalyzing}
                 className="px-3.5 py-1.5 rounded-lg text-white text-sm font-medium flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
                 style={{ backgroundColor: 'var(--accent-secondary)' }}
-                title={t('history.regenerateDynamicTooltip', '重新调用AI生成动态网页')}
+                title={t('history.regenerateDynamicTooltip')}
               >
                 <span>{isGeneratingDynamic || isReanalyzing ? '⏳' : '🔄'}</span>
                 <span>
                   {isGeneratingDynamic || isReanalyzing
-                    ? t('history.generatingDynamicReport', '正在生成动态网页...')
-                    : t('history.regenerateDynamicReport', '重新生成网页')}
+                    ? t('history.generatingDynamicReport')
+                    : t('history.regenerateDynamicReport')}
                 </span>
               </button>
             )}
@@ -224,10 +224,10 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
               onClick={() => exportAnalysisAsHTML(selectedItem)}
               className="px-3.5 py-1.5 rounded-lg text-white text-sm font-medium flex items-center gap-1.5 transition-all hover:scale-105 shadow-sm"
               style={{ background: 'var(--gradient-primary)' }}
-              title={t('history.exportHtmlTooltip', '导出独立 HTML 网页文件')}
+              title={t('history.exportHtmlTooltip')}
             >
               <span>💾</span>
-              <span>{t('history.exportHtml', '导出 HTML')}</span>
+              <span>{t('history.exportHtml')}</span>
             </button>
           </div>
         </div>
@@ -320,7 +320,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
               color: viewMode === 'dynamic' ? undefined : 'var(--text-tertiary)',
             }}
           >
-            🌐 {t('history.dynamicReport', '动态看板')}
+            🌐 {t('history.dynamicReport')}
           </button>
           <button
             onClick={() => onViewModeChange('comments')}
@@ -372,8 +372,8 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                       {isReanalyzing
                         ? compactReanalyzeProgressMessage
                         : hasAnalysis
-                          ? t('history.reanalyze', '重新分析')
-                          : t('history.startAnalysis', '开始分析')}
+                          ? t('history.reanalyze')
+                          : t('history.startAnalysis')}
                     </span>
                   </span>
                 </button>
@@ -433,7 +433,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
           <div className="animate-fade-in flex flex-col h-full">
             <div className="mb-4 flex justify-between items-center flex-wrap gap-2">
               <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-                {t('history.dynamicReport', '动态看板')}
+                {t('history.dynamicReport')}
               </h3>
               <div className="flex items-center gap-2">
                 {hasAnalysis && (
@@ -444,17 +444,17 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                     style={{ backgroundColor: 'var(--accent-secondary)' }}
                     title={
                       hasDynamicHtml
-                        ? t('history.regenerateDynamicTooltip', '重新调用AI生成动态网页')
-                        : t('history.generateDynamicTooltip', '调用AI生成动态网页')
+                        ? t('history.regenerateDynamicTooltip')
+                        : t('history.generateDynamicTooltip')
                     }
                   >
                     <span>{isGeneratingDynamic ? '⏳' : hasDynamicHtml ? '🔄' : '✨'}</span>
                     <span>
                       {isGeneratingDynamic
-                        ? t('history.generatingDynamicReport', '正在生成动态网页...')
+                        ? t('history.generatingDynamicReport')
                         : hasDynamicHtml
-                          ? t('history.regenerateDynamicReport', '重新生成网页')
-                          : t('history.generateDynamicReport', '生成动态网页')}
+                          ? t('history.regenerateDynamicReport')
+                          : t('history.generateDynamicReport')}
                     </span>
                   </button>
                 )}
@@ -464,19 +464,19 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                       onClick={handleOpenInNewTab}
                       className="px-4 py-2 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-all hover:scale-105 shadow-md"
                       style={{ backgroundColor: '#3b82f6' }}
-                      title={t('history.openInNewTabTooltip', '在新标签页全屏查看')}
+                      title={t('history.openInNewTabTooltip')}
                     >
                       <span>🖥️</span>
-                      <span>{t('history.openInNewTab', '新标签页打开')}</span>
+                      <span>{t('history.openInNewTab')}</span>
                     </button>
                     <button
                       onClick={() => exportAnalysisAsHTML(selectedItem)}
                       className="px-4 py-2 rounded-lg text-white text-sm font-medium flex items-center gap-2 transition-all hover:scale-105 shadow-md"
                       style={{ background: 'var(--gradient-primary)' }}
-                      title={t('history.exportHtmlTooltip', '导出独立 HTML 网页文件')}
+                      title={t('history.exportHtmlTooltip')}
                     >
                       <span>💾</span>
-                      <span>{t('history.exportHtml', '导出 HTML')}</span>
+                      <span>{t('history.exportHtml')}</span>
                     </button>
                   </>
                 )}
@@ -518,7 +518,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
               >
                 <p className="text-5xl mb-4">✨</p>
                 <h4 className="text-lg font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
-                  {t('history.noDynamicReportYet', '暂无动态可视化网页')}
+                  {t('history.noDynamicReportYet')}
                 </h4>
                 <p className="text-sm max-w-md mx-auto mb-6" style={{ color: 'var(--text-muted)' }}>
                   {t(
@@ -535,8 +535,8 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                   <span>{isGeneratingDynamic ? '⏳' : '✨'}</span>
                   <span>
                     {isGeneratingDynamic
-                      ? t('history.generatingDynamicReport', '正在生成动态网页...')
-                      : t('history.generateDynamicReport', '生成动态分析网页')}
+                      ? t('history.generatingDynamicReport')
+                      : t('history.generateDynamicReport')}
                   </span>
                 </button>
               </div>

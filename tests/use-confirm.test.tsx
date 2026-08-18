@@ -9,7 +9,7 @@ import { useConfirm, type ConfirmFunction } from '../src/hooks/useConfirm';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue,
+    t: (key: string) => key,
   }),
 }));
 
@@ -51,13 +51,13 @@ describe('useConfirm', () => {
 
     expect(screen.getByText('First confirmation')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.confirm' }));
 
     await waitFor(() => {
       expect(screen.getByText('Second confirmation')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }));
 
     await expect(first).resolves.toBe(true);
     await expect(second).resolves.toBe(false);

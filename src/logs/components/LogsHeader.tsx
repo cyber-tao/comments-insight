@@ -25,20 +25,20 @@ export const LogsHeader: React.FC<LogsHeaderProps> = ({
           <input
             type="search"
             className="search-input"
-            placeholder={t('logs.searchPlaceholder', 'Search logs...')}
+            placeholder={t('logs.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            aria-label={t('logs.searchAria', 'Search logs')}
+            aria-label={t('logs.searchAria')}
           />
         </div>
         <button className="btn-primary" onClick={onRefresh}>
-          🔄 {t('logs.refresh', 'Refresh')}
+          🔄 {t('logs.refresh')}
         </button>
         <button className="btn-primary" onClick={onExport}>
-          📥 {t('logs.export', 'Export')}
+          📥 {t('logs.export')}
         </button>
         <button className="btn-danger" onClick={onClearAll}>
-          🗑️ {t('logs.clearAll', 'Clear All')}
+          🗑️ {t('logs.clearAll')}
         </button>
       </div>
     </div>

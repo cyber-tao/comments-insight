@@ -9,7 +9,7 @@ import { ConfirmDialog } from '../src/components/ConfirmDialog';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_key: string, options?: { defaultValue?: string }) => options?.defaultValue,
+    t: (key: string) => key,
   }),
 }));
 
@@ -20,10 +20,10 @@ describe('ConfirmDialog', () => {
 
     render(<ConfirmDialog open message="Delete item?" onConfirm={onConfirm} onCancel={onCancel} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.confirm' }));
     expect(onConfirm).toHaveBeenCalledOnce();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'common.cancel' }));
     expect(onCancel).toHaveBeenCalledOnce();
   });
 

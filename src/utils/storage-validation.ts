@@ -122,6 +122,7 @@ const taskSchema = z.object({
   maxComments: finiteNumberSchema.optional(),
   error: z.string().optional(),
   message: z.string().optional(),
+  interruptedByRestart: z.boolean().optional(),
   detailedProgress: taskProgressSchema.optional(),
 });
 const commentSchema: z.ZodType<Comment> = z.lazy(() =>

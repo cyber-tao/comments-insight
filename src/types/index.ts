@@ -77,6 +77,8 @@ export interface Task {
   maxComments?: number;
   error?: string;
   message?: string;
+  /** Marks a task that was mid-flight when the service worker restarted */
+  interruptedByRestart?: boolean;
   /** Detailed progress information for enhanced UI feedback */
   detailedProgress?: TaskProgress;
 }

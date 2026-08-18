@@ -10,6 +10,7 @@ import { DataMigrator } from './storage/DataMigrator';
 import { Message } from '../types';
 import { Logger } from '../utils/logger';
 import { STORAGE } from '@/config/constants';
+import i18n, { changeLanguage } from '../utils/i18n';
 
 Logger.info('Comments Insight Service Worker loaded');
 
@@ -25,11 +26,28 @@ const initPromise = (async () => {
   try {
     await new DataMigrator().migrate();
     await getTaskManager().initialize();
+    // Apply the user's language preference before any background-originated
+    // strings (notifications, persisted task errors) are produced.
+    const settings = await getSettingsStore().getSettings();
+    await changeLanguage(settings.language);
     Logger.info('[Background] Migration and TaskManager initialized');
   } catch (error) {
     Logger.error('[Background] Service worker initialization failed', { error });
   }
 })();
+
+// Keep the service worker locale in sync when the user changes it in Options,
+// mirroring how Logger tracks developerMode via the same listener.
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local' || !changes[STORAGE.SETTINGS_KEY]) {
+    return;
+  }
+  const language = (changes[STORAGE.SETTINGS_KEY].newValue as { language?: string } | undefined)
+    ?.language;
+  if (typeof language === 'string' && language && language !== i18n.language) {
+    void changeLanguage(language);
+  }
+});
 
 getNotificationService().setupNotificationHandlers();
 

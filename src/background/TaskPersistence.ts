@@ -60,6 +60,9 @@ export class TaskPersistence {
     task.status = 'failed';
     task.error = i18n.t(ERROR_KEYS.TASK_INTERRUPTED_BY_RESTART);
     task.message = task.error;
+    // Language-independent marker so recovery never depends on the localized
+    // error text staying identical across service worker restarts.
+    task.interruptedByRestart = true;
     task.detailedProgress = undefined;
     task.endTime = interruptedAt;
   }

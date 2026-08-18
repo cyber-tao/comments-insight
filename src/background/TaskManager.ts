@@ -501,6 +501,9 @@ export class TaskManager {
       return undefined;
     }
 
+    // Newer persisted tasks carry the language-independent interruptedByRestart
+    // flag; the localized-error comparison only stays as a legacy fallback for
+    // state written before the flag existed.
     const interruptedMessage = i18n.t(ERROR_KEYS.TASK_INTERRUPTED_BY_RESTART);
     const tabMatchesSender =
       typeof options.senderTabId !== 'number' ||
@@ -513,7 +516,7 @@ export class TaskManager {
       Date.now() - task.endTime <= options.maxAgeMs;
     const canRecoverFromInterruption =
       task.status === 'failed' &&
-      task.error === interruptedMessage &&
+      (task.interruptedByRestart === true || task.error === interruptedMessage) &&
       tabMatchesSender &&
       taskTypeMatches &&
       withinRecoveryWindow;
@@ -526,6 +529,7 @@ export class TaskManager {
       task.status = 'running';
       task.error = undefined;
       task.message = undefined;
+      task.interruptedByRestart = undefined;
       task.endTime = undefined;
       this.currentTaskId = taskId;
       this.notifyTaskUpdate(task, { immediate: true });

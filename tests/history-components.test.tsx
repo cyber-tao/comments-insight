@@ -354,7 +354,7 @@ describe('HistoryDetailPanel', () => {
     fireEvent.click(screen.getByText('💬 history.comments'));
     expect(onViewModeChange).toHaveBeenCalledWith('comments');
 
-    fireEvent.click(screen.getByText('重新分析'));
+    fireEvent.click(screen.getByText('history.reanalyze'));
     expect(onReanalyze).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByText('history.exportMarkdown'));
@@ -402,7 +402,7 @@ describe('HistoryDetailPanel', () => {
     );
 
     expect(screen.getByText('history.noAnalysis')).toBeTruthy();
-    expect(screen.getByText('开始分析')).toBeTruthy();
+    expect(screen.getByText('history.startAnalysis')).toBeTruthy();
     expect(screen.queryByText('history.exportMarkdown')).toBeNull();
   });
 

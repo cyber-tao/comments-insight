@@ -145,6 +145,44 @@ describe('TaskManager', () => {
       expect(recovered?.endTime).toBeUndefined();
     });
 
+    it('recovers interrupted tasks via the flag even after the UI language changed', async () => {
+      const now = Date.now();
+      mockStorageGet.mockResolvedValue({
+        [STORAGE.TASK_STATE_KEY]: {
+          tasks: [
+            {
+              id: 'task_interrupted',
+              type: 'extract',
+              status: 'failed',
+              url: 'https://example.com/a',
+              platform: 'Generic',
+              progress: 42,
+              startTime: now - 1000,
+              endTime: now - 500,
+              tokensUsed: 0,
+              interruptedByRestart: true,
+              // Error text written in another locale; must not matter anymore.
+              error: 'タスクはサービスワーカーの再起動によって中断されました',
+            },
+          ],
+          queue: [],
+          currentTaskId: null,
+          savedAt: now - 100,
+        },
+      });
+
+      const persistentTaskManager = new TaskManager(mockNotificationService as any, {
+        enablePersistence: true,
+      });
+      await persistentTaskManager.initialize();
+
+      const recovered = persistentTaskManager.recoverInterruptedTask('task_interrupted');
+
+      expect(recovered?.status).toBe('running');
+      expect(recovered?.error).toBeUndefined();
+      expect(recovered?.interruptedByRestart).toBeUndefined();
+    });
+
     it('should normalize malformed persisted state instead of crashing', async () => {
       mockStorageGet.mockResolvedValue({
         [STORAGE.TASK_STATE_KEY]: {

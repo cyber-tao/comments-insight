@@ -49,8 +49,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     return null;
   }
 
-  const confirmText = confirmLabel ?? t('common.confirm', { defaultValue: 'Confirm' });
-  const cancelText = cancelLabel ?? t('common.cancel', { defaultValue: 'Cancel' });
+  const confirmText = confirmLabel ?? t('common.confirm');
+  const cancelText = cancelLabel ?? t('common.cancel');
 
   return (
     <div
