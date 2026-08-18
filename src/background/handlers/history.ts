@@ -15,14 +15,6 @@ interface HistoryMetadataEntry {
   platform: string;
 }
 
-interface PaginatedHistoryResponse {
-  items: HistoryItem[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-}
-
 interface PaginatedHistoryMetadataResponse {
   entries: HistoryMetadataEntry[];
   total: number;
@@ -47,9 +39,9 @@ interface ExportSettingsResponse {
 export async function handleGetHistory(
   message: Extract<Message, { type: 'GET_HISTORY' }>,
   context: HandlerContext,
-): Promise<GetHistoryItemResponse | PaginatedHistoryResponse | PaginatedHistoryMetadataResponse> {
+): Promise<GetHistoryItemResponse | PaginatedHistoryMetadataResponse> {
   const payload = message.payload || {};
-  const { id, query, page, pageSize, metadataOnly } = payload;
+  const { id, query, page, pageSize } = payload;
 
   if (id) {
     const item = await context.historyStore.getHistoryItem(id);
@@ -60,20 +52,14 @@ export async function handleGetHistory(
   const safePageSize =
     typeof pageSize === 'number' && pageSize > 0 ? pageSize : PAGINATION.DEFAULT_PER_PAGE;
 
-  if (metadataOnly) {
-    if (query) {
-      return await context.historyStore.searchHistoryMetadataPage(query, safePage, safePageSize);
-    }
-    return await context.historyStore.getHistoryMetadataPage(safePage, safePageSize);
-  }
-
+  // Listing always returns metadata entries; full items are fetched by id.
+  // The legacy metadataOnly flag (still accepted by the payload schema) no
+  // longer selects a different path - loading full history rows for pages was
+  // never used by any UI surface.
   if (query) {
-    return await context.historyStore.searchHistoryPaginated(query, safePage, safePageSize);
+    return await context.historyStore.searchHistoryMetadataPage(query, safePage, safePageSize);
   }
-
-  // Always return paginated results to avoid loading the entire IndexedDB into memory.
-  // Callers that need the full export must opt-in via `EXPORT_DATA` or iterate pages.
-  return await context.historyStore.getHistoryPage(safePage, safePageSize);
+  return await context.historyStore.getHistoryMetadataPage(safePage, safePageSize);
 }
 
 export async function handleGetHistoryByUrl(

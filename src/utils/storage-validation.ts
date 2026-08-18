@@ -1,11 +1,8 @@
 import { z } from 'zod';
 import type {
   AIConfig,
-  AnalysisResult,
-  Comment,
   CrawlingConfig,
   DOMAnalysisConfig,
-  HistoryItem,
   SelectorCache,
   Settings,
   Task,
@@ -124,49 +121,6 @@ const taskSchema = z.object({
   message: z.string().optional(),
   interruptedByRestart: z.boolean().optional(),
   detailedProgress: taskProgressSchema.optional(),
-});
-const commentSchema: z.ZodType<Comment> = z.lazy(() =>
-  z.object({
-    id: nonEmptyStringSchema,
-    username: z.string(),
-    userId: z.string().optional(),
-    platform: z.string().optional(),
-    timestamp: z.string(),
-    likes: finiteNumberSchema,
-    content: z.string(),
-    replies: z.array(commentSchema),
-    isHot: z.boolean().optional(),
-  }),
-);
-const analysisResultSchema: z.ZodType<AnalysisResult> = z.object({
-  markdown: z.string(),
-  dynamicHtml: z.string().optional(),
-  summary: z.object({
-    totalComments: finiteNumberSchema,
-    sentimentDistribution: z.object({
-      positive: finiteNumberSchema,
-      negative: finiteNumberSchema,
-      neutral: finiteNumberSchema,
-    }),
-    hotComments: z.array(commentSchema),
-    keyInsights: z.array(z.string()),
-  }),
-  tokensUsed: finiteNumberSchema,
-  generatedAt: finiteNumberSchema,
-});
-const compressedHistoryItemSchema = z.object({
-  id: nonEmptyStringSchema,
-  url: nonEmptyStringSchema,
-  title: z.string(),
-  platform: z.string(),
-  videoTime: z.string().optional(),
-  postContent: z.string().optional(),
-  extractedAt: finiteNumberSchema,
-  commentsCount: finiteNumberSchema,
-  comments: z.string().optional(),
-  commentsChunks: z.number().int().nonnegative().optional(),
-  analysis: analysisResultSchema.optional(),
-  analyzedAt: finiteNumberSchema.optional(),
 });
 const tokenStatsSchema = z.object({
   today: finiteNumberSchema,
@@ -331,46 +285,6 @@ export function sanitizeStringIndex(value: unknown): string[] {
   }
 
   return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
-}
-
-export function sanitizeCompressedHistoryItem(value: unknown): {
-  id: string;
-  url: string;
-  title: string;
-  platform: string;
-  videoTime?: string;
-  postContent?: string;
-  extractedAt: number;
-  commentsCount: number;
-  comments?: string;
-  commentsChunks?: number;
-  analysis?: AnalysisResult;
-  analyzedAt?: number;
-} | null {
-  const result = compressedHistoryItemSchema.safeParse(value);
-  return result.success ? result.data : null;
-}
-
-export function sanitizeHistoryComments(value: unknown): Comment[] | null {
-  const result = z.array(commentSchema).safeParse(value);
-  return result.success ? result.data : null;
-}
-
-export function sanitizeHistoryMetadata(value: unknown): Pick<HistoryItem, 'url'> & {
-  commentsChunks?: number;
-} {
-  if (!isPlainObject(value)) {
-    return { url: '' };
-  }
-
-  const raw = value as Record<string, unknown>;
-  return {
-    url: typeof raw.url === 'string' ? raw.url : '',
-    commentsChunks:
-      typeof raw.commentsChunks === 'number' && Number.isInteger(raw.commentsChunks)
-        ? raw.commentsChunks
-        : undefined,
-  };
 }
 
 export function sanitizeAiLogEntry(value: unknown): StoredAiLogEntry | null {

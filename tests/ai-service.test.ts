@@ -559,8 +559,7 @@ describe('AIService', () => {
       const result = await promise;
 
       expect(result.markdown).toContain('Analysis Report');
-      expect(result.summary.totalComments).toBe(5);
-      expect(result.summary.sentimentDistribution.positive).toBe(60);
+      expect(result.summary).toBeUndefined();
       expect(result.tokensUsed).toBe(500);
       expect(result.generatedAt).toBeDefined();
     });
@@ -587,7 +586,7 @@ describe('AIService', () => {
       await vi.runAllTimersAsync();
       const result = await promise;
 
-      expect(result.summary.totalComments).toBe(0);
+      expect(result.markdown).toBe('No comments to analyze');
     });
 
     it('should analyze a single oversized comment after truncating content to fit context', async () => {
@@ -621,7 +620,7 @@ describe('AIService', () => {
       );
       expect(userMessage.content).toContain(TEXT.TRUNCATED_SUFFIX);
       expect(userMessage.content).not.toContain(oversizedContent);
-      expect(result.summary.totalComments).toBe(1);
+      expect(result.markdown).toBe('Analysis');
     });
 
     it('should reject when every comment is too large to fit after truncation', async () => {
@@ -676,7 +675,7 @@ describe('AIService', () => {
       );
       expect(userMessage.content).toContain('small comment');
       expect(userMessage.content).not.toContain('reply content');
-      expect(result.summary.totalComments).toBe(1);
+      expect(result.markdown).toBe('Analysis');
     });
 
     it('should pass metadata to prompt', async () => {

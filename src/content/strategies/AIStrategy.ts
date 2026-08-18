@@ -225,10 +225,6 @@ export class AIStrategy implements ExtractionStrategy {
         newElementsToProcess = [];
 
         if (elementsBatch.length > 0) {
-          // Create a virtual root for the batch to simplify them together
-          const virtualRoot = document.createElement('div');
-          virtualRoot.id = 'ai-incremental-batch';
-
           const simplifier = this.simplifier;
           const batchSimplifiedNodes = elementsBatch.map((el) =>
             simplifier.simplifyElement(el, {

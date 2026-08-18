@@ -267,11 +267,9 @@ export class CommentAnalyzer {
     });
 
     const markdown = response.content;
-    const summary = PromptBuilder.extractSummaryFromMarkdown(markdown, comments);
 
     return {
       markdown,
-      summary,
       tokensUsed: response.tokensUsed,
       generatedAt: Date.now(),
     };

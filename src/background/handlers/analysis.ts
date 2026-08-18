@@ -233,7 +233,6 @@ export async function handleStartAnalysis(
 export interface GenerateDynamicReportResponse {
   success: boolean;
   taskId?: string;
-  dynamicHtml?: string;
   error?: string;
 }
 

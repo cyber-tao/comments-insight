@@ -7,7 +7,6 @@
       "dependencies": {
         "dexie": "^4.4.1",
         "i18next": "^25.6.3",
-        "lz-string": "^1.5.0",
         "react": "^19.2.0",
         "react-dom": "^19.2.0",
         "react-i18next": "^16.5.0",

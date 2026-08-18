@@ -80,13 +80,15 @@ describe('Prompts Utils', () => {
   });
 
   describe('PromptBuilder.extractCleanHtml', () => {
-    it('should extract raw HTML and inject navigation helper', () => {
+    it('should extract raw HTML without injecting scripts', () => {
       const html =
         '<!DOCTYPE html><html><head><title>Test</title></head><body><h1>Hello</h1></body></html>';
       const extracted = PromptBuilder.extractCleanHtml(html);
       expect(extracted).toContain('<!DOCTYPE html>');
       expect(extracted).toContain('<h1>Hello</h1>');
-      expect(extracted).toContain('scrollIntoView');
+      // Anchor navigation is handled by the sandbox page itself; the report
+      // must not carry an injected <script> for it.
+      expect(extracted).not.toContain('<script>');
     });
 
     it('should extract HTML wrapped in ```html code fences and sanitize chrome-extension links', () => {

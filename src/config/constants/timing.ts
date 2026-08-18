@@ -42,7 +42,6 @@ export const TIMEOUT = {
   MAX_AI_SECONDS: 600,
   MS_PER_SEC: 1000,
   AVAILABLE_MODELS_FETCH_MS: 15000,
-  DYNAMIC_REPORT_RESPONSE_MS: 3 * 60 * 1000,
   // Headroom added on top of the user's aiTimeout when a UI surface must wait
   // for a background AI call through the message channel.
   MESSAGE_OVERHEAD_MS: 15000,

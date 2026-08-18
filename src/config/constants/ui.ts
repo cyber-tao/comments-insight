@@ -72,8 +72,6 @@ export const PAGINATION = {
 };
 
 export const HISTORY_UI = {
-  LIST_ITEM_HEIGHT: 108,
-  LIST_OVERSCAN: 4,
   MAX_COMMENT_DEPTH: 10,
 };
 

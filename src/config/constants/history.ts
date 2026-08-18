@@ -1,8 +1,5 @@
 export const HISTORY = {
   MAX_ITEMS: 200,
-  // Maximum number of full HistoryItem records to scan during a comment-content search.
-  // Metadata-only searches use Dexie indexes and do not rely on this cap.
-  SEARCH_FULL_SCAN_HARD_CAP: 500,
 };
 
 export const COMMENT_HASH = {

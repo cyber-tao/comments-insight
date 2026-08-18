@@ -2,14 +2,7 @@ import { Comment, AnalysisResult } from '../../types';
 import { buildAnalysisPrompt, buildDynamicReportPrompt } from '../../utils/prompts';
 import { Tokenizer } from '../../utils/tokenizer';
 import { DataNormalizer } from './DataNormalizer';
-import {
-  ANALYSIS_FORMAT,
-  LANGUAGES,
-  SENTIMENT_DEFAULTS,
-  AI as AI_CONST,
-  TIME_NORMALIZATION,
-  TEXT,
-} from '@/config/constants';
+import { ANALYSIS_FORMAT, LANGUAGES, TIME_NORMALIZATION, TEXT } from '@/config/constants';
 
 export class PromptBuilder {
   static mergeAnalysisResults(results: AnalysisResult[]): AnalysisResult {
@@ -17,45 +10,12 @@ export class PromptBuilder {
       .map((r, i) => `## Batch ${i + 1}\n\n${r.markdown}`)
       .join('\n\n---\n\n');
 
-    const totalComments = results.reduce((sum, r) => sum + r.summary.totalComments, 0);
     const totalTokens = results.reduce((sum, r) => sum + r.tokensUsed, 0);
 
-    const sentimentDistribution = {
-      positive: 0,
-      negative: 0,
-      neutral: 0,
-    };
-
-    results.forEach((r) => {
-      sentimentDistribution.positive += r.summary.sentimentDistribution.positive;
-      sentimentDistribution.negative += r.summary.sentimentDistribution.negative;
-      sentimentDistribution.neutral += r.summary.sentimentDistribution.neutral;
-    });
-
-    const total =
-      sentimentDistribution.positive +
-      sentimentDistribution.negative +
-      sentimentDistribution.neutral;
-    if (total > 0) {
-      sentimentDistribution.positive = Math.round((sentimentDistribution.positive / total) * 100);
-      sentimentDistribution.negative = Math.round((sentimentDistribution.negative / total) * 100);
-      sentimentDistribution.neutral =
-        100 - sentimentDistribution.positive - sentimentDistribution.negative;
-    }
-
-    const allHotComments = results.flatMap((r) => r.summary.hotComments);
-    const hotComments = allHotComments.slice(0, AI_CONST.HOT_COMMENTS_LIMIT);
-
-    const keyInsights = results.flatMap((r) => r.summary.keyInsights);
-
+    // No summary is produced anymore: no UI surface reads it, and persisting
+    // it duplicated up to 10 full comments per history item in IndexedDB.
     return {
       markdown: mergedMarkdown,
-      summary: {
-        totalComments,
-        sentimentDistribution,
-        hotComments,
-        keyInsights,
-      },
       tokensUsed: totalTokens,
       generatedAt: Date.now(),
     };
@@ -159,64 +119,7 @@ export class PromptBuilder {
       },
     );
 
-    // Inject in-page smooth navigation and anchor helper script if </body> is present
-    const anchorHelperScript = `
-<script>
-(function() {
-  document.addEventListener('click', function(e) {
-    var link = e.target.closest('a');
-    if (!link) return;
-    var href = link.getAttribute('href');
-    if (!href) return;
-    if (href.startsWith('#')) {
-      var id = href.slice(1);
-      if (!id) return;
-      var el = document.getElementById(id) || document.querySelector('[name="' + id + '"]') || document.querySelector('.' + id) || document.querySelector('section[id*="' + id + '"]');
-      if (el) {
-        e.preventDefault();
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        try { history.replaceState(null, '', '#' + id); } catch(err) {}
-      }
-    }
-  });
-})();
-</script>`;
-
-    if (text.includes('</body>')) {
-      text = text.replace('</body>', `${anchorHelperScript}\n</body>`);
-    } else if (text.includes('</html>')) {
-      text = text.replace('</html>', `${anchorHelperScript}\n</html>`);
-    }
-
     return text.trim();
-  }
-
-  static extractSummaryFromMarkdown(
-    markdown: string,
-    comments: Comment[],
-  ): AnalysisResult['summary'] {
-    const parsePercent = (re: RegExp): number | undefined => {
-      const match = markdown.match(re);
-      return match ? parseInt(match[1]) : undefined;
-    };
-
-    const positive =
-      parsePercent(/\|\s*Positive\s*\|\s*(\d+)%/i) ?? parsePercent(/Positive:\s*(\d+)%/i);
-    const negative =
-      parsePercent(/\|\s*Negative\s*\|\s*(\d+)%/i) ?? parsePercent(/Negative:\s*(\d+)%/i);
-    const neutral =
-      parsePercent(/\|\s*Neutral\s*\|\s*(\d+)%/i) ?? parsePercent(/Neutral:\s*(\d+)%/i);
-
-    return {
-      totalComments: comments.length,
-      sentimentDistribution: {
-        positive: typeof positive === 'number' ? positive : SENTIMENT_DEFAULTS.SENTIMENT_POSITIVE,
-        negative: typeof negative === 'number' ? negative : SENTIMENT_DEFAULTS.SENTIMENT_NEGATIVE,
-        neutral: typeof neutral === 'number' ? neutral : SENTIMENT_DEFAULTS.SENTIMENT_NEUTRAL,
-      },
-      hotComments: comments.slice(0, SENTIMENT_DEFAULTS.HOT_COMMENTS_PREVIEW),
-      keyInsights: [],
-    };
   }
 
   static serializeCommentsDense(comments: Comment[]): { text: string; total: number } {

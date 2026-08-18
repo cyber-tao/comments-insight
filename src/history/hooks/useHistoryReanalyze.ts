@@ -69,7 +69,7 @@ export function useHistoryReanalyze({
         try {
           const task = await ExtensionAPI.getTaskStatus(taskId);
           if (!task) {
-            throw new Error(t('history.reanalyzeTaskMissing', '分析任务不存在或已结束'));
+            throw new Error(t('history.reanalyzeTaskMissing'));
           }
 
           if (task.status === 'running' || task.status === 'pending') {
@@ -93,14 +93,14 @@ export function useHistoryReanalyze({
             return;
           }
 
-          setReanalyzeError(task.error || t('history.reanalyzeFailed', '重新分析失败'));
+          setReanalyzeError(task.error || t('history.reanalyzeFailed'));
           resetReanalyzeState();
           clearPollTimeout();
         } catch (error) {
           Logger.error('[History] Failed to monitor reanalyze task', { taskId, error });
           if (!isUnmountedRef.current) {
             setReanalyzeError(
-              error instanceof Error ? error.message : t('history.reanalyzeFailed', '重新分析失败'),
+              error instanceof Error ? error.message : t('history.reanalyzeFailed'),
             );
             resetReanalyzeState();
           }
@@ -139,16 +139,14 @@ export function useHistoryReanalyze({
       });
 
       if (!response?.taskId) {
-        throw new Error(t('history.reanalyzeStartFailed', '启动重新分析失败'));
+        throw new Error(t('history.reanalyzeStartFailed'));
       }
 
       setReanalyzeTaskId(response.taskId);
       monitorReanalyzeTask(response.taskId, selectedItem.id);
     } catch (error) {
       Logger.error('[History] Failed to start reanalyze', { error });
-      setReanalyzeError(
-        error instanceof Error ? error.message : t('history.reanalyzeFailed', '重新分析失败'),
-      );
+      setReanalyzeError(error instanceof Error ? error.message : t('history.reanalyzeFailed'));
       resetReanalyzeState();
     }
   }, [isReanalyzing, monitorReanalyzeTask, resetReanalyzeState, selectedItem, t]);
@@ -174,22 +172,13 @@ export function useHistoryReanalyze({
         setReanalyzingHistoryId(selectedItem.id);
         setReanalyzeTaskId(response.taskId);
         monitorReanalyzeTask(response.taskId, selectedItem.id);
-      } else if (response.success && response.dynamicHtml) {
-        const refreshed = await fetchHistoryItemById(selectedItem.id, { force: true });
-        if (!isUnmountedRef.current) {
-          setSelectedItem(refreshed);
-        }
       } else {
-        setGenerateDynamicError(
-          response.error || t('history.generateDynamicFailed', '生成动态网页失败'),
-        );
+        setGenerateDynamicError(response.error || t('history.generateDynamicFailed'));
       }
     } catch (error) {
       Logger.error('[History] Failed to generate dynamic report', { error });
       setGenerateDynamicError(
-        error instanceof Error
-          ? error.message
-          : t('history.generateDynamicFailed', '生成动态网页失败'),
+        error instanceof Error ? error.message : t('history.generateDynamicFailed'),
       );
     } finally {
       if (!isUnmountedRef.current) {

@@ -1,5 +1,5 @@
 import { SimplifiedNode } from '../types';
-import { getShadowRoot, querySelectorDeep } from '@/utils/dom-query';
+import { getShadowRoot } from '@/utils/dom-query';
 import { Logger } from '@/utils/logger';
 import { DOM } from '@/config/constants';
 
@@ -406,26 +406,6 @@ export class DOMSimplifier {
 
     this.selectorCache.set(element, fullSelector);
     return fullSelector;
-  }
-
-  /**
-   * Expand a specific node by selector (supports Shadow DOM)
-   * @param selector - CSS selector
-   * @param depth - Depth to expand
-   * @returns Simplified node or null if not found
-   */
-  expandNode(selector: string, depth: number = DOM.DEFAULT_EXPAND_DEPTH): SimplifiedNode | null {
-    try {
-      const element = querySelectorDeep(document, selector);
-      if (!element) {
-        Logger.warn('[DOMSimplifier] Element not found', { selector });
-        return null;
-      }
-      return this.simplifyElement(element, { maxDepth: depth });
-    } catch (error) {
-      Logger.error('[DOMSimplifier] Failed to expand node', { selector, error });
-      return null;
-    }
   }
 
   /**

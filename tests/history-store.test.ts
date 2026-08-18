@@ -157,12 +157,14 @@ describe('HistoryStore (IndexedDB)', () => {
       ],
     });
 
-    const fullResult = await store.searchHistoryPaginated('deep reply needle');
     const metadataResult = await store.searchHistoryMetadataPage('deep reply needle');
 
-    expect(fullResult.total).toBe(1);
-    expect(fullResult.items[0].id).toBe('history_nested_comment_search');
+    // Metadata search does not inspect comment bodies; the deep reply needle
+    // lives only inside comments, so metadata search yields no hits. Fetching
+    // the stored row by id still exposes the nested comments for inspection.
     expect(metadataResult.total).toBe(0);
+    const stored = await store.getHistoryItem('history_nested_comment_search');
+    expect(stored?.comments[0].replies[0].content).toBe('deep reply needle');
   });
 
   it('should enforce the configured history retention limit', async () => {
@@ -178,10 +180,10 @@ describe('HistoryStore (IndexedDB)', () => {
       });
     }
 
-    const page = await store.getHistoryPage(0, HISTORY.MAX_ITEMS + 2);
+    const page = await store.getHistoryMetadataPage(0, HISTORY.MAX_ITEMS + 2);
 
     expect(page.total).toBe(HISTORY.MAX_ITEMS);
-    expect(page.items.map((item) => item.id)).not.toContain('history_0');
-    expect(page.items.map((item) => item.id)).not.toContain('history_1');
+    expect(page.entries.map((item) => item.id)).not.toContain('history_0');
+    expect(page.entries.map((item) => item.id)).not.toContain('history_1');
   });
 });

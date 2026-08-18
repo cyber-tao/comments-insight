@@ -12,12 +12,8 @@ import type { HandlerContext } from '../../src/background/handlers/types';
 
 describe('History Handlers', () => {
   const mockHistoryStore = {
-    getHistory: vi.fn(),
-    getHistoryPage: vi.fn(),
     getHistoryMetadataPage: vi.fn(),
     getHistoryItem: vi.fn(),
-    searchHistory: vi.fn(),
-    searchHistoryPaginated: vi.fn(),
     searchHistoryMetadataPage: vi.fn(),
     deleteHistoryItem: vi.fn(),
     clearAllHistory: vi.fn(),
@@ -39,26 +35,23 @@ describe('History Handlers', () => {
   });
 
   describe('handleGetHistory', () => {
-    it('should return paginated first page when no id or query provided', async () => {
-      const mockHistory: HistoryItem[] = [
-        {
-          id: '1',
-          url: 'https://example.com',
-          title: 'Example',
-          platform: 'youtube',
-          extractedAt: Date.now(),
-          commentsCount: 100,
-          comments: [],
-        },
-      ];
+    it('should return metadata first page when no id or query provided', async () => {
       const mockResult = {
-        items: mockHistory,
+        entries: [
+          {
+            id: '1',
+            url: 'https://example.com',
+            title: 'Example',
+            platform: 'youtube',
+            extractedAt: Date.now(),
+          },
+        ],
         total: 1,
         page: 0,
         pageSize: 20,
         totalPages: 1,
       };
-      mockHistoryStore.getHistoryPage.mockResolvedValue(mockResult);
+      mockHistoryStore.getHistoryMetadataPage.mockResolvedValue(mockResult);
 
       const message: Extract<Message, { type: 'GET_HISTORY' }> = {
         type: 'GET_HISTORY',
@@ -68,8 +61,7 @@ describe('History Handlers', () => {
       const result = await handleGetHistory(message, context);
 
       expect(result).toEqual(mockResult);
-      expect(mockHistoryStore.getHistoryPage).toHaveBeenCalledWith(0, 20);
-      expect(mockHistoryStore.getHistory).not.toHaveBeenCalled();
+      expect(mockHistoryStore.getHistoryMetadataPage).toHaveBeenCalledWith(0, 20);
     });
 
     it('should return single history item when id is provided', async () => {
@@ -109,17 +101,15 @@ describe('History Handlers', () => {
       expect(mockHistoryStore.getHistoryItem).toHaveBeenCalledWith('non-existent');
     });
 
-    it('should search history when query is provided', async () => {
+    it('should search metadata page when query is provided', async () => {
       const mockResult = {
-        items: [
+        entries: [
           {
             id: '1',
             url: 'https://example.com',
             title: 'Search Result',
             platform: 'youtube',
             extractedAt: Date.now(),
-            commentsCount: 50,
-            comments: [],
           },
         ],
         total: 1,
@@ -127,7 +117,7 @@ describe('History Handlers', () => {
         pageSize: 20,
         totalPages: 1,
       };
-      mockHistoryStore.searchHistoryPaginated.mockResolvedValue(mockResult);
+      mockHistoryStore.searchHistoryMetadataPage.mockResolvedValue(mockResult);
 
       const message: Extract<Message, { type: 'GET_HISTORY' }> = {
         type: 'GET_HISTORY',
@@ -137,7 +127,7 @@ describe('History Handlers', () => {
       const result = await handleGetHistory(message, context);
 
       expect(result).toEqual(mockResult);
-      expect(mockHistoryStore.searchHistoryPaginated).toHaveBeenCalledWith('search term', 0, 20);
+      expect(mockHistoryStore.searchHistoryMetadataPage).toHaveBeenCalledWith('search term', 0, 20);
     });
 
     it('should return metadata page when metadataOnly is true', async () => {
@@ -167,7 +157,6 @@ describe('History Handlers', () => {
 
       expect(result).toEqual(mockResult);
       expect(mockHistoryStore.getHistoryMetadataPage).toHaveBeenCalledWith(0, 20);
-      expect(mockHistoryStore.getHistoryPage).not.toHaveBeenCalled();
     });
 
     it('should search metadata page when metadataOnly and query are provided', async () => {
@@ -197,20 +186,17 @@ describe('History Handlers', () => {
 
       expect(result).toEqual(mockResult);
       expect(mockHistoryStore.searchHistoryMetadataPage).toHaveBeenCalledWith('search term', 0, 20);
-      expect(mockHistoryStore.searchHistoryPaginated).not.toHaveBeenCalled();
     });
 
-    it('should return paged history when page parameters are provided', async () => {
+    it('should return paged metadata when page parameters are provided', async () => {
       const mockResult = {
-        items: [
+        entries: [
           {
             id: '1',
             url: 'https://example.com',
             title: 'Paged Item',
             platform: 'youtube',
             extractedAt: Date.now(),
-            commentsCount: 30,
-            comments: [],
           },
         ],
         total: 25,
@@ -218,7 +204,7 @@ describe('History Handlers', () => {
         pageSize: 10,
         totalPages: 3,
       };
-      mockHistoryStore.getHistoryPage.mockResolvedValue(mockResult);
+      mockHistoryStore.getHistoryMetadataPage.mockResolvedValue(mockResult);
 
       const message: Extract<Message, { type: 'GET_HISTORY' }> = {
         type: 'GET_HISTORY',
@@ -228,18 +214,18 @@ describe('History Handlers', () => {
       const result = await handleGetHistory(message, context);
 
       expect(result).toEqual(mockResult);
-      expect(mockHistoryStore.getHistoryPage).toHaveBeenCalledWith(1, 10);
+      expect(mockHistoryStore.getHistoryMetadataPage).toHaveBeenCalledWith(1, 10);
     });
 
     it('should fallback to default paging values for invalid page params', async () => {
       const mockResult = {
-        items: [],
+        entries: [],
         total: 0,
         page: 0,
         pageSize: 20,
         totalPages: 0,
       };
-      mockHistoryStore.getHistoryPage.mockResolvedValue(mockResult);
+      mockHistoryStore.getHistoryMetadataPage.mockResolvedValue(mockResult);
 
       const message: Extract<Message, { type: 'GET_HISTORY' }> = {
         type: 'GET_HISTORY',
@@ -249,7 +235,7 @@ describe('History Handlers', () => {
       const result = await handleGetHistory(message, context);
 
       expect(result).toEqual(mockResult);
-      expect(mockHistoryStore.getHistoryPage).toHaveBeenCalledWith(0, 20);
+      expect(mockHistoryStore.getHistoryMetadataPage).toHaveBeenCalledWith(0, 20);
     });
   });
 

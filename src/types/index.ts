@@ -46,7 +46,6 @@ export interface Comment {
   likes: number;
   content: string;
   replies: Comment[];
-  isHot?: boolean;
 }
 
 // Simplified DOM node for progressive extraction
@@ -193,19 +192,22 @@ export interface Settings {
   developerMode: boolean;
 }
 
+export interface AnalysisResultSummary {
+  totalComments: number;
+  sentimentDistribution: {
+    positive: number;
+    negative: number;
+    neutral: number;
+  };
+  hotComments: Comment[];
+  keyInsights: string[];
+}
+
 export interface AnalysisResult {
   markdown: string;
   dynamicHtml?: string;
-  summary: {
-    totalComments: number;
-    sentimentDistribution: {
-      positive: number;
-      negative: number;
-      neutral: number;
-    };
-    hotComments: Comment[];
-    keyInsights: string[];
-  };
+  /** Legacy field: no longer written, kept so old history rows stay typed */
+  summary?: AnalysisResultSummary;
   tokensUsed: number;
   generatedAt: number;
 }

@@ -1,4 +1,4 @@
-import { getShadowRoot, querySelectorDeep, querySelectorAllDeep } from '@/utils/dom-query';
+import { getShadowRoot, querySelectorAllDeep } from '@/utils/dom-query';
 import { DOM, DOM_ANALYSIS_DEFAULTS } from '@/config/constants';
 
 export interface DOMNode {
@@ -23,26 +23,6 @@ export class DOMAnalyzer {
     const root = document.body;
     const domNode = this.analyzeNode(root, 0, maxDepth);
     return this.serializeForAI(domNode);
-  }
-
-  /**
-   * Analyze DOM layer by layer
-   * @param maxDepth - Maximum depth to analyze
-   * @returns Root DOM node
-   */
-  analyzeLayerByLayer(maxDepth: number = DOM_ANALYSIS_DEFAULTS.initialDepth): DOMNode {
-    const root = document.body;
-    return this.analyzeNode(root, 0, maxDepth);
-  }
-
-  /**
-   * Get content by CSS selector (supports Shadow DOM)
-   * @param selector - CSS selector
-   * @returns Text content
-   */
-  getContentBySelector(selector: string): string {
-    const element = querySelectorDeep(document, selector);
-    return element?.textContent?.trim() || '';
   }
 
   querySelectorAllDeep(root: Document | Element | ShadowRoot, selector: string): Element[] {

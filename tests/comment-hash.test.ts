@@ -211,7 +211,6 @@ describe('comment-hash', () => {
         timestamp: '2024-01-01',
         userId: 'uid1',
         platform: 'youtube',
-        isHot: true,
         replies: [createComment({ content: 'reply' })],
       });
       const comment2 = createComment({
@@ -220,7 +219,6 @@ describe('comment-hash', () => {
         timestamp: '2024-01-01',
         userId: 'uid2',
         platform: 'twitter',
-        isHot: false,
         replies: [],
       });
 
