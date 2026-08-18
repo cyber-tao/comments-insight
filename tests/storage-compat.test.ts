@@ -4,6 +4,7 @@ import { HistoryStore } from '../src/background/storage/HistoryStore';
 import {
   sanitizePersistedTaskState,
   sanitizeStoredSettings,
+  sanitizeTokenStats,
 } from '../src/utils/storage-validation';
 
 vi.mock('../src/utils/logger', () => ({
@@ -181,6 +182,26 @@ describe('storage compatibility with pre-refactor data', () => {
     it('returns empty object for non-object input', () => {
       expect(sanitizeStoredSettings(null)).toEqual({});
       expect(sanitizeStoredSettings([1, 2, 3])).toEqual({});
+    });
+  });
+
+  describe('sanitizeTokenStats', () => {
+    it('keeps valid persisted stats', () => {
+      expect(sanitizeTokenStats({ today: 100, total: 5000, lastReset: 1234567890 })).toEqual({
+        today: 100,
+        total: 5000,
+        lastReset: 1234567890,
+      });
+    });
+
+    it('resets corrupted stats instead of producing NaN', () => {
+      expect(sanitizeTokenStats({ today: '100', total: null, lastReset: undefined })).toEqual({
+        today: 0,
+        total: 0,
+        lastReset: 0,
+      });
+      expect(sanitizeTokenStats('garbage')).toEqual({ today: 0, total: 0, lastReset: 0 });
+      expect(sanitizeTokenStats(undefined)).toEqual({ today: 0, total: 0, lastReset: 0 });
     });
   });
 });

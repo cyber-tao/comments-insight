@@ -1,6 +1,7 @@
 import { STORAGE } from '@/config/constants';
 import { Logger } from '@/utils/logger';
 import { Mutex } from '@/utils/promise';
+import { sanitizeTokenStats } from '@/utils/storage-validation';
 
 export interface TokenStats {
   today: number;
@@ -37,8 +38,7 @@ export class TokenStatsStore {
   async getTokenStats(): Promise<TokenStats> {
     try {
       const result = await chrome.storage.local.get(STORAGE.TOKEN_STATS_KEY);
-      const stats = result[STORAGE.TOKEN_STATS_KEY] as TokenStats | undefined;
-      return stats || { today: 0, total: 0, lastReset: 0 };
+      return sanitizeTokenStats(result[STORAGE.TOKEN_STATS_KEY]);
     } catch (error) {
       Logger.error('[TokenStatsStore] Failed to get token stats', { error });
       return { today: 0, total: 0, lastReset: 0 };
