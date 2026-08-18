@@ -184,7 +184,6 @@ describe('analysis handlers', () => {
           stage: 'analyzing',
           current: 0,
           total: expect.any(Number),
-          stageMessage: expect.any(String),
           stageMessageKey: expect.any(String),
         },
       );
@@ -192,9 +191,8 @@ describe('analysis handlers', () => {
         'task_analysis_123',
         {
           stage: 'analyzing',
-          current: 8,
+          current: 12,
           total: 100,
-          stageMessage: 'receiving model response, 512 chars',
           stageMessageKey: 'receiving',
           stageMessageParams: { characters: 512 },
         },

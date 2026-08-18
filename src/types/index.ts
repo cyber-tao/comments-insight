@@ -11,6 +11,8 @@ export type ProgressStage =
   | 'expanding'
   | 'scrolling'
   | 'validating'
+  | 'normalizing'
+  | 'generating'
   | 'complete';
 
 export type TaskProgressMessageParams = Record<string, string | number>;

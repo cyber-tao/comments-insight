@@ -27,6 +27,8 @@ export const AI = {
   ANALYSIS_STREAM_CHARS_PER_UNIT: 512,
   ANALYSIS_TASK_PROGRESS_START: 25,
   ANALYSIS_TASK_PROGRESS_RANGE: 50,
+  // Characters received per 1/100 of the dynamic-report generation phase.
+  DYNAMIC_REPORT_PROGRESS_CHARS_PER_UNIT: 200,
   ROLES: {
     SYSTEM: 'system',
     USER: 'user',

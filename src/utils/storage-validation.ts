@@ -97,6 +97,8 @@ const taskProgressSchema = z.object({
     'expanding',
     'scrolling',
     'validating',
+    'normalizing',
+    'generating',
     'complete',
   ]),
   current: finiteNumberSchema,

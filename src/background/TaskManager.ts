@@ -277,6 +277,9 @@ export class TaskManager {
     if (message) {
       task.message = message;
     }
+    // Raw percent writes own the display; drop any stale detailed-progress
+    // stage so the UI does not keep showing the previous stage's label.
+    task.detailedProgress = undefined;
     Logger.debug(`[TaskManager] Task progress updated: ${taskId}`, {
       progress: task.progress,
       message,
@@ -320,8 +323,9 @@ export class TaskManager {
       elapsed,
     });
 
-    // Update task
-    task.progress = progressPercent;
+    // Update task. Progress is monotonic within a task run: stage ranges can
+    // overlap across phases, so never let a computed value move backwards.
+    task.progress = Math.max(task.progress, progressPercent);
     task.message = `${stage}:${current}:${total}`;
     task.detailedProgress = {
       stage,

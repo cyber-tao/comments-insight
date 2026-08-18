@@ -20,6 +20,8 @@ const STAGE_KEYS: Record<string, string> = {
   scrolling: 'popup.progressScrolling',
   expanding: 'popup.progressExpanding',
   validating: 'popup.progressValidating',
+  normalizing: 'popup.progressNormalizing',
+  generating: 'popup.generatingDynamicReport',
   complete: 'popup.progressComplete',
 };
 
@@ -32,6 +34,8 @@ const getCompactAnalysisProgressKey = (stageMessageKey: string): string | undefi
     [messageKeys.RECEIVING_BATCH]: compactMessageKeys.RECEIVING_BATCH,
     [messageKeys.COMPLETE]: compactMessageKeys.COMPLETE,
     [messageKeys.COMPLETE_BATCH]: compactMessageKeys.COMPLETE_BATCH,
+    [messageKeys.GENERATING_DYNAMIC]: compactMessageKeys.GENERATING_DYNAMIC,
+    [messageKeys.DYNAMIC_COMPLETE]: compactMessageKeys.DYNAMIC_COMPLETE,
   };
   return keyMap[stageMessageKey];
 };

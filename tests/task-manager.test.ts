@@ -384,6 +384,75 @@ describe('TaskManager', () => {
       expect(estimatedTimeRemaining).toBe(-1);
     });
 
+    it('keeps progress monotonic across the full handleStartAnalysis call sequence', async () => {
+      const taskId = taskManager.createTask('analyze', 'https://example.com', 'Generic');
+      await taskManager.startTask(taskId);
+
+      // Mirror the real handleStartAnalysis sequence: stream progress up to
+      // completion, then the dynamic-report phase in the generating range.
+      const sequence: Array<{
+        stage: 'analyzing' | 'generating' | 'complete';
+        current: number;
+        total: number;
+      }> = [
+        { stage: 'analyzing', current: 0, total: 100 },
+        { stage: 'analyzing', current: 30, total: 100 },
+        { stage: 'analyzing', current: 100, total: 100 },
+        { stage: 'generating', current: 0, total: 100 },
+        { stage: 'generating', current: 50, total: 100 },
+        { stage: 'generating', current: 100, total: 100 },
+        { stage: 'complete', current: 100, total: 100 },
+      ];
+
+      const observed: number[] = [];
+      for (const update of sequence) {
+        taskManager.updateDetailedProgress(taskId, update);
+        observed.push(taskManager.getTask(taskId)!.progress);
+      }
+
+      for (let i = 1; i < observed.length; i++) {
+        expect(observed[i]).toBeGreaterThanOrEqual(observed[i - 1]);
+      }
+      expect(observed[observed.length - 1]).toBe(100);
+    });
+
+    it('maps extract scrolling into the extracting range to avoid percent jitter', async () => {
+      const taskId = taskManager.createTask('extract', 'https://example.com', 'Generic');
+      await taskManager.startTask(taskId);
+
+      taskManager.updateDetailedProgress(taskId, {
+        stage: 'extracting',
+        current: 10,
+        total: 100,
+      });
+      const extractingPercent = taskManager.getTask(taskId)!.progress;
+
+      taskManager.updateDetailedProgress(taskId, {
+        stage: 'scrolling',
+        current: 10,
+        total: 100,
+      });
+      const scrollingPercent = taskManager.getTask(taskId)!.progress;
+
+      expect(scrollingPercent).toBe(extractingPercent);
+    });
+
+    it('drops stale detailedProgress when a raw percent update arrives', async () => {
+      const taskId = taskManager.createTask('extract', 'https://example.com', 'Generic');
+      await taskManager.startTask(taskId);
+
+      taskManager.updateDetailedProgress(taskId, {
+        stage: 'extracting',
+        current: 10,
+        total: 100,
+      });
+      expect(taskManager.getTask(taskId)?.detailedProgress).toBeDefined();
+
+      taskManager.updateTaskProgress(taskId, 90, 'normalizing');
+      expect(taskManager.getTask(taskId)?.detailedProgress).toBeUndefined();
+      expect(taskManager.getTask(taskId)?.progress).toBe(90);
+    });
+
     it('should map analyze task stream progress into the analysis progress range', async () => {
       const taskId = taskManager.createTask('analyze', 'https://example.com', 'Generic');
       await taskManager.startTask(taskId);

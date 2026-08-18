@@ -14,6 +14,8 @@ const progressStageSchema = z.enum([
   'expanding',
   'scrolling',
   'validating',
+  'normalizing',
+  'generating',
   'complete',
 ] as [ProgressStage, ...ProgressStage[]]);
 

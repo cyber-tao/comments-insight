@@ -57,7 +57,6 @@ export async function handleStartAnalysis(
       stage: 'analyzing',
       current: 0,
       total: AI_CONST.ANALYSIS_STREAM_BATCH_UNITS,
-      stageMessage: AI_CONST.ANALYSIS_PROGRESS_MESSAGES.WAITING,
       stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.WAITING,
     });
 
@@ -104,24 +103,20 @@ export async function handleStartAnalysis(
       (progress) => {
         context.taskManager.updateDetailedProgress(taskId, {
           stage: 'analyzing',
-          current: Math.floor(progress.current * 0.7),
+          current: progress.current,
           total: progress.total,
-          stageMessage: progress.stageMessage,
           stageMessageKey: progress.stageMessageKey,
           stageMessageParams: progress.stageMessageParams,
         });
       },
     );
 
-    context.taskManager.updateTaskProgress(taskId, 70);
-
     // Stage 2: Generate dynamic visual HTML webpage if enabled (separate LLM API call)
     if (settings.generateDynamicReport !== false && result.markdown) {
       context.taskManager.updateDetailedProgress(taskId, {
-        stage: 'analyzing',
-        current: 75,
+        stage: 'generating',
+        current: 0,
         total: 100,
-        stageMessage: AI_CONST.ANALYSIS_PROGRESS_MESSAGES.GENERATING_DYNAMIC,
         stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.GENERATING_DYNAMIC,
       });
 
@@ -143,10 +138,14 @@ export async function handleStartAnalysis(
           settings.aiTimeout,
           (progress) => {
             context.taskManager.updateDetailedProgress(taskId, {
-              stage: 'analyzing',
-              current: Math.min(95, 75 + Math.floor(progress.charactersReceived / 100)),
+              stage: 'generating',
+              current: Math.min(
+                100,
+                Math.floor(
+                  progress.charactersReceived / AI_CONST.DYNAMIC_REPORT_PROGRESS_CHARS_PER_UNIT,
+                ),
+              ),
               total: 100,
-              stageMessage: `${AI_CONST.ANALYSIS_PROGRESS_MESSAGES.GENERATING_DYNAMIC}, ${progress.charactersReceived} ${AI_CONST.ANALYSIS_PROGRESS_MESSAGES.CHARS_LABEL}`,
               stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
               stageMessageParams: {
                 [AI_CONST.ANALYSIS_PROGRESS_PARAM_KEYS.CHARACTERS]: progress.charactersReceived,
@@ -169,8 +168,6 @@ export async function handleStartAnalysis(
         );
       }
     }
-
-    context.taskManager.updateTaskProgress(taskId, 95);
 
     try {
       if (historyId) {
@@ -253,10 +250,9 @@ export async function handleGenerateDynamicReport(
     const analysisModel = settings.aiModel;
 
     context.taskManager.updateDetailedProgress(taskId, {
-      stage: 'analyzing',
-      current: 10,
+      stage: 'generating',
+      current: 0,
       total: 100,
-      stageMessage: AI_CONST.ANALYSIS_PROGRESS_MESSAGES.GENERATING_DYNAMIC,
       stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.GENERATING_DYNAMIC,
     });
 
@@ -277,10 +273,14 @@ export async function handleGenerateDynamicReport(
       settings.aiTimeout,
       (progress) => {
         context.taskManager.updateDetailedProgress(taskId, {
-          stage: 'analyzing',
-          current: Math.min(95, 10 + Math.floor(progress.charactersReceived / 100)),
+          stage: 'generating',
+          current: Math.min(
+            100,
+            Math.floor(
+              progress.charactersReceived / AI_CONST.DYNAMIC_REPORT_PROGRESS_CHARS_PER_UNIT,
+            ),
+          ),
           total: 100,
-          stageMessage: `${AI_CONST.ANALYSIS_PROGRESS_MESSAGES.GENERATING_DYNAMIC}, ${progress.charactersReceived} ${AI_CONST.ANALYSIS_PROGRESS_MESSAGES.CHARS_LABEL}`,
           stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
           stageMessageParams: {
             [AI_CONST.ANALYSIS_PROGRESS_PARAM_KEYS.CHARACTERS]: progress.charactersReceived,
@@ -306,7 +306,6 @@ export async function handleGenerateDynamicReport(
       stage: 'complete',
       current: 100,
       total: 100,
-      stageMessage: AI_CONST.ANALYSIS_PROGRESS_MESSAGES.DYNAMIC_COMPLETE,
       stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.DYNAMIC_COMPLETE,
     });
 

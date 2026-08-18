@@ -5,7 +5,6 @@ import { ExtensionError, ErrorCode } from '@/utils/errors';
 import {
   MESSAGES,
   EXTRACTION_DEFAULTS,
-  EXTRACTION_PROGRESS,
   DATE_TIME,
   ANALYSIS_FORMAT,
   TIMEOUT,
@@ -125,11 +124,11 @@ export async function handleExtractionCompleted(
       const settings = await context.settingsStore.getSettings();
       if (settings.normalizeTimestamps && rawComments.length > 0) {
         const totalCount = rawComments.length + (postInfo?.videoTime ? 1 : 0);
-        context.taskManager.updateTaskProgress(
-          taskId,
-          EXTRACTION_PROGRESS.NORMALIZING,
-          `normalizing:0:${totalCount}`,
-        );
+        context.taskManager.updateDetailedProgress(taskId, {
+          stage: 'normalizing',
+          current: 0,
+          total: totalCount,
+        });
         const pad = (value: number) => value.toString().padStart(DATE_TIME.PAD_LENGTH, '0');
         const now = new Date();
         const referenceTime = `${now.getFullYear()}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${pad(
@@ -149,11 +148,11 @@ export async function handleExtractionCompleted(
           referenceTime,
           settings.aiTimeout,
         );
-        context.taskManager.updateTaskProgress(
-          taskId,
-          EXTRACTION_PROGRESS.NORMALIZING,
-          `normalizing:${totalCount}:${totalCount}`,
-        );
+        context.taskManager.updateDetailedProgress(taskId, {
+          stage: 'normalizing',
+          current: totalCount,
+          total: totalCount,
+        });
       }
     } catch (normalizationError) {
       Logger.warn('[ExtractionHandler] Timestamp normalization failed', {

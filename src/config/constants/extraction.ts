@@ -55,6 +55,9 @@ export const TASK = {
     SCROLLING: { START: 75, RANGE: 10 },
     EXPANDING: { START: 85, RANGE: 5 },
     VALIDATING: { START: 90, RANGE: 5 },
+    NORMALIZING: { START: 90, RANGE: 5 },
+    // Dedicated range for the analyze task's dynamic-report generation phase.
+    GENERATING: { START: 80, RANGE: 15 },
     COMPLETE: 100,
   },
   PROGRESS_ESTIMATE_MIN_PERCENT: 5,

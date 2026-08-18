@@ -45,13 +45,25 @@ export const TaskProgressCalculator = {
           progressPercent = RANGES.EXTRACTING.START + stageProgress * RANGES.EXTRACTING.RANGE;
           break;
         case 'scrolling':
-          progressPercent = RANGES.SCROLLING.START + stageProgress * RANGES.SCROLLING.RANGE;
+          // Extract tasks alternate scroll/extract every loop iteration with
+          // the same comment count; sharing the extracting range keeps the
+          // percent monotonic while the stage label still reflects scrolling.
+          progressPercent =
+            taskType === 'extract'
+              ? RANGES.EXTRACTING.START + stageProgress * RANGES.EXTRACTING.RANGE
+              : RANGES.SCROLLING.START + stageProgress * RANGES.SCROLLING.RANGE;
           break;
         case 'expanding':
           progressPercent = RANGES.EXPANDING.START + stageProgress * RANGES.EXPANDING.RANGE;
           break;
         case 'validating':
           progressPercent = RANGES.VALIDATING.START + stageProgress * RANGES.VALIDATING.RANGE;
+          break;
+        case 'normalizing':
+          progressPercent = RANGES.NORMALIZING.START + stageProgress * RANGES.NORMALIZING.RANGE;
+          break;
+        case 'generating':
+          progressPercent = RANGES.GENERATING.START + stageProgress * RANGES.GENERATING.RANGE;
           break;
         case 'complete':
           progressPercent = RANGES.COMPLETE;
