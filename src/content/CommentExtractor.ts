@@ -4,7 +4,7 @@ import { Logger } from '@/utils/logger';
 import { AIStrategy } from './strategies/AIStrategy';
 import { ConfiguredStrategy } from './strategies/ConfiguredStrategy';
 import type { ProgressCallback } from './strategies/ExtractionStrategy';
-import { EXTRACTION, EXTRACTION_PROGRESS } from '@/config/constants';
+import { EXTRACTION, EXTRACTION_PROGRESS, ANALYSIS_FORMAT } from '@/config/constants';
 import { getCurrentHostname } from '@/utils/url';
 import { sendMessage } from '@/utils/chrome-message';
 import { MESSAGES } from '@/config/constants';
@@ -149,6 +149,7 @@ export class CommentExtractor {
         ...comment,
         platform, // Ensure platform is set
         likes: Math.max(0, typeof comment.likes === 'number' ? comment.likes : 0),
+        timestamp: comment.timestamp || ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP,
         replies: validReplies,
       });
 

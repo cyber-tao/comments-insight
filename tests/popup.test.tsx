@@ -286,16 +286,22 @@ describe('Popup', () => {
     expect(windowCloseMock).toHaveBeenCalledTimes(3);
   });
 
-  it('logs and swallows history lookup failures during analyze', async () => {
+  it('surfaces analysis start failures as a toast instead of failing silently', async () => {
     extensionApiMock.getHistoryItem.mockRejectedValue(new Error('history failed'));
     render(<Popup />);
 
     fireEvent.click(screen.getByText('analyze'));
 
     await waitFor(() => {
-      expect(loggerMock.error).toHaveBeenCalledWith('[Popup] Failed to get history for analysis', {
+      expect(loggerMock.error).toHaveBeenCalledWith('[Popup] Failed to start analysis', {
         error: expect.any(Error),
       });
+    });
+
+    // The mocked translator echoes the key; the toast proves the failure
+    // surfaced to the UI instead of being swallowed.
+    await waitFor(() => {
+      expect(screen.queryByText(/popup.analysisStartFailed|history failed/)).not.toBeNull();
     });
 
     const taskHook = useTaskMock.mock.results[0]?.value;

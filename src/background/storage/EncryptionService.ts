@@ -7,8 +7,10 @@ export class EncryptionService {
   private encryptionKey?: CryptoKey;
   private encryptionEnabled = false;
   private encryptionInitPromise?: Promise<void>;
-  private secretMutex = new Mutex();
-  private saltMutex = new Mutex();
+  // Single mutex for both secret and salt so they are created in one atomic
+  // storage write; two independent locks could persist one half and lose the
+  // other if the service worker is evicted in between.
+  private keyMaterialMutex = new Mutex();
 
   async ensureEncryptionReady(): Promise<void> {
     if (this.encryptionEnabled && this.encryptionKey) return;
@@ -24,29 +26,47 @@ export class EncryptionService {
 
   private async initializeEncryption(): Promise<void> {
     try {
-      const secret = await this.getOrCreateSecret();
-      await this.enableEncryption(secret);
+      const { secret, salt } = await this.getOrCreateKeyMaterial();
+      const keyMaterial = await this.importKeyMaterial(secret);
+      this.encryptionKey = await this.deriveKey(keyMaterial, salt);
+      this.encryptionEnabled = true;
     } catch (error) {
       Logger.warn('[EncryptionService] Failed to initialize encryption', { error });
       this.disableEncryption();
     }
   }
 
-  private async getOrCreateSecret(): Promise<string> {
-    return this.secretMutex.withLock(async () => {
-      const result = await chrome.storage.local.get(STORAGE.ENCRYPTION_SECRET_KEY);
+  private async getOrCreateKeyMaterial(): Promise<{ secret: string; salt: ArrayBuffer }> {
+    return this.keyMaterialMutex.withLock(async () => {
+      const result = await chrome.storage.local.get([
+        STORAGE.ENCRYPTION_SECRET_KEY,
+        STORAGE.ENCRYPTION_SALT_KEY,
+      ]);
       let secretBase64 = result[STORAGE.ENCRYPTION_SECRET_KEY] as string | undefined;
+      let saltBase64 = result[STORAGE.ENCRYPTION_SALT_KEY] as string | undefined;
+
+      const updates: Record<string, string> = {};
       if (!secretBase64) {
         const secret = crypto.getRandomValues(new Uint8Array(SECURITY.SECRET_LENGTH));
         secretBase64 = btoa(String.fromCharCode(...secret));
-        await chrome.storage.local.set({ [STORAGE.ENCRYPTION_SECRET_KEY]: secretBase64 });
+        updates[STORAGE.ENCRYPTION_SECRET_KEY] = secretBase64;
       }
-      return secretBase64;
+      if (!saltBase64) {
+        const salt = crypto.getRandomValues(new Uint8Array(SECURITY.SALT_LENGTH));
+        saltBase64 = btoa(String.fromCharCode(...salt));
+        updates[STORAGE.ENCRYPTION_SALT_KEY] = saltBase64;
+      }
+      if (Object.keys(updates).length > 0) {
+        await chrome.storage.local.set(updates);
+      }
+
+      const saltBytes = Uint8Array.from(atob(saltBase64!), (c) => c.charCodeAt(0));
+      return { secret: secretBase64!, salt: saltBytes.buffer };
     });
   }
 
   async enableEncryption(passphrase: string): Promise<void> {
-    const salt = await this.getOrCreateSalt();
+    const { salt } = await this.getOrCreateKeyMaterial();
     const keyMaterial = await this.importKeyMaterial(passphrase);
     this.encryptionKey = await this.deriveKey(keyMaterial, salt);
     this.encryptionEnabled = true;
@@ -55,20 +75,6 @@ export class EncryptionService {
   disableEncryption(): void {
     this.encryptionKey = undefined;
     this.encryptionEnabled = false;
-  }
-
-  private async getOrCreateSalt(): Promise<ArrayBuffer> {
-    return this.saltMutex.withLock(async () => {
-      const result = await chrome.storage.local.get(STORAGE.ENCRYPTION_SALT_KEY);
-      let saltBase64 = result[STORAGE.ENCRYPTION_SALT_KEY] as string | undefined;
-      if (!saltBase64) {
-        const salt = crypto.getRandomValues(new Uint8Array(SECURITY.SALT_LENGTH));
-        saltBase64 = btoa(String.fromCharCode(...salt));
-        await chrome.storage.local.set({ [STORAGE.ENCRYPTION_SALT_KEY]: saltBase64 });
-      }
-      const bytes = Uint8Array.from(atob(saltBase64), (c) => c.charCodeAt(0));
-      return bytes.buffer;
-    });
   }
 
   private async importKeyMaterial(passphrase: string): Promise<CryptoKey> {

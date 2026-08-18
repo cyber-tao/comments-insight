@@ -375,9 +375,11 @@ export function sanitizeAiLogEntry(value: unknown): StoredAiLogEntry | null {
   return result.success ? result.data : null;
 }
 
-export function sanitizeTokenStats(
-  value: unknown,
-): { today: number; total: number; lastReset: number } {
+export function sanitizeTokenStats(value: unknown): {
+  today: number;
+  total: number;
+  lastReset: number;
+} {
   const result = tokenStatsSchema.safeParse(value);
   return result.success ? result.data : { today: 0, total: 0, lastReset: 0 };
 }

@@ -8,6 +8,7 @@ import { ExtensionAPI } from '@/utils/extension-api';
 import { useTask } from './hooks/useTask';
 import { usePageInfo } from './hooks/usePageInfo';
 import { useTheme } from '@/hooks/useTheme';
+import { useToast } from '@/hooks/useToast';
 import { Header } from './components/Header';
 import { PageStatus } from './components/PageStatus';
 import { ActionButtons } from './components/ActionButtons';
@@ -22,6 +23,7 @@ const Popup: React.FC = () => {
   const { pageInfo, pageStatus, loading, loadPageInfo, refreshPageStatus } = usePageInfo();
   // Initialize theme side-effect (applies dark/light class to document)
   useTheme();
+  const toast = useToast();
 
   const {
     currentTask,
@@ -92,7 +94,12 @@ const Popup: React.FC = () => {
         });
       }
     } catch (error) {
-      Logger.error('[Popup] Failed to get history for analysis', { error });
+      Logger.error('[Popup] Failed to start analysis', { error });
+      toast.error(
+        t('popup.analysisStartFailed', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
     }
   };
 
@@ -145,6 +152,7 @@ const Popup: React.FC = () => {
         onOpenHistory={handleOpenHistory}
       />
       {developerMode && <SelectorTester />}
+      <toast.ToastContainer />
     </div>
   );
 };

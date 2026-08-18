@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Message, ProgressStage } from '@/types';
 import { ExtensionError, ErrorCode } from './errors';
 import { settingsPatchSchema } from '@/utils/storage-validation';
+import { ANALYSIS_FORMAT } from '@/config/constants';
 
 const nonEmptyString = z.string().trim().min(1);
 const looseObjectSchema = z.object({}).passthrough();
@@ -16,11 +17,16 @@ const progressStageSchema = z.enum([
   'complete',
 ] as [ProgressStage, ...ProgressStage[]]);
 
+// Comments arrive from persisted history as well as fresh extraction, so the
+// schema must tolerate legacy rows written before timestamp/likes fallbacks
+// existed: recover with sane defaults instead of rejecting the whole analysis.
 const coreCommentSchema = z.object({
   id: nonEmptyString,
   username: z.string(),
-  timestamp: z.string(),
-  likes: z.number(),
+  userId: z.string().optional(),
+  platform: z.string().optional(),
+  timestamp: z.string().catch(ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP),
+  likes: z.number().catch(0),
   content: z.string(),
   replies: z.array(looseObjectSchema),
 });

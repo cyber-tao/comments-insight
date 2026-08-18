@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { handleStartAnalysis, handleAIAnalyzeStructure } from '@/background/handlers/analysis';
+import {
+  handleStartAnalysis,
+  handleAIAnalyzeStructure,
+  handleAIExtractContent,
+} from '@/background/handlers/analysis';
 import { HandlerContext } from '@/background/handlers/types';
 import { ErrorCode } from '@/utils/errors';
+import { ANALYSIS_FORMAT } from '@/config/constants';
 
 vi.mock('@/utils/logger', () => ({
   Logger: {
@@ -268,6 +273,40 @@ describe('analysis handlers', () => {
       expect(result).toBeDefined();
       expect(result.data?.selectors).toEqual({ container: '.comments' });
       expect(result.data?.confidence).toBe(0.9);
+    });
+  });
+
+  describe('handleAIExtractContent', () => {
+    it('fills in missing timestamp/likes/replies on LLM-extracted comments', async () => {
+      const message = {
+        type: 'AI_EXTRACT_CONTENT' as const,
+        payload: {
+          chunks: ['<div>chunk</div>'],
+        },
+      };
+      const localContext = createMockContext({
+        aiService: {
+          callAI: vi.fn().mockResolvedValue({
+            content: JSON.stringify([
+              { username: 'user1', content: 'hello' },
+              { username: 'user2', content: 'hi', timestamp: '2h ago' },
+            ]),
+            tokensUsed: 10,
+          }),
+        },
+      } as unknown as Partial<HandlerContext>);
+
+      const result = await handleAIExtractContent(message, localContext);
+
+      expect(result.comments).toHaveLength(2);
+      for (const comment of result.comments) {
+        expect(comment.id).toBeTruthy();
+        expect(comment.timestamp).toBeDefined();
+        expect(comment.likes).toBe(0);
+        expect(comment.replies).toEqual([]);
+      }
+      expect(result.comments[0].timestamp).toBe(ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP);
+      expect(result.comments[1].timestamp).toBe('2h ago');
     });
   });
 

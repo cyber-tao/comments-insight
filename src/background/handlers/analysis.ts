@@ -396,6 +396,7 @@ export async function handleAIExtractContent(
         const chunkComments = cleanAndParseJsonArray<Partial<Comment>>(response.content);
         chunkComments.forEach((c, idx) => {
           if (!c.id) c.id = `ai_${Date.now()}_${i}_${idx}`;
+          if (!c.timestamp) c.timestamp = ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
           if (!c.likes) c.likes = 0;
           if (!c.replies) c.replies = [];
         });

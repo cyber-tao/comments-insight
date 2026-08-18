@@ -73,10 +73,17 @@ export class SettingsStore {
       const merged = this.mergeSettingsWithDefaults(settings);
 
       const normalizedModel = this.normalizeAIModel(merged);
-      merged.aiModel = {
-        ...normalizedModel,
-        apiKey: await this.encryptionService.decrypt(normalizedModel.apiKey || ''),
-      };
+      let apiKey = '';
+      try {
+        apiKey = await this.encryptionService.decrypt(normalizedModel.apiKey || '');
+      } catch (decryptError) {
+        // An unreadable protected field must not brick every getSettings
+        // consumer; return an empty key so Options can prompt for a re-entry.
+        Logger.warn('[SettingsStore] Failed to decrypt API key, returning empty', {
+          error: decryptError,
+        });
+      }
+      merged.aiModel = { ...normalizedModel, apiKey };
 
       delete (merged as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig })
         .extractorModel;

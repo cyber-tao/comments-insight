@@ -1,11 +1,35 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HistoryStore } from '../src/background/storage/HistoryStore';
+import { SettingsStore } from '../src/background/storage/SettingsStore';
+import type { EncryptionService } from '../src/background/storage/EncryptionService';
+import { STORAGE } from '../src/config/constants';
 import {
   sanitizePersistedTaskState,
   sanitizeStoredSettings,
   sanitizeTokenStats,
 } from '../src/utils/storage-validation';
+
+const mockStorageGet = vi.fn();
+const mockStorageSet = vi.fn();
+
+vi.stubGlobal('chrome', {
+  storage: {
+    local: {
+      get: mockStorageGet,
+      set: mockStorageSet,
+    },
+  },
+});
+
+function createEncryptionServiceMock(overrides: Record<string, unknown> = {}) {
+  return {
+    ensureEncryptionReady: vi.fn().mockResolvedValue(undefined),
+    encrypt: vi.fn().mockImplementation((text: string) => Promise.resolve(`enc:${text}`)),
+    decrypt: vi.fn().mockResolvedValue(''),
+    ...overrides,
+  } as unknown as EncryptionService;
+}
 
 vi.mock('../src/utils/logger', () => ({
   Logger: {
@@ -203,5 +227,57 @@ describe('storage compatibility with pre-refactor data', () => {
       expect(sanitizeTokenStats('garbage')).toEqual({ today: 0, total: 0, lastReset: 0 });
       expect(sanitizeTokenStats(undefined)).toEqual({ today: 0, total: 0, lastReset: 0 });
     });
+  });
+});
+
+describe('SettingsStore decryption resilience', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockStorageGet.mockReset();
+    mockStorageSet.mockResolvedValue(undefined);
+  });
+
+  it('resolves with an empty API key when decryption fails, keeping other settings', async () => {
+    mockStorageGet.mockResolvedValue({
+      [STORAGE.SETTINGS_KEY]: {
+        maxComments: 100,
+        language: 'en-US',
+        aiModel: {
+          apiUrl: 'https://api.example.com/v1',
+          apiKey: 'enc:not-decryptable',
+          model: 'gpt-test',
+        },
+      },
+    });
+    const encryption = createEncryptionServiceMock({
+      decrypt: vi.fn().mockRejectedValue(new Error('decryption failed')),
+    });
+    const store = new SettingsStore(encryption);
+
+    const settings = await store.getSettings();
+
+    expect(settings.aiModel.apiKey).toBe('');
+    expect(settings.maxComments).toBe(100);
+    expect(settings.aiModel.model).toBe('gpt-test');
+    expect(settings.aiModel.apiUrl).toBe('https://api.example.com/v1');
+  });
+
+  it('creates secret and salt in a single atomic storage write', async () => {
+    const { EncryptionService: RealEncryptionService } =
+      await import('../src/background/storage/EncryptionService');
+    mockStorageGet.mockResolvedValue({});
+    const setCalls: unknown[][] = [];
+    mockStorageSet.mockImplementation((payload: unknown) => {
+      setCalls.push([payload]);
+      return Promise.resolve();
+    });
+
+    const service = new RealEncryptionService();
+    await service.ensureEncryptionReady();
+
+    expect(setCalls).toHaveLength(1);
+    const writtenKeys = Object.keys(setCalls[0][0] as Record<string, unknown>);
+    expect(writtenKeys).toContain(STORAGE.ENCRYPTION_SECRET_KEY);
+    expect(writtenKeys).toContain(STORAGE.ENCRYPTION_SALT_KEY);
   });
 });

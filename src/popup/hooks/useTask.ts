@@ -274,7 +274,8 @@ export function useTask(options: UseTaskOptions = {}) {
     } catch (error) {
       Logger.error('[useTask] Failed to start analysis', { error });
       setCurrentTask(null);
-      return null;
+      // Bubble up so the UI can surface why the analysis never started.
+      throw error;
     } finally {
       isStartingRef.current = false;
     }
