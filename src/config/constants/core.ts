@@ -69,6 +69,10 @@ export const STORAGE = {
  * Semantics:
  *   1 = pre-refactor baseline (extension version <= 0.6.0)
  *   2 = current refactored layout (no persisted-shape change; version bump only)
+ *
+ * Versions 0.7.x-0.8.x added the sandbox page and dynamic reports without
+ * altering any persisted shape (new fields like Task.interruptedByRestart are
+ * optional and tolerated by the existing sanitizers), so CURRENT stays at 2.
  */
 export const APP_DATA_VERSION = {
   CURRENT: 2,

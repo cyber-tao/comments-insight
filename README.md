@@ -90,6 +90,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
   - **Thought Filtering**: Supports reasoning models (like DeepSeek) by automatically stripping `<think>` tags from output for clean reports.
   - **Invalid Output Guard**: Empty model responses are rejected and retried instead of being stored as successful blank reports.
   - Comprehensive reports including Sentiment Distribution, Hot Comments, Top Discussed, and Interaction Analysis.
+  - **Dynamic Visual Reports** (enabled by default): generates a standalone interactive HTML dashboard from the analysis via a second LLM call, rendered safely inside a sandboxed iframe.
   - Customizable prompt templates with "Reset to Default" capability.
 - 🧩 **Scraper Config**:
   - Automatically generate/edit/import/export per-site configs.
@@ -109,11 +110,12 @@ API keys are stored locally (reversible encryption/obfuscation) to avoid acciden
 
 ## 🧱 Architecture
 
-- **Background**: Service Worker orchestrates the `TaskManager` (for maintaining long-running tasks), `AIService` (streaming AI calls, concurrency, output cleanup, and token tracking), and a unified `StorageManager` that routes data to Dexie history, settings, and log stores.
+- **Background**: Service Worker orchestrates the `TaskManager` (for maintaining long-running tasks) and `AIService` (streaming AI calls, concurrency, output cleanup, and token tracking). Data access goes through dedicated stores injected via `ServiceContainer` (Dexie-backed `HistoryStore`, `SettingsStore`, `CrawlingConfigStore`, `LogStore`, `TokenStatsStore`).
 - **Content Scripts**: Handles DOM traversal, abortable `MutationObserver`-powered interactions (clicking "View Replies" and waiting for network-bound changes), and data extraction.
 - **Popup**: Main control center for triggering tasks, viewing page status, and monitoring granular real-time progress.
 - **Options**: Configuration for AI models (OpenAI, Ollama, DeepSeek, etc.), Prompts, and Scraper Management.
 - **History**: Rich interface for browsing extracted data, rerunning analysis, monitoring streaming progress, and exporting reports.
+- **Sandbox**: An opaque-origin iframe page that renders LLM-generated dynamic reports without granting them `chrome.*` APIs or extension-page privileges.
 
 ## 📦 Project Structure
 
@@ -124,13 +126,15 @@ src/
     handlers/            # Message handlers: extraction, analysis, config, history, settings, task, misc
     storage/             # Dexie/chrome.storage stores + DataMigrator
   content/               # Content Scripts
-    handlers/            # Message handlers: extraction, config-generation, dom
+    handlers/            # Message handlers: extraction, config-generation, dom, tools
+    prompts.ts           # Extraction/config prompts bundled into the content chunk
     strategies/          # AIStrategy, ConfiguredStrategy, AIConfigGenerator
     utils/               # Chunker, abort helpers
   popup/                 # Extension popup UI
   options/               # Options page: settings & scraper configs
   history/               # History page: browsing & re-analysis
   logs/                  # Debug logs viewer
+  sandbox/               # Sandboxed page for rendering LLM-generated dynamic reports
   config/
     constants/           # Themed constants (ai, dom, extraction, timing, ui, ...)
     default_rules.json   # Default crawling rules bundle

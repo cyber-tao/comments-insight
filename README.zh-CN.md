@@ -105,15 +105,16 @@
 
 ## 🔑 API 密钥安全说明
 
-API 密钥存储在本地（经过简单的混淆处理），旨在防止误操作导致的泄漏。这**不足以**抵御针对性的恶意软件或其他扩展程序的攻击。
+API 密钥存储在本地（经过简单的混淆处理），且导出设置时永远不会包含 API 密钥，旨在防止误操作导致的泄漏。这**不足以**抵御针对性的恶意软件或其他扩展程序的攻击。
 
 ## 🧱 架构设计
 
-- **Background (后台)**: Service Worker 负责调度统筹管理后台长任务流的 `TaskManager`、流式 AI 服务调用（含并发控制、Token 跟踪与 `<think>` 标签清洗）以及统一规范化的 `StorageManager`，将数据路由到 Dexie 历史库、设置库和日志库。
+- **Background (后台)**: Service Worker 负责调度统筹管理后台长任务流的 `TaskManager` 和流式 AI 服务调用（含并发控制、Token 跟踪与 `<think>` 标签清洗）。数据访问通过 `ServiceContainer` 注入的独立 Store 完成（Dexie 的 `HistoryStore`，以及 `SettingsStore`、`CrawlingConfigStore`、`LogStore`、`TokenStatsStore`）。
 - **Content Scripts (内容脚本)**: 执行可取消的 `MutationObserver` 网络监听器 DOM 滚动交互模拟任务（点击"查看回复"并等待）和深层数据提取。
 - **Popup (弹窗)**: 控制中心，用于触发任务、实时掌握扩展内状态以及获得细粒度的人类可读的任务进度播报。
 - **Options (选项)**: 配置不同服务商的 AI 模型（OpenAI、Ollama、OpenRouter 免费模型等）、提示词和爬虫规则。
 - **History (历史)**: 丰富的数据可视化界面，浏览提取内容、重新分析、监控流式进度并导出报告。
+- **Sandbox (沙箱)**: 不透明源的 iframe 页面，用于渲染 LLM 生成的动态报告，不向其暴露 `chrome.*` API 或扩展页面权限。
 
 ## 📦 项目结构
 
@@ -124,13 +125,15 @@ src/
     handlers/            # 消息处理器：extraction、analysis、config、history、settings、task、misc
     storage/             # Dexie/chrome.storage 存储 + DataMigrator
   content/               # 内容脚本
-    handlers/            # 消息处理器：extraction、config-generation、dom
+    handlers/            # 消息处理器：extraction、config-generation、dom、tools
+    prompts.ts           # 随内容脚本打包的抽取/配置提示词
     strategies/          # AIStrategy、ConfiguredStrategy、AIConfigGenerator
     utils/               # Chunker、abort 辅助
   popup/                 # 扩展弹窗 UI
   options/               # 选项页：设置与爬取配置
   history/               # 历史页：浏览与重新分析
   logs/                  # 调试日志查看器
+  sandbox/               # 沙箱页：渲染 LLM 生成的动态报告
   config/
     constants/           # 按主题分文件的常量（ai、dom、extraction、timing、ui 等）
     default_rules.json   # 默认爬取规则

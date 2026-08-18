@@ -16,8 +16,13 @@ the built `dist/` directory loaded as an unpacked extension in headful mode.
 ## Option 1: Puppeteer (used in this repo)
 
 `scripts/test-youtube.js` runs a scripted extraction against a public YouTube
-video and asserts the extension writes results to `chrome.storage.local`. It is
-the reference implementation for browser-level regression checks.
+video and asserts the extraction outcome. The dev-only content-script hook
+(`window.postMessage({ type: 'COMMENTS_INSIGHT_TEST_TRIGGER', ... })`) starts an
+extraction and reports its final result via
+`console.log('__TEST_RESULT__:' + JSON.stringify(outcome))`; the script watches
+the page console for that marker and fails on `{ success: false }` or timeout.
+Extracted history itself lands in IndexedDB (Dexie) via the background flow.
+It is the reference implementation for browser-level regression checks.
 
 ### Environment variables
 

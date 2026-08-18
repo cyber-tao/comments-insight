@@ -146,6 +146,17 @@ describe('CommentExtractor', () => {
       expect(result[0].username).toBe('ValidUser');
     });
 
+    it('should backfill missing timestamps with the unknown placeholder', async () => {
+      const comments = [mockComment({ timestamp: '' }), mockComment({ timestamp: '2h ago' })];
+      mockExecute.mockResolvedValue(comments);
+
+      const result = await extractor.extractWithAI(10, 'YouTube');
+
+      expect(result).toHaveLength(2);
+      expect(result[0].timestamp).toBe('N/A');
+      expect(result[1].timestamp).toBe('2h ago');
+    });
+
     it('should ensure likes are non-negative', async () => {
       const comments = [
         mockComment({ likes: 10 }),

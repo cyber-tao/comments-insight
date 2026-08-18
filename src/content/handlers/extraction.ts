@@ -28,9 +28,16 @@ export function sendCancelledCompletion(
     });
 }
 
+export interface ExtractionOutcome {
+  success: boolean;
+  comments?: unknown[];
+  error?: string;
+}
+
 export async function handleStartExtraction(
   data: { taskId: string; maxComments: number },
   sendResponse: (response: ExtractionResponse) => void,
+  onComplete?: (outcome: ExtractionOutcome) => void,
 ): Promise<void> {
   // 1. Immediately acknowledge receipt to prevent message timeout
   sendResponse({ success: true });
@@ -73,6 +80,7 @@ export async function handleStartExtraction(
 
     if (!globalExtractionState.isCurrentTask(taskId, controller)) {
       Logger.info('[Content] Extraction cancelled');
+      onComplete?.({ success: false, error: 'cancelled' });
       return;
     }
 
@@ -80,6 +88,7 @@ export async function handleStartExtraction(
 
     if (!globalExtractionState.isCurrentTask(taskId, controller)) {
       Logger.info('[Content] Extraction cancelled before completion');
+      onComplete?.({ success: false, error: 'cancelled' });
       return;
     }
 
@@ -94,21 +103,25 @@ export async function handleStartExtraction(
     });
 
     Logger.info('[Content] Extraction complete', { count: comments.length });
+    onComplete?.({ success: true, comments });
   } catch (error) {
     if (!globalExtractionState.isCurrentTask(taskId, controller)) {
       Logger.info('[Content] Extraction cancelled', { taskId });
+      onComplete?.({ success: false, error: 'cancelled' });
       return;
     }
 
     Logger.error('[Content] Extraction failed', { error });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     await chrome.runtime.sendMessage({
       type: MESSAGES.EXTRACTION_COMPLETED,
       payload: {
         taskId,
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: errorMessage,
       },
     });
+    onComplete?.({ success: false, error: errorMessage });
   } finally {
     globalExtractionState.finishTask(taskId, controller);
   }
