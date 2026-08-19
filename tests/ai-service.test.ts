@@ -431,10 +431,11 @@ describe('AIService', () => {
         timeout: 1000,
       });
 
+      const rejection = expect(promise).rejects.toMatchObject({ code: ErrorCode.AI_TIMEOUT });
       // Advance past the timeout plus what a retry backoff would need; the
       // call must fail exactly once with AI_TIMEOUT and never re-fetch.
       await vi.advanceTimersByTimeAsync(10_000);
-      await expect(promise).rejects.toMatchObject({ code: ErrorCode.AI_TIMEOUT });
+      await rejection;
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 

@@ -185,15 +185,7 @@ export function useHistoryReanalyze({
         setIsGeneratingDynamic(false);
       }
     }
-  }, [
-    fetchHistoryItemById,
-    isGeneratingDynamic,
-    isReanalyzing,
-    monitorReanalyzeTask,
-    selectedItem,
-    setSelectedItem,
-    t,
-  ]);
+  }, [isGeneratingDynamic, isReanalyzing, monitorReanalyzeTask, selectedItem, t]);
 
   return {
     clearReanalyzeError,

@@ -74,6 +74,7 @@ if (!globalInsight.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED) {
           () => {},
           (outcome) => {
             // Consumed by scripts/test-youtube.js via page console scraping.
+            // eslint-disable-next-line no-console
             console.log(`__TEST_RESULT__:${JSON.stringify(outcome)}`);
           },
         );
