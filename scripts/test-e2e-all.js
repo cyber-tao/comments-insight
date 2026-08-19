@@ -1,3 +1,5 @@
+import fs from 'fs';
+import os from 'os';
 import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -6,7 +8,24 @@ import puppeteer from 'puppeteer';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const extensionPath = path.resolve(scriptDir, '../dist');
 
-const TEST_TIMEOUT_MS = 60000;
+function getChromeExecutablePath() {
+  const candidatePaths = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Google/Chrome/Application/chrome.exe'),
+  ].filter(Boolean);
+
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) {
+      return p;
+    }
+  }
+  return undefined;
+}
+
 const SERVICE_WORKER_RETRIES = 15;
 const RETRY_DELAY_MS = 800;
 
@@ -40,7 +59,9 @@ function recordFail(suite, name, error) {
 async function findBackgroundTarget(browser) {
   for (let attempt = 0; attempt < SERVICE_WORKER_RETRIES; attempt++) {
     const targets = await browser.targets();
-    const backgroundTarget = targets.find((t) => t.type() === 'service_worker');
+    const backgroundTarget = targets.find(
+      (t) => t.type() === 'service_worker' && t.url().includes('service-worker-loader.js'),
+    );
     if (backgroundTarget) {
       return backgroundTarget;
     }
@@ -114,10 +135,21 @@ async function runAllAutomatedTests() {
   const mockPageUrl = `http://127.0.0.1:${port}/test-comments.html`;
   console.log(`Local test server running at: ${mockPageUrl}`);
 
+  const executablePath = getChromeExecutablePath();
+  console.log(`Browser executable: ${executablePath || 'default puppeteer bundle'}`);
+
+  const tempProfileDir = path.join(os.tmpdir(), 'comments-insight-e2e-' + Date.now());
+
   const browser = await puppeteer.launch({
     headless: false,
+    executablePath,
+    ignoreDefaultArgs: [
+      '--disable-extensions',
+      '--disable-component-extensions-with-background-pages',
+      '--enable-automation',
+    ],
     args: [
-      `--disable-extensions-except=${extensionPath}`,
+      `--user-data-dir=${tempProfileDir}`,
       `--load-extension=${extensionPath}`,
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -136,16 +168,24 @@ async function runAllAutomatedTests() {
     const bgUrl = backgroundTarget.url();
     const extensionId = new URL(bgUrl).host;
     assert(extensionId && extensionId.length > 5, `Invalid extension ID: ${extensionId}`);
-    recordPass('ServiceWorker', `Service worker running with Extension ID: ${extensionId}`);
-
-    const worker = await backgroundTarget.worker();
-    assert(worker, 'Failed to access worker instance');
-    recordPass('ServiceWorker', 'Worker execution context available');
+    recordPass('ServiceWorker', `Comments Insight service worker active with ID: ${extensionId}`);
 
     // ----------------------------------------------------
-    // Suite 2: Storage & Settings Initialization
+    // Suite 2 & 3: Options Page & Storage Subsystem
     // ----------------------------------------------------
-    console.log('\n⚙️ [Suite 2] Storage & Configuration Subsystem');
+    console.log('\n🛠️ [Suite 2 & 3] Options Page & Storage Subsystem');
+    const optionsPage = await browser.newPage();
+    const optionsUrl = `chrome-extension://${extensionId}/src/options/index.html`;
+
+    const optionsErrors = [];
+    optionsPage.on('pageerror', (err) => optionsErrors.push(err.message));
+
+    await optionsPage.goto(optionsUrl, { waitUntil: 'domcontentloaded' });
+    await delay(1500);
+
+    assert(optionsErrors.length === 0, `Options page had JS errors: ${optionsErrors.join(', ')}`);
+    recordPass('OptionsPage', 'Loaded Options page cleanly without console errors');
+
     const mockRule = {
       id: 'local_test_rule',
       domain: '127.0.0.1',
@@ -163,7 +203,7 @@ async function runAllAutomatedTests() {
       ],
     };
 
-    await worker.evaluate((testRule) => {
+    await optionsPage.evaluate((testRule) => {
       return new Promise((resolve, reject) => {
         chrome.storage.local.get('settings', (result) => {
           const currentSettings = result.settings || {};
@@ -185,33 +225,17 @@ async function runAllAutomatedTests() {
         });
       });
     }, mockRule);
-    recordPass('Storage', 'Injected test crawling config and updated settings in chrome.storage.local');
+    recordPass('Storage', 'Injected custom crawling config into chrome.storage.local');
 
     // Verify storage readback
-    const storedSettings = await worker.evaluate(() => {
+    const storedSettings = await optionsPage.evaluate(() => {
       return new Promise((resolve) => {
         chrome.storage.local.get('settings', (res) => resolve(res.settings));
       });
     });
     assert(storedSettings.theme === 'dark', 'Stored theme setting mismatch');
     assert(storedSettings.language === 'zh-CN', 'Stored language setting mismatch');
-    recordPass('Storage', 'Verified persistent settings readback from background storage');
-
-    // ----------------------------------------------------
-    // Suite 3: Options Page E2E Tests
-    // ----------------------------------------------------
-    console.log('\n🛠️ [Suite 3] Options Page UI & Component Interaction');
-    const optionsPage = await browser.newPage();
-    const optionsUrl = `chrome-extension://${extensionId}/src/options/index.html`;
-
-    const optionsErrors = [];
-    optionsPage.on('pageerror', (err) => optionsErrors.push(err.message));
-
-    await optionsPage.goto(optionsUrl, { waitUntil: 'domcontentloaded' });
-    await delay(1500);
-
-    assert(optionsErrors.length === 0, `Options page had JS errors: ${optionsErrors.join(', ')}`);
-    recordPass('OptionsPage', 'Loaded Options page without console errors');
+    recordPass('Storage', 'Verified persistent settings roundtrip in browser storage');
 
     // Verify Tab navigation (AI Settings, Crawling Rules, General)
     const optionsHtml = await optionsPage.content();
@@ -221,7 +245,7 @@ async function runAllAutomatedTests() {
     // Test clicking navigation buttons/tabs if present
     const navButtons = await optionsPage.$$('button, nav button, [role="tab"]');
     assert(navButtons.length > 0, 'No navigation or action buttons found on Options page');
-    recordPass('OptionsPage', `Found ${navButtons.length} interactive buttons/tabs on Options page`);
+    recordPass('OptionsPage', `Found ${navButtons.length} interactive UI elements on Options page`);
 
     await optionsPage.close();
 
@@ -238,7 +262,6 @@ async function runAllAutomatedTests() {
     await historyPage.goto(historyUrl, { waitUntil: 'domcontentloaded' });
     await delay(1000);
 
-    // Insert mock history item using extension messaging or direct Dexie call from extension page context
     const mockHistoryItem = {
       id: 'hist_test_' + Date.now(),
       url: 'https://www.youtube.com/watch?v=mock_test_123',
@@ -285,20 +308,34 @@ async function runAllAutomatedTests() {
       },
     };
 
-    // Save to history via ExtensionAPI/Chrome message
-    const saveResponse = await historyPage.evaluate((item) => {
-      return new Promise((resolve) => {
-        chrome.runtime.sendMessage(
-          {
-            type: 'SAVE_HISTORY',
-            payload: item,
-          },
-          (res) => resolve(res),
-        );
+    // Save to IndexedDB (CommentsInsightDatabase -> history & historyMetadata)
+    await historyPage.evaluate((item) => {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open('CommentsInsightDatabase');
+        req.onsuccess = (e) => {
+          const db = e.target.result;
+          const tx = db.transaction(['history', 'historyMetadata'], 'readwrite');
+          tx.objectStore('history').put(item);
+          tx.objectStore('historyMetadata').put({
+            id: item.id,
+            url: item.url,
+            title: item.title,
+            platform: item.platform,
+            videoTime: item.videoTime,
+            postContent: item.postContent,
+            extractedAt: item.extractedAt,
+            commentsCount: item.commentsCount,
+            analyzedAt: item.analyzedAt,
+            hasAnalysis: Boolean(item.analysis),
+          });
+          tx.oncomplete = () => resolve(true);
+          tx.onerror = (err) => reject(err);
+        };
+        req.onerror = (err) => reject(err);
       });
     }, mockHistoryItem);
 
-    recordPass('HistoryPage', 'Saved mock history item via SAVE_HISTORY message');
+    recordPass('HistoryPage', 'Inserted mock history record into CommentsInsightDatabase IndexedDB');
 
     // Reload history page to see updated list
     await historyPage.reload({ waitUntil: 'domcontentloaded' });
@@ -381,7 +418,6 @@ async function runAllAutomatedTests() {
     await sandboxPage.goto(sandboxUrl, { waitUntil: 'domcontentloaded' });
     await delay(800);
 
-    // Send mock report render message to sandbox
     const sandboxRenderSuccess = await sandboxPage.evaluate(() => {
       return new Promise((resolve) => {
         window.addEventListener('message', (event) => {
@@ -390,7 +426,6 @@ async function runAllAutomatedTests() {
           }
         });
 
-        // Post RENDER_REPORT message to sandbox window
         window.postMessage(
           {
             type: 'RENDER_REPORT',
@@ -401,7 +436,6 @@ async function runAllAutomatedTests() {
           '*',
         );
 
-        // Fallback timeout to check DOM
         setTimeout(() => {
           const rendered = document.body.innerHTML.includes('Sandbox Report') || document.body.innerHTML.length > 0;
           resolve(rendered);

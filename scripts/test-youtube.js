@@ -1,10 +1,29 @@
 import fs from 'fs/promises';
+import { existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import puppeteer from 'puppeteer';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const extensionPath = path.resolve(scriptDirectory, '../dist');
+
+function getChromeExecutablePath() {
+  const candidatePaths = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Google/Chrome/Application/chrome.exe'),
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+  ].filter(Boolean);
+
+  for (const p of candidatePaths) {
+    if (existsSync(p)) {
+      return p;
+    }
+  }
+  return undefined;
+}
 const settingsPathEnv = 'COMMENTS_INSIGHT_SETTINGS_PATH';
 const videoUrlEnv = 'COMMENTS_INSIGHT_VIDEO_URL';
 const maxCommentsEnv = 'COMMENTS_INSIGHT_MAX_COMMENTS';
@@ -143,8 +162,13 @@ async function runTest() {
   console.log('Extension path:', extensionPath);
   console.log('Target URL:', videoUrl);
 
+  const executablePath = getChromeExecutablePath();
+  console.log('Browser executable:', executablePath || 'default puppeteer bundle');
+
   const browser = await puppeteer.launch({
     headless: false,
+    executablePath,
+    ignoreDefaultArgs: ['--disable-extensions', '--disable-component-extensions-with-background-pages'],
     dumpio: true,
     args: [
       `--disable-extensions-except=${extensionPath}`,
