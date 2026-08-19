@@ -15,7 +15,8 @@ function getChromeExecutablePath() {
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'Google/Chrome/Application/chrome.exe'),
+    process.env.LOCALAPPDATA &&
+      path.join(process.env.LOCALAPPDATA, 'Google/Chrome/Application/chrome.exe'),
   ].filter(Boolean);
 
   for (const p of candidatePaths) {
@@ -213,10 +214,7 @@ async function runAllAutomatedTests() {
             theme: 'dark',
             language: 'zh-CN',
             developerMode: true,
-            crawlingConfigs: [
-              ...crawlingConfigs.filter((r) => r.domain !== '127.0.0.1'),
-              testRule,
-            ],
+            crawlingConfigs: [...crawlingConfigs.filter((r) => r.domain !== '127.0.0.1'), testRule],
           };
           chrome.storage.local.set({ settings: updated }, () => {
             if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
@@ -239,7 +237,10 @@ async function runAllAutomatedTests() {
 
     // Verify Tab navigation (AI Settings, Crawling Rules, General)
     const optionsHtml = await optionsPage.content();
-    assert(optionsHtml.includes('Comments Insight') || optionsHtml.includes('options'), 'Options page title/content missing');
+    assert(
+      optionsHtml.includes('Comments Insight') || optionsHtml.includes('options'),
+      'Options page title/content missing',
+    );
     recordPass('OptionsPage', 'Verified Options page rendered root UI components');
 
     // Test clicking navigation buttons/tabs if present
@@ -335,7 +336,10 @@ async function runAllAutomatedTests() {
       });
     }, mockHistoryItem);
 
-    recordPass('HistoryPage', 'Inserted mock history record into CommentsInsightDatabase IndexedDB');
+    recordPass(
+      'HistoryPage',
+      'Inserted mock history record into CommentsInsightDatabase IndexedDB',
+    );
 
     // Reload history page to see updated list
     await historyPage.reload({ waitUntil: 'domcontentloaded' });
@@ -344,8 +348,8 @@ async function runAllAutomatedTests() {
     const historyPageContent = await historyPage.content();
     assert(
       historyPageContent.includes('Automated E2E Test Mock Video') ||
-      historyPageContent.includes('Mock Video') ||
-      historyPageContent.includes('YouTube'),
+        historyPageContent.includes('Mock Video') ||
+        historyPageContent.includes('YouTube'),
       'History page did not display saved mock item title',
     );
     recordPass('HistoryPage', 'Verified saved history item is displayed in History UI');
@@ -378,7 +382,10 @@ async function runAllAutomatedTests() {
     recordPass('LogsPage', 'Loaded Logs page cleanly without errors');
 
     const logsContent = await logsPage.content();
-    assert(logsContent.includes('log') || logsContent.includes('Log') || logsContent.includes('日志'), 'Logs page UI structure missing');
+    assert(
+      logsContent.includes('log') || logsContent.includes('Log') || logsContent.includes('日志'),
+      'Logs page UI structure missing',
+    );
     recordPass('LogsPage', 'Verified Logs page structure rendered');
 
     await logsPage.close();
@@ -400,7 +407,10 @@ async function runAllAutomatedTests() {
     recordPass('PopupPage', 'Loaded Popup page without errors');
 
     const popupContent = await popupPage.content();
-    assert(popupContent.includes('Comments Insight') || popupContent.includes('popup'), 'Popup page missing header or title');
+    assert(
+      popupContent.includes('Comments Insight') || popupContent.includes('popup'),
+      'Popup page missing header or title',
+    );
     recordPass('PopupPage', 'Verified Popup page components');
 
     await popupPage.close();
@@ -437,7 +447,9 @@ async function runAllAutomatedTests() {
         );
 
         setTimeout(() => {
-          const rendered = document.body.innerHTML.includes('Sandbox Report') || document.body.innerHTML.length > 0;
+          const rendered =
+            document.body.innerHTML.includes('Sandbox Report') ||
+            document.body.innerHTML.length > 0;
           resolve(rendered);
         }, 1000);
       });
@@ -483,17 +495,31 @@ async function runAllAutomatedTests() {
 
     extractionOutcome = await outcomePromise;
     assert(extractionOutcome, 'No extraction outcome received');
-    assert(extractionOutcome.success, `Extraction reported failure: ${extractionOutcome.error || 'unknown'}`);
+    assert(
+      extractionOutcome.success,
+      `Extraction reported failure: ${extractionOutcome.error || 'unknown'}`,
+    );
     assert(Array.isArray(extractionOutcome.comments), 'Extraction did not return comments array');
-    assert(extractionOutcome.comments.length >= 3, `Expected at least 3 comments, got ${extractionOutcome.comments.length}`);
+    assert(
+      extractionOutcome.comments.length >= 3,
+      `Expected at least 3 comments, got ${extractionOutcome.comments.length}`,
+    );
 
     const firstComment = extractionOutcome.comments[0];
-    assert(firstComment.username && firstComment.content, 'Extracted comment missing username or content');
-    recordPass('ContentScript', `Successfully extracted ${extractionOutcome.comments.length} comments from live DOM`);
-    recordPass('ContentScript', `Verified comment fields (Author: "${firstComment.username}", Content: "${firstComment.content.slice(0, 30)}...")`);
+    assert(
+      firstComment.username && firstComment.content,
+      'Extracted comment missing username or content',
+    );
+    recordPass(
+      'ContentScript',
+      `Successfully extracted ${extractionOutcome.comments.length} comments from live DOM`,
+    );
+    recordPass(
+      'ContentScript',
+      `Verified comment fields (Author: "${firstComment.username}", Content: "${firstComment.content.slice(0, 30)}...")`,
+    );
 
     await contentPage.close();
-
   } catch (err) {
     console.error('\n❌ Fatal Test Runner Error:', err);
     recordFail('Runner', 'Execution halted prematurely', err);
