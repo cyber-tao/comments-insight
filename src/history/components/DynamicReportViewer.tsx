@@ -33,7 +33,7 @@ export const DynamicReportViewer: React.FC<DynamicReportViewerProps> = ({
     };
 
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'SANDBOX_READY') {
+      if (event.source === iframe.contentWindow && event.data?.type === 'SANDBOX_READY') {
         postHtml();
       }
     };
@@ -56,6 +56,7 @@ export const DynamicReportViewer: React.FC<DynamicReportViewerProps> = ({
       ref={iframeRef}
       title={title || 'Dynamic Analysis Report'}
       src={sandboxUrl}
+      sandbox="allow-scripts"
       onLoad={() => {
         if (iframeRef.current?.contentWindow) {
           iframeRef.current.contentWindow.postMessage(

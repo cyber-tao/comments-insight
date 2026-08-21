@@ -6,6 +6,103 @@ import { REGEX, EXPORT_DEFAULTS, LIMITS } from '../config/constants';
 import { t } from './i18n';
 import { formatDateTimeFromTimestamp, formatCommentTimestamp } from './date-formatter';
 
+const STATIC_REPORT_CSP = [
+  "default-src 'none'",
+  "script-src 'none'",
+  "style-src 'unsafe-inline'",
+  'img-src data: blob:',
+  'font-src data: blob:',
+  "connect-src 'none'",
+  "form-action 'none'",
+  "frame-src 'none'",
+  "child-src 'none'",
+  "object-src 'none'",
+  "media-src 'none'",
+  "worker-src 'none'",
+  "base-uri 'none'",
+].join('; ');
+
+const STATIC_REPORT_BLOCKED_ELEMENTS = new Set([
+  'applet',
+  'audio',
+  'base',
+  'embed',
+  'form',
+  'frame',
+  'frameset',
+  'iframe',
+  'link',
+  'object',
+  'portal',
+  'script',
+  'source',
+  'track',
+  'video',
+]);
+
+const STATIC_REPORT_URL_ATTRIBUTES = new Set([
+  'action',
+  'background',
+  'data',
+  'formaction',
+  'href',
+  'imagesrcset',
+  'ping',
+  'poster',
+  'src',
+  'srcdoc',
+  'srcset',
+  'xlink:href',
+]);
+
+function removeExecutableHtml(root: ParentNode): void {
+  for (const element of Array.from(root.querySelectorAll('*'))) {
+    const tagName = element.localName.toLowerCase();
+    const isRefreshMeta =
+      tagName === 'meta' && element.getAttribute('http-equiv')?.trim().toLowerCase() === 'refresh';
+    if (STATIC_REPORT_BLOCKED_ELEMENTS.has(tagName) || isRefreshMeta) {
+      element.remove();
+      continue;
+    }
+
+    for (const attribute of Array.from(element.attributes)) {
+      const attributeName = attribute.name.toLowerCase();
+      if (
+        attributeName.startsWith('on') ||
+        attributeName === 'target' ||
+        STATIC_REPORT_URL_ATTRIBUTES.has(attributeName)
+      ) {
+        if (
+          (tagName === 'a' && attributeName === 'href' && attribute.value.trim().startsWith('#')) ||
+          (tagName === 'img' &&
+            attributeName === 'src' &&
+            /^(data|blob):/i.test(attribute.value.trim()))
+        ) {
+          continue;
+        }
+        element.removeAttribute(attribute.name);
+      }
+    }
+
+    if (tagName === 'template') {
+      removeExecutableHtml((element as HTMLTemplateElement).content);
+    }
+  }
+}
+
+function createStaticReportHtml(rawHtml: string): string {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(rawHtml, 'text/html');
+  removeExecutableHtml(doc);
+
+  const cspMeta = doc.createElement('meta');
+  cspMeta.setAttribute('http-equiv', 'Content-Security-Policy');
+  cspMeta.setAttribute('content', `${STATIC_REPORT_CSP};`);
+  doc.head.insertBefore(cspMeta, doc.head.firstChild);
+
+  return `<!doctype html>\n${doc.documentElement.outerHTML}`;
+}
+
 /**
  * Flatten comment tree to include all replies
  * @param comments - Comments to flatten
@@ -192,7 +289,8 @@ export function exportAnalysisAsHTML(item: HistoryItem, filename?: string): void
     .substring(0, LIMITS.EXPORT_ISO_TIMESTAMP_LENGTH);
   const defaultFilename = `${sanitizeFilename(item.title)}_dynamic_report_${timestamp}.html`;
 
-  downloadFile(item.analysis.dynamicHtml, filename || defaultFilename, 'text/html;charset=utf-8');
+  const staticHtml = createStaticReportHtml(item.analysis.dynamicHtml);
+  downloadFile(staticHtml, filename || defaultFilename, 'text/html;charset=utf-8');
 }
 
 /**

@@ -1,63 +1,183 @@
 // Manifest V3 Sandboxed Dynamic Report Renderer
 
+const BLOCKED_ELEMENT_NAMES = new Set([
+  'applet',
+  'audio',
+  'base',
+  'embed',
+  'form',
+  'frame',
+  'frameset',
+  'iframe',
+  'link',
+  'object',
+  'portal',
+  'source',
+  'track',
+  'video',
+]);
+
+const BLOCKED_ATTRIBUTES = new Set([
+  'action',
+  'formaction',
+  'formenctype',
+  'formmethod',
+  'formnovalidate',
+  'formtarget',
+  'srcdoc',
+  'target',
+]);
+
+const URL_ATTRIBUTES = new Set([
+  'archive',
+  'background',
+  'cite',
+  'classid',
+  'codebase',
+  'data',
+  'dynsrc',
+  'href',
+  'icon',
+  'imagesrcset',
+  'longdesc',
+  'lowsrc',
+  'manifest',
+  'ping',
+  'poster',
+  'profile',
+  'src',
+  'srcset',
+  'usemap',
+  'xlink:href',
+]);
+
 function cleanPreviousReport(): void {
   const previousStyles = document.head.querySelectorAll('style[data-dynamic-report]');
-  previousStyles.forEach((s) => s.remove());
+  previousStyles.forEach((style) => style.remove());
   const reportRoot = document.getElementById('report-root');
   if (reportRoot) {
     reportRoot.innerHTML = '';
   }
 }
 
+function isRefreshMeta(element: Element): boolean {
+  return (
+    element.localName.toLowerCase() === 'meta' &&
+    element.getAttribute('http-equiv')?.trim().toLowerCase() === 'refresh'
+  );
+}
+
+function isAllowedImageSource(value: string): boolean {
+  const normalizedValue = value.trim().toLowerCase();
+  return normalizedValue.startsWith('data:') || normalizedValue.startsWith('blob:');
+}
+
+function sanitizeElementAttributes(element: Element): void {
+  const tagName = element.localName.toLowerCase();
+
+  for (const attribute of Array.from(element.attributes)) {
+    const attributeName = attribute.name.toLowerCase();
+
+    if (attributeName.startsWith('on') || BLOCKED_ATTRIBUTES.has(attributeName)) {
+      element.removeAttribute(attribute.name);
+      continue;
+    }
+
+    if (tagName === 'img' && attributeName === 'src') {
+      if (isAllowedImageSource(attribute.value)) {
+        element.setAttribute(attribute.name, attribute.value.trim());
+      } else {
+        element.removeAttribute(attribute.name);
+      }
+      continue;
+    }
+
+    if (tagName === 'a' && attributeName === 'href') {
+      const href = attribute.value.trim();
+      if (href.startsWith('#')) {
+        element.setAttribute(attribute.name, href);
+      } else {
+        element.removeAttribute(attribute.name);
+      }
+      continue;
+    }
+
+    if (URL_ATTRIBUTES.has(attributeName)) {
+      element.removeAttribute(attribute.name);
+    }
+  }
+}
+
+function sanitizeReportDom(root: ParentNode, removeScripts: boolean = false): void {
+  for (const element of Array.from(root.querySelectorAll('*'))) {
+    const tagName = element.localName.toLowerCase();
+
+    if (
+      BLOCKED_ELEMENT_NAMES.has(tagName) ||
+      isRefreshMeta(element) ||
+      (removeScripts && tagName === 'script')
+    ) {
+      element.remove();
+      continue;
+    }
+
+    sanitizeElementAttributes(element);
+
+    if (tagName === 'template') {
+      sanitizeReportDom((element as HTMLTemplateElement).content, true);
+    }
+  }
+}
+
+function findAnchorTarget(id: string): Element | undefined {
+  return (
+    document.getElementById(id) ||
+    document.getElementsByName(id)[0] ||
+    document.getElementsByClassName(id)[0] ||
+    Array.from(document.querySelectorAll('section[id]')).find((section) => section.id.includes(id))
+  );
+}
+
 function setupLinkInterceptors(): void {
   document.addEventListener(
     'click',
-    (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
+    (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
       const link = target?.closest('a');
       if (!link) return;
 
       const href = link.getAttribute('href');
       if (!href) return;
 
-      // 1. In-page anchor links (e.g. #overview, #comments)
-      if (href.startsWith('#')) {
-        e.preventDefault();
-        e.stopPropagation();
-        const id = href.slice(1);
-        if (!id) return;
-        const targetEl =
-          document.getElementById(id) ||
-          document.querySelector(`[name="${id}"]`) ||
-          document.querySelector(`.${id}`) ||
-          document.querySelector(`section[id*="${id}"]`);
+      event.preventDefault();
+      event.stopPropagation();
 
-        if (targetEl) {
-          targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-        return;
-      }
+      if (!href.startsWith('#')) return;
 
-      // 2. External links (http:// or https://)
-      if (href.startsWith('http://') || href.startsWith('https://')) {
-        e.preventDefault();
-        e.stopPropagation();
-        window.open(href, '_blank', 'noopener,noreferrer');
-        return;
-      }
+      const id = href.slice(1);
+      if (!id) return;
 
-      // 3. Prevent any broken extension or blob navigations that trigger Chrome blocked screens
-      if (
-        href.startsWith('chrome-extension://') ||
-        href.startsWith('blob:') ||
-        href.startsWith('about:')
-      ) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+      findAnchorTarget(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     },
     true,
   );
+}
+
+function showRenderError(error: unknown): void {
+  const reportRoot = document.getElementById('report-root');
+  if (!reportRoot) return;
+
+  const container = document.createElement('div');
+  container.style.cssText = 'padding: 2rem; color: red; text-align: center;';
+
+  const heading = document.createElement('h3');
+  heading.textContent = 'Render Error';
+
+  const message = document.createElement('p');
+  message.textContent = error instanceof Error ? error.message : 'Unknown error';
+
+  container.append(heading, message);
+  reportRoot.replaceChildren(container);
 }
 
 function renderReport(rawHtml: string): void {
@@ -68,51 +188,26 @@ function renderReport(rawHtml: string): void {
   try {
     const parser = new DOMParser();
     const doc = parser.parseFromString(rawHtml, 'text/html');
+    sanitizeReportDom(doc, true);
 
     // 1. Extract and inject <style> tags
-    const styleTags = doc.querySelectorAll('style');
+    const styleTags = Array.from(doc.querySelectorAll('style'));
     styleTags.forEach((styleTag) => {
       const newStyle = document.createElement('style');
       newStyle.setAttribute('data-dynamic-report', 'true');
       newStyle.textContent = styleTag.textContent || '';
       document.head.appendChild(newStyle);
+      styleTag.remove();
     });
 
-    // 2. Extract scripts before injecting body
-    const scriptElements = Array.from(doc.querySelectorAll('script'));
-    const scriptContents: string[] = [];
-    scriptElements.forEach((script) => {
-      if (script.textContent) {
-        scriptContents.push(script.textContent);
-      }
-      script.remove();
-    });
-
-    // 3. Inject body content into report-root
+    // 2. Inject body content into report-root
     const reportRoot = document.getElementById('report-root');
     if (reportRoot) {
       reportRoot.innerHTML = doc.body.innerHTML;
     }
-
-    // 4. Execute scripts in sandboxed context (eval and inline scripts are permitted in manifest sandbox)
-    scriptContents.forEach((code) => {
-      try {
-        // Run in local function scope
-        eval(code);
-      } catch (err) {
-        console.warn('[Sandbox] Script execution warning:', err);
-      }
-    });
-
-    // 5. Trigger DOMContentLoaded event simulation if scripts registered listeners
-    document.dispatchEvent(new Event('DOMContentLoaded'));
-    window.dispatchEvent(new Event('load'));
   } catch (error) {
     console.error('[Sandbox] Failed to render report:', error);
-    const reportRoot = document.getElementById('report-root');
-    if (reportRoot) {
-      reportRoot.innerHTML = `<div style="padding: 2rem; color: red; text-align: center;"><h3>Render Error</h3><p>${error instanceof Error ? error.message : 'Unknown error'}</p></div>`;
-    }
+    showRenderError(error);
   }
 }
 
@@ -121,7 +216,11 @@ setupLinkInterceptors();
 
 // Listen for messages from parent window
 window.addEventListener('message', (event: MessageEvent) => {
-  if (event.data?.type === 'RENDER_REPORT' && typeof event.data.html === 'string') {
+  if (
+    event.source === window.parent &&
+    event.data?.type === 'RENDER_REPORT' &&
+    typeof event.data.html === 'string'
+  ) {
     renderReport(event.data.html);
   }
 });

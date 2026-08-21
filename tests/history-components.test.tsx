@@ -573,8 +573,37 @@ describe('HistoryDetailPanel', () => {
       />,
     );
 
-    const iframe = screen.getByTitle('History Title');
+    const iframe = screen.getByTitle('History Title') as HTMLIFrameElement;
     expect(iframe).toBeTruthy();
     expect(iframe.getAttribute('src')).toContain('src/sandbox/index.html');
+    expect(iframe.getAttribute('sandbox')).toBe('allow-scripts');
+
+    const iframeWindow = iframe.contentWindow;
+    expect(iframeWindow).not.toBeNull();
+    const postMessage = vi.spyOn(iframeWindow!, 'postMessage').mockImplementation(() => undefined);
+
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        data: { type: 'SANDBOX_READY' },
+        source: window,
+      }),
+    );
+    expect(postMessage).not.toHaveBeenCalled();
+
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        data: { type: 'SANDBOX_READY' },
+        source: iframeWindow,
+      }),
+    );
+    expect(postMessage).toHaveBeenCalledWith(
+      {
+        type: 'RENDER_REPORT',
+        html: selectedItem.analysis?.dynamicHtml,
+      },
+      '*',
+    );
   });
 });

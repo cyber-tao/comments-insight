@@ -76,6 +76,8 @@ describe('Prompts Utils', () => {
       expect(result).toContain('Awesome Video');
       expect(result).toContain('50');
       expect(result).toContain('<!DOCTYPE html>');
+      expect(result).toContain('Do NOT include <script>');
+      expect(result).toContain('Do not create external links');
     });
   });
 

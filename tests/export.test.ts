@@ -1,5 +1,13 @@
+/**
+ * @vitest-environment jsdom
+ */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { exportCommentsAsCSV, exportAnalysisAsMarkdown } from '../src/utils/export';
+import {
+  exportCommentsAsCSV,
+  exportAnalysisAsHTML,
+  exportAnalysisAsMarkdown,
+} from '../src/utils/export';
 import { Comment, HistoryItem } from '../src/types';
 
 const mockClick = vi.fn();
@@ -160,8 +168,7 @@ describe('Export Utils', () => {
       },
     };
 
-    it('should generate HTML file and trigger download', async () => {
-      const { exportAnalysisAsHTML } = await import('../src/utils/export');
+    it('should generate HTML file and trigger download', () => {
       exportAnalysisAsHTML(mockHistoryItem);
 
       expect(mockCreateElement).toHaveBeenCalledWith('a');
@@ -169,8 +176,52 @@ describe('Export Utils', () => {
       expect(link.download).toContain('.html');
     });
 
-    it('should throw error if no dynamicHtml available', async () => {
-      const { exportAnalysisAsHTML } = await import('../src/utils/export');
+    it('should export a static report without scripts or inline event handlers', () => {
+      const unsafeItem: HistoryItem = {
+        ...mockHistoryItem,
+        analysis: {
+          ...mockHistoryItem.analysis!,
+          dynamicHtml: `<!doctype html>
+<html onload="run()">
+  <head>
+    <style>h1 { color: red; }</style>
+    <script src="https://example.com/report.js"></script>
+  </head>
+  <body>
+    <h1 onclick="run()">Dashboard</h1>
+    <a href="https://example.com/leak">External</a>
+    <img src="data:image/png;base64,AA==" onerror="run()">
+    <form action="https://example.com/leak"><input name="report"></form>
+    <iframe src="https://example.com/leak"></iframe>
+    <script>globalThis.reportExecuted = true;</script>
+  </body>
+</html>`,
+        },
+      };
+
+      exportAnalysisAsHTML(unsafeItem);
+
+      const blob = mockUrlCreate.mock.calls[0][0] as unknown as { content: string[] };
+      const html = blob.content[0];
+      expect(html).toContain('<style>h1 { color: red; }</style>');
+      expect(html).toContain('<h1>Dashboard</h1>');
+      expect(html).not.toMatch(/<script[\s>]/i);
+      expect(html).not.toMatch(/\son[a-z]+\s*=/i);
+      expect(html).not.toMatch(/<form[\s>]/i);
+      expect(html).not.toMatch(/<iframe[\s>]/i);
+      expect(html).not.toContain('href="https://example.com/leak"');
+      expect(html).toMatch(
+        /^<!doctype html>\n<html[^>]*><head><meta http-equiv="Content-Security-Policy"/,
+      );
+      expect(html).toContain("default-src 'none'");
+      expect(html).toContain("script-src 'none'");
+      expect(html).toContain("connect-src 'none'");
+      expect(html).toContain("form-action 'none'");
+      expect(html).toContain("frame-src 'none'");
+      expect(html).toContain("object-src 'none'");
+    });
+
+    it('should throw error if no dynamicHtml available', () => {
       const noHtmlItem = {
         ...mockHistoryItem,
         analysis: { ...mockHistoryItem.analysis!, dynamicHtml: undefined },

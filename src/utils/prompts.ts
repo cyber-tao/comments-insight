@@ -145,7 +145,7 @@ export function buildAnalysisPrompt(
  * Default dynamic HTML report prompt template
  */
 export const DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE = `You are an expert UI/UX designer and frontend web engineer.
-Generate a modern, highly interactive, visually stunning, and responsive standalone single-page HTML report based on the provided comment analysis data.
+Generate a modern, visually rich, and responsive standalone single-page HTML report based on the provided comment analysis data.
 
 ## Post & Analysis Information:
 - **Title**: {title}
@@ -162,29 +162,30 @@ Generate a modern, highly interactive, visually stunning, and responsive standal
 {top_comments_data}
 
 ## Page Design & Feature Requirements:
-1. **Self-Contained Single File**:
+1. **Self-Contained Static File**:
    - Output valid HTML5 starting with <!DOCTYPE html> and ending with </html>.
-   - Include all styling in a <style> block and all interactivity in a <script> block.
-   - Do NOT load external JS/CSS dependencies from CDNs so it works completely offline and in a sandboxed iframe.
+   - Include all styling in a <style> block.
+   - Do NOT include <script>, inline event handlers, forms, frames, external resources, or network-dependent content.
+   - The report must work completely offline in a sandboxed iframe.
 
 2. **Dashboard Layout & Direct Section Visibility**:
    - The page MUST be laid out as a rich, full vertical dashboard where ALL 5 sections (#overview, #sentiment, #comments, #insights, #recommendations) are visible and fully populated with real synthesized text and data by default (do NOT hide sections behind unselected tabs or leave them empty).
    - Top sticky navigation bar provides smooth jump links (\`href="#overview"\`, \`href="#sentiment"\`, \`href="#comments"\`, \`href="#insights"\`, \`href="#recommendations"\`).
    - Every section MUST be thoroughly populated with real content extracted from the Analysis Report and Comments data:
      - \`<section id="overview">\`: Key metrics cards (total comments, overall sentiment %, engagement, core topics) and executive summary text.
-     - \`<section id="sentiment">\`: Interactive SVG or Canvas donut/bar chart with percentage breakdown, legend, and hover tooltips.
-     - \`<section id="comments">\`: MUST pre-render HTML comment cards for each top comment in {top_comments_data} directly into the DOM. Include author name, likes badge, sentiment label, and comment body. Provide a working search input (\`<input type="text" id="comment-search" placeholder="...">\`) and sentiment filter pills (All / Positive / Negative / Neutral) that filter visible comment cards in real time.
+     - \`<section id="sentiment">\`: Static SVG or CSS donut/bar chart with percentage breakdown and legend.
+     - \`<section id="comments">\`: MUST pre-render HTML comment cards for each top comment in {top_comments_data} directly into the DOM. Include author name, likes badge, sentiment label, and comment body, grouped by sentiment where useful.
      - \`<section id="insights">\`: Thematic breakdown cards, positive highlights, user pain points, and perspective analysis.
      - \`<section id="recommendations">\`: Actionable takeaways and strategic advice.
 
 3. **Link & Navigation Rules**:
    - In-page navigation links MUST use \`href="#overview"\`, \`href="#sentiment"\`, \`href="#comments"\`, \`href="#insights"\`, \`href="#recommendations"\` and include \`html { scroll-behavior: smooth; }\`.
    - NEVER generate \`chrome-extension://\` or internal extension URLs. All data and comments MUST be embedded and viewable directly within this standalone HTML page.
-   - External links (like original post URL or author link) MUST have \`target="_blank" rel="noopener noreferrer"\`.
+   - Do not create external links. Render source URLs as plain text.
 
 4. **Visual & Aesthetic Excellence**:
    - Modern, sleek dashboard (dark/light clean aesthetic, smooth gradients, subtle card shadows/glassmorphism, clean typography, responsive flex/grid).
-   - Interactive micro-animations, hover effects on cards and charts, active state on filter buttons.
+   - CSS-only micro-animations and hover effects on cards and charts.
 
 5. **Language Requirement**:
    - You MUST write all UI texts, labels, summaries, and descriptions in {language_name}.

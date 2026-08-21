@@ -438,7 +438,7 @@ export class CommentAnalyzer {
     const response = await this.aiService.callAI({
       prompt,
       systemPrompt:
-        'You are an expert web developer and UI designer. Output ONLY valid, standalone, self-contained HTML5 code without markdown fences.',
+        'You are an expert web developer and UI designer. Output ONLY valid, standalone, self-contained static HTML5 without scripts, event handlers, forms, frames, external resources, or markdown fences.',
       config,
       signal,
       timeout,
