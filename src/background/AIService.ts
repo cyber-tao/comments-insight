@@ -13,6 +13,7 @@ import {
 import type { SettingsStore } from './storage/SettingsStore';
 import type { LogStore } from './storage/LogStore';
 import type { TokenStatsStore } from './storage/TokenStatsStore';
+import { buildAiChatCompletionsUrl, parseAllowedAiApiUrl } from '@/utils/url';
 
 import { AIErrorHandler } from './ai/AIErrorHandler';
 import { DataNormalizer } from './ai/DataNormalizer';
@@ -117,9 +118,13 @@ export class AIService {
         hasModel: !!config.model,
       });
     }
-    let apiUrl = config.apiUrl.trim();
-    if (!apiUrl.endsWith(API_CONST.ENDPOINTS.CHAT_COMPLETIONS)) {
-      apiUrl = apiUrl.replace(/\/$/, '') + API_CONST.ENDPOINTS.CHAT_COMPLETIONS;
+    const apiUrl = buildAiChatCompletionsUrl(config.apiUrl);
+    if (!apiUrl) {
+      throw createAIError(
+        ErrorCode.INVALID_API_URL,
+        'AI API URL must use HTTPS, except for loopback development endpoints',
+        { apiUrl: config.apiUrl },
+      );
     }
     return apiUrl;
   }
@@ -445,21 +450,21 @@ export class AIService {
       return [];
     }
 
-    let baseUrl: string;
-    try {
-      // Validate the URL up-front so we never issue a request to a malformed
-      // origin and never block on DNS for arbitrary user input.
-      const parsed = new URL(trimmedUrl);
-      baseUrl = parsed.toString().replace(/\/$/, '');
-      baseUrl = baseUrl.replace(new RegExp(API_CONST.ENDPOINTS.CHAT_COMPLETIONS + '$'), '');
-    } catch (urlError) {
-      Logger.warn('[AIService] Invalid API URL for models lookup', {
-        error: urlError instanceof Error ? urlError.message : String(urlError),
-      });
+    // Validate the URL up-front so we never issue a request to a malformed
+    // origin and never block on DNS for arbitrary user input.
+    const parsedUrl = parseAllowedAiApiUrl(trimmedUrl);
+    if (!parsedUrl) {
+      Logger.warn('[AIService] Invalid or insecure API URL for models lookup');
       return [];
     }
 
-    const modelsUrl = baseUrl + API_CONST.ENDPOINTS.MODELS;
+    let pathname = parsedUrl.pathname.replace(/\/$/, '');
+    if (pathname.endsWith(API_CONST.ENDPOINTS.CHAT_COMPLETIONS)) {
+      pathname = pathname.slice(0, -API_CONST.ENDPOINTS.CHAT_COMPLETIONS.length);
+    }
+    parsedUrl.pathname = `${pathname}${API_CONST.ENDPOINTS.MODELS}`;
+    parsedUrl.hash = '';
+    const modelsUrl = parsedUrl.toString();
     Logger.info('[AIService] Fetching available models', { url: modelsUrl });
 
     const headers: Record<string, string> = {};

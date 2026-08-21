@@ -275,6 +275,37 @@ describe('AIService', () => {
       );
     });
 
+    it('should reject insecure remote API URLs before sending credentials', async () => {
+      const config = mockAIConfig({
+        apiUrl: 'http://api.example.com/v1',
+        apiKey: 'must-not-leak',
+      });
+
+      await expect(aiService.callAI({ prompt: 'Test', config })).rejects.toMatchObject({
+        code: ErrorCode.INVALID_API_URL,
+      });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('should allow HTTP for loopback model endpoints', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: 'Local response' }, finish_reason: 'stop' }],
+        }),
+      });
+      const config = mockAIConfig({ apiUrl: 'http://127.0.0.1:11434/v1' });
+
+      const promise = aiService.callAI({ prompt: 'Test', config });
+      await vi.runAllTimersAsync();
+      await promise;
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://127.0.0.1:11434/v1/chat/completions',
+        expect.anything(),
+      );
+    });
+
     it('should handle rate limit errors (429)', async () => {
       mockFetch.mockResolvedValue({
         ok: false,

@@ -28,6 +28,8 @@ lerna-debug.log*
 .env
 .env.local
 .env.*.local
+secrets/
+*.settings.local.json
 
 # Temporary files
 *.tmp

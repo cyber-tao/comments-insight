@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HistoryStore } from '../src/background/storage/HistoryStore';
 import { SettingsStore } from '../src/background/storage/SettingsStore';
 import type { EncryptionService } from '../src/background/storage/EncryptionService';
+import type { AIConfig } from '../src/types';
 import { STORAGE } from '../src/config/constants';
 import {
   sanitizePersistedTaskState,
@@ -290,6 +291,92 @@ describe('SettingsStore decryption resilience', () => {
     const savedPayload = importCalls[importCalls.length - 1]?.[0] as Record<string, unknown>;
     const savedSettings = savedPayload?.[STORAGE.SETTINGS_KEY] as { aiModel: { apiKey: string } };
     expect(savedSettings.aiModel.apiKey).toBe('enc:sk-plaintext-secret');
+  });
+
+  it('clears the existing API key when an import changes the endpoint', async () => {
+    mockStorageGet.mockResolvedValue({
+      [STORAGE.SETTINGS_KEY]: {
+        aiModel: {
+          apiUrl: 'https://provider-a.example/v1',
+          apiKey: 'enc:secret-a',
+          model: 'model-a',
+        },
+      },
+    });
+    const encryption = createEncryptionServiceMock({
+      decrypt: vi.fn().mockResolvedValue('sk-provider-a'),
+    });
+    const store = new SettingsStore(encryption);
+
+    await store.importSettings(
+      JSON.stringify({
+        aiModel: {
+          apiUrl: 'https://provider-b.example/v1',
+          model: 'model-b',
+        },
+      }),
+    );
+
+    const savedPayload = mockStorageSet.mock.calls[
+      mockStorageSet.mock.calls.length - 1
+    ]?.[0] as Record<string, unknown>;
+    const savedSettings = savedPayload[STORAGE.SETTINGS_KEY] as { aiModel: AIConfig };
+    expect(savedSettings.aiModel.apiUrl).toBe('https://provider-b.example/v1');
+    expect(savedSettings.aiModel.apiKey).toBe('');
+  });
+
+  it('round-trips exported settings before an AI provider is configured', async () => {
+    mockStorageGet.mockResolvedValue({
+      [STORAGE.SETTINGS_KEY]: {
+        aiModel: {
+          apiUrl: '',
+          apiKey: '',
+          model: '',
+        },
+      },
+    });
+    const store = new SettingsStore(createEncryptionServiceMock());
+
+    const exported = await store.exportSettings();
+
+    await expect(store.importSettings(exported)).resolves.toBeUndefined();
+  });
+
+  it('rejects saving remote HTTP AI endpoints', async () => {
+    mockStorageGet.mockResolvedValue({});
+    const store = new SettingsStore(createEncryptionServiceMock());
+
+    await expect(
+      store.saveSettings({
+        aiModel: {
+          apiUrl: 'http://provider.example/v1',
+          apiKey: '',
+          model: 'model',
+          contextWindowSize: 128_000,
+          temperature: 1,
+          topP: 1,
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('rejects imported remote HTTP AI endpoints', async () => {
+    mockStorageGet.mockResolvedValue({
+      [STORAGE.SETTINGS_KEY]: {
+        aiModel: {
+          apiUrl: 'https://provider.example/v1',
+          apiKey: 'enc:secret',
+          model: 'model',
+        },
+      },
+    });
+    const store = new SettingsStore(createEncryptionServiceMock());
+
+    await expect(
+      store.importSettings(
+        JSON.stringify({ aiModel: { apiUrl: 'http://provider.example/v1', model: 'model' } }),
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
   it('creates secret and salt in a single atomic storage write', async () => {

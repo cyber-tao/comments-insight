@@ -1,4 +1,4 @@
-import { HOST, REGEX } from '@/config/constants';
+import { API, HOST, REGEX } from '@/config/constants';
 
 export interface ParsedUrl {
   hostname: string;
@@ -91,4 +91,61 @@ export function getCurrentHostname(): string {
     return window.location.hostname;
   }
   return '';
+}
+
+export function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  return (
+    normalized === 'localhost' ||
+    normalized.endsWith('.localhost') ||
+    normalized === '::1' ||
+    /^127(?:\.\d{1,3}){3}$/.test(normalized)
+  );
+}
+
+export function parseAllowedAiApiUrl(value: string): URL | null {
+  try {
+    const parsed = new URL(value.trim());
+    if (
+      (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') ||
+      parsed.username ||
+      parsed.password ||
+      (parsed.protocol === 'http:' && !isLoopbackHostname(parsed.hostname))
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function normalizeAiApiUrl(value: string): string | null {
+  const parsed = parseAllowedAiApiUrl(value);
+  if (!parsed) {
+    return null;
+  }
+
+  let pathname = parsed.pathname.replace(/\/+$/, '');
+  if (pathname.endsWith(API.ENDPOINTS.CHAT_COMPLETIONS)) {
+    pathname = pathname.slice(0, -API.ENDPOINTS.CHAT_COMPLETIONS.length);
+  }
+  parsed.pathname = pathname || '/';
+  parsed.hash = '';
+  parsed.searchParams.sort();
+  return parsed.toString();
+}
+
+export function buildAiChatCompletionsUrl(value: string): string | null {
+  const parsed = parseAllowedAiApiUrl(value);
+  if (!parsed) {
+    return null;
+  }
+
+  const pathname = parsed.pathname.replace(/\/+$/, '');
+  if (!pathname.endsWith(API.ENDPOINTS.CHAT_COMPLETIONS)) {
+    parsed.pathname = `${pathname}${API.ENDPOINTS.CHAT_COMPLETIONS}`;
+  }
+  parsed.hash = '';
+  return parsed.toString();
 }

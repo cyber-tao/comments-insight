@@ -11,7 +11,7 @@ const mockCreateElement = vi.fn(() => ({
   click: mockClick,
 }));
 
-const mockUrlCreate = vi.fn(() => 'blob:url');
+const mockUrlCreate = vi.fn((_blob: Blob) => 'blob:url');
 const mockUrlRevoke = vi.fn();
 
 vi.stubGlobal('document', {
@@ -80,6 +80,22 @@ describe('Export Utils', () => {
       const link = mockCreateElement.mock.results[0].value;
       expect(link.download).not.toContain('/');
       expect(link.download).not.toContain(':');
+    });
+
+    it('should neutralize spreadsheet formulas in untrusted text cells', () => {
+      exportCommentsAsCSV([
+        {
+          ...mockComments[0],
+          username: '=HYPERLINK("https://example.com")',
+          content: '  +SUM(1,1)',
+          replies: [],
+        },
+      ]);
+
+      const blob = mockUrlCreate.mock.calls[0][0] as unknown as { content: string[] };
+      const csv = blob.content[0];
+      expect(csv).toContain("'=HYPERLINK");
+      expect(csv).toContain("'  +SUM");
     });
   });
 

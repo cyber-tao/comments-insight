@@ -75,6 +75,11 @@ function sanitizeFilename(filename: string): string {
     .substring(0, EXPORT_DEFAULTS.FILENAME_MAX_LENGTH);
 }
 
+function escapeCsvText(value: string): string {
+  const neutralized = /^[\s]*[=+\-@]/.test(value) ? `'${value}` : value;
+  return `"${neutralized.replace(/"/g, '""').replace(/\n/g, ' ').replace(/\r/g, '')}"`;
+}
+
 const formatDateTime = formatDateTimeFromTimestamp;
 
 /**
@@ -97,10 +102,10 @@ export function exportCommentsAsCSV(comments: Comment[], title?: string, filenam
   ];
   const rows = flatComments.map((comment) => [
     comment.depth.toString(),
-    `"${comment.username.replace(/"/g, '""')}"`,
-    `"${formatCommentTimestamp(comment.timestamp)}"`,
+    escapeCsvText(comment.username),
+    escapeCsvText(formatCommentTimestamp(comment.timestamp)),
     comment.likes.toString(),
-    `"${comment.content.replace(/"/g, '""').replace(/\n/g, ' ').replace(/\r/g, '')}"`,
+    escapeCsvText(comment.content),
     comment.replies.length.toString(),
   ]);
 

@@ -18,6 +18,7 @@ import { ErrorHandler, ExtensionError, ErrorCode } from '@/utils/errors';
 import type { EncryptionService } from './EncryptionService';
 import { Mutex } from '@/utils/promise';
 import { sanitizeStoredSettings, settingsPatchSchema } from '@/utils/storage-validation';
+import { normalizeAiApiUrl } from '@/utils/url';
 
 export const DEFAULT_SETTINGS: Settings = {
   maxComments: EXTRACTION_DEFAULTS.MAX_COMMENTS,
@@ -249,6 +250,15 @@ export class SettingsStore {
       };
 
       updatedSettings.aiModel = this.normalizeAIModel(updatedSettings);
+      if (
+        updatedSettings.aiModel.apiUrl.trim().length > 0 &&
+        !normalizeAiApiUrl(updatedSettings.aiModel.apiUrl)
+      ) {
+        throw new ExtensionError(
+          ErrorCode.VALIDATION_ERROR,
+          'AI API URL must use HTTPS, except for loopback development endpoints',
+        );
+      }
 
       if (
         typeof updatedSettings.aiModel.apiKey === 'string' &&
@@ -346,20 +356,40 @@ export class SettingsStore {
         // Reuse the same zod-driven sanitizer that protects stored settings, so
         // imported payloads cannot inject unknown fields or bypass type checks.
         const sanitized = sanitizeStoredSettings(parsed);
-        if (!sanitized.aiModel?.apiUrl || !sanitized.aiModel?.model) {
-          throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Invalid settings format');
-        }
-
         const currentSettings = await this.getSettings();
         const {
           crawlingConfigs: _crawlingConfigs,
           selectorCache: _selectorCache,
           ...rest
         } = sanitized;
+        const importedModel = rest.aiModel;
+        const importedApiUrl = importedModel?.apiUrl;
+        const currentEndpoint = normalizeAiApiUrl(currentSettings.aiModel.apiUrl);
+        const importedEndpoint =
+          typeof importedApiUrl === 'string' && importedApiUrl.trim().length > 0
+            ? normalizeAiApiUrl(importedApiUrl)
+            : null;
+        if (typeof importedApiUrl === 'string' && importedApiUrl.trim() && !importedEndpoint) {
+          throw new ExtensionError(
+            ErrorCode.VALIDATION_ERROR,
+            'AI API URL must use HTTPS, except for loopback development endpoints',
+          );
+        }
+        const endpointChanged =
+          typeof importedApiUrl === 'string' && importedEndpoint !== currentEndpoint;
+        const hasImportedApiKey =
+          importedModel !== undefined &&
+          Object.prototype.hasOwnProperty.call(importedModel, 'apiKey');
+        const apiKey =
+          endpointChanged && !hasImportedApiKey
+            ? ''
+            : hasImportedApiKey
+              ? importedModel.apiKey
+              : currentSettings.aiModel.apiKey;
         const merged: Settings = {
           ...currentSettings,
           ...rest,
-          aiModel: { ...currentSettings.aiModel, ...rest.aiModel } as AIConfig,
+          aiModel: { ...currentSettings.aiModel, ...importedModel, apiKey } as AIConfig,
           crawlingConfigs: currentSettings.crawlingConfigs,
           selectorCache: currentSettings.selectorCache,
         };

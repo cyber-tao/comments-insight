@@ -88,7 +88,7 @@ async function findBackgroundTarget(browser) {
   return null;
 }
 
-async function injectSettings(backgroundTarget, settings) {
+async function injectSettings(browser, backgroundTarget, settings) {
   const worker = await backgroundTarget.worker();
   if (!worker) {
     throw new Error('Failed to access extension service worker');
@@ -101,20 +101,25 @@ async function injectSettings(backgroundTarget, settings) {
     crawlingConfigs: [],
     selectorCache: [],
   };
+  const extensionId = new URL(backgroundTarget.url()).host;
+  const settingsPage = await browser.newPage();
 
-  await worker.evaluate((data) => {
-    return new Promise((resolve, reject) => {
-      console.log('[Worker] Injecting minimal settings:', data.aiModel);
-      chrome.storage.local.set({ settings: data }, () => {
-        if (chrome.runtime.lastError) {
-          reject(chrome.runtime.lastError);
-          return;
-        }
-        console.log('[Worker] Minimal settings saved.');
-        resolve(undefined);
-      });
+  try {
+    await settingsPage.goto(`chrome-extension://${extensionId}/src/options/index.html`, {
+      waitUntil: 'domcontentloaded',
     });
-  }, minimalSettings);
+    await settingsPage.evaluate(async (data) => {
+      const response = await chrome.runtime.sendMessage({
+        type: 'SAVE_SETTINGS',
+        payload: { settings: data },
+      });
+      if (!response?.success) {
+        throw new Error(response?.error || 'Failed to save test settings');
+      }
+    }, minimalSettings);
+  } finally {
+    await settingsPage.close();
+  }
 }
 
 function createTestResultPromise(page) {
@@ -189,7 +194,7 @@ async function runTest() {
 
     if (backgroundTarget) {
       if (settings) {
-        await injectSettings(backgroundTarget, settings);
+        await injectSettings(browser, backgroundTarget, settings);
       } else {
         console.log(`${settingsPathEnv} is not set; using existing extension settings.`);
       }
