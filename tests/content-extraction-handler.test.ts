@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleStartExtraction } from '../src/content/handlers/extraction';
+import { handleStartConfigGeneration } from '../src/content/handlers/config-generation';
 import { resetExtractionState } from '../src/content/extractionState';
 import { MESSAGES } from '../src/config/constants';
 import type { Comment } from '../src/types';
 
 const sendMessageMock = vi.fn().mockResolvedValue(undefined);
+const { generateConfigMock, cleanupMock } = vi.hoisted(() => ({
+  generateConfigMock: vi.fn(),
+  cleanupMock: vi.fn(),
+}));
 
 vi.stubGlobal('chrome', {
   runtime: {
@@ -18,6 +23,13 @@ vi.mock('../src/content/handlers/tools', () => ({
 
 vi.mock('../src/content/handlers/dom', () => ({
   getPostInfo: vi.fn().mockResolvedValue({ url: 'https://example.com', title: 'Example' }),
+}));
+
+vi.mock('../src/content/strategies/AIStrategy', () => ({
+  AIStrategy: class {
+    generateConfig = generateConfigMock;
+    cleanup = cleanupMock;
+  },
 }));
 
 vi.mock('../src/utils/logger', () => ({
@@ -125,6 +137,23 @@ describe('content extraction handler', () => {
         error: 'Extraction superseded by a newer task',
       }),
     });
+  });
+
+  it('reports config generation failure when no valid config is produced', async () => {
+    generateConfigMock.mockResolvedValue(false);
+    (getTools as ReturnType<typeof vi.fn>).mockReturnValue({ domAnalyzer: {} });
+
+    await handleStartConfigGeneration({ taskId: 'config-fail' }, vi.fn());
+
+    expect(sendMessageMock).toHaveBeenCalledWith({
+      type: MESSAGES.CONFIG_GENERATION_COMPLETED,
+      payload: {
+        taskId: 'config-fail',
+        success: false,
+        error: 'No valid crawling configuration was generated',
+      },
+    });
+    expect(cleanupMock).toHaveBeenCalledOnce();
   });
 
   it('forwards extraction progress for the active task only', async () => {

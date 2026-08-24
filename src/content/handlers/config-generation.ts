@@ -6,6 +6,7 @@ import { AIStrategy } from '../strategies/AIStrategy';
 import { ConfigGenerationResponse } from '@/types/messages';
 import { getTools } from './tools';
 import { sendCancelledCompletion } from './extraction';
+import { ErrorCode, ExtensionError } from '@/utils/error-types';
 
 export async function handleStartConfigGeneration(
   data: { taskId: string },
@@ -31,7 +32,7 @@ export async function handleStartConfigGeneration(
     const strategy = new AIStrategy(localPageController);
 
     try {
-      await strategy.generateConfig((progress: number, message: string) => {
+      const generated = await strategy.generateConfig((progress: number, message: string) => {
         if (!globalExtractionState.isCurrentTask(taskId, controller)) {
           return;
         }
@@ -40,6 +41,12 @@ export async function handleStartConfigGeneration(
           payload: { taskId, progress, message },
         });
       }, controller.signal);
+      if (!generated) {
+        throw new ExtensionError(
+          ErrorCode.DOM_ANALYSIS_FAILED,
+          'No valid crawling configuration was generated',
+        );
+      }
 
       if (!globalExtractionState.isCurrentTask(taskId, controller)) {
         Logger.info('[Content] Config generation cancelled');

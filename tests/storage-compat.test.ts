@@ -360,6 +360,25 @@ describe('SettingsStore decryption resilience', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
+  it('rejects AI token budgets that exceed the configured context window', async () => {
+    mockStorageGet.mockResolvedValue({});
+    const store = new SettingsStore(createEncryptionServiceMock());
+
+    await expect(
+      store.saveSettings({
+        aiModel: {
+          apiUrl: 'https://provider.example/v1',
+          apiKey: '',
+          model: 'model',
+          contextWindowSize: 4096,
+          maxOutputTokens: 3000,
+          temperature: 1,
+          topP: 1,
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
   it('rejects imported remote HTTP AI endpoints', async () => {
     mockStorageGet.mockResolvedValue({
       [STORAGE.SETTINGS_KEY]: {

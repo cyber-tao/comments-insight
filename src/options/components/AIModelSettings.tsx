@@ -39,6 +39,10 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
     Number.isFinite(settings.aiModel.maxOutputTokens)
       ? settings.aiModel.maxOutputTokens
       : AI.DEFAULT_MAX_OUTPUT_TOKENS;
+  const maxAllowedOutputTokens = Math.max(
+    AI.MIN_OUTPUT_TOKENS,
+    settings.aiModel.contextWindowSize - AI.INPUT_TOKEN_BUFFER - AI.MIN_AVAILABLE_TOKENS,
+  );
 
   const handleFetchModels = async () => {
     const config = settings.aiModel;
@@ -213,16 +217,21 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 if (contextWindowSize === null) {
                   return;
                 }
+                const maxAllowed = Math.max(
+                  AI.MIN_OUTPUT_TOKENS,
+                  contextWindowSize - AI.INPUT_TOKEN_BUFFER - AI.MIN_AVAILABLE_TOKENS,
+                );
                 onSettingsChange({
                   ...settings,
                   aiModel: {
                     ...settings.aiModel,
                     contextWindowSize,
+                    maxOutputTokens: Math.min(maxOutputTokens, maxAllowed),
                   },
                 });
               }}
               className="w-full theme-input"
-              min="1"
+              min={AI.MIN_CONTEXT_WINDOW}
             />
           </div>
           <div>
@@ -244,12 +253,13 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   ...settings,
                   aiModel: {
                     ...settings.aiModel,
-                    maxOutputTokens: parsedMaxOutputTokens,
+                    maxOutputTokens: Math.min(parsedMaxOutputTokens, maxAllowedOutputTokens),
                   },
                 });
               }}
               className="w-full theme-input"
-              min="1"
+              min={AI.MIN_OUTPUT_TOKENS}
+              max={maxAllowedOutputTokens}
             />
           </div>
         </div>

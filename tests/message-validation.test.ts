@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { validateMessagePayload } from '../src/utils/message-validation';
 import { Message } from '../src/types';
-import { ANALYSIS_FORMAT } from '../src/config/constants';
+import { ANALYSIS_FORMAT, TIMEOUT, UI_LIMITS } from '../src/config/constants';
 
 function makeStartAnalysisMessage(comments: unknown[]): Message {
   return {
@@ -66,5 +66,44 @@ describe('validateMessagePayload START_ANALYSIS comments', () => {
     const message = makeStartAnalysisMessage([{ username: 'u', content: 'c' }]);
 
     expect(() => validateMessagePayload(message)).toThrowError(/START_ANALYSIS/);
+  });
+});
+
+describe('validateMessagePayload SAVE_SETTINGS limits', () => {
+  const makeMessage = (settings: Record<string, unknown>): Message =>
+    ({ type: 'SAVE_SETTINGS', payload: { settings } }) as unknown as Message;
+
+  it('rejects numeric settings outside supported ranges', () => {
+    expect(() =>
+      validateMessagePayload(makeMessage({ maxComments: UI_LIMITS.MAX_COMMENTS_MIN - 1 })),
+    ).toThrowError(/SAVE_SETTINGS/);
+    expect(() =>
+      validateMessagePayload(
+        makeMessage({ aiTimeout: TIMEOUT.MIN_AI_SECONDS * TIMEOUT.MS_PER_SEC - 1 }),
+      ),
+    ).toThrowError(/SAVE_SETTINGS/);
+    expect(() =>
+      validateMessagePayload(
+        makeMessage({ domAnalysisConfig: { maxDepth: UI_LIMITS.MAX_DEPTH_MAX + 1 } }),
+      ),
+    ).toThrowError(/SAVE_SETTINGS/);
+    expect(() =>
+      validateMessagePayload(
+        makeMessage({ aiModel: { temperature: UI_LIMITS.TEMPERATURE_MAX + 0.1 } }),
+      ),
+    ).toThrowError(/SAVE_SETTINGS/);
+  });
+
+  it('accepts values on supported boundaries', () => {
+    expect(() =>
+      validateMessagePayload(
+        makeMessage({
+          maxComments: UI_LIMITS.MAX_COMMENTS_MAX,
+          aiTimeout: TIMEOUT.MAX_AI_SECONDS * TIMEOUT.MS_PER_SEC,
+          domAnalysisConfig: { maxDepth: UI_LIMITS.MAX_DEPTH_MAX },
+          aiModel: { topP: UI_LIMITS.TOP_P_MAX },
+        }),
+      ),
+    ).not.toThrow();
   });
 });

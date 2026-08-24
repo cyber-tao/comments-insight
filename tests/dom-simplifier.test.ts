@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DOMSimplifier } from '@/content/DOMSimplifier';
+import { Chunker } from '@/content/utils/Chunker';
 import { querySelectorDeep } from '@/utils/dom-query';
+import { Tokenizer } from '@/utils/tokenizer';
+import type { SimplifiedNode } from '@/types';
 
 // Mock the logger to avoid console output during tests
 vi.mock('@/utils/logger', () => ({
@@ -513,5 +516,47 @@ describe('DOMSimplifier', () => {
 
       expect(str).toContain('childCount="2"');
     });
+  });
+});
+
+describe('Chunker', () => {
+  const createNode = (overrides: Partial<SimplifiedNode> = {}): SimplifiedNode => ({
+    tag: 'div',
+    childCount: 0,
+    expanded: true,
+    selector: '',
+    depth: 0,
+    ...overrides,
+  });
+
+  it('recursively splits an oversized single subtree within the token budget', () => {
+    const largeSection = createNode({
+      selector: '#comments',
+      childCount: 12,
+      children: Array.from({ length: 12 }, (_, index) =>
+        createNode({
+          tag: 'article',
+          selector: `.comment-${index}`,
+          text: `评论内容${index}`.repeat(20),
+          depth: 1,
+        }),
+      ),
+    });
+    const root = createNode({ childCount: 1, children: [largeSection] });
+
+    const chunks = Chunker.chunkSimplifiedNode(root, 40);
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => Tokenizer.estimateTokens(chunk) <= 40)).toBe(true);
+  });
+
+  it('splits an oversized leaf without returning an over-budget chunk', () => {
+    const leaf = createNode({ text: '汉'.repeat(1000) });
+
+    const chunks = Chunker.chunkSimplifiedNode(leaf, 25);
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.every((chunk) => Tokenizer.estimateTokens(chunk) <= 25)).toBe(true);
+    expect(chunks.join('')).toContain('汉'.repeat(100));
   });
 });

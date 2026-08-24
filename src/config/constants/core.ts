@@ -3,6 +3,7 @@ export const RETRY = {
   MAX_DELAY_MS: 10000,
   MAX_ATTEMPTS: 3,
   SELECTOR_ATTEMPTS: 3,
+  SELECTOR_MAX_ATTEMPTS: 10,
 };
 
 /**

@@ -1,6 +1,7 @@
 import { SimplifiedNode } from '../../types';
 import { DOMSimplifier } from '../DOMSimplifier';
-import { AI, TOKENIZER } from '@/config/constants';
+import { AI } from '@/config/constants';
+import { Tokenizer } from '@/utils/tokenizer';
 
 export class Chunker {
   /**
@@ -17,46 +18,77 @@ export class Chunker {
     maxTokens: number = AI.DEFAULT_CONTEXT_WINDOW,
   ): string[] {
     const simplifier = new DOMSimplifier();
+    const tokenLimit = Math.max(1, Math.floor(maxTokens));
+    const serialized = simplifier.nodeToString(rootNode);
+    if (Tokenizer.estimateTokens(serialized) <= tokenLimit) {
+      return [serialized];
+    }
+
     if (!rootNode.children || rootNode.children.length === 0) {
-      // If no children or not expanded, return the whole thing (it's likely small or empty)
-      return [simplifier.nodeToString(rootNode)];
+      return this.splitTextByTokenBudget(serialized, tokenLimit);
+    }
+
+    const wrapperNode = { ...rootNode, children: [], childCount: 0, expanded: true };
+    const wrapper = simplifier.nodeToString(wrapperNode);
+    if (Tokenizer.estimateTokens(wrapper) >= tokenLimit) {
+      return this.splitTextByTokenBudget(serialized, tokenLimit);
     }
 
     const chunks: string[] = [];
     let currentBatch: SimplifiedNode[] = [];
-    let currentSize = 0;
 
-    const maxChars = maxTokens * TOKENIZER.CHARS_PER_TOKEN;
-
-    // Calculate wrapper overhead (open tag + close tag)
-    // We create a temporary node without children to measure overhead
-    const wrapperNode = { ...rootNode, children: [], childCount: 0, expanded: true };
-    const wrapperStr = simplifier.nodeToString(wrapperNode);
-    // Rough overhead: wrapper string length (which includes <div...></div>)
-    // We will inject children inside.
-    const wrapperOverhead = wrapperStr.length;
+    const flushCurrentBatch = (): void => {
+      if (currentBatch.length === 0) {
+        return;
+      }
+      chunks.push(this.createChunkString(wrapperNode, currentBatch, simplifier));
+      currentBatch = [];
+    };
 
     for (const child of rootNode.children) {
-      const childStr = simplifier.nodeToString(child);
-      const childSize = childStr.length;
-
-      if (currentSize + childSize + wrapperOverhead > maxChars && currentBatch.length > 0) {
-        // Flush current batch
-        chunks.push(this.createChunkString(wrapperNode, currentBatch, simplifier));
-        currentBatch = [];
-        currentSize = 0;
+      const candidate = this.createChunkString(wrapperNode, [...currentBatch, child], simplifier);
+      if (Tokenizer.estimateTokens(candidate) <= tokenLimit) {
+        currentBatch.push(child);
+        continue;
       }
 
-      currentBatch.push(child);
-      currentSize += childSize;
+      flushCurrentBatch();
+      const singleChildChunk = this.createChunkString(wrapperNode, [child], simplifier);
+      if (Tokenizer.estimateTokens(singleChildChunk) <= tokenLimit) {
+        currentBatch.push(child);
+      } else {
+        chunks.push(...this.chunkSimplifiedNode(child, tokenLimit));
+      }
     }
 
-    // Flush remaining
-    if (currentBatch.length > 0) {
-      chunks.push(this.createChunkString(wrapperNode, currentBatch, simplifier));
+    flushCurrentBatch();
+    return chunks.length > 0 ? chunks : this.splitTextByTokenBudget(serialized, tokenLimit);
+  }
+
+  private static splitTextByTokenBudget(text: string, maxTokens: number): string[] {
+    const chunks: string[] = [];
+    let offset = 0;
+
+    while (offset < text.length) {
+      let low = offset + 1;
+      let high = text.length;
+      let bestEnd = low;
+
+      while (low <= high) {
+        const midpoint = Math.floor((low + high) / 2);
+        if (Tokenizer.estimateTokens(text.slice(offset, midpoint)) <= maxTokens) {
+          bestEnd = midpoint;
+          low = midpoint + 1;
+        } else {
+          high = midpoint - 1;
+        }
+      }
+
+      chunks.push(text.slice(offset, bestEnd));
+      offset = bestEnd;
     }
 
-    return chunks;
+    return chunks.length > 0 ? chunks : [''];
   }
 
   private static createChunkString(

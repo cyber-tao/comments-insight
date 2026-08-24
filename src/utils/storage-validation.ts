@@ -8,6 +8,7 @@ import type {
   Task,
 } from '@/types';
 import { Logger } from '@/utils/logger';
+import { AI, RETRY, TIMEOUT, UI_LIMITS } from '@/config/constants';
 
 export type StoredAiLogEntry = {
   type: 'extraction' | 'analysis';
@@ -24,6 +25,7 @@ type PersistedTaskStateShape = {
 };
 
 const finiteNumberSchema = z.number().finite();
+const positiveIntegerSchema = z.number().int().positive().finite();
 const nonEmptyStringSchema = z.string().trim().min(1);
 const selectorRuleSchema = z.object({
   selector: nonEmptyStringSchema,
@@ -75,15 +77,32 @@ export const aiConfigSchema = z.object({
   apiUrl: z.string(),
   apiKey: z.string(),
   model: z.string(),
-  contextWindowSize: finiteNumberSchema,
-  maxOutputTokens: finiteNumberSchema.optional(),
-  temperature: finiteNumberSchema,
-  topP: finiteNumberSchema,
+  contextWindowSize: positiveIntegerSchema.min(AI.MIN_CONTEXT_WINDOW),
+  maxOutputTokens: positiveIntegerSchema.min(AI.MIN_OUTPUT_TOKENS).optional(),
+  temperature: finiteNumberSchema.min(UI_LIMITS.TEMPERATURE_MIN).max(UI_LIMITS.TEMPERATURE_MAX),
+  topP: finiteNumberSchema.min(UI_LIMITS.TOP_P_MIN).max(UI_LIMITS.TOP_P_MAX),
+});
+export const completeAiConfigSchema = aiConfigSchema.superRefine((config, context) => {
+  const maxOutputTokens = config.maxOutputTokens ?? AI.DEFAULT_MAX_OUTPUT_TOKENS;
+  if (
+    maxOutputTokens + AI.INPUT_TOKEN_BUFFER + AI.MIN_AVAILABLE_TOKENS >
+    config.contextWindowSize
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['maxOutputTokens'],
+      message: 'The output and input reserves must fit within contextWindowSize',
+    });
+  }
 });
 export const domAnalysisConfigSchema = z.object({
-  initialDepth: finiteNumberSchema,
-  expandDepth: finiteNumberSchema,
-  maxDepth: finiteNumberSchema,
+  initialDepth: positiveIntegerSchema
+    .min(UI_LIMITS.INITIAL_DEPTH_MIN)
+    .max(UI_LIMITS.INITIAL_DEPTH_MAX),
+  expandDepth: positiveIntegerSchema
+    .min(UI_LIMITS.EXPAND_DEPTH_MIN)
+    .max(UI_LIMITS.EXPAND_DEPTH_MAX),
+  maxDepth: positiveIntegerSchema.min(UI_LIMITS.MAX_DEPTH_MIN).max(UI_LIMITS.MAX_DEPTH_MAX),
 });
 const taskProgressSchema = z.object({
   stage: z.enum([
@@ -136,9 +155,15 @@ const aiLogEntrySchema = z.object({
 
 export const settingsPatchSchema = z
   .object({
-    maxComments: finiteNumberSchema.optional(),
+    maxComments: positiveIntegerSchema
+      .min(UI_LIMITS.MAX_COMMENTS_MIN)
+      .max(UI_LIMITS.MAX_COMMENTS_MAX)
+      .optional(),
     aiModel: aiConfigSchema.partial().optional(),
-    aiTimeout: finiteNumberSchema.optional(),
+    aiTimeout: positiveIntegerSchema
+      .min(TIMEOUT.MIN_AI_SECONDS * TIMEOUT.MS_PER_SEC)
+      .max(TIMEOUT.MAX_AI_SECONDS * TIMEOUT.MS_PER_SEC)
+      .optional(),
     analyzerPromptTemplate: z.string().optional(),
     generateDynamicReport: z.boolean().optional(),
     dynamicReportPromptTemplate: z.string().optional(),
@@ -146,7 +171,7 @@ export const settingsPatchSchema = z
     theme: z.enum(['light', 'dark', 'system']).optional(),
     normalizeTimestamps: z.boolean().optional(),
     exportPostContentInMarkdown: z.boolean().optional(),
-    selectorRetryAttempts: finiteNumberSchema.optional(),
+    selectorRetryAttempts: positiveIntegerSchema.max(RETRY.SELECTOR_MAX_ATTEMPTS).optional(),
     selectorCache: z.array(selectorCacheSchema).optional(),
     crawlingConfigs: z.array(crawlingConfigSchema).optional(),
     domAnalysisConfig: domAnalysisConfigSchema.partial().optional(),
@@ -187,12 +212,18 @@ export function sanitizeStoredSettings(value: unknown): Partial<Settings> {
   const raw = value as Record<string, unknown>;
   const sanitized: Partial<Settings> = {};
 
-  const maxComments = finiteNumberSchema.safeParse(raw.maxComments);
+  const maxComments = positiveIntegerSchema
+    .min(UI_LIMITS.MAX_COMMENTS_MIN)
+    .max(UI_LIMITS.MAX_COMMENTS_MAX)
+    .safeParse(raw.maxComments);
   if (maxComments.success) {
     sanitized.maxComments = maxComments.data;
   }
 
-  const aiTimeout = finiteNumberSchema.safeParse(raw.aiTimeout);
+  const aiTimeout = positiveIntegerSchema
+    .min(TIMEOUT.MIN_AI_SECONDS * TIMEOUT.MS_PER_SEC)
+    .max(TIMEOUT.MAX_AI_SECONDS * TIMEOUT.MS_PER_SEC)
+    .safeParse(raw.aiTimeout);
   if (aiTimeout.success) {
     sanitized.aiTimeout = aiTimeout.data;
   }
@@ -226,7 +257,9 @@ export function sanitizeStoredSettings(value: unknown): Partial<Settings> {
     sanitized.exportPostContentInMarkdown = raw.exportPostContentInMarkdown;
   }
 
-  const selectorRetryAttempts = finiteNumberSchema.safeParse(raw.selectorRetryAttempts);
+  const selectorRetryAttempts = positiveIntegerSchema
+    .max(RETRY.SELECTOR_MAX_ATTEMPTS)
+    .safeParse(raw.selectorRetryAttempts);
   if (selectorRetryAttempts.success) {
     sanitized.selectorRetryAttempts = selectorRetryAttempts.data;
   }

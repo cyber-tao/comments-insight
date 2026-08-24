@@ -17,7 +17,11 @@ import { Logger } from '@/utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '@/utils/errors';
 import type { EncryptionService } from './EncryptionService';
 import { Mutex } from '@/utils/promise';
-import { sanitizeStoredSettings, settingsPatchSchema } from '@/utils/storage-validation';
+import {
+  completeAiConfigSchema,
+  sanitizeStoredSettings,
+  settingsPatchSchema,
+} from '@/utils/storage-validation';
 import { normalizeAiApiUrl } from '@/utils/url';
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -250,6 +254,13 @@ export class SettingsStore {
       };
 
       updatedSettings.aiModel = this.normalizeAIModel(updatedSettings);
+      const aiModelResult = completeAiConfigSchema.safeParse(updatedSettings.aiModel);
+      if (!aiModelResult.success) {
+        throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Invalid AI model limits', {
+          issues: aiModelResult.error.flatten(),
+        });
+      }
+      updatedSettings.aiModel = aiModelResult.data;
       if (
         updatedSettings.aiModel.apiUrl.trim().length > 0 &&
         !normalizeAiApiUrl(updatedSettings.aiModel.apiUrl)

@@ -619,8 +619,8 @@ describe('AIService', () => {
         .spyOn(aiService, 'callAI')
         .mockRejectedValueOnce(new Error('batch failed'))
         .mockResolvedValue({ content: 'Successful batch', tokensUsed: 10, finishReason: 'stop' });
-      const comments = mockComments(4, { content: 'word '.repeat(500) });
-      const config = mockAIConfig({ contextWindowSize: 3000, maxOutputTokens: 1 });
+      const comments = mockComments(4, { content: 'word '.repeat(1000) });
+      const config = mockAIConfig({ contextWindowSize: 6000, maxOutputTokens: 1 });
 
       await expect(
         commentAnalyzer.analyzeComments(comments, config, 'Analyze'),
@@ -656,6 +656,15 @@ describe('AIService', () => {
       expect(result.markdown).toBe('No comments to analyze');
     });
 
+    it('should reject model budgets that leave no safe input context', async () => {
+      const config = mockAIConfig({ contextWindowSize: 4096, maxOutputTokens: 2000 });
+
+      await expect(
+        commentAnalyzer.analyzeComments([mockComment()], config, 'Analyze'),
+      ).rejects.toMatchObject({ code: ErrorCode.INVALID_CONFIG });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it('should analyze a single oversized comment after truncating content to fit context', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
@@ -665,7 +674,7 @@ describe('AIService', () => {
         }),
       });
 
-      const config = mockAIConfig({ contextWindowSize: 2000, maxOutputTokens: 1 });
+      const config = mockAIConfig({ contextWindowSize: 4096, maxOutputTokens: 1 });
       const oversizedContent = 'x'.repeat(5000);
       const comments = [
         mockComment({
@@ -691,7 +700,7 @@ describe('AIService', () => {
     });
 
     it('should reject when every comment is too large to fit after truncation', async () => {
-      const config = mockAIConfig({ contextWindowSize: 2000, maxOutputTokens: 1 });
+      const config = mockAIConfig({ contextWindowSize: 4096, maxOutputTokens: 1 });
       const comments = [
         mockComment({
           id: 'oversized-metadata',
@@ -718,7 +727,7 @@ describe('AIService', () => {
         }),
       });
 
-      const config = mockAIConfig({ contextWindowSize: 2000, maxOutputTokens: 1 });
+      const config = mockAIConfig({ contextWindowSize: 4096, maxOutputTokens: 1 });
       const skippedComment = mockComment({
         id: 'oversized-metadata',
         content: 'root',

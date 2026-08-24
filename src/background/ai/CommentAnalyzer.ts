@@ -328,10 +328,16 @@ export class CommentAnalyzer {
     let currentTokens = 0;
 
     const maxOutput = config.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS;
-    const availableTokens = Math.max(
-      AI_CONST.MIN_AVAILABLE_TOKENS,
-      config.contextWindowSize - maxOutput - AI_CONST.INPUT_TOKEN_BUFFER - promptOverheadTokens,
-    );
+    const availableTokens =
+      config.contextWindowSize - maxOutput - AI_CONST.INPUT_TOKEN_BUFFER - promptOverheadTokens;
+    if (availableTokens < AI_CONST.MIN_AVAILABLE_TOKENS) {
+      throw createAIError(
+        ErrorCode.INVALID_CONFIG,
+        'The model context window is too small for the configured output and prompt',
+        { contextWindowSize: config.contextWindowSize, maxOutput, promptOverheadTokens },
+        false,
+      );
+    }
     const metadataReserve = AI_CONST.METADATA_RESERVE_TOKENS;
     const maxContentTokens = Math.max(0, availableTokens - metadataReserve);
     const maxContentChars = maxContentTokens * AI_CONST.CHARS_PER_TOKEN_RATIO;
