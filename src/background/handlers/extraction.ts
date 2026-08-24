@@ -115,6 +115,7 @@ export async function handleExtractionCompleted(
   if (!task) {
     return { success: false };
   }
+  const taskSignal = context.taskManager.getAbortSignal?.(taskId);
 
   if (success) {
     const rawComments = comments || [];
@@ -141,12 +142,14 @@ export async function handleExtractionCompleted(
           settings.aiModel,
           referenceTime,
           settings.aiTimeout,
+          taskSignal,
         );
         normalizedPostTime = await context.timestampNormalizer.normalizeSingleTimestamp(
           postInfo?.videoTime,
           settings.aiModel,
           referenceTime,
           settings.aiTimeout,
+          taskSignal,
         );
         context.taskManager.updateDetailedProgress(taskId, {
           stage: 'normalizing',
@@ -155,9 +158,16 @@ export async function handleExtractionCompleted(
         });
       }
     } catch (normalizationError) {
+      if (taskSignal?.aborted) {
+        return { success: false };
+      }
       Logger.warn('[ExtractionHandler] Timestamp normalization failed', {
         error: normalizationError,
       });
+    }
+
+    if (taskSignal?.aborted || task.status !== 'running') {
+      return { success: false };
     }
 
     const historyItem = {

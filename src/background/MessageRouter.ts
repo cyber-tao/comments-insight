@@ -1,4 +1,10 @@
-import { Message, PortMessage, MessageType } from '../types';
+import {
+  AIBridgeMessage,
+  Message,
+  PortMessage,
+  MessageType,
+  PORT_CANCEL_MESSAGE_TYPE,
+} from '../types';
 import { Logger } from '../utils/logger';
 import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
 import { MESSAGES } from '@/config/constants';
@@ -62,6 +68,7 @@ type HandlerFunction<T extends Message = Message> = {
 export class MessageRouter {
   private handlers = new Map<MessageType, HandlerFunction>();
   private portMessageInFlight = new Map<string, Promise<unknown>>();
+  private portRequestControllers = new Map<string, AbortController>();
   private readyPromise?: Promise<unknown>;
 
   private context: Omit<HandlerContext, 'sender'>;
@@ -141,20 +148,33 @@ export class MessageRouter {
    * @param port - Chrome runtime port
    * @param message - Port message with correlation ID
    */
-  async handlePortMessage(port: chrome.runtime.Port, message: PortMessage): Promise<void> {
+  async handlePortMessage(port: chrome.runtime.Port, message: AIBridgeMessage): Promise<void> {
     await this.ensureReady();
     const correlationId = message.id;
-    try {
-      if (typeof correlationId !== 'string' || correlationId.length === 0) {
-        throw new ExtensionError(
-          ErrorCode.VALIDATION_ERROR,
-          'Port message correlation ID is required',
-        );
-      }
+    if (typeof correlationId !== 'string' || correlationId.length === 0) {
+      const error = new ExtensionError(
+        ErrorCode.VALIDATION_ERROR,
+        'Port message correlation ID is required',
+      );
+      Logger.error('[MessageRouter] Port message handling failed', { error, type: message.type });
+      port.postMessage({ id: correlationId, response: { error: error.message } });
+      return;
+    }
 
-      let responsePromise = this.portMessageInFlight.get(correlationId);
+    if (message.type === PORT_CANCEL_MESSAGE_TYPE) {
+      this.portRequestControllers.get(correlationId)?.abort();
+      return;
+    }
+
+    let responsePromise = this.portMessageInFlight.get(correlationId);
+    let controller = this.portRequestControllers.get(correlationId);
+    try {
       if (!responsePromise) {
-        responsePromise = this.handleMessage(toMessage(message), ensurePortSender(port.sender));
+        controller = new AbortController();
+        responsePromise = this.handleMessage(toMessage(message), ensurePortSender(port.sender), {
+          requestSignal: controller.signal,
+        });
+        this.portRequestControllers.set(correlationId, controller);
         this.portMessageInFlight.set(correlationId, responsePromise);
       }
 
@@ -163,9 +183,21 @@ export class MessageRouter {
     } catch (error) {
       Logger.error('[MessageRouter] Port message handling failed', { error, type: message.type });
       const response = { error: error instanceof Error ? error.message : String(error) };
-      port.postMessage({ id: correlationId, response });
+      try {
+        port.postMessage({ id: correlationId, response });
+      } catch (postError) {
+        Logger.debug('[MessageRouter] Port disconnected before error response', {
+          error: postError,
+          correlationId,
+        });
+      }
     } finally {
-      this.portMessageInFlight.delete(correlationId);
+      if (this.portMessageInFlight.get(correlationId) === responsePromise) {
+        this.portMessageInFlight.delete(correlationId);
+      }
+      if (this.portRequestControllers.get(correlationId) === controller) {
+        this.portRequestControllers.delete(correlationId);
+      }
     }
   }
 
@@ -175,7 +207,11 @@ export class MessageRouter {
    * @param sender - Message sender
    * @returns Response data
    */
-  async handleMessage(message: Message, sender: chrome.runtime.MessageSender): Promise<unknown> {
+  async handleMessage(
+    message: Message,
+    sender: chrome.runtime.MessageSender,
+    options: { requestSignal?: AbortSignal } = {},
+  ): Promise<unknown> {
     await this.ensureReady();
     const validatedMessage = validateMessagePayload(message);
 
@@ -186,6 +222,7 @@ export class MessageRouter {
     const context: HandlerContext = {
       ...this.context,
       sender,
+      requestSignal: options.requestSignal,
     };
 
     const handler = this.handlers.get(validatedMessage.type);

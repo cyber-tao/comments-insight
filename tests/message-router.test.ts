@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageRouter } from '../src/background/MessageRouter';
 import { MESSAGES } from '../src/config/constants';
 import { ErrorCode } from '../src/utils/errors';
+import { PORT_CANCEL_MESSAGE_TYPE } from '../src/types';
 import type { Message, PortMessage } from '../src/types';
+import type { HandlerContext } from '../src/background/handlers/types';
 
 // Mock Logger
 vi.mock('../src/utils/logger', () => ({
@@ -405,6 +407,40 @@ describe('MessageRouter', () => {
             { id: 'c1', username: 'u', content: 'x', likes: 0, timestamp: 't', replies: [] },
           ],
         },
+      });
+    });
+
+    it('aborts the matching background request when the bridge sends cancellation', async () => {
+      const analysisHandlers = await import('../src/background/handlers/analysis');
+      const handleAIExtractContentMock = vi.mocked(analysisHandlers.handleAIExtractContent);
+      let requestSignal: AbortSignal | undefined;
+      handleAIExtractContentMock.mockImplementation(
+        async (_message, context: HandlerContext) =>
+          new Promise((_, reject) => {
+            requestSignal = context.requestSignal;
+            requestSignal?.addEventListener('abort', () => reject(new Error('Request aborted')));
+          }),
+      );
+      const port = createMockPort();
+      const request = {
+        id: 'cancelled-request-id',
+        type: MESSAGES.AI_EXTRACT_CONTENT,
+        payload: { chunks: ['<div>comment</div>'] },
+      } as PortMessage;
+
+      const requestPromise = router.handlePortMessage(port, request);
+      await Promise.resolve();
+      await Promise.resolve();
+      await router.handlePortMessage(port, {
+        id: request.id,
+        type: PORT_CANCEL_MESSAGE_TYPE,
+      });
+      await requestPromise;
+
+      expect(requestSignal?.aborted).toBe(true);
+      expect(port.postMessage).toHaveBeenCalledWith({
+        id: request.id,
+        response: { error: 'Request aborted' },
       });
     });
   });

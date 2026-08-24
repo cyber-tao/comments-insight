@@ -3,6 +3,7 @@ import type { Task, HistoryItem, Settings, Comment, SelectorMap } from '@/types'
 
 export type HandlerContext = ServiceInstances & {
   sender?: chrome.runtime.MessageSender;
+  requestSignal?: AbortSignal;
 };
 
 export interface TaskResponse {

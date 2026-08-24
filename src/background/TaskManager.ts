@@ -193,6 +193,10 @@ export class TaskManager {
     this.abortControllers.set(taskId, controller);
   }
 
+  getAbortSignal(taskId: string): AbortSignal | undefined {
+    return this.abortControllers.get(taskId)?.signal;
+  }
+
   abortTask(taskId: string): void {
     const controller = this.abortControllers.get(taskId);
     if (!controller) {

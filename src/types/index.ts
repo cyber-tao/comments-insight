@@ -248,8 +248,11 @@ export {
   type ExportMessage,
 } from './messages';
 
+export { PORT_CANCEL_MESSAGE_TYPE } from './handlers';
 export type {
+  AIBridgeMessage,
   PortMessage,
+  PortCancelMessage,
   PortMessageResponse,
   PortMessageErrorResponse,
   MessageHandler,

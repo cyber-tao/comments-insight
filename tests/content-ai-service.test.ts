@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ContentAIService } from '../src/content/ContentAIService';
 import { ErrorCode } from '../src/utils/errors';
 import { AI } from '../src/config/constants';
+import { PORT_CANCEL_MESSAGE_TYPE } from '../src/types';
 
 describe('ContentAIService', () => {
   const connectMock = vi.fn();
@@ -85,9 +86,14 @@ describe('ContentAIService', () => {
       controller.signal,
     );
 
+    const request = postMessageMock.mock.calls[0]?.[0] as { id: string };
     controller.abort();
 
     await expect(promise).rejects.toMatchObject({ code: ErrorCode.TASK_CANCELLED });
+    expect(postMessageMock).toHaveBeenLastCalledWith({
+      type: PORT_CANCEL_MESSAGE_TYPE,
+      id: request.id,
+    });
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -157,7 +163,12 @@ describe('ContentAIService', () => {
     });
     expect(settled).toBe(false);
 
+    const request = postMessageMock.mock.calls[0]?.[0] as { id: string };
     await vi.advanceTimersByTimeAsync(1);
     await expect(promise).rejects.toThrow('AI Bridge response timeout');
+    expect(postMessageMock).toHaveBeenLastCalledWith({
+      type: PORT_CANCEL_MESSAGE_TYPE,
+      id: request.id,
+    });
   });
 });

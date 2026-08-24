@@ -180,6 +180,10 @@ export async function handleStartAnalysis(
         }
       }
 
+      if (combinedSignal.aborted) {
+        throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Analysis cancelled before persistence');
+      }
+
       try {
         if (historyId) {
           const historyItem = await context.historyStore.getHistoryItem(historyId);
@@ -311,6 +315,9 @@ export async function handleGenerateDynamicReport(
     if (!dynamicResult.html) {
       throw new ExtensionError(ErrorCode.AI_INVALID_RESPONSE, 'Empty HTML received from model');
     }
+    if (signal.aborted) {
+      throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Report generation cancelled');
+    }
 
     const latestItem = (await context.historyStore.getHistoryItem(historyId)) || historyItem;
     if (latestItem.analysis) {
@@ -355,6 +362,7 @@ export async function handleAIAnalyzeStructure(
         'You MUST respond with ONLY valid JSON, no markdown, no explanations, no code blocks. Start with { and end with }.',
       config: settings.aiModel,
       timeout: settings.aiTimeout,
+      signal: context.requestSignal,
     });
 
     const aggregated: ScraperAnalysisResult = {
@@ -407,6 +415,7 @@ export async function handleAIExtractContent(
         systemPrompt: systemPrompt || 'You are a data extractor. Return JSON only.',
         config: settings.aiModel,
         timeout: settings.aiTimeout,
+        signal: context.requestSignal,
       });
 
       const chunkComments = cleanAndParseJsonArray<Partial<Comment>>(response.content);

@@ -57,6 +57,7 @@ function createMockContext(overrides: Partial<HandlerContext> = {}): HandlerCont
       completeTask: vi.fn(),
       failTask: vi.fn(),
       getTask: vi.fn().mockReturnValue({ maxComments: 100 }),
+      getAbortSignal: vi.fn().mockReturnValue(undefined),
       recoverInterruptedTask: vi.fn().mockReturnValue(undefined),
       getAllTasks: vi.fn().mockReturnValue([]),
       cancelTask: vi.fn(),
@@ -352,6 +353,72 @@ describe('extraction handlers', () => {
         'task_123',
         expect.objectContaining({ commentsCount: 0, title: 'No Comments' }),
       );
+    });
+
+    it('should stop normalization and skip persistence after cancellation', async () => {
+      const controller = new AbortController();
+      const task = {
+        id: 'task_123',
+        type: 'extract' as const,
+        status: 'running' as const,
+        url: 'https://example.com',
+        platform: 'example.com',
+        progress: 80,
+        startTime: Date.now(),
+        tokensUsed: 0,
+      };
+      const normalizeCommentTimestamps = vi.fn().mockImplementation(async () => {
+        controller.abort();
+        throw new Error('cancelled');
+      });
+      const context = createMockContext({
+        taskManager: {
+          ...createMockContext().taskManager,
+          getTask: vi.fn().mockReturnValue(task),
+          getAbortSignal: vi.fn().mockReturnValue(controller.signal),
+        },
+        settingsStore: {
+          getSettings: vi.fn().mockResolvedValue({
+            normalizeTimestamps: true,
+            aiModel: {},
+            aiTimeout: 1000,
+          }),
+        },
+        timestampNormalizer: {
+          normalizeCommentTimestamps,
+          normalizeSingleTimestamp: vi.fn(),
+        },
+      } as unknown as Partial<HandlerContext>);
+      const message = {
+        type: 'EXTRACTION_COMPLETED' as const,
+        payload: {
+          taskId: task.id,
+          success: true,
+          comments: [
+            {
+              id: 'comment-1',
+              username: 'user',
+              content: 'content',
+              likes: 1,
+              timestamp: '1 hour ago',
+              replies: [],
+            },
+          ],
+        },
+      };
+
+      const result = await handleExtractionCompleted(message, context);
+
+      expect(result).toEqual({ success: false });
+      expect(normalizeCommentTimestamps).toHaveBeenCalledWith(
+        message.payload.comments,
+        expect.anything(),
+        expect.any(String),
+        1000,
+        controller.signal,
+      );
+      expect(context.historyStore.saveHistory).not.toHaveBeenCalled();
+      expect(context.taskManager.completeTask).not.toHaveBeenCalled();
     });
 
     it('should return false for extraction completion without taskId', async () => {

@@ -282,21 +282,23 @@ describe('analysis handlers', () => {
           chunks: ['<div>chunk</div>'],
         },
       };
+      const requestSignal = new AbortController().signal;
+      const callAI = vi.fn().mockResolvedValue({
+        content: JSON.stringify([
+          { username: 'user1', content: 'hello' },
+          { username: 'user2', content: 'hi', timestamp: '2h ago' },
+        ]),
+        tokensUsed: 10,
+      });
       const localContext = createMockContext({
-        aiService: {
-          callAI: vi.fn().mockResolvedValue({
-            content: JSON.stringify([
-              { username: 'user1', content: 'hello' },
-              { username: 'user2', content: 'hi', timestamp: '2h ago' },
-            ]),
-            tokensUsed: 10,
-          }),
-        },
+        aiService: { callAI },
+        requestSignal,
       } as unknown as Partial<HandlerContext>);
 
       const result = await handleAIExtractContent(message, localContext);
 
       expect(result.comments).toHaveLength(2);
+      expect(callAI).toHaveBeenCalledWith(expect.objectContaining({ signal: requestSignal }));
       for (const comment of result.comments) {
         expect(comment.id).toBeTruthy();
         expect(comment.timestamp).toBeDefined();

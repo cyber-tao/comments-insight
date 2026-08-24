@@ -5,6 +5,8 @@
 
 import type { Message, MessageType } from './messages';
 
+export const PORT_CANCEL_MESSAGE_TYPE = 'CANCEL_AI_REQUEST' as const;
+
 /**
  * Port message with correlation ID
  * Used for request-response pattern over long-lived connections
@@ -17,6 +19,13 @@ export interface PortMessage {
   /** Message payload */
   payload?: unknown;
 }
+
+export interface PortCancelMessage {
+  type: typeof PORT_CANCEL_MESSAGE_TYPE;
+  id: string;
+}
+
+export type AIBridgeMessage = PortMessage | PortCancelMessage;
 
 /**
  * Port message response

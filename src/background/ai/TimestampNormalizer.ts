@@ -15,6 +15,7 @@ export class TimestampNormalizer {
     config: AIConfig,
     referenceTimeISO: string,
     timeout?: number,
+    signal?: AbortSignal,
   ): Promise<Comment[]> {
     if (!comments.length) {
       return comments;
@@ -38,6 +39,7 @@ export class TimestampNormalizer {
           systemPrompt: AI_CONST.PROMPTS.JSON_ONLY,
           config,
           timeout,
+          signal,
         });
         const parsed = DataNormalizer.parseTimestampNormalizationResponse(response.content);
         if (!parsed) {
@@ -52,6 +54,9 @@ export class TimestampNormalizer {
           }
         }
       } catch (error) {
+        if (signal?.aborted) {
+          throw error;
+        }
         Logger.warn('[TimestampNormalizer] Timestamp normalization failed', { error });
       }
     }
@@ -69,6 +74,7 @@ export class TimestampNormalizer {
     config: AIConfig,
     referenceTimeISO: string,
     timeout?: number,
+    signal?: AbortSignal,
   ): Promise<string | undefined> {
     if (!timestamp) {
       return timestamp;
@@ -85,6 +91,7 @@ export class TimestampNormalizer {
         systemPrompt: AI_CONST.PROMPTS.JSON_ONLY,
         config,
         timeout,
+        signal,
       });
       const parsed = DataNormalizer.parseTimestampNormalizationResponse(response.content);
       const match = parsed?.find((item) => item.path === '0');
@@ -93,6 +100,9 @@ export class TimestampNormalizer {
       }
       return DataNormalizer.normalizeTimestampToMinute(match.timestamp) || timestamp;
     } catch (error) {
+      if (signal?.aborted) {
+        throw error;
+      }
       Logger.warn('[TimestampNormalizer] Single timestamp normalization failed', { error });
       return timestamp;
     }

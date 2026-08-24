@@ -122,6 +122,7 @@ export async function handleGenerateCrawlingConfig(
         'You are a config generator. Return ONLY valid JSON matching the CrawlingConfig interface. No markdown.',
       config: settings.aiModel,
       timeout: settings.aiTimeout,
+      signal: context.requestSignal,
     });
 
     const config = cleanAndParseJsonObject<CrawlingConfig>(response.content);

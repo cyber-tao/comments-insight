@@ -1,5 +1,5 @@
 import { Logger } from '@/utils/logger';
-import { PortMessage, PortMessageResponse } from '@/types/handlers';
+import { PORT_CANCEL_MESSAGE_TYPE, PortMessage, PortMessageResponse } from '@/types/handlers';
 import { AI, TEXT } from '@/config/constants';
 import { ErrorCode, ExtensionError } from '@/utils/error-types';
 
@@ -45,6 +45,10 @@ export class ContentAIService {
   disconnect(): void {
     this.clearReconnectTimer();
 
+    for (const requestId of this.pendingRequests.keys()) {
+      this.notifyCancellation(requestId);
+    }
+
     if (this.port) {
       try {
         this.port.onDisconnect.removeListener(this.handleDisconnect);
@@ -65,6 +69,23 @@ export class ContentAIService {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+  }
+
+  private notifyCancellation(requestId: string): void {
+    if (!this.port || this.portState !== 'connected') {
+      this.connect();
+    }
+    if (!this.port || this.portState !== 'connected') {
+      return;
+    }
+    try {
+      this.port.postMessage({ type: PORT_CANCEL_MESSAGE_TYPE, id: requestId });
+    } catch (error) {
+      Logger.debug('[ContentAIService] Failed to notify background cancellation', {
+        id: requestId,
+        error,
+      });
     }
   }
 
@@ -218,8 +239,12 @@ export class ContentAIService {
         timer = setTimeout(() => {
           const pending = this.pendingRequests.get(requestId);
           if (pending) {
+            this.notifyCancellation(requestId);
             this.clearPending(pending);
             this.pendingRequests.delete(requestId);
+            if (this.pendingRequests.size === 0) {
+              this.clearReconnectTimer();
+            }
           }
           reject(new Error('AI Bridge response timeout'));
         }, timeoutMs);
@@ -227,8 +252,12 @@ export class ContentAIService {
         abortHandler = () => {
           const pending = this.pendingRequests.get(requestId);
           if (pending) {
+            this.notifyCancellation(requestId);
             this.clearPending(pending);
             this.pendingRequests.delete(requestId);
+            if (this.pendingRequests.size === 0) {
+              this.clearReconnectTimer();
+            }
           }
           reject(this.createCancelledError());
         };
