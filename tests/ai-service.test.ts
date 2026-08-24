@@ -113,7 +113,10 @@ describe('AIService', () => {
       );
 
       const requestInit = mockFetch.mock.calls[0]?.[1] as RequestInit;
-      expect(JSON.parse(requestInit.body as string)).toMatchObject({ stream: true });
+      expect(JSON.parse(requestInit.body as string)).toMatchObject({
+        stream: true,
+        stream_options: { include_usage: true },
+      });
 
       expect(result.content).toBe('Test response');
       expect(result.tokensUsed).toBe(100);
@@ -304,6 +307,21 @@ describe('AIService', () => {
         'http://127.0.0.1:11434/v1/chat/completions',
         expect.anything(),
       );
+    });
+
+    it('should not retry non-retryable bad requests', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: vi.fn().mockResolvedValue('Bad request'),
+      });
+
+      const promise = aiService.callAI({ prompt: 'Test', config: mockAIConfig() });
+      const rejection = expect(promise).rejects.toMatchObject({ code: ErrorCode.API_ERROR });
+
+      await vi.runAllTimersAsync();
+      await rejection;
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('should handle rate limit errors (429)', async () => {
@@ -594,6 +612,23 @@ describe('AIService', () => {
       expect(result.summary).toBeUndefined();
       expect(result.tokensUsed).toBe(500);
       expect(result.generatedAt).toBeDefined();
+    });
+
+    it('should fail rather than persist a partial report when any batch fails', async () => {
+      const callSpy = vi
+        .spyOn(aiService, 'callAI')
+        .mockRejectedValueOnce(new Error('batch failed'))
+        .mockResolvedValue({ content: 'Successful batch', tokensUsed: 10, finishReason: 'stop' });
+      const comments = mockComments(4, { content: 'word '.repeat(500) });
+      const config = mockAIConfig({ contextWindowSize: 3000, maxOutputTokens: 1 });
+
+      await expect(
+        commentAnalyzer.analyzeComments(comments, config, 'Analyze'),
+      ).rejects.toMatchObject({
+        code: ErrorCode.AI_INVALID_RESPONSE,
+        message: expect.stringContaining('1 analysis batch'),
+      });
+      expect(callSpy.mock.calls.length).toBeGreaterThan(1);
     });
 
     it('should handle empty comments array', async () => {

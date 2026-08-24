@@ -107,6 +107,7 @@ export class ExtensionError extends Error {
   public readonly timestamp: number;
   /** Whether the operation can be retried */
   public readonly retryable: boolean;
+  public readonly retryableWasExplicit: boolean;
 
   /**
    * Creates a new ExtensionError.
@@ -119,14 +120,15 @@ export class ExtensionError extends Error {
     code: ErrorCode,
     message: string,
     details?: Record<string, unknown>,
-    retryable: boolean = false,
+    retryable?: boolean,
   ) {
     super(message);
     this.name = 'ExtensionError';
     this.code = code;
     this.details = details;
     this.timestamp = Date.now();
-    this.retryable = retryable;
+    this.retryable = retryable ?? false;
+    this.retryableWasExplicit = retryable !== undefined;
 
     const ErrorWithStack = Error as { captureStackTrace?: (target: object, ctor: unknown) => void };
     if (typeof ErrorWithStack.captureStackTrace === 'function') {

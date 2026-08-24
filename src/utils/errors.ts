@@ -245,7 +245,10 @@ export class ErrorHandler {
    * @returns True if retryable
    */
   private static isRetryable(error: ExtensionError, config: RetryConfig): boolean {
-    return error.retryable || config.retryableErrors.includes(error.code);
+    if (error.retryableWasExplicit) {
+      return error.retryable;
+    }
+    return config.retryableErrors.includes(error.code);
   }
 
   /**
@@ -375,11 +378,10 @@ export function createAIError(
   details?: Record<string, unknown>,
   retryable?: boolean,
 ): ExtensionError {
-  const isRetryable =
-    retryable !== undefined
-      ? retryable
-      : [ErrorCode.AI_TIMEOUT, ErrorCode.AI_RATE_LIMIT].includes(code);
-  return new ExtensionError(code, message, details, isRetryable);
+  const retryDecision =
+    retryable ??
+    ([ErrorCode.AI_TIMEOUT, ErrorCode.AI_RATE_LIMIT].includes(code) ? true : undefined);
+  return new ExtensionError(code, message, details, retryDecision);
 }
 
 /**

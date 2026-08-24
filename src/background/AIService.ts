@@ -144,6 +144,7 @@ export class AIService {
       temperature: config.temperature,
       top_p: config.topP,
       stream: true,
+      stream_options: { include_usage: true },
     });
   }
 

@@ -402,26 +402,21 @@ export async function handleAIExtractContent(
 
     const tasks = chunks.map((chunk, i) => async () => {
       if (!chunk.trim()) return [];
-      try {
-        const response = await context.aiService.callAI({
-          prompt: chunk,
-          systemPrompt: systemPrompt || 'You are a data extractor. Return JSON only.',
-          config: settings.aiModel,
-          timeout: settings.aiTimeout,
-        });
+      const response = await context.aiService.callAI({
+        prompt: chunk,
+        systemPrompt: systemPrompt || 'You are a data extractor. Return JSON only.',
+        config: settings.aiModel,
+        timeout: settings.aiTimeout,
+      });
 
-        const chunkComments = cleanAndParseJsonArray<Partial<Comment>>(response.content);
-        chunkComments.forEach((c, idx) => {
-          if (!c.id) c.id = `ai_${Date.now()}_${i}_${idx}`;
-          if (!c.timestamp) c.timestamp = ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
-          if (!c.likes) c.likes = 0;
-          if (!c.replies) c.replies = [];
-        });
-        return chunkComments as Comment[];
-      } catch (e) {
-        Logger.warn('[AnalysisHandler] Failed to extract from chunk', { index: i, error: e });
-        return [];
-      }
+      const chunkComments = cleanAndParseJsonArray<Partial<Comment>>(response.content);
+      chunkComments.forEach((c, idx) => {
+        if (!c.id) c.id = `ai_${Date.now()}_${i}_${idx}`;
+        if (!c.timestamp) c.timestamp = ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
+        if (!c.likes) c.likes = 0;
+        if (!c.replies) c.replies = [];
+      });
+      return chunkComments as Comment[];
     });
 
     const results = await runWithConcurrencyLimit(tasks, AI_CONST.MAX_CONCURRENT_REQUESTS || 3);

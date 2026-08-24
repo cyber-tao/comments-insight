@@ -344,34 +344,23 @@ export class AIStrategy implements ExtractionStrategy {
   ): Promise<Comment[]> {
     const allComments: Comment[] = [];
 
-    const tasks = chunks.map((chunk, i) => async () => {
-      try {
-        const response = await this.aiService.callAI<{ comments?: Comment[]; error?: string }>(
-          {
-            type: MESSAGES.AI_EXTRACT_CONTENT,
-            payload: {
-              chunks: [chunk],
-              systemPrompt: PROMPT_EXTRACT_COMMENTS_FROM_HTML,
-            },
+    const tasks = chunks.map((chunk) => async () => {
+      const response = await this.aiService.callAI<{ comments?: Comment[]; error?: string }>(
+        {
+          type: MESSAGES.AI_EXTRACT_CONTENT,
+          payload: {
+            chunks: [chunk],
+            systemPrompt: PROMPT_EXTRACT_COMMENTS_FROM_HTML,
           },
-          signal,
-          timeoutMs,
-        );
+        },
+        signal,
+        timeoutMs,
+      );
 
-        if (response?.error) {
-          Logger.warn(`[AIStrategy] Chunk ${i + 1}/${chunks.length} extraction error`, {
-            error: response.error,
-          });
-          return [];
-        } else if (response?.comments?.length) {
-          return response.comments;
-        }
-      } catch (err) {
-        Logger.error(`[AIStrategy] Port call failed for chunk ${i + 1}/${chunks.length}`, {
-          error: err,
-        });
+      if (response?.error) {
+        throw new ExtensionError(ErrorCode.AI_INVALID_RESPONSE, response.error);
       }
-      return [];
+      return response?.comments || [];
     });
 
     const results = await runWithConcurrencyLimit(tasks, AI.MAX_CONCURRENT_REQUESTS);

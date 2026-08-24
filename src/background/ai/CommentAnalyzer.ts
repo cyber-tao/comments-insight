@@ -7,7 +7,7 @@ import {
   TaskProgressMessageParams,
 } from '../../types';
 import { Logger } from '../../utils/logger';
-import { createAIError, ErrorCode } from '../../utils/errors';
+import { createAIError, ErrorCode, ExtensionError } from '../../utils/errors';
 import { AI as AI_CONST, LANGUAGES, TEXT, ANALYSIS_FORMAT } from '@/config/constants';
 import { Tokenizer } from '../../utils/tokenizer';
 import { runWithConcurrencyLimit } from '../../utils/promise';
@@ -87,30 +87,26 @@ export class CommentAnalyzer {
           progressTracker.reportBatchComplete(index);
           return { ok: true as const, result };
         } catch (error) {
+          if (error instanceof ExtensionError && error.code === ErrorCode.TASK_CANCELLED) {
+            throw error;
+          }
           Logger.error(`[CommentAnalyzer] Analysis batch ${index + 1} failed`, { error });
           return { ok: false as const, error };
         }
       });
 
       const results = await runWithConcurrencyLimit(tasks, AI_CONST.MAX_CONCURRENT_REQUESTS);
-      const successful = results.filter((item) => item.ok).map((item) => item.result);
-
-      if (successful.length === 0) {
+      const failed = results.filter((item) => !item.ok);
+      if (failed.length > 0) {
         throw createAIError(
           ErrorCode.AI_INVALID_RESPONSE,
-          'All analysis batches failed',
-          {},
+          `${failed.length} analysis batch${failed.length === 1 ? '' : 'es'} failed; no partial report was saved`,
+          { totalBatches: results.length, failedBatches: failed.length },
           false,
         );
       }
 
-      if (successful.length < results.length) {
-        Logger.warn('[CommentAnalyzer] Partial analysis results due to failed batches', {
-          total: results.length,
-          successful: successful.length,
-        });
-      }
-
+      const successful = results.filter((item) => item.ok).map((item) => item.result);
       const merged = PromptBuilder.mergeAnalysisResults(successful);
       progressTracker.reportAllComplete();
       return merged;

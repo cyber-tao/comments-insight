@@ -306,6 +306,22 @@ describe('analysis handlers', () => {
       expect(result.comments[0].timestamp).toBe(ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP);
       expect(result.comments[1].timestamp).toBe('2h ago');
     });
+
+    it('returns an error instead of an empty success when a chunk request fails', async () => {
+      const message = {
+        type: 'AI_EXTRACT_CONTENT' as const,
+        payload: { chunks: ['<div>chunk</div>'] },
+      };
+      const localContext = createMockContext({
+        aiService: {
+          callAI: vi.fn().mockRejectedValue(new Error('provider failed')),
+        },
+      } as unknown as Partial<HandlerContext>);
+
+      const result = await handleAIExtractContent(message, localContext);
+
+      expect(result).toEqual({ comments: [], error: 'provider failed' });
+    });
   });
 
   describe('handleGenerateDynamicReport', () => {

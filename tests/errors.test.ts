@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   ErrorCode,
   ErrorHandler,
+  ExtensionError,
   createNetworkError,
   getUserFriendlyMessage,
 } from '../src/utils/errors';
@@ -26,6 +27,32 @@ describe('ErrorHandler.withRetry', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it('should honor an explicit non-retryable decision for a normally retryable code', async () => {
+    const fn = vi
+      .fn()
+      .mockRejectedValue(new ExtensionError(ErrorCode.API_ERROR, 'bad request', {}, false));
+
+    await expect(ErrorHandler.withRetry(fn, 'test.withRetry.explicit')).rejects.toMatchObject({
+      code: ErrorCode.API_ERROR,
+      retryable: false,
+    });
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('should use code defaults when retryability was not explicitly specified', async () => {
+    const fn = vi.fn().mockRejectedValue(new ExtensionError(ErrorCode.API_ERROR, 'server error'));
+    const promise = ErrorHandler.withRetry(fn, 'test.withRetry.default', {
+      maxAttempts: 3,
+      initialDelay: 10,
+      maxDelay: 10,
+    });
+    const rejection = expect(promise).rejects.toMatchObject({ code: ErrorCode.API_ERROR });
+
+    await vi.runAllTimersAsync();
+    await rejection;
+    expect(fn).toHaveBeenCalledTimes(3);
   });
 
   it('should stop retry backoff immediately when abortSignal is cancelled', async () => {
