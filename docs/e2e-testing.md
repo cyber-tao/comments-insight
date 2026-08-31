@@ -15,7 +15,7 @@ The repository provides two Puppeteer scripts:
 - Chrome/Chromium/Edge 116 or newer
 - `bun run build` before each browser run
 
-Set `PUPPETEER_EXECUTABLE_PATH` to select a browser explicitly. On Windows, the scripts also look for common Chrome and Edge installations; otherwise Puppeteer's downloaded browser is used.
+Set `PUPPETEER_EXECUTABLE_PATH` or `CHROME_BIN` to select a browser explicitly. The scripts also check common Chrome, Chromium, and Edge locations on Windows, Linux, and macOS before falling back to Puppeteer's downloaded browser.
 
 ## Deterministic local suite
 
@@ -64,6 +64,7 @@ This test can invoke a real AI provider and is intentionally not part of CI.
 | `COMMENTS_INSIGHT_MAX_COMMENTS`    | Maximum comments to extract                                      | `20`                                          |
 | `COMMENTS_INSIGHT_TEST_TIMEOUT_MS` | Overall timeout                                                  | `180000`                                      |
 | `PUPPETEER_EXECUTABLE_PATH`        | Explicit Chrome/Chromium/Edge executable                         | auto-detected                                 |
+| `CHROME_BIN`                       | Alternative explicit browser executable                          | auto-detected                                 |
 
 Run:
 
@@ -82,6 +83,6 @@ The development hook is exposed only when the loaded manifest has no `update_url
 
 - Rebuild before testing; Puppeteer loads files from `dist/`, not directly from `src/`.
 - If the service worker is not found, confirm that the browser allows unpacked extensions and that no enterprise policy disables them.
-- If launch fails, set `PUPPETEER_EXECUTABLE_PATH` to a compatible local browser.
+- If launch fails, set `PUPPETEER_EXECUTABLE_PATH` or `CHROME_BIN` to a compatible local browser.
 - Inspect page and service-worker console output for task errors. The deterministic suite fails on page errors, failed tasks, missing comments, missing history, or sandbox sanitization regressions.
 - Use mocked `chrome.storage`, IndexedDB, and extension APIs for isolated unit tests; reserve browser E2E for cross-context wiring and browser behavior.
