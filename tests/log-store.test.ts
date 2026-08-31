@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LogStore } from '../src/background/storage/LogStore';
+import { TokenStatsStore } from '../src/background/storage/TokenStatsStore';
 import { LOG_DEFAULTS, LIMITS, STORAGE } from '../src/config/constants';
 
 type StorageShape = Record<string, unknown>;
@@ -27,36 +28,41 @@ vi.mock('../src/utils/logger', () => ({
   },
 }));
 
+let backing: StorageShape;
+
+function useInMemoryStorage() {
+  backing = {};
+  mockStorageGet.mockImplementation((keys: string[] | string | null) => {
+    if (keys === null || keys === undefined) {
+      return Promise.resolve({ ...backing });
+    }
+    if (typeof keys === 'string') {
+      return Promise.resolve({ [keys]: backing[keys] });
+    }
+    const result: StorageShape = {};
+    for (const key of keys) {
+      result[key] = backing[key];
+    }
+    return Promise.resolve(result);
+  });
+  mockStorageSet.mockImplementation((payload: StorageShape) => {
+    Object.assign(backing, payload);
+    return Promise.resolve(undefined);
+  });
+  mockStorageRemove.mockImplementation((keys: string[]) => {
+    for (const key of keys) {
+      delete backing[key];
+    }
+    return Promise.resolve(undefined);
+  });
+}
+
 describe('LogStore AI log retention', () => {
   let store: LogStore;
-  let backing: StorageShape;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    backing = {};
-    mockStorageGet.mockImplementation((keys: string[] | string | null) => {
-      if (keys === null || keys === undefined) {
-        return Promise.resolve({ ...backing });
-      }
-      if (typeof keys === 'string') {
-        return Promise.resolve({ [keys]: backing[keys] });
-      }
-      const result: StorageShape = {};
-      for (const key of keys) {
-        result[key] = backing[key];
-      }
-      return Promise.resolve(result);
-    });
-    mockStorageSet.mockImplementation((payload: StorageShape) => {
-      Object.assign(backing, payload);
-      return Promise.resolve(undefined);
-    });
-    mockStorageRemove.mockImplementation((keys: string[]) => {
-      for (const key of keys) {
-        delete backing[key];
-      }
-      return Promise.resolve(undefined);
-    });
+    useInMemoryStorage();
     store = new LogStore();
   });
 
@@ -103,5 +109,88 @@ describe('LogStore AI log retention', () => {
     expect(index.length).toBeLessThan(entryCount + 2);
     expect(backing['ai_big_0']).toBeUndefined();
     expect(backing[`ai_big_${entryCount + 1}`]).toBeDefined();
+  });
+});
+
+describe('TokenStatsStore', () => {
+  let store: TokenStatsStore;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2025, 0, 15, 12));
+    vi.clearAllMocks();
+    useInMemoryStorage();
+    store = new TokenStatsStore();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function startOfToday(): number {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  }
+
+  it('records token usage for today and the all-time total', async () => {
+    await store.recordTokenUsage(37);
+
+    expect(backing[STORAGE.TOKEN_STATS_KEY]).toEqual({
+      today: 37,
+      total: 37,
+      lastReset: startOfToday(),
+    });
+  });
+
+  it('resets the daily count before recording usage on a new day', async () => {
+    const todayStart = startOfToday();
+    backing[STORAGE.TOKEN_STATS_KEY] = {
+      today: 80,
+      total: 120,
+      lastReset: todayStart - 1,
+    };
+
+    await store.recordTokenUsage(9);
+
+    expect(backing[STORAGE.TOKEN_STATS_KEY]).toEqual({
+      today: 9,
+      total: 129,
+      lastReset: todayStart,
+    });
+  });
+
+  it('serializes concurrent records so no token usage is lost', async () => {
+    const usages = [3, 5, 7, 11];
+    backing[STORAGE.TOKEN_STATS_KEY] = {
+      today: 13,
+      total: 100,
+      lastReset: startOfToday(),
+    };
+
+    await Promise.all(usages.map((tokens) => store.recordTokenUsage(tokens)));
+
+    expect(backing[STORAGE.TOKEN_STATS_KEY]).toEqual({
+      today: 39,
+      total: 126,
+      lastReset: startOfToday(),
+    });
+    expect(mockStorageSet).toHaveBeenCalledTimes(usages.length);
+  });
+
+  it('returns zeroed stats when storage cannot be read', async () => {
+    mockStorageGet.mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await expect(store.getTokenStats()).resolves.toEqual({
+      today: 0,
+      total: 0,
+      lastReset: 0,
+    });
+  });
+
+  it('does not reject callers when storage cannot persist a record', async () => {
+    mockStorageSet.mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await expect(store.recordTokenUsage(12)).resolves.toBeUndefined();
+    expect(backing[STORAGE.TOKEN_STATS_KEY]).toBeUndefined();
   });
 });

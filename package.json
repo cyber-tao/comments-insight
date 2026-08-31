@@ -21,6 +21,8 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,css,html}\"",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "bun scripts/test-e2e-all.js",
+    "version:check": "node scripts/check-version.mjs",
     "audit": "bun audit --prod --audit-level=high"
   },
   "dependencies": {
@@ -45,6 +47,7 @@
     "@vitejs/plugin-react": "^5.1.1",
     "@vitest/coverage-v8": "^4.1.5",
     "autoprefixer": "^10.4.22",
+    "crx3": "2.0.0",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",

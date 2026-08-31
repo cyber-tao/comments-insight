@@ -29,6 +29,7 @@ function getChromeExecutablePath() {
 
 const SERVICE_WORKER_RETRIES = 15;
 const RETRY_DELAY_MS = 800;
+const TASK_POLL_TIMEOUT_MS = 30000;
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -69,6 +70,38 @@ async function findBackgroundTarget(browser) {
     await delay(RETRY_DELAY_MS);
   }
   return null;
+}
+
+async function sendExtensionMessage(page, message) {
+  const response = await page.evaluate(
+    async (request) => chrome.runtime.sendMessage(request),
+    message,
+  );
+  if (response?.error) {
+    const errorMessage =
+      typeof response.error === 'string' ? response.error : response.error.message;
+    throw new Error(errorMessage || 'Extension message failed');
+  }
+  return response;
+}
+
+async function waitForTask(page, taskId) {
+  const deadline = Date.now() + TASK_POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const response = await sendExtensionMessage(page, {
+      type: 'GET_TASK_STATUS',
+      payload: { taskId },
+    });
+    const task = response?.task;
+    if (task?.status === 'completed') {
+      return task;
+    }
+    if (task?.status === 'failed') {
+      throw new Error(task.error || 'Extraction task failed');
+    }
+    await delay(RETRY_DELAY_MS);
+  }
+  throw new Error(`Task ${taskId} did not complete within ${TASK_POLL_TIMEOUT_MS}ms`);
 }
 
 // Start a lightweight local HTTP server with a mock comments page
@@ -428,97 +461,98 @@ async function runAllAutomatedTests() {
     await sandboxPage.goto(sandboxUrl, { waitUntil: 'domcontentloaded' });
     await delay(800);
 
-    const sandboxRenderSuccess = await sandboxPage.evaluate(() => {
-      return new Promise((resolve) => {
-        window.addEventListener('message', (event) => {
-          if (event.data && event.data.type === 'REPORT_RENDERED') {
-            resolve(true);
-          }
-        });
-
-        window.postMessage(
-          {
-            type: 'RENDER_REPORT',
-            payload: {
-              html: '<div id="test-sandbox-report"><h3>Sandbox Report Rendered Successfully</h3></div>',
-            },
-          },
-          '*',
-        );
-
-        setTimeout(() => {
-          const rendered =
-            document.body.innerHTML.includes('Sandbox Report') ||
-            document.body.innerHTML.length > 0;
-          resolve(rendered);
-        }, 1000);
-      });
+    await sandboxPage.evaluate(() => {
+      window.postMessage(
+        {
+          type: 'RENDER_REPORT',
+          html: `<!doctype html><html><body>
+            <div id="test-sandbox-report" onclick="globalThis.reportClicked = true">
+              <h3>Sandbox Report Rendered Successfully</h3>
+            </div>
+            <img id="external-image" src="https://example.com/tracker.png" onerror="globalThis.reportErrored = true">
+            <iframe id="external-frame" src="https://example.com"></iframe>
+            <script>globalThis.reportScriptExecuted = true;</script>
+          </body></html>`,
+        },
+        '*',
+      );
     });
+    await sandboxPage.waitForSelector('#test-sandbox-report', { timeout: 5000 });
+    const sandboxResult = await sandboxPage.evaluate(() => ({
+      text: document.querySelector('#test-sandbox-report')?.textContent?.trim(),
+      hasClickHandler: document.querySelector('#test-sandbox-report')?.hasAttribute('onclick'),
+      externalImageSource: document.querySelector('#external-image')?.getAttribute('src'),
+      hasExternalFrame: Boolean(document.querySelector('#external-frame')),
+      scriptExecuted: Boolean(globalThis.reportScriptExecuted),
+    }));
 
-    assert(sandboxRenderSuccess, 'Sandbox failed to render report content');
-    recordPass('Sandbox', 'Verified sandbox dynamic report execution & DOM rendering');
+    assert(
+      sandboxResult.text === 'Sandbox Report Rendered Successfully',
+      'Sandbox did not render the requested report content',
+    );
+    assert(!sandboxResult.hasClickHandler, 'Sandbox retained an inline event handler');
+    assert(!sandboxResult.externalImageSource, 'Sandbox retained an external image source');
+    assert(!sandboxResult.hasExternalFrame, 'Sandbox retained an external frame');
+    assert(!sandboxResult.scriptExecuted, 'Sandbox executed model-provided JavaScript');
+    assert(sandboxErrors.length === 0, `Sandbox page had JS errors: ${sandboxErrors.join(', ')}`);
+    recordPass('Sandbox', 'Rendered sanitized static report without active external content');
 
     await sandboxPage.close();
 
     // ----------------------------------------------------
     // Suite 8: Content Script Injection & Full Extraction Flow
     // ----------------------------------------------------
-    console.log('\n🕷️ [Suite 8] Content Script Live DOM Extraction Flow');
+    console.log('\n🕷️ [Suite 8] Background Task, Content Script & History Flow');
     const contentPage = await browser.newPage();
-
-    let extractionOutcome = null;
-    const outcomePromise = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Extraction timed out after 20s')), 20000);
-
-      contentPage.on('console', (msg) => {
-        const text = msg.text();
-        if (text.includes('__TEST_RESULT__:')) {
-          clearTimeout(timer);
-          try {
-            const data = JSON.parse(text.replace('__TEST_RESULT__:', '').trim());
-            resolve(data);
-          } catch (e) {
-            reject(e);
-          }
-        }
-      });
-    });
+    const controlPage = await browser.newPage();
 
     console.log(`  Navigating to mock test page: ${mockPageUrl}`);
     await contentPage.goto(mockPageUrl, { waitUntil: 'domcontentloaded' });
-    await delay(2000);
-
-    console.log('  Triggering COMMENTS_INSIGHT_TEST_TRIGGER on test page...');
-    await contentPage.evaluate(() => {
-      window.postMessage({ type: 'COMMENTS_INSIGHT_TEST_TRIGGER', maxComments: 10 }, '*');
+    await controlPage.goto(`chrome-extension://${extensionId}/src/options/index.html`, {
+      waitUntil: 'domcontentloaded',
     });
+    await delay(2000);
+    await contentPage.bringToFront();
 
-    extractionOutcome = await outcomePromise;
-    assert(extractionOutcome, 'No extraction outcome received');
+    const tabId = await controlPage.evaluate(async (targetUrl) => {
+      const tabs = await chrome.tabs.query({});
+      return tabs.find((tab) => tab.url === targetUrl)?.id;
+    }, mockPageUrl);
+    assert(typeof tabId === 'number', 'Failed to resolve mock content tab id');
+
+    const startResponse = await sendExtensionMessage(controlPage, {
+      type: 'START_EXTRACTION',
+      payload: { url: mockPageUrl, tabId, maxComments: 10 },
+    });
+    assert(startResponse?.taskId, 'Background did not create an extraction task');
+    const completedTask = await waitForTask(controlPage, startResponse.taskId);
+    assert(completedTask.status === 'completed', 'Extraction task did not complete');
+
+    const historyResponse = await sendExtensionMessage(controlPage, {
+      type: 'GET_HISTORY_BY_URL',
+      payload: { url: mockPageUrl },
+    });
+    const historyItem = historyResponse?.item;
+    assert(historyItem, 'Completed extraction did not persist history');
+    assert(Array.isArray(historyItem.comments), 'Persisted history has no comments array');
     assert(
-      extractionOutcome.success,
-      `Extraction reported failure: ${extractionOutcome.error || 'unknown'}`,
-    );
-    assert(Array.isArray(extractionOutcome.comments), 'Extraction did not return comments array');
-    assert(
-      extractionOutcome.comments.length >= 3,
-      `Expected at least 3 comments, got ${extractionOutcome.comments.length}`,
+      historyItem.comments.length >= 3,
+      `Expected at least 3 persisted comments, got ${historyItem.comments.length}`,
     );
 
-    const firstComment = extractionOutcome.comments[0];
+    const firstComment = historyItem.comments[0];
     assert(
       firstComment.username && firstComment.content,
-      'Extracted comment missing username or content',
+      'Persisted comment missing username or content',
     );
+    recordPass('TaskManager', `Completed background extraction task ${startResponse.taskId}`);
     recordPass(
       'ContentScript',
-      `Successfully extracted ${extractionOutcome.comments.length} comments from live DOM`,
+      `Extracted ${historyItem.comments.length} comments through the real message flow`,
     );
-    recordPass(
-      'ContentScript',
-      `Verified comment fields (Author: "${firstComment.username}", Content: "${firstComment.content.slice(0, 30)}...")`,
-    );
+    recordPass('HistoryStore', 'Verified completed extraction was persisted and readable by URL');
 
+    await controlPage.close();
     await contentPage.close();
   } catch (err) {
     console.error('\n❌ Fatal Test Runner Error:', err);
@@ -529,6 +563,9 @@ async function runAllAutomatedTests() {
     } catch {}
     try {
       server.close();
+    } catch {}
+    try {
+      fs.rmSync(tempProfileDir, { recursive: true, force: true });
     } catch {}
   }
 
