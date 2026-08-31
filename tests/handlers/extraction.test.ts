@@ -70,7 +70,7 @@ function createMockContext(overrides: Partial<HandlerContext> = {}): HandlerCont
       }),
     },
     historyStore: {
-      saveHistory: vi.fn().mockResolvedValue(undefined),
+      createHistory: vi.fn().mockResolvedValue(undefined),
       getHistoryItem: vi.fn().mockResolvedValue({ id: 'history-123' }),
     },
     aiService: {
@@ -352,7 +352,7 @@ describe('extraction handlers', () => {
       const result = await handleExtractionCompleted(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(context.historyStore.saveHistory).toHaveBeenCalledWith(
+      expect(context.historyStore.createHistory).toHaveBeenCalledWith(
         expect.objectContaining({
           title: 'No Comments',
           commentsCount: 0,
@@ -427,7 +427,7 @@ describe('extraction handlers', () => {
         1000,
         controller.signal,
       );
-      expect(context.historyStore.saveHistory).not.toHaveBeenCalled();
+      expect(context.historyStore.createHistory).not.toHaveBeenCalled();
       expect(context.taskManager.completeTask).not.toHaveBeenCalled();
     });
 
@@ -500,7 +500,7 @@ describe('extraction handlers', () => {
       const result = await handleExtractionCompleted(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(context.historyStore.saveHistory).toHaveBeenCalledOnce();
+      expect(context.historyStore.createHistory).toHaveBeenCalledOnce();
       expect(context.taskManager.completeTask).toHaveBeenCalledWith(
         'task_123',
         expect.objectContaining({ commentsCount: 1, title: 'Recovered Title' }),
@@ -553,7 +553,7 @@ describe('extraction handlers', () => {
       const result = await handleExtractionCompleted(message, context);
 
       expect(result).toEqual({ success: false });
-      expect(context.historyStore.saveHistory).not.toHaveBeenCalled();
+      expect(context.historyStore.createHistory).not.toHaveBeenCalled();
       expect(context.taskManager.completeTask).not.toHaveBeenCalled();
       expect(context.taskManager.failTask).not.toHaveBeenCalled();
     });

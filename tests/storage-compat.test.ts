@@ -1,10 +1,10 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { HistoryStore } from '../src/background/storage/HistoryStore';
+import { CommentsInsightDatabase, HistoryStore } from '../src/background/storage/HistoryStore';
 import { SettingsStore } from '../src/background/storage/SettingsStore';
 import type { EncryptionService } from '../src/background/storage/EncryptionService';
-import type { AIConfig } from '../src/types';
-import { STORAGE } from '../src/config/constants';
+import type { AIConfig, HistoryItem } from '../src/types';
+import { ANALYSIS_FORMAT, STORAGE } from '../src/config/constants';
 import {
   sanitizePersistedTaskState,
   sanitizeStoredSettings,
@@ -70,7 +70,7 @@ describe('storage compatibility with pre-refactor data', () => {
         ],
       };
 
-      await store.saveHistory(legacyItem);
+      await store.createHistory(legacyItem);
 
       const fetched = await store.getHistoryItem(legacyItem.id);
       expect(fetched).toBeDefined();
@@ -78,9 +78,87 @@ describe('storage compatibility with pre-refactor data', () => {
       expect(fetched?.comments).toHaveLength(1);
     });
 
+    it('safely reads legacy nested comments with malformed optional fields', async () => {
+      const database = new CommentsInsightDatabase();
+      const legacyItem = {
+        id: 'legacy_malformed_comments',
+        url: 'https://example.com/legacy-comments',
+        title: 'Legacy Comments',
+        platform: 'example.com',
+        extractedAt: 1_500_000,
+        commentsCount: 1,
+        comments: [
+          {
+            id: 'legacy_parent',
+            username: 'parent',
+            content: 'parent content',
+            likes: 'unknown',
+            replies: [
+              {
+                id: 'legacy_reply',
+                username: 'reply',
+                content: 'reply content',
+              },
+              { malformed: true },
+            ],
+          },
+        ],
+        analysis: { markdown: '# Legacy', tokensUsed: 'unknown', generatedAt: 1000 },
+      };
+
+      try {
+        await database.history.put(legacyItem as unknown as HistoryItem);
+      } finally {
+        database.close();
+      }
+
+      const fetched = await new HistoryStore().getHistoryItem(legacyItem.id);
+      expect(fetched?.analysis).toBeUndefined();
+      expect(fetched?.comments).toEqual([
+        {
+          id: 'legacy_parent',
+          username: 'parent',
+          content: 'parent content',
+          timestamp: ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP,
+          likes: 0,
+          replies: [
+            {
+              id: 'legacy_reply',
+              username: 'reply',
+              content: 'reply content',
+              timestamp: ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP,
+              likes: 0,
+              replies: [],
+            },
+          ],
+        },
+      ]);
+    });
+
+    it('rejects an unrecognizable persisted history row with a read error', async () => {
+      const database = new CommentsInsightDatabase();
+      try {
+        await database.history.put({
+          id: 'invalid_history_row',
+          url: 42,
+          title: 'Invalid',
+          platform: 'example.com',
+          extractedAt: 1_750_000,
+          commentsCount: 0,
+          comments: [],
+        } as unknown as HistoryItem);
+      } finally {
+        database.close();
+      }
+
+      await expect(new HistoryStore().getHistoryItem('invalid_history_row')).rejects.toMatchObject({
+        code: 'STORAGE_READ_ERROR',
+      });
+    });
+
     it('populates historyMetadata from history rows during upgrade', async () => {
       const store = new HistoryStore();
-      await store.saveHistory({
+      await store.createHistory({
         id: 'existing_item',
         url: 'https://example.com/existing',
         title: 'Existing',
@@ -101,7 +179,7 @@ describe('storage compatibility with pre-refactor data', () => {
 
     it('uses [url+extractedAt] index to find latest by url (v3 index)', async () => {
       const store = new HistoryStore();
-      await store.saveHistory({
+      await store.createHistory({
         id: 'old_id',
         url: 'https://example.com/same',
         title: 'Old',
@@ -110,7 +188,7 @@ describe('storage compatibility with pre-refactor data', () => {
         commentsCount: 0,
         comments: [],
       });
-      await store.saveHistory({
+      await store.createHistory({
         id: 'new_id',
         url: 'https://example.com/same',
         title: 'New',

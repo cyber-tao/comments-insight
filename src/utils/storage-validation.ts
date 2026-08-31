@@ -1,14 +1,18 @@
 import { z } from 'zod';
 import type {
   AIConfig,
+  AnalysisResult,
+  AnalysisResultSummary,
+  Comment,
   CrawlingConfig,
   DOMAnalysisConfig,
+  HistoryItem,
   SelectorCache,
   Settings,
   Task,
 } from '@/types';
 import { Logger } from '@/utils/logger';
-import { AI, RETRY, TIMEOUT, UI_LIMITS } from '@/config/constants';
+import { AI, ANALYSIS_FORMAT, RETRY, TIMEOUT, UI_LIMITS } from '@/config/constants';
 
 export type StoredAiLogEntry = {
   type: 'extraction' | 'analysis';
@@ -141,6 +145,36 @@ const taskSchema = z.object({
   interruptedByRestart: z.boolean().optional(),
   detailedProgress: taskProgressSchema.optional(),
 });
+const historyItemSchema = z.object({
+  id: nonEmptyStringSchema,
+  url: nonEmptyStringSchema,
+  title: z.string(),
+  platform: z.string(),
+  videoTime: z.string().optional(),
+  postContent: z.string().optional(),
+  extractedAt: finiteNumberSchema,
+  commentsCount: finiteNumberSchema,
+  comments: z.array(z.unknown()),
+  analysis: z.unknown().optional(),
+  analyzedAt: finiteNumberSchema.optional(),
+});
+const analysisResultSchema = z.object({
+  markdown: z.string(),
+  dynamicHtml: z.string().optional(),
+  summary: z.unknown().optional(),
+  tokensUsed: finiteNumberSchema,
+  generatedAt: finiteNumberSchema,
+});
+const analysisResultSummarySchema = z.object({
+  totalComments: finiteNumberSchema,
+  sentimentDistribution: z.object({
+    positive: finiteNumberSchema,
+    negative: finiteNumberSchema,
+    neutral: finiteNumberSchema,
+  }),
+  hotComments: z.array(z.unknown()),
+  keyInsights: z.array(z.string()),
+});
 const tokenStatsSchema = z.object({
   today: finiteNumberSchema,
   total: finiteNumberSchema,
@@ -181,6 +215,85 @@ export const settingsPatchSchema = z
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function sanitizeComment(value: unknown): Comment | null {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+
+  const id = nonEmptyStringSchema.safeParse(value.id);
+  if (!id.success || typeof value.username !== 'string' || typeof value.content !== 'string') {
+    return null;
+  }
+
+  const replies = Array.isArray(value.replies)
+    ? value.replies.flatMap((reply) => {
+        const sanitized = sanitizeComment(reply);
+        return sanitized ? [sanitized] : [];
+      })
+    : [];
+  const likes = finiteNumberSchema.safeParse(value.likes);
+  const comment: Comment = {
+    id: id.data,
+    username: value.username,
+    timestamp:
+      typeof value.timestamp === 'string' && value.timestamp.trim().length > 0
+        ? value.timestamp
+        : ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP,
+    likes: likes.success ? Math.max(0, likes.data) : 0,
+    content: value.content,
+    replies,
+  };
+
+  if (typeof value.userId === 'string') {
+    comment.userId = value.userId;
+  }
+  if (typeof value.platform === 'string') {
+    comment.platform = value.platform;
+  }
+
+  return comment;
+}
+
+function sanitizeAnalysisResultSummary(value: unknown): AnalysisResultSummary | undefined {
+  const result = analysisResultSummarySchema.safeParse(value);
+  if (!result.success) {
+    return undefined;
+  }
+
+  return {
+    totalComments: result.data.totalComments,
+    sentimentDistribution: result.data.sentimentDistribution,
+    hotComments: result.data.hotComments.flatMap((comment) => {
+      const sanitized = sanitizeComment(comment);
+      return sanitized ? [sanitized] : [];
+    }),
+    keyInsights: result.data.keyInsights,
+  };
+}
+
+function sanitizeAnalysisResult(value: unknown): AnalysisResult | null {
+  const result = analysisResultSchema.safeParse(value);
+  if (!result.success) {
+    return null;
+  }
+
+  const sanitized: AnalysisResult = {
+    markdown: result.data.markdown,
+    tokensUsed: result.data.tokensUsed,
+    generatedAt: result.data.generatedAt,
+  };
+  if (result.data.dynamicHtml !== undefined) {
+    sanitized.dynamicHtml = result.data.dynamicHtml;
+  }
+
+  const summary = sanitizeAnalysisResultSummary(result.data.summary);
+  if (summary) {
+    sanitized.summary = summary;
+  }
+
+  return sanitized;
 }
 
 function filterValidItems<T>(items: unknown, schema: z.ZodType<T>): T[] {
@@ -288,6 +401,43 @@ export function sanitizeStoredSettings(value: unknown): Partial<Settings> {
   ) as CrawlingConfig[];
 
   return sanitized;
+}
+
+export function sanitizeHistoryItem(
+  value: unknown,
+  options: { dropInvalidAnalysis?: boolean } = {},
+): HistoryItem | null {
+  const result = historyItemSchema.safeParse(value);
+  if (!result.success) {
+    return null;
+  }
+
+  const comments = result.data.comments.flatMap((comment) => {
+    const sanitized = sanitizeComment(comment);
+    return sanitized ? [sanitized] : [];
+  });
+  let analysis: AnalysisResult | undefined;
+  if (result.data.analysis !== undefined) {
+    const sanitizedAnalysis = sanitizeAnalysisResult(result.data.analysis);
+    if (!sanitizedAnalysis && !options.dropInvalidAnalysis) {
+      return null;
+    }
+    analysis = sanitizedAnalysis ?? undefined;
+  }
+
+  return {
+    id: result.data.id,
+    url: result.data.url,
+    title: result.data.title,
+    platform: result.data.platform,
+    videoTime: result.data.videoTime,
+    postContent: result.data.postContent,
+    extractedAt: result.data.extractedAt,
+    commentsCount: comments.length,
+    comments,
+    analysis,
+    analyzedAt: result.data.analyzedAt,
+  };
 }
 
 export function sanitizePersistedTaskState(value: unknown): PersistedTaskStateShape | null {

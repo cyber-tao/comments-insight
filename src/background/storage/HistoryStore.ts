@@ -2,6 +2,7 @@ import { HistoryItem } from '@/types';
 import { HISTORY, PAGINATION } from '@/config/constants';
 import { Logger } from '@/utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
+import { sanitizeHistoryItem } from '@/utils/storage-validation';
 import Dexie, { type Table } from 'dexie';
 
 type HistoryMetadata = Pick<
@@ -101,23 +102,100 @@ function toHistoryReadError(
   });
 }
 
-export class HistoryStore {
-  private itemCountEstimate: number | null = null;
+function toHistoryWriteError(
+  message: string,
+  error: unknown,
+  details: Record<string, unknown> = {},
+): ExtensionError {
+  if (error instanceof ExtensionError) {
+    return error;
+  }
 
-  async saveHistory(item: HistoryItem): Promise<void> {
+  return new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, message, {
+    ...details,
+    originalError: error instanceof Error ? error.message : String(error),
+  });
+}
+
+function getHistoryId(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null) {
+    return undefined;
+  }
+
+  const id = (value as { id?: unknown }).id;
+  return typeof id === 'string' ? id : undefined;
+}
+
+function requireValidHistoryItem(value: unknown): HistoryItem {
+  const item = sanitizeHistoryItem(value);
+  if (item) {
+    return item;
+  }
+
+  throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Invalid history item', {
+    historyId: getHistoryId(value),
+  });
+}
+
+export class HistoryStore {
+  async createHistory(item: HistoryItem): Promise<void> {
+    const historyId = getHistoryId(item);
     try {
-      await db.transaction('rw', db.history, db.historyMetadata, async () => {
-        await db.history.put(item);
-        await db.historyMetadata.put(toHistoryMetadata(item));
+      const sanitizedItem = requireValidHistoryItem(item);
+      const prunedCount = await db.transaction('rw', db.history, db.historyMetadata, async () => {
+        await db.history.add(sanitizedItem);
+        await db.historyMetadata.put(toHistoryMetadata(sanitizedItem));
+
+        const count = await db.history.count();
+        if (count <= HISTORY.MAX_ITEMS) {
+          return 0;
+        }
+
+        const itemsToDelete = await db.history
+          .orderBy('extractedAt')
+          .reverse()
+          .offset(HISTORY.MAX_ITEMS)
+          .toArray();
+        const idsToDelete = itemsToDelete.map((historyItem) => historyItem.id);
+        await db.history.bulkDelete(idsToDelete);
+        await db.historyMetadata.bulkDelete(idsToDelete);
+        return idsToDelete.length;
       });
-      await this.enforceHistoryLimit();
-      Logger.info('[HistoryStore] History item saved', { id: item.id });
+
+      Logger.info('[HistoryStore] History item created', { id: sanitizedItem.id });
+      if (prunedCount > 0) {
+        Logger.info('[HistoryStore] Pruned old history items', { count: prunedCount });
+      }
     } catch (error) {
-      Logger.error('[HistoryStore] Failed to save history', { error });
-      throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save history', {
-        historyId: item.id,
-        originalError: error instanceof Error ? error.message : String(error),
+      const wrappedError = toHistoryWriteError('Failed to create history', error, { historyId });
+      Logger.error('[HistoryStore] Failed to create history', { error: wrappedError });
+      throw wrappedError;
+    }
+  }
+
+  async updateHistory(item: HistoryItem): Promise<boolean> {
+    const historyId = getHistoryId(item);
+    try {
+      const sanitizedItem = requireValidHistoryItem(item);
+      const updated = await db.transaction('rw', db.history, db.historyMetadata, async () => {
+        const existingItem = await db.history.get(sanitizedItem.id);
+        if (!existingItem) {
+          return false;
+        }
+
+        await db.history.put(sanitizedItem);
+        await db.historyMetadata.put(toHistoryMetadata(sanitizedItem));
+        return true;
       });
+
+      if (updated) {
+        Logger.info('[HistoryStore] History item updated', { id: sanitizedItem.id });
+      }
+      return updated;
+    } catch (error) {
+      const wrappedError = toHistoryWriteError('Failed to update history', error, { historyId });
+      Logger.error('[HistoryStore] Failed to update history', { error: wrappedError });
+      throw wrappedError;
     }
   }
 
@@ -143,7 +221,6 @@ export class HistoryStore {
         await db.history.clear();
         await db.historyMetadata.clear();
       });
-      this.itemCountEstimate = 0;
       return count;
     } catch (error) {
       Logger.error('[HistoryStore] Failed to clear all history', { error });
@@ -221,7 +298,18 @@ export class HistoryStore {
 
   async getHistoryItem(id: string): Promise<HistoryItem | undefined> {
     try {
-      return await db.history.get(id);
+      const storedItem = await db.history.get(id);
+      if (!storedItem) {
+        return undefined;
+      }
+
+      const item = sanitizeHistoryItem(storedItem, { dropInvalidAnalysis: true });
+      if (!item) {
+        throw new ExtensionError(ErrorCode.STORAGE_READ_ERROR, 'Invalid history item', {
+          historyId: id,
+        });
+      }
+      return item;
     } catch (error) {
       const wrappedError = toHistoryReadError('Failed to get history item', error, { id });
       Logger.error('[HistoryStore] Failed to get history item', { id, error: wrappedError });
@@ -235,9 +323,6 @@ export class HistoryStore {
         await db.history.delete(id);
         await db.historyMetadata.delete(id);
       });
-      if (this.itemCountEstimate !== null) {
-        this.itemCountEstimate = Math.max(0, this.itemCountEstimate - 1);
-      }
       Logger.info('[HistoryStore] History item deleted', { id });
     } catch (error) {
       Logger.error('[HistoryStore] Failed to delete history item', { id, error });
@@ -245,35 +330,6 @@ export class HistoryStore {
         historyId: id,
         originalError: error instanceof Error ? error.message : String(error),
       });
-    }
-  }
-
-  private async enforceHistoryLimit(): Promise<void> {
-    // Counting on every save is the dominant cost of saveHistory; keep an
-    // in-memory estimate (seeded lazily) so writes below the limit skip the
-    // count() cursor scan entirely.
-    if (this.itemCountEstimate === null) {
-      this.itemCountEstimate = await db.historyMetadata.count();
-    } else {
-      this.itemCountEstimate += 1;
-    }
-    if (this.itemCountEstimate <= HISTORY.MAX_ITEMS) {
-      return;
-    }
-
-    const itemsToDelete = await db.historyMetadata
-      .orderBy('extractedAt')
-      .reverse()
-      .offset(HISTORY.MAX_ITEMS)
-      .toArray();
-    const idsToDelete = itemsToDelete.map((item) => item.id);
-    if (idsToDelete.length > 0) {
-      await db.transaction('rw', db.history, db.historyMetadata, async () => {
-        await db.history.bulkDelete(idsToDelete);
-        await db.historyMetadata.bulkDelete(idsToDelete);
-      });
-      this.itemCountEstimate = HISTORY.MAX_ITEMS;
-      Logger.info('[HistoryStore] Pruned old history items', { count: idsToDelete.length });
     }
   }
 }

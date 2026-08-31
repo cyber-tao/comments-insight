@@ -34,6 +34,12 @@ interface StartAnalysisResponse {
   taskId: string;
 }
 
+function createHistoryNotFoundError(historyId: string): ExtensionError {
+  return new ExtensionError(ErrorCode.TASK_NOT_FOUND, `History item not found: ${historyId}`, {
+    historyId,
+  });
+}
+
 export async function handleStartAnalysis(
   message: Extract<Message, { type: 'START_ANALYSIS' }>,
   context: HandlerContext,
@@ -76,13 +82,7 @@ export async function handleStartAnalysis(
       if (historyId) {
         const historyItem = await context.historyStore.getHistoryItem(historyId);
         if (!historyItem) {
-          throw new ExtensionError(
-            ErrorCode.TASK_NOT_FOUND,
-            `History item not found: ${historyId}`,
-            {
-              historyId,
-            },
-          );
+          throw createHistoryNotFoundError(historyId);
         }
         platform = historyItem.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM;
         url = historyItem.url || ANALYSIS_FORMAT.UNKNOWN_URL;
@@ -188,17 +188,16 @@ export async function handleStartAnalysis(
         if (historyId) {
           const historyItem = await context.historyStore.getHistoryItem(historyId);
           if (!historyItem) {
-            throw new ExtensionError(
-              ErrorCode.TASK_NOT_FOUND,
-              `History item not found: ${historyId}`,
-              { historyId },
-            );
+            throw createHistoryNotFoundError(historyId);
           }
           historyItem.analysis = result;
           historyItem.analyzedAt = Date.now();
-          await context.historyStore.saveHistory(historyItem);
+          const updated = await context.historyStore.updateHistory(historyItem);
+          if (!updated) {
+            throw createHistoryNotFoundError(historyId);
+          }
         } else {
-          await context.historyStore.saveHistory({
+          await context.historyStore.createHistory({
             id: generateUniqueId('history'),
             url: task.url,
             title: `Analysis ${new Date().toLocaleString()}`,
@@ -213,6 +212,9 @@ export async function handleStartAnalysis(
         }
       } catch (saveError) {
         Logger.error('[AnalysisHandler] Failed to save analysis history', { saveError });
+        if (saveError instanceof ExtensionError) {
+          throw saveError;
+        }
         throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save analysis history');
       }
 
@@ -252,9 +254,7 @@ export async function handleGenerateDynamicReport(
 
   const historyItem = await context.historyStore.getHistoryItem(historyId);
   if (!historyItem) {
-    throw new ExtensionError(ErrorCode.TASK_NOT_FOUND, `History item not found: ${historyId}`, {
-      historyId,
-    });
+    throw createHistoryNotFoundError(historyId);
   }
 
   if (!historyItem.analysis?.markdown) {
@@ -319,13 +319,24 @@ export async function handleGenerateDynamicReport(
       throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Report generation cancelled');
     }
 
-    const latestItem = (await context.historyStore.getHistoryItem(historyId)) || historyItem;
-    if (latestItem.analysis) {
-      latestItem.analysis.dynamicHtml = dynamicResult.html;
-      latestItem.analysis.tokensUsed =
-        (latestItem.analysis.tokensUsed || 0) + dynamicResult.tokensUsed;
+    const latestItem = await context.historyStore.getHistoryItem(historyId);
+    if (!latestItem) {
+      throw createHistoryNotFoundError(historyId);
     }
-    await context.historyStore.saveHistory(latestItem);
+    if (!latestItem.analysis) {
+      throw new ExtensionError(
+        ErrorCode.VALIDATION_ERROR,
+        'Analysis report does not exist for this history item',
+      );
+    }
+
+    latestItem.analysis.dynamicHtml = dynamicResult.html;
+    latestItem.analysis.tokensUsed =
+      (latestItem.analysis.tokensUsed || 0) + dynamicResult.tokensUsed;
+    const updated = await context.historyStore.updateHistory(latestItem);
+    if (!updated) {
+      throw createHistoryNotFoundError(historyId);
+    }
 
     context.taskManager.updateDetailedProgress(taskId, {
       stage: 'complete',

@@ -182,7 +182,7 @@ export async function handleExtractionCompleted(
       comments: normalizedComments,
     };
     try {
-      await context.historyStore.saveHistory(historyItem);
+      await context.historyStore.createHistory(historyItem);
     } catch (saveError) {
       Logger.error('[ExtractionHandler] Failed to save extraction history', { saveError });
       const historyError = new ExtensionError(

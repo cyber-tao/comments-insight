@@ -38,9 +38,8 @@ function createMockContext(overrides: Partial<HandlerContext> = {}): HandlerCont
     },
     historyStore: {
       getHistoryItem: vi.fn().mockResolvedValue(null),
-      saveHistory: vi.fn().mockResolvedValue('hist_123'),
-      addAnalysisToHistory: vi.fn().mockResolvedValue(undefined),
-      addHistoryItem: vi.fn().mockResolvedValue('hist_123'),
+      createHistory: vi.fn().mockResolvedValue(undefined),
+      updateHistory: vi.fn().mockResolvedValue(true),
     },
     commentAnalyzer: {
       analyzeComments: vi.fn().mockResolvedValue({
@@ -197,6 +196,13 @@ describe('analysis handlers', () => {
           stageMessageParams: { characters: 512 },
         },
       );
+      expect(localContext.historyStore.createHistory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          comments: message.payload.comments,
+          analysis: analysisResult,
+        }),
+      );
+      expect(localContext.historyStore.updateHistory).not.toHaveBeenCalled();
     });
 
     it('should fail analysis when history target is missing', async () => {
@@ -243,6 +249,80 @@ describe('analysis handlers', () => {
         message: 'History item not found: history-missing',
       });
       expect(localContext.commentAnalyzer.analyzeComments).not.toHaveBeenCalled();
+    });
+
+    it('should throw task not found when a reanalysis target is deleted before update', async () => {
+      const historyItem = {
+        id: 'history_deleted_during_analysis',
+        url: 'https://example.com/post',
+        title: 'Post',
+        platform: 'example.com',
+        extractedAt: 1000,
+        commentsCount: 1,
+        comments: [],
+      };
+      const analysisResult = {
+        markdown: '# Updated analysis',
+        tokensUsed: 5,
+        generatedAt: 2000,
+      };
+      const localContext = createMockContext({
+        settingsStore: {
+          getSettings: vi.fn().mockResolvedValue({
+            aiModel: {},
+            analyzerPromptTemplate: '',
+            language: 'en-US',
+            generateDynamicReport: false,
+          }),
+        },
+        historyStore: {
+          ...createMockContext().historyStore,
+          getHistoryItem: vi.fn().mockResolvedValue(historyItem),
+          updateHistory: vi.fn().mockResolvedValue(false),
+        },
+        commentAnalyzer: {
+          analyzeComments: vi.fn().mockResolvedValue(analysisResult),
+        },
+      } as unknown as Partial<HandlerContext>);
+      const message = {
+        type: 'START_ANALYSIS' as const,
+        payload: {
+          comments: [
+            {
+              id: 'comment_1',
+              username: 'user',
+              content: 'hello',
+              likes: 0,
+              timestamp: new Date().toISOString(),
+              replies: [],
+            },
+          ],
+          historyId: historyItem.id,
+        },
+      };
+
+      await handleStartAnalysis(message, localContext);
+      const setExecutorMock = localContext.taskManager.setExecutor as unknown as {
+        mock: { calls: unknown[][] };
+      };
+      const executor = setExecutorMock.mock.calls[0][1] as (
+        task: { id: string; url: string; platform?: string },
+        signal: AbortSignal,
+      ) => Promise<unknown>;
+
+      await expect(
+        executor(
+          { id: 'task_123', url: historyItem.url, platform: historyItem.platform },
+          new AbortController().signal,
+        ),
+      ).rejects.toMatchObject({
+        code: ErrorCode.TASK_NOT_FOUND,
+        message: `History item not found: ${historyItem.id}`,
+      });
+      expect(localContext.historyStore.updateHistory).toHaveBeenCalledWith(
+        expect.objectContaining({ id: historyItem.id, analysis: analysisResult }),
+      );
+      expect(localContext.historyStore.createHistory).not.toHaveBeenCalled();
     });
   });
 
@@ -378,7 +458,7 @@ describe('analysis handlers', () => {
         historyStore: {
           ...createMockContext().historyStore,
           getHistoryItem: vi.fn().mockResolvedValue(mockHistoryItem),
-          saveHistory: vi.fn().mockResolvedValue('hist_1'),
+          updateHistory: vi.fn().mockResolvedValue(true),
         },
         commentAnalyzer: {
           generateDynamicHtml: vi.fn().mockResolvedValue({
@@ -407,7 +487,7 @@ describe('analysis handlers', () => {
       // Execute the task executor
       const taskResult = await executorFn({ id: 'task_dynamic_123' }, new AbortController().signal);
       expect(taskResult.tokensUsed).toBe(50);
-      expect(localContext.historyStore.saveHistory).toHaveBeenCalledWith(
+      expect(localContext.historyStore.updateHistory).toHaveBeenCalledWith(
         expect.objectContaining({
           analysis: expect.objectContaining({
             dynamicHtml: '<!DOCTYPE html><html><body>Dashboard</body></html>',
@@ -415,6 +495,62 @@ describe('analysis handlers', () => {
           }),
         }),
       );
+      expect(localContext.historyStore.createHistory).not.toHaveBeenCalled();
+    });
+
+    it('should not recreate history deleted while a dynamic report is generated', async () => {
+      const { handleGenerateDynamicReport } = await import('@/background/handlers/analysis');
+      const historyItem = {
+        id: 'hist_deleted_during_generation',
+        url: 'https://example.com',
+        title: 'Example',
+        platform: 'example',
+        extractedAt: 1000,
+        commentsCount: 1,
+        comments: [],
+        analysis: {
+          markdown: '# Analysis Markdown',
+          tokensUsed: 100,
+          generatedAt: 1000,
+        },
+      };
+      let executorFn: any;
+      const localContext = createMockContext({
+        taskManager: {
+          ...createMockContext().taskManager,
+          setExecutor: vi.fn().mockImplementation((_taskId, fn) => {
+            executorFn = fn;
+          }),
+        },
+        historyStore: {
+          ...createMockContext().historyStore,
+          getHistoryItem: vi.fn().mockResolvedValue(historyItem),
+          updateHistory: vi.fn().mockResolvedValue(false),
+        },
+        commentAnalyzer: {
+          generateDynamicHtml: vi.fn().mockResolvedValue({
+            html: '<!DOCTYPE html><html><body>Dashboard</body></html>',
+            tokensUsed: 50,
+          }),
+        },
+      } as unknown as Partial<HandlerContext>);
+
+      await handleGenerateDynamicReport(
+        {
+          type: 'GENERATE_DYNAMIC_REPORT',
+          payload: { historyId: historyItem.id },
+        },
+        localContext,
+      );
+
+      await expect(
+        executorFn({ id: 'task_dynamic_123' }, new AbortController().signal),
+      ).rejects.toMatchObject({
+        code: ErrorCode.TASK_NOT_FOUND,
+        message: `History item not found: ${historyItem.id}`,
+      });
+      expect(localContext.historyStore.updateHistory).toHaveBeenCalledOnce();
+      expect(localContext.historyStore.createHistory).not.toHaveBeenCalled();
     });
   });
 });

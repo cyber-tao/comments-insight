@@ -2,6 +2,25 @@ import 'fake-indexeddb/auto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HistoryStore } from '../src/background/storage/HistoryStore';
 import { HISTORY } from '../src/config/constants';
+import { ErrorCode } from '../src/utils/errors';
+import type { HistoryItem } from '../src/types';
+
+function createHistoryItem(
+  id: string,
+  extractedAt: number,
+  overrides: Partial<HistoryItem> = {},
+): HistoryItem {
+  return {
+    id,
+    url: `https://example.com/${id}`,
+    title: `History ${id}`,
+    platform: 'example',
+    extractedAt,
+    commentsCount: 0,
+    comments: [],
+    ...overrides,
+  };
+}
 
 vi.mock('../src/utils/logger', () => ({
   Logger: {
@@ -35,7 +54,7 @@ describe('HistoryStore (IndexedDB)', () => {
       },
     ];
 
-    await store.saveHistory({
+    await store.createHistory({
       id,
       url: 'https://example.com',
       title: 'Test',
@@ -52,8 +71,56 @@ describe('HistoryStore (IndexedDB)', () => {
     expect(result?.comments).toEqual(comments);
   });
 
+  it('should reject a duplicate id without overwriting the existing row or metadata', async () => {
+    const original = createHistoryItem('duplicate_id', 1000, {
+      url: 'https://example.com/original',
+      title: 'Original',
+    });
+    await store.createHistory(original);
+
+    await expect(
+      store.createHistory({
+        ...original,
+        url: 'https://example.com/replacement',
+        title: 'Replacement',
+        extractedAt: 2000,
+      }),
+    ).rejects.toMatchObject({ code: ErrorCode.STORAGE_WRITE_ERROR });
+
+    expect(await store.getHistoryItem(original.id)).toMatchObject({
+      url: 'https://example.com/original',
+      title: 'Original',
+      extractedAt: 1000,
+    });
+    const page = await store.getHistoryMetadataPage(0, 10);
+    expect(page.total).toBe(1);
+    expect(page.entries[0]).toMatchObject({
+      id: original.id,
+      url: 'https://example.com/original',
+      title: 'Original',
+      extractedAt: 1000,
+    });
+  });
+
+  it('should reject an invalid history item before writing either table', async () => {
+    const invalidItem = {
+      ...createHistoryItem('invalid_analysis', 1000),
+      analysis: {
+        markdown: '# Analysis',
+        tokensUsed: 'invalid',
+        generatedAt: 1000,
+      },
+    };
+
+    await expect(store.createHistory(invalidItem as unknown as HistoryItem)).rejects.toMatchObject({
+      code: ErrorCode.STORAGE_WRITE_ERROR,
+    });
+    expect(await store.getHistoryItem(invalidItem.id)).toBeUndefined();
+    expect((await store.getHistoryMetadataPage(0, 10)).total).toBe(0);
+  });
+
   it('should retrieve latest history id by url', async () => {
-    await store.saveHistory({
+    await store.createHistory({
       id: 'id_old',
       url: 'https://example.com',
       title: 'Test',
@@ -63,7 +130,7 @@ describe('HistoryStore (IndexedDB)', () => {
       comments: [],
     });
 
-    await store.saveHistory({
+    await store.createHistory({
       id: 'id_new',
       url: 'https://example.com',
       title: 'Test 2',
@@ -79,7 +146,7 @@ describe('HistoryStore (IndexedDB)', () => {
 
   it('should delete a history item', async () => {
     const id = 'history_to_delete';
-    await store.saveHistory({
+    await store.createHistory({
       id,
       url: 'https://example.com',
       title: 'Test',
@@ -95,8 +162,24 @@ describe('HistoryStore (IndexedDB)', () => {
     expect(result).toBeUndefined();
   });
 
+  it('should return false when updating a deleted history item', async () => {
+    const item = createHistoryItem('history_deleted_before_update', 1000);
+    await store.createHistory(item);
+    await store.deleteHistoryItem(item.id);
+
+    await expect(
+      store.updateHistory({
+        ...item,
+        title: 'Must not be recreated',
+      }),
+    ).resolves.toBe(false);
+
+    expect(await store.getHistoryItem(item.id)).toBeUndefined();
+    expect((await store.getHistoryMetadataPage(0, 10)).total).toBe(0);
+  });
+
   it('should return metadata search results without comment payloads', async () => {
-    await store.saveHistory({
+    await store.createHistory({
       id: 'history_metadata_search',
       url: 'https://example.com/search',
       title: 'Needle Title',
@@ -129,7 +212,7 @@ describe('HistoryStore (IndexedDB)', () => {
   });
 
   it('should recursively search comments for full history queries', async () => {
-    await store.saveHistory({
+    await store.createHistory({
       id: 'history_nested_comment_search',
       url: 'https://example.com/nested-search',
       title: 'Nested Search',
@@ -167,23 +250,96 @@ describe('HistoryStore (IndexedDB)', () => {
     expect(stored?.comments[0].replies[0].content).toBe('deep reply needle');
   });
 
-  it('should enforce the configured history retention limit', async () => {
-    for (let index = 0; index < HISTORY.MAX_ITEMS + 2; index += 1) {
-      await store.saveHistory({
-        id: `history_${index}`,
-        url: `https://example.com/${index}`,
-        title: `History ${index}`,
-        platform: 'example',
-        extractedAt: index,
-        commentsCount: 0,
-        comments: [],
+  it('should roll back the new row when atomic pruning fails', async () => {
+    const historyConfig = HISTORY as { MAX_ITEMS: number };
+    const originalLimit = historyConfig.MAX_ITEMS;
+    historyConfig.MAX_ITEMS = 2;
+
+    try {
+      await store.createHistory(createHistoryItem('history_0', 0));
+      await store.createHistory(createHistoryItem('history_1', 1));
+
+      const originalDelete = IDBObjectStore.prototype.delete;
+      const deleteSpy = vi.spyOn(IDBObjectStore.prototype, 'delete').mockImplementation(function (
+        this: IDBObjectStore,
+        query: IDBValidKey | IDBKeyRange,
+      ) {
+        if (this.name === 'historyMetadata') {
+          throw new Error('Forced metadata prune failure');
+        }
+        return originalDelete.call(this, query);
       });
+      try {
+        await expect(store.createHistory(createHistoryItem('history_2', 2))).rejects.toMatchObject({
+          code: ErrorCode.STORAGE_WRITE_ERROR,
+        });
+      } finally {
+        deleteSpy.mockRestore();
+      }
+
+      const page = await store.getHistoryMetadataPage(0, 10);
+      expect(page.entries.map((item) => item.id)).toEqual(['history_1', 'history_0']);
+      await expect(store.getHistoryItem('history_0')).resolves.toBeDefined();
+      await expect(store.getHistoryItem('history_2')).resolves.toBeUndefined();
+    } finally {
+      historyConfig.MAX_ITEMS = originalLimit;
     }
+  });
 
-    const page = await store.getHistoryMetadataPage(0, HISTORY.MAX_ITEMS + 2);
+  it('should atomically create and prune old rows from both history tables', async () => {
+    const historyConfig = HISTORY as { MAX_ITEMS: number };
+    const originalLimit = historyConfig.MAX_ITEMS;
+    historyConfig.MAX_ITEMS = 2;
 
-    expect(page.total).toBe(HISTORY.MAX_ITEMS);
-    expect(page.entries.map((item) => item.id)).not.toContain('history_0');
-    expect(page.entries.map((item) => item.id)).not.toContain('history_1');
+    try {
+      await store.createHistory(createHistoryItem('history_0', 0));
+      await store.createHistory(createHistoryItem('history_1', 1));
+      await store.createHistory(createHistoryItem('history_2', 2));
+
+      const page = await store.getHistoryMetadataPage(0, 10);
+      expect(page.total).toBe(2);
+      expect(page.entries.map((item) => item.id)).toEqual(['history_2', 'history_1']);
+      await expect(store.getHistoryItem('history_0')).resolves.toBeUndefined();
+      await expect(store.getHistoryItem('history_1')).resolves.toBeDefined();
+      await expect(store.getHistoryItem('history_2')).resolves.toBeDefined();
+    } finally {
+      historyConfig.MAX_ITEMS = originalLimit;
+    }
+  });
+
+  it('should update without applying or increasing the retention count', async () => {
+    const historyConfig = HISTORY as { MAX_ITEMS: number };
+    const originalLimit = historyConfig.MAX_ITEMS;
+    historyConfig.MAX_ITEMS = 3;
+
+    try {
+      const items = [
+        createHistoryItem('history_0', 0),
+        createHistoryItem('history_1', 1),
+        createHistoryItem('history_2', 2),
+      ];
+      for (const item of items) {
+        await store.createHistory(item);
+      }
+
+      historyConfig.MAX_ITEMS = 2;
+      await expect(
+        store.updateHistory({
+          ...items[0],
+          title: 'Updated without retention',
+        }),
+      ).resolves.toBe(true);
+
+      const page = await store.getHistoryMetadataPage(0, 10);
+      expect(page.total).toBe(3);
+      expect(page.entries.map((item) => item.id).sort()).toEqual([
+        'history_0',
+        'history_1',
+        'history_2',
+      ]);
+      expect((await store.getHistoryItem('history_0'))?.title).toBe('Updated without retention');
+    } finally {
+      historyConfig.MAX_ITEMS = originalLimit;
+    }
   });
 });
