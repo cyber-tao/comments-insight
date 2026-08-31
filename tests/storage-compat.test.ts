@@ -1,24 +1,37 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CommentsInsightDatabase, HistoryStore } from '../src/background/storage/HistoryStore';
-import { SettingsStore } from '../src/background/storage/SettingsStore';
+import { DEFAULT_SETTINGS, SettingsStore } from '../src/background/storage/SettingsStore';
+import { CrawlingConfigStore } from '../src/background/storage/CrawlingConfigStore';
 import type { EncryptionService } from '../src/background/storage/EncryptionService';
-import type { AIConfig, HistoryItem } from '../src/types';
+import type { AIConfig, CrawlingConfig, HistoryItem, Settings } from '../src/types';
 import { ANALYSIS_FORMAT, STORAGE } from '../src/config/constants';
 import {
   sanitizePersistedTaskState,
   sanitizeStoredSettings,
   sanitizeTokenStats,
+  settingsPatchSchema,
 } from '../src/utils/storage-validation';
 
 const mockStorageGet = vi.fn();
 const mockStorageSet = vi.fn();
+type StorageChangeListener = (
+  changes: Record<string, { oldValue?: unknown; newValue?: unknown }>,
+  areaName: string,
+) => void;
+const storageChangeListeners: StorageChangeListener[] = [];
+const mockStorageOnChangedAddListener = vi.fn((listener: StorageChangeListener) => {
+  storageChangeListeners.push(listener);
+});
 
 vi.stubGlobal('chrome', {
   storage: {
     local: {
       get: mockStorageGet,
       set: mockStorageSet,
+    },
+    onChanged: {
+      addListener: mockStorageOnChangedAddListener,
     },
   },
 });
@@ -31,6 +44,40 @@ function createEncryptionServiceMock(overrides: Record<string, unknown> = {}) {
     ...overrides,
   } as unknown as EncryptionService;
 }
+
+function useInMemorySettingsStorage(initialSettings: unknown = {}) {
+  let persistedSettings = structuredClone(initialSettings);
+  mockStorageGet.mockImplementation(async (key: string) =>
+    key === STORAGE.SETTINGS_KEY
+      ? { [STORAGE.SETTINGS_KEY]: structuredClone(persistedSettings) }
+      : {},
+  );
+  mockStorageSet.mockImplementation(async (values: Record<string, unknown>) => {
+    if (Object.prototype.hasOwnProperty.call(values, STORAGE.SETTINGS_KEY)) {
+      persistedSettings = structuredClone(values[STORAGE.SETTINGS_KEY]);
+    }
+  });
+  return {
+    read: () => structuredClone(persistedSettings),
+    write: (settings: unknown) => {
+      persistedSettings = structuredClone(settings);
+    },
+  };
+}
+
+function createCrawlingConfig(domain: string): CrawlingConfig {
+  return {
+    ...structuredClone(DEFAULT_SETTINGS.crawlingConfigs[0]),
+    id: `config_${domain}`,
+    domain,
+    siteName: domain,
+    lastUpdated: 1,
+  };
+}
+
+beforeEach(() => {
+  storageChangeListeners.length = 0;
+});
 
 vi.mock('../src/utils/logger', () => ({
   Logger: {
@@ -282,6 +329,19 @@ describe('storage compatibility with pre-refactor data', () => {
       expect((sanitized as Record<string, unknown>).analyzerModel).toBeUndefined();
     });
 
+    it('normalizes and deduplicates disabled default config domains', () => {
+      const sanitized = sanitizeStoredSettings({
+        disabledDefaultConfigDomains: [' YouTube.COM ', 'youtube.com', 42, '', 'X.COM'],
+      });
+
+      expect(sanitized.disabledDefaultConfigDomains).toEqual(['youtube.com', 'x.com']);
+      expect(
+        settingsPatchSchema.parse({
+          disabledDefaultConfigDomains: [' Reddit.COM ', 'reddit.com', null],
+        }).disabledDefaultConfigDomains,
+      ).toEqual(['reddit.com']);
+    });
+
     it('returns empty object for non-object input', () => {
       expect(sanitizeStoredSettings(null)).toEqual({});
       expect(sanitizeStoredSettings([1, 2, 3])).toEqual({});
@@ -306,6 +366,204 @@ describe('storage compatibility with pre-refactor data', () => {
       expect(sanitizeTokenStats('garbage')).toEqual({ today: 0, total: 0, lastReset: 0 });
       expect(sanitizeTokenStats(undefined)).toEqual({ today: 0, total: 0, lastReset: 0 });
     });
+  });
+});
+
+describe('SettingsStore crawling config persistence', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockStorageGet.mockReset();
+    mockStorageSet.mockReset();
+  });
+
+  it('reads a legacy Settings object without tombstones', async () => {
+    useInMemorySettingsStorage({ language: 'en-US' });
+    const store = new SettingsStore(createEncryptionServiceMock());
+
+    const settings = await store.getSettings();
+
+    expect(settings.disabledDefaultConfigDomains).toEqual([]);
+    expect(settings.crawlingConfigs).toHaveLength(DEFAULT_SETTINGS.crawlingConfigs.length);
+  });
+
+  it('keeps a deleted bundled config removed after save and reload', async () => {
+    const storage = useInMemorySettingsStorage();
+    const store = new SettingsStore(createEncryptionServiceMock());
+    const initial = await store.getSettings();
+    const removed = initial.crawlingConfigs[0];
+    const removedDomain = removed.domain.toLowerCase();
+
+    await store.saveSettings({
+      crawlingConfigs: initial.crawlingConfigs.filter(
+        (config) => config.domain.toLowerCase() !== removedDomain,
+      ),
+    });
+
+    const persisted = storage.read() as Settings;
+    expect(persisted.disabledDefaultConfigDomains).toContain(removedDomain);
+    const reloaded = await new SettingsStore(createEncryptionServiceMock()).getSettings();
+    expect(reloaded.crawlingConfigs.some((config) => config.domain === removedDomain)).toBe(false);
+  });
+
+  it('clears a bundled config tombstone when the config explicitly reappears', async () => {
+    const storage = useInMemorySettingsStorage();
+    const store = new SettingsStore(createEncryptionServiceMock());
+    const initial = await store.getSettings();
+    const restoredConfig = structuredClone(initial.crawlingConfigs[0]);
+    const restoredDomain = restoredConfig.domain.toLowerCase();
+
+    await store.saveSettings({
+      crawlingConfigs: initial.crawlingConfigs.filter(
+        (config) => config.domain.toLowerCase() !== restoredDomain,
+      ),
+    });
+    const withoutConfig = await store.getSettings();
+    await store.saveSettings({
+      crawlingConfigs: [...withoutConfig.crawlingConfigs, restoredConfig],
+    });
+
+    const persisted = storage.read() as Settings;
+    expect(persisted.disabledDefaultConfigDomains).not.toContain(restoredDomain);
+    const reloaded = await new SettingsStore(createEncryptionServiceMock()).getSettings();
+    expect(reloaded.crawlingConfigs.some((config) => config.domain === restoredDomain)).toBe(true);
+  });
+
+  it('does not change config tombstones for a settings patch without crawling configs', async () => {
+    const storage = useInMemorySettingsStorage();
+    const store = new SettingsStore(createEncryptionServiceMock());
+    const initial = await store.getSettings();
+    const removedDomain = initial.crawlingConfigs[0].domain.toLowerCase();
+
+    await store.saveSettings({
+      crawlingConfigs: initial.crawlingConfigs.filter(
+        (config) => config.domain.toLowerCase() !== removedDomain,
+      ),
+    });
+    await store.saveSettings({ theme: 'dark' });
+
+    const persisted = storage.read() as Settings;
+    expect(persisted.disabledDefaultConfigDomains).toContain(removedDomain);
+    const reloaded = await new SettingsStore(createEncryptionServiceMock()).getSettings();
+    expect(reloaded.crawlingConfigs.some((config) => config.domain === removedDomain)).toBe(false);
+  });
+
+  it('excludes crawling state from settings export and ignores it on import', async () => {
+    const removedDomain = DEFAULT_SETTINGS.crawlingConfigs[0].domain.toLowerCase();
+    const storage = useInMemorySettingsStorage({
+      disabledDefaultConfigDomains: [removedDomain],
+      crawlingConfigs: [],
+      selectorCache: [],
+    });
+    const store = new SettingsStore(createEncryptionServiceMock());
+
+    const exported = JSON.parse(await store.exportSettings()) as Record<string, unknown>;
+    expect(exported).not.toHaveProperty('crawlingConfigs');
+    expect(exported).not.toHaveProperty('selectorCache');
+    expect(exported).not.toHaveProperty('disabledDefaultConfigDomains');
+
+    await store.importSettings(
+      JSON.stringify({
+        theme: 'dark',
+        crawlingConfigs: [DEFAULT_SETTINGS.crawlingConfigs[0]],
+        selectorCache: [],
+        disabledDefaultConfigDomains: [],
+      }),
+    );
+
+    const persisted = storage.read() as Settings;
+    expect(persisted.disabledDefaultConfigDomains).toEqual([removedDomain]);
+    expect(persisted.crawlingConfigs.some((config) => config.domain === removedDomain)).toBe(false);
+  });
+
+  it('preserves both crawling configs saved concurrently', async () => {
+    useInMemorySettingsStorage();
+    const settingsStore = new SettingsStore(createEncryptionServiceMock());
+    const configStore = new CrawlingConfigStore(settingsStore);
+
+    await Promise.all([
+      configStore.saveCrawlingConfig(createCrawlingConfig('alpha.example.com')),
+      configStore.saveCrawlingConfig(createCrawlingConfig('beta.example.com')),
+    ]);
+
+    const reloaded = await new SettingsStore(createEncryptionServiceMock()).getSettings();
+    expect(reloaded.crawlingConfigs.map((config) => config.domain)).toEqual(
+      expect.arrayContaining(['alpha.example.com', 'beta.example.com']),
+    );
+  });
+
+  it('does not treat settings read failures as a missing crawling config', async () => {
+    const configStore = new CrawlingConfigStore({
+      getSettings: vi.fn().mockRejectedValue(new Error('storage unavailable')),
+    } as unknown as SettingsStore);
+
+    await expect(configStore.getCrawlingConfig('example.com')).rejects.toMatchObject({
+      code: 'STORAGE_READ_ERROR',
+    });
+  });
+
+  it('does not cache a stale read that finishes after a save', async () => {
+    useInMemorySettingsStorage({ language: 'old-language' });
+    let resolveDecrypt!: (value: string) => void;
+    let markDecryptStarted!: () => void;
+    const decryptStarted = new Promise<void>((resolve) => {
+      markDecryptStarted = resolve;
+    });
+    const delayedDecrypt = new Promise<string>((resolve) => {
+      resolveDecrypt = resolve;
+    });
+    const decrypt = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        markDecryptStarted();
+        return delayedDecrypt;
+      })
+      .mockResolvedValue('');
+    const store = new SettingsStore(createEncryptionServiceMock({ decrypt }));
+
+    const staleRead = store.getSettings();
+    await decryptStarted;
+    await store.saveSettings({ language: 'new-language' });
+    resolveDecrypt('');
+
+    expect((await staleRead).language).toBe('old-language');
+    expect((await store.getSettings()).language).toBe('new-language');
+  });
+
+  it('does not cache a stale read that finishes after a storage change event', async () => {
+    const storage = useInMemorySettingsStorage({ language: 'old-language' });
+    let resolveDecrypt!: (value: string) => void;
+    let markDecryptStarted!: () => void;
+    const decryptStarted = new Promise<void>((resolve) => {
+      markDecryptStarted = resolve;
+    });
+    const delayedDecrypt = new Promise<string>((resolve) => {
+      resolveDecrypt = resolve;
+    });
+    const decrypt = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        markDecryptStarted();
+        return delayedDecrypt;
+      })
+      .mockResolvedValue('');
+    const store = new SettingsStore(createEncryptionServiceMock({ decrypt }));
+
+    const staleRead = store.getSettings();
+    await decryptStarted;
+    storage.write({ language: 'external-language' });
+    storageChangeListeners[0](
+      {
+        [STORAGE.SETTINGS_KEY]: {
+          oldValue: { language: 'old-language' },
+          newValue: { language: 'external-language' },
+        },
+      },
+      'local',
+    );
+    resolveDecrypt('');
+
+    expect((await staleRead).language).toBe('old-language');
+    expect((await store.getSettings()).language).toBe('external-language');
   });
 });
 

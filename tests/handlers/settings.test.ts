@@ -48,6 +48,7 @@ describe('Settings Handlers', () => {
     selectorRetryAttempts: 3,
     selectorCache: [],
     crawlingConfigs: [],
+    disabledDefaultConfigDomains: [],
     domAnalysisConfig: {
       initialDepth: 5,
       expandDepth: 3,

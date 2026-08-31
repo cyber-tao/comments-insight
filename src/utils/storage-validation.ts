@@ -31,6 +31,15 @@ type PersistedTaskStateShape = {
 const finiteNumberSchema = z.number().finite();
 const positiveIntegerSchema = z.number().int().positive().finite();
 const nonEmptyStringSchema = z.string().trim().min(1);
+const normalizedDomainListSchema = z
+  .array(z.unknown())
+  .transform((values) => [
+    ...new Set(
+      values.flatMap((value) =>
+        typeof value === 'string' && value.trim().length > 0 ? [value.trim().toLowerCase()] : [],
+      ),
+    ),
+  ]);
 const selectorRuleSchema = z.object({
   selector: nonEmptyStringSchema,
   type: z.enum(['css', 'xpath']),
@@ -208,6 +217,7 @@ export const settingsPatchSchema = z
     selectorRetryAttempts: positiveIntegerSchema.max(RETRY.SELECTOR_MAX_ATTEMPTS).optional(),
     selectorCache: z.array(selectorCacheSchema).optional(),
     crawlingConfigs: z.array(crawlingConfigSchema).optional(),
+    disabledDefaultConfigDomains: normalizedDomainListSchema.optional(),
     domAnalysisConfig: domAnalysisConfigSchema.partial().optional(),
     developerMode: z.boolean().optional(),
   })
@@ -380,6 +390,13 @@ export function sanitizeStoredSettings(value: unknown): Partial<Settings> {
   if (typeof raw.developerMode === 'boolean') {
     sanitized.developerMode = raw.developerMode;
   }
+
+  const disabledDefaultConfigDomains = normalizedDomainListSchema.safeParse(
+    raw.disabledDefaultConfigDomains,
+  );
+  sanitized.disabledDefaultConfigDomains = disabledDefaultConfigDomains.success
+    ? disabledDefaultConfigDomains.data
+    : [];
 
   const aiModel = aiConfigSchema.partial().safeParse(raw.aiModel);
   if (aiModel.success) {

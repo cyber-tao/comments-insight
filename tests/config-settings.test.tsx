@@ -89,6 +89,7 @@ function createSettings(configs: CrawlingConfig[] = []): Settings {
     selectorRetryAttempts: 3,
     selectorCache: [],
     crawlingConfigs: configs,
+    disabledDefaultConfigDomains: [],
     domAnalysisConfig: {
       initialDepth: 5,
       expandDepth: 3,

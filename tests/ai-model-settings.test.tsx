@@ -46,6 +46,7 @@ function createSettings(overrides: Partial<Settings> = {}): Settings {
     selectorRetryAttempts: 3,
     selectorCache: [],
     crawlingConfigs: [],
+    disabledDefaultConfigDomains: [],
     domAnalysisConfig: {
       initialDepth: 3,
       expandDepth: 2,

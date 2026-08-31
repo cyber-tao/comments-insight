@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CrawlingConfig, SelectorRule, FieldSelector, ReplyConfig } from '../../types';
+import { generateUniqueId } from '@/utils/id-generator';
 import {
   ConflictItem,
   MERGE_FIELDS,
@@ -58,12 +59,22 @@ export const useConfigImport = (currentConfigs: CrawlingConfig[]) => {
     );
   };
 
-  const normalizeImportedConfig = (config: CrawlingConfig): CrawlingConfig => {
-    const id = config.id && typeof config.id === 'string' ? config.id : `imported_${Date.now()}`;
+  const normalizeImportedConfig = (
+    config: CrawlingConfig,
+    usedIds: Set<string>,
+  ): CrawlingConfig => {
+    let id = typeof config.id === 'string' && config.id.trim().length > 0 ? config.id : '';
+    if (!id || usedIds.has(id)) {
+      do {
+        id = generateUniqueId('imported');
+      } while (usedIds.has(id));
+    }
+    usedIds.add(id);
+
     return {
       ...config,
       id,
-      domain: config.domain.trim(),
+      domain: config.domain.trim().toLowerCase(),
       lastUpdated: config.lastUpdated ?? Date.now(),
     };
   };
@@ -115,7 +126,10 @@ export const useConfigImport = (currentConfigs: CrawlingConfig[]) => {
     configsToProcess: unknown[],
     isRemote: boolean,
   ): { additions: number; conflicts: number } | null => {
-    const validated = configsToProcess.filter(isCrawlingConfig).map(normalizeImportedConfig);
+    const usedIds = new Set(currentConfigs.map((config) => config.id));
+    const validated = configsToProcess
+      .filter(isCrawlingConfig)
+      .map((config) => normalizeImportedConfig(config, usedIds));
     const dedupedByDomain = new Map<string, CrawlingConfig>();
     for (const config of validated) {
       dedupedByDomain.set(config.domain, config);
@@ -128,7 +142,9 @@ export const useConfigImport = (currentConfigs: CrawlingConfig[]) => {
       return null;
     }
 
-    const existingByDomain = new Map(currentConfigs.map((config) => [config.domain, config]));
+    const existingByDomain = new Map(
+      currentConfigs.map((config) => [config.domain.trim().toLowerCase(), config]),
+    );
     const conflicts: ConflictItem[] = [];
     const additions: CrawlingConfig[] = [];
 

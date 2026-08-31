@@ -33,37 +33,41 @@ export class CrawlingConfigStore {
       return null;
     } catch (error) {
       Logger.warn('[CrawlingConfigStore] Failed to get crawling config', { error });
-      return null;
+      if (error instanceof ExtensionError) {
+        throw error;
+      }
+      throw new ExtensionError(ErrorCode.STORAGE_READ_ERROR, 'Failed to get crawling config', {
+        originalError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
   async saveCrawlingConfig(config: CrawlingConfig): Promise<void> {
     try {
-      const settings = await this.settingsStore.getSettings();
-      const configs = settings.crawlingConfigs || [];
       const normalizedDomain = this.normalizeCrawlingDomain(config.domain);
-      const index = configs.findIndex(
-        (c) => this.normalizeCrawlingDomain(c.domain) === normalizedDomain,
-      );
-      const existing = index >= 0 ? configs[index] : undefined;
-      const incomingConfig: CrawlingConfig = {
-        ...config,
-        domain: normalizedDomain,
-      };
-      const normalizedConfig: CrawlingConfig = {
-        ...incomingConfig,
-        lastUpdated: resolveCrawlingConfigLastUpdated({
-          previous: existing,
-          next: incomingConfig,
-        }),
-      };
-      if (index >= 0) {
-        configs[index] = normalizedConfig;
-      } else {
-        configs.push(normalizedConfig);
-      }
-
-      await this.settingsStore.saveSettings({ crawlingConfigs: configs });
+      await this.settingsStore.updateCrawlingConfigs((configs) => {
+        const index = configs.findIndex(
+          (current) => this.normalizeCrawlingDomain(current.domain) === normalizedDomain,
+        );
+        const existing = index >= 0 ? configs[index] : undefined;
+        const incomingConfig: CrawlingConfig = {
+          ...config,
+          domain: normalizedDomain,
+        };
+        const normalizedConfig: CrawlingConfig = {
+          ...incomingConfig,
+          lastUpdated: resolveCrawlingConfigLastUpdated({
+            previous: existing,
+            next: incomingConfig,
+          }),
+        };
+        if (index >= 0) {
+          configs[index] = normalizedConfig;
+        } else {
+          configs.push(normalizedConfig);
+        }
+        return configs;
+      });
       Logger.info('[CrawlingConfigStore] Crawling config saved', { domain: normalizedDomain });
     } catch (error) {
       Logger.error('[CrawlingConfigStore] Failed to save crawling config', { error });

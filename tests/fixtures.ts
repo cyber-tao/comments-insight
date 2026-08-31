@@ -69,6 +69,7 @@ export const mockSettings = (overrides: Partial<Settings> = {}): Settings => {
     selectorRetryAttempts: RETRY.SELECTOR_ATTEMPTS,
     selectorCache: [],
     crawlingConfigs: [],
+    disabledDefaultConfigDomains: [],
     domAnalysisConfig: {
       initialDepth: 3,
       expandDepth: 2,

@@ -79,6 +79,31 @@ export class DataMigrator {
       2: async () => {
         // no-op
       },
+      // Version 3: Settings records persist tombstones for bundled crawling
+      // configs that users explicitly removed. Do not create Settings on a
+      // fresh install; SettingsStore remains responsible for initialization.
+      3: async () => {
+        const stored = await chrome.storage.local.get(STORAGE.SETTINGS_KEY);
+        const settings = stored[STORAGE.SETTINGS_KEY];
+        if (typeof settings !== 'object' || settings === null || Array.isArray(settings)) {
+          return;
+        }
+
+        const disabledDomains = (settings as Record<string, unknown>).disabledDefaultConfigDomains;
+        if (
+          Array.isArray(disabledDomains) &&
+          disabledDomains.every((domain) => typeof domain === 'string')
+        ) {
+          return;
+        }
+
+        await chrome.storage.local.set({
+          [STORAGE.SETTINGS_KEY]: {
+            ...(settings as Record<string, unknown>),
+            disabledDefaultConfigDomains: [],
+          },
+        });
+      },
     };
   }
 }

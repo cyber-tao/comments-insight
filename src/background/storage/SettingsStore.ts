@@ -49,6 +49,7 @@ export const DEFAULT_SETTINGS: Settings = {
     ...config,
     lastUpdated: typeof config.lastUpdated === 'number' ? config.lastUpdated : Date.now(),
   })) as CrawlingConfig[],
+  disabledDefaultConfigDomains: [],
   domAnalysisConfig: DOM_ANALYSIS_DEFAULTS,
   developerMode: false,
 };
@@ -56,6 +57,7 @@ export const DEFAULT_SETTINGS: Settings = {
 export class SettingsStore {
   private saveMutex = new Mutex();
   private settingsCache: Settings | null = null;
+  private settingsRevision = 0;
 
   constructor(private readonly encryptionService: EncryptionService) {
     try {
@@ -64,13 +66,18 @@ export class SettingsStore {
       // calls skip the storage read + PBKDF2 key derivation.
       chrome.storage.onChanged.addListener((changes, areaName) => {
         if (areaName === 'local' && changes[STORAGE.SETTINGS_KEY]) {
-          this.settingsCache = null;
+          this.invalidateSettingsCache();
         }
       });
     } catch {
       // Storage events unavailable (tests/non-extension hosts): cache stays
       // valid until the next save clears it.
     }
+  }
+
+  private invalidateSettingsCache(): void {
+    this.settingsRevision += 1;
+    this.settingsCache = null;
   }
 
   private normalizeCrawlingDomain(domain: string): string {
@@ -84,6 +91,7 @@ export class SettingsStore {
         // poisoning the cache.
         return structuredClone(this.settingsCache);
       }
+      const readRevision = this.settingsRevision;
       await this.encryptionService.ensureEncryptionReady();
       Logger.debug('[SettingsStore] Getting settings from storage');
       const result = await chrome.storage.local.get(STORAGE.SETTINGS_KEY);
@@ -115,7 +123,9 @@ export class SettingsStore {
       delete (merged as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig })
         .analyzerModel;
       Logger.debug('[SettingsStore] Settings retrieved successfully');
-      this.settingsCache = structuredClone(merged);
+      if (this.settingsRevision === readRevision) {
+        this.settingsCache = structuredClone(merged);
+      }
       return merged;
     } catch (error) {
       const wrappedError =
@@ -141,11 +151,26 @@ export class SettingsStore {
 
     const defaultConfigs = DEFAULT_SETTINGS.crawlingConfigs || [];
     const storedConfigs = Array.isArray(stored.crawlingConfigs) ? stored.crawlingConfigs : [];
+    const disabledDefaultConfigDomains = Array.from(
+      new Set(
+        (Array.isArray(stored.disabledDefaultConfigDomains)
+          ? stored.disabledDefaultConfigDomains
+          : []
+        )
+          .map((domain) => this.normalizeCrawlingDomain(domain))
+          .filter((domain) => domain.length > 0),
+      ),
+    );
+    const disabledDomains = new Set(disabledDefaultConfigDomains);
     const configMap = new Map<string, CrawlingConfig>();
     for (const config of defaultConfigs) {
-      configMap.set(this.normalizeCrawlingDomain(config.domain), {
+      const normalizedDomain = this.normalizeCrawlingDomain(config.domain);
+      if (disabledDomains.has(normalizedDomain)) {
+        continue;
+      }
+      configMap.set(normalizedDomain, {
         ...config,
-        domain: this.normalizeCrawlingDomain(config.domain),
+        domain: normalizedDomain,
       });
     }
     for (const config of storedConfigs) {
@@ -162,6 +187,7 @@ export class SettingsStore {
       });
     }
     merged.crawlingConfigs = Array.from(configMap.values());
+    merged.disabledDefaultConfigDomains = disabledDefaultConfigDomains;
     merged.selectorCache = Array.isArray(stored.selectorCache) ? stored.selectorCache : [];
     merged.maxComments =
       typeof stored.maxComments === 'number' && Number.isFinite(stored.maxComments)
@@ -222,8 +248,21 @@ export class SettingsStore {
     return this.saveMutex.withLock(() => this._saveSettings(settings));
   }
 
+  async updateCrawlingConfigs(
+    updater: (configs: CrawlingConfig[]) => CrawlingConfig[],
+  ): Promise<void> {
+    return this.saveMutex.withLock(async () => {
+      const settings = await this.getSettings();
+      const updatedConfigs = updater(structuredClone(settings.crawlingConfigs));
+      await this._saveSettings({ crawlingConfigs: updatedConfigs });
+    });
+  }
+
   private async _saveSettings(settings: Partial<Settings>): Promise<void> {
     try {
+      const updatesCrawlingConfigs =
+        Object.prototype.hasOwnProperty.call(settings, 'crawlingConfigs') &&
+        Array.isArray(settings.crawlingConfigs);
       const settingsResult = settingsPatchSchema.safeParse(settings);
       if (!settingsResult.success) {
         throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Invalid settings data', {
@@ -252,6 +291,30 @@ export class SettingsStore {
         ...currentSettings.domAnalysisConfig,
         ...(sanitizedSettings.domAnalysisConfig || {}),
       };
+
+      if (updatesCrawlingConfigs) {
+        const configuredDomains = new Set(
+          (sanitizedSettings.crawlingConfigs || []).map((config) =>
+            this.normalizeCrawlingDomain(config.domain),
+          ),
+        );
+        const defaultDomains = new Set(
+          DEFAULT_SETTINGS.crawlingConfigs.map((config) =>
+            this.normalizeCrawlingDomain(config.domain),
+          ),
+        );
+        const disabledDomains = new Set(
+          updatedSettings.disabledDefaultConfigDomains.filter(
+            (domain) => !defaultDomains.has(this.normalizeCrawlingDomain(domain)),
+          ),
+        );
+        for (const domain of defaultDomains) {
+          if (!configuredDomains.has(domain)) {
+            disabledDomains.add(domain);
+          }
+        }
+        updatedSettings.disabledDefaultConfigDomains = Array.from(disabledDomains);
+      }
 
       updatedSettings.aiModel = this.normalizeAIModel(updatedSettings);
       const aiModelResult = completeAiConfigSchema.safeParse(updatedSettings.aiModel);
@@ -290,7 +353,7 @@ export class SettingsStore {
       await chrome.storage.local.set({
         [STORAGE.SETTINGS_KEY]: updatedSettings,
       });
-      this.settingsCache = null;
+      this.invalidateSettingsCache();
 
       Logger.info('[SettingsStore] Settings saved successfully');
     } catch (error) {
@@ -341,7 +404,12 @@ export class SettingsStore {
       // decrypted for runtime use, but an exported file may be shared or
       // attached to bug reports. importSettings merges aiModel over the
       // current one, so an absent key simply keeps the stored key.
-      const { crawlingConfigs: _crawlingConfigs, ...settingsToExport } = settings;
+      const {
+        crawlingConfigs: _crawlingConfigs,
+        selectorCache: _selectorCache,
+        disabledDefaultConfigDomains: _disabledDefaultConfigDomains,
+        ...settingsToExport
+      } = settings;
       const { apiKey: _apiKey, ...aiModelWithoutKey } = settingsToExport.aiModel;
       return JSON.stringify({ ...settingsToExport, aiModel: aiModelWithoutKey }, null, 2);
     } catch (error) {
@@ -371,6 +439,7 @@ export class SettingsStore {
         const {
           crawlingConfigs: _crawlingConfigs,
           selectorCache: _selectorCache,
+          disabledDefaultConfigDomains: _disabledDefaultConfigDomains,
           ...rest
         } = sanitized;
         const importedModel = rest.aiModel;
@@ -397,14 +466,11 @@ export class SettingsStore {
             : hasImportedApiKey
               ? importedModel.apiKey
               : currentSettings.aiModel.apiKey;
-        const merged: Settings = {
-          ...currentSettings,
+        const settingsToImport: Partial<Settings> = {
           ...rest,
           aiModel: { ...currentSettings.aiModel, ...importedModel, apiKey } as AIConfig,
-          crawlingConfigs: currentSettings.crawlingConfigs,
-          selectorCache: currentSettings.selectorCache,
         };
-        await this._saveSettings(merged);
+        await this._saveSettings(settingsToImport);
         Logger.info('[SettingsStore] Settings imported successfully');
       } catch (error) {
         Logger.error('[SettingsStore] Failed to import settings', { error });

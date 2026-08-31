@@ -6,8 +6,9 @@ import { renderHook, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ChangeEvent } from 'react';
 import { TIMING } from '../src/config/constants';
+import { useConfigImport } from '../src/options/hooks/useConfigImport';
 import { useSettings } from '../src/options/hooks/useSettings';
-import type { Settings } from '../src/types';
+import type { CrawlingConfig, Settings } from '../src/types';
 
 const extensionApiMock = vi.hoisted(() => ({
   exportSettings: vi.fn(),
@@ -92,12 +93,28 @@ function createSettings(): Settings {
       },
     ],
     crawlingConfigs: [],
+    disabledDefaultConfigDomains: [],
     domAnalysisConfig: {
       initialDepth: 3,
       expandDepth: 2,
       maxDepth: 10,
     },
     developerMode: false,
+  };
+}
+
+function createCrawlingConfig(domain: string, siteName = domain): CrawlingConfig {
+  return {
+    id: `config_${domain}`,
+    domain,
+    siteName,
+    container: { selector: '.comments', type: 'css' },
+    item: { selector: '.comment', type: 'css' },
+    fields: [
+      { name: 'username', rule: { selector: '.author', type: 'css' } },
+      { name: 'content', rule: { selector: '.content', type: 'css' } },
+    ],
+    lastUpdated: 1,
   };
 }
 
@@ -386,5 +403,39 @@ describe('useSettings', () => {
 
     expect(extensionApiMock.importSettings).toHaveBeenCalledWith(fileReaderResult);
     expect(toastMock.error).toHaveBeenCalledWith('options.importError');
+  });
+});
+
+describe('useConfigImport', () => {
+  it('normalizes domains before conflict detection and gives no-ID imports unique IDs', () => {
+    const current = createCrawlingConfig('example.com', 'Current Example');
+    const imported = [
+      createCrawlingConfig(' Alpha.Example.COM '),
+      createCrawlingConfig('BETA.Example.com'),
+      createCrawlingConfig(' EXAMPLE.COM ', 'Incoming Example'),
+    ].map(({ id: _id, ...config }) => config);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(12345);
+
+    try {
+      const { result } = renderHook(() => useConfigImport([current]));
+
+      act(() => {
+        result.current.processConfigs(imported, false);
+      });
+
+      expect(result.current.importAdditions.map((config) => config.domain)).toEqual([
+        'alpha.example.com',
+        'beta.example.com',
+      ]);
+      expect(result.current.importConflicts).toHaveLength(1);
+      expect(result.current.importConflicts[0].incoming.domain).toBe('example.com');
+      const importedIds = [
+        ...result.current.importAdditions.map((config) => config.id),
+        ...result.current.importConflicts.map((conflict) => conflict.incoming.id),
+      ];
+      expect(new Set(importedIds).size).toBe(importedIds.length);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 });

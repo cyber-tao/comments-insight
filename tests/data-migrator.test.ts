@@ -23,6 +23,13 @@ vi.mock('../src/utils/logger', () => ({
   },
 }));
 
+function buildCurrentMigrations(step2: () => Promise<void>): Record<number, () => Promise<void>> {
+  return {
+    2: step2,
+    3: async () => undefined,
+  };
+}
+
 describe('DataMigrator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -32,7 +39,7 @@ describe('DataMigrator', () => {
 
   it('runs all migrations for a fresh install (no stored version)', async () => {
     const step = vi.fn().mockResolvedValue(undefined);
-    const migrator = new DataMigrator({ 2: step });
+    const migrator = new DataMigrator(buildCurrentMigrations(step));
 
     await migrator.migrate();
 
@@ -47,7 +54,7 @@ describe('DataMigrator', () => {
       [STORAGE.APP_DATA_VERSION_KEY]: APP_DATA_VERSION.CURRENT,
     });
     const step = vi.fn().mockResolvedValue(undefined);
-    const migrator = new DataMigrator({ 2: step });
+    const migrator = new DataMigrator(buildCurrentMigrations(step));
 
     await migrator.migrate();
 
@@ -57,7 +64,7 @@ describe('DataMigrator', () => {
 
   it('is idempotent when run twice', async () => {
     const step = vi.fn().mockResolvedValue(undefined);
-    const migrator = new DataMigrator({ 2: step });
+    const migrator = new DataMigrator(buildCurrentMigrations(step));
 
     await migrator.migrate();
 
@@ -74,7 +81,7 @@ describe('DataMigrator', () => {
       [STORAGE.APP_DATA_VERSION_KEY]: 'not-a-number',
     });
     const step = vi.fn().mockResolvedValue(undefined);
-    const migrator = new DataMigrator({ 2: step });
+    const migrator = new DataMigrator(buildCurrentMigrations(step));
 
     await migrator.migrate();
 
@@ -131,7 +138,7 @@ describe('DataMigrator', () => {
 
   it('propagates version marker write failures after migrations complete', async () => {
     const step = vi.fn().mockResolvedValue(undefined);
-    const migrator = new DataMigrator({ 2: step });
+    const migrator = new DataMigrator(buildCurrentMigrations(step));
     mockStorageSet.mockRejectedValueOnce(new Error('storage unavailable'));
 
     await expect(migrator.migrate()).rejects.toThrow('storage unavailable');
@@ -141,14 +148,79 @@ describe('DataMigrator', () => {
   it('tolerates chrome.storage.get failures and treats as initial version', async () => {
     mockStorageGet.mockRejectedValueOnce(new Error('storage unavailable'));
     const step = vi.fn().mockResolvedValue(undefined);
-    const migrator = new DataMigrator({ 2: step });
+    const migrator = new DataMigrator(buildCurrentMigrations(step));
 
     await migrator.migrate();
 
     expect(step).toHaveBeenCalledTimes(1);
   });
 
-  it('default migrator has no-op step for version 2 and bumps version', async () => {
+  it('migrates a v2 Settings object to the v3 tombstone shape', async () => {
+    const legacySettings = { theme: 'dark', maxComments: 200 };
+    mockStorageGet.mockImplementation(async (key: string) => {
+      if (key === STORAGE.APP_DATA_VERSION_KEY) {
+        return { [STORAGE.APP_DATA_VERSION_KEY]: 2 };
+      }
+      if (key === STORAGE.SETTINGS_KEY) {
+        return { [STORAGE.SETTINGS_KEY]: legacySettings };
+      }
+      return {};
+    });
+
+    await new DataMigrator().migrate();
+
+    expect(mockStorageSet).toHaveBeenNthCalledWith(1, {
+      [STORAGE.SETTINGS_KEY]: {
+        ...legacySettings,
+        disabledDefaultConfigDomains: [],
+      },
+    });
+    expect(mockStorageSet).toHaveBeenNthCalledWith(2, {
+      [STORAGE.APP_DATA_VERSION_KEY]: 3,
+    });
+  });
+
+  it('keeps the v3 Settings migration idempotent when the step is retried', async () => {
+    const storage: Record<string, unknown> = {
+      [STORAGE.APP_DATA_VERSION_KEY]: 2,
+      [STORAGE.SETTINGS_KEY]: { theme: 'dark' },
+    };
+    mockStorageGet.mockImplementation(async (key: string) =>
+      Object.prototype.hasOwnProperty.call(storage, key) ? { [key]: storage[key] } : {},
+    );
+    mockStorageSet.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(storage, values);
+    });
+
+    await new DataMigrator().migrate();
+    storage[STORAGE.APP_DATA_VERSION_KEY] = 2;
+    mockStorageSet.mockClear();
+    await new DataMigrator().migrate();
+
+    expect(storage[STORAGE.SETTINGS_KEY]).toEqual({
+      theme: 'dark',
+      disabledDefaultConfigDomains: [],
+    });
+    expect(mockStorageSet).toHaveBeenCalledTimes(1);
+    expect(mockStorageSet).toHaveBeenCalledWith({
+      [STORAGE.APP_DATA_VERSION_KEY]: APP_DATA_VERSION.CURRENT,
+    });
+  });
+
+  it('does not create Settings during v3 migration when the key is absent', async () => {
+    mockStorageGet.mockImplementation(async (key: string) =>
+      key === STORAGE.APP_DATA_VERSION_KEY ? { [STORAGE.APP_DATA_VERSION_KEY]: 2 } : {},
+    );
+
+    await new DataMigrator().migrate();
+
+    expect(mockStorageSet).toHaveBeenCalledTimes(1);
+    expect(mockStorageSet).toHaveBeenCalledWith({
+      [STORAGE.APP_DATA_VERSION_KEY]: APP_DATA_VERSION.CURRENT,
+    });
+  });
+
+  it('default migrator keeps version 2 and v3 steps and bumps version', async () => {
     const migrator = new DataMigrator();
 
     await migrator.migrate();

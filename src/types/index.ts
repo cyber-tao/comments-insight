@@ -188,6 +188,7 @@ export interface Settings {
   selectorRetryAttempts: number;
   selectorCache: SelectorCache[];
   crawlingConfigs: CrawlingConfig[];
+  disabledDefaultConfigDomains: string[];
   domAnalysisConfig: DOMAnalysisConfig; // DOM analysis configuration for structure analysis
   developerMode: boolean;
 }
