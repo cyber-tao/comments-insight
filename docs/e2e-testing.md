@@ -2,38 +2,70 @@
 
 ## Overview
 
-E2E testing for Chrome extensions requires special considerations due to the
-extension architecture (service worker, content scripts, popup, options page).
-The extension can only be exercised end-to-end when Chromium is launched with
-the built `dist/` directory loaded as an unpacked extension in headful mode.
+The browser suite loads the production `dist/` directory as an unpacked Manifest V3 extension and exercises the service worker, extension pages, sandbox, content script, task protocol, and IndexedDB persistence in a real Chromium-based browser.
+
+The repository provides two Puppeteer scripts:
+
+- `scripts/test-e2e-all.js` is the deterministic, credential-free regression suite used by CI.
+- `scripts/test-youtube.js` is an optional live-provider/manual test that can call a configured AI service against a public page.
 
 ## Prerequisites
 
-- `bun install` — Puppeteer 24.x is already listed in `devDependencies`.
-- `bun run build` — produces `dist/` for the loader to consume.
-- Chromium (bundled with Puppeteer) or a local Chrome install.
+- `bun install`
+- Chrome/Chromium/Edge 116 or newer
+- `bun run build` before each browser run
 
-## Option 1: Puppeteer (used in this repo)
+Set `PUPPETEER_EXECUTABLE_PATH` to select a browser explicitly. On Windows, the scripts also look for common Chrome and Edge installations; otherwise Puppeteer's downloaded browser is used.
 
-`scripts/test-youtube.js` runs a scripted extraction against a public YouTube
-video and asserts the extraction outcome. The dev-only content-script hook
-(`window.postMessage({ type: 'COMMENTS_INSIGHT_TEST_TRIGGER', ... })`) starts an
-extraction and reports its final result via
-`console.log('__TEST_RESULT__:' + JSON.stringify(outcome))`; the script watches
-the page console for that marker and fails on `{ success: false }` or timeout.
-Extracted history itself lands in IndexedDB (Dexie) via the background flow.
-It is the reference implementation for browser-level regression checks.
+## Deterministic local suite
+
+Run:
+
+```bash
+bun run build
+bun run test:e2e
+```
+
+The suite starts a local HTTP page containing a fixed comment fixture, creates a temporary browser profile, loads the extension, and verifies:
+
+1. the background service worker starts;
+2. Options renders and settings round-trip through `chrome.storage.local`;
+3. History renders a Dexie/IndexedDB record and filters it;
+4. Logs and Popup render without page errors;
+5. the sandbox renders safe static report content while removing scripts, event handlers, external image URLs, and frames;
+6. a real `START_EXTRACTION` request creates a `TaskManager` task, dispatches `RUN_EXTRACTION` to the content script, extracts the fixture comments, and persists a readable history record.
+
+The final extraction assertion reads the persisted record through `GET_HISTORY_BY_URL`; it does not use the development-only page hook and does not accept an empty page or an unmodified sandbox document as success.
+
+This suite needs no API key and makes no AI-provider request. It uses a configured crawling rule for `127.0.0.1` so the extraction path is deterministic.
+
+### CI
+
+CI runs the browser suite after the production build:
+
+```bash
+xvfb-run -a bun run test:e2e
+```
+
+The suite launches in headful mode because extension service workers and extension pages must behave as they do in a normal browser session. Linux runners therefore need Xvfb or another display server.
+
+## Optional live YouTube test
+
+`scripts/test-youtube.js` exercises the unpacked extension against a configurable public page. It uses the unpacked-development content-script hook to start extraction and reports the final outcome through a page console marker. Extracted history is still persisted through the normal background flow.
+
+This test can invoke a real AI provider and is intentionally not part of CI.
 
 ### Environment variables
 
-| Variable                           | Description                                                         | Default                                       |
-| ---------------------------------- | ------------------------------------------------------------------- | --------------------------------------------- |
-| `COMMENTS_INSIGHT_SETTINGS_PATH`   | JSON file with settings to preload (API key/model, prompt template) | none                                          |
-| `COMMENTS_INSIGHT_VIDEO_URL`       | Target URL to scrape                                                | `https://www.youtube.com/watch?v=gQySzdR2k74` |
-| `COMMENTS_INSIGHT_MAX_COMMENTS`    | Number of comments to extract                                       | `20`                                          |
-| `COMMENTS_INSIGHT_TEST_TIMEOUT_MS` | Overall test timeout                                                | `180000`                                      |
+| Variable                           | Description                                                      | Default                                       |
+| ---------------------------------- | ---------------------------------------------------------------- | --------------------------------------------- |
+| `COMMENTS_INSIGHT_SETTINGS_PATH`   | Local JSON settings file to preload, potentially including a key | none                                          |
+| `COMMENTS_INSIGHT_VIDEO_URL`       | Target URL                                                       | `https://www.youtube.com/watch?v=gQySzdR2k74` |
+| `COMMENTS_INSIGHT_MAX_COMMENTS`    | Maximum comments to extract                                      | `20`                                          |
+| `COMMENTS_INSIGHT_TEST_TIMEOUT_MS` | Overall timeout                                                  | `180000`                                      |
+| `PUPPETEER_EXECUTABLE_PATH`        | Explicit Chrome/Chromium/Edge executable                         | auto-detected                                 |
 
-### Run
+Run:
 
 ```bash
 bun run build
@@ -42,56 +74,14 @@ COMMENTS_INSIGHT_VIDEO_URL=https://www.youtube.com/watch?v=... \
 bun scripts/test-youtube.js
 ```
 
-The script launches Chromium with `--load-extension=dist`, injects the settings
-file, drives the extraction flow, and prints the extracted comments to stdout.
+Keep the settings file outside version control. The test sends relevant page data and credentials to the configured AI endpoint and prints extraction diagnostics, including a sample comment, to the local terminal. Do not use sensitive pages or credentials that are not intended for that provider.
 
-## Option 2: Playwright (alternative)
+The development hook is exposed only when the loaded manifest has no `update_url`; a Web Store installation does not expose it.
 
-Playwright also supports headful extension testing:
+## Troubleshooting
 
-```typescript
-import { defineConfig } from '@playwright/test';
-
-export default defineConfig({
-  use: {
-    headless: false,
-    launchOptions: {
-      args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`],
-    },
-  },
-});
-```
-
-Not adopted in this repo because the Puppeteer script already covers the
-critical happy path with fewer moving parts.
-
-## Key Scenarios to Cover
-
-1. **Popup functionality**
-   - Settings save/load.
-   - Navigation to history page.
-   - Extraction button triggers the content script.
-
-2. **Content script injection**
-   - Script injects on supported pages.
-   - Comment extraction succeeds.
-   - Progress updates render correctly.
-
-3. **Background service worker**
-   - Message routing between components.
-   - History storage (Dexie/IndexedDB) writes and reads.
-   - AI service calls (streamed chat completions).
-
-4. **Options page**
-   - API configuration round-trip.
-   - Crawling config CRUD.
-
-## Notes
-
-- Chrome extensions can only be tested in headful mode; CI runners must
-  provide an X server (or Xvfb) if Puppeteer is executed on Linux.
-- Service worker state is best asserted by reading `chrome.storage.local`
-  through `chrome.tabs.executeScript` from an extension page.
-- Prefer mocking `chrome.storage.local` and IndexedDB in unit tests (see
-  `tests/setup.ts` for the shared setup); reserve this file for browser-level
-  smoke tests.
+- Rebuild before testing; Puppeteer loads files from `dist/`, not directly from `src/`.
+- If the service worker is not found, confirm that the browser allows unpacked extensions and that no enterprise policy disables them.
+- If launch fails, set `PUPPETEER_EXECUTABLE_PATH` to a compatible local browser.
+- Inspect page and service-worker console output for task errors. The deterministic suite fails on page errors, failed tasks, missing comments, missing history, or sandbox sanitization regressions.
+- Use mocked `chrome.storage`, IndexedDB, and extension APIs for isolated unit tests; reserve browser E2E for cross-context wiring and browser behavior.

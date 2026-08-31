@@ -8,7 +8,7 @@
 
 AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+[English](README.md) | [简体中文](README.zh-CN.md) | [Privacy](PRIVACY.md)
 
 [![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.4-000000)](https://crxjs.dev/vite-plugin/)
 
@@ -43,7 +43,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 - Manifest V3 Chrome extension with multi-page UI: Popup, Options, History, Logs.
 - Built with Vite, React, TypeScript, and `@crxjs/vite-plugin`.
 - Combines selectors and AI to robustly extract comments (including nested replies), stream AI analysis progress, and produce comprehensive Markdown reports with tables and structured data.
-- Persists history in Dexie-backed IndexedDB with lightweight metadata paging, full comment search, and local task/log storage.
+- Persists history in Dexie-backed IndexedDB with lightweight metadata paging and search, plus local task/log storage.
 
 ## 📸 Screenshots
 
@@ -90,14 +90,14 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
   - **Thought Filtering**: Supports reasoning models (like DeepSeek) by automatically stripping `<think>` tags from output for clean reports.
   - **Invalid Output Guard**: Empty model responses are rejected and retried instead of being stored as successful blank reports.
   - Comprehensive reports including Sentiment Distribution, Hot Comments, Top Discussed, and Interaction Analysis.
-  - **Dynamic Visual Reports** (enabled by default): generates a standalone interactive HTML dashboard from the analysis via a second LLM call, rendered safely inside a sandboxed iframe.
+  - **Dynamic Visual Reports** (enabled by default): generates a visual HTML dashboard through a second model call, strips scripts, forms, frames, event handlers, and external URLs, then renders the static result in a network-blocked sandbox.
   - Customizable prompt templates with "Reset to Default" capability.
 - 🧩 **Scraper Config**:
   - Automatically generate/edit/import/export per-site configs.
   - Visual selector validation and caching for performance.
 - 🗂️ **History & Logs**:
   - **Token Tracking**: Locally records token usage stats for better cost management.
-  - IndexedDB history storage with metadata-only paging for fast browsing and full-content search when needed.
+  - IndexedDB history storage with metadata-only paging and search for fast browsing.
   - Sanitized AI/system logs with local inspection tools for debugging.
   - Searchable history with filtering and sorting (by Time, Likes, Replies).
 - 🌐 **i18n**: Multi-language support: English, Chinese (简体中文), Japanese (日本語), French (Français), and Spanish (Español).
@@ -106,16 +106,18 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
 ## 🔑 API Key Security Note
 
-API keys are stored locally (reversible encryption/obfuscation) to avoid accidental exposure, and settings exports never include the API key, but this is **not** a strong security boundary against malware or other extensions.
+API keys are encrypted in local extension storage, but the key material is stored in the same browser profile. This prevents accidental plaintext exposure; it is **not** a strong security boundary against malware or another actor with local access. Settings exports never include the API key, and importing a different API endpoint without a new key clears the stored key.
+
+AI-powered extraction, selector generation, analysis, model discovery, and visual reports send the API key and relevant page or report data directly to the endpoint selected by the user. Remote endpoints must use HTTPS; plain HTTP is allowed only for loopback development services. See the [Privacy Policy](PRIVACY.md) for the complete data-flow disclosure.
 
 ## 🧱 Architecture
 
-- **Background**: Service Worker orchestrates the `TaskManager` (for maintaining long-running tasks) and `AIService` (streaming AI calls, concurrency, output cleanup, and token tracking). Data access goes through dedicated stores injected via `ServiceContainer` (Dexie-backed `HistoryStore`, `SettingsStore`, `CrawlingConfigStore`, `LogStore`, `TokenStatsStore`).
-- **Content Scripts**: Handles DOM traversal, abortable `MutationObserver`-powered interactions (clicking "View Replies" and waiting for network-bound changes), and data extraction.
+- **Background**: The Service Worker runs migrations before initializing `TaskManager`, owns streaming `AIService` calls, and persists data through stores injected by `ServiceContainer`. UI requests use `START_*` messages; background jobs send validated `RUN_*` commands to content scripts.
+- **Content Scripts**: Accept validated content-only commands, perform abortable DOM traversal and `MutationObserver`-powered interactions, and return extraction/configuration outcomes to the background task.
 - **Popup**: Main control center for triggering tasks, viewing page status, and monitoring granular real-time progress.
-- **Options**: Configuration for AI models (OpenAI, Ollama, DeepSeek, etc.), Prompts, and Scraper Management.
-- **History**: Rich interface for browsing extracted data, rerunning analysis, monitoring streaming progress, and exporting reports.
-- **Sandbox**: An opaque-origin iframe page that renders LLM-generated dynamic reports without granting them `chrome.*` APIs or extension-page privileges.
+- **Options**: Configuration for AI models (OpenAI-compatible services and local endpoints), prompts, and scraper management.
+- **History**: Browses Dexie-backed extraction records, reruns analysis, monitors streaming progress, and exports sanitized reports.
+- **Sandbox**: An opaque-origin, network-blocked iframe that sanitizes model-generated HTML and renders only static HTML/CSS without `chrome.*` APIs or extension-page privileges.
 
 ## 📦 Project Structure
 
@@ -158,7 +160,7 @@ Visit the Chrome Web Store to install the extension with one click.
 
 ### Build from Source
 
-1. **Prerequisites**: Node.js 20.19+ or 22.12+, Bun 1.3.11+, Chrome.
+1. **Prerequisites**: Node.js 20.19+ or 22.12+, Bun 1.3.11+, Chrome 116+.
 2. **Install dependencies**:
    ```bash
    bun install
@@ -213,7 +215,7 @@ OpenRouter provides access to various AI models, including free options. Here's 
 
 ## ⚙️ Configuration
 
-- **AI Model**: Any OpenAI-compatible Chat Completions endpoint (OpenAI, Anthropic, DeepSeek, Kimi, Qwen, OpenRouter, Ollama, vLLM, etc.).
+- **AI Model**: Any OpenAI-compatible Chat Completions endpoint (OpenAI, DeepSeek, Kimi, Qwen, OpenRouter, Ollama, vLLM, etc.). Remote URLs require HTTPS; loopback development endpoints may use HTTP.
 - **DOM Analysis**: Configure advanced parameters like `initialDepth`, `expandDepth`, and `maxDepth` for complex pages.
 - **Prompts**: Customize labels/placeholders like `{comments_data}`, `{post_content}`, etc.
 - **Developer Mode**: Enable in Settings to see "View AI Logs" and selector testing tools.
@@ -242,12 +244,14 @@ OpenRouter provides access to various AI models, including free options. Here's 
 - `bun run format`: Format code with Prettier
 - `bun run format:check`: Check formatting with Prettier
 - `bun run test`: Run unit tests
-- `bun run test:coverage`: Run tests with coverage report
-- `bun run audit`: Check high severity dependency security issues
+- `bun run test:coverage`: Run tests and enforce coverage thresholds
+- `bun run test:e2e`: Run the built extension against the local browser E2E fixture
+- `bun run version:check`: Verify package, manifest, and release-tag version consistency
+- `bun run audit`: Check high severity production dependency issues
 
 ## 🤝 Contributing
 
-Issues and PRs are welcome! Please ensure you run `bun run format:check`, `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run build` before submitting.
+Issues and PRs are welcome! Before submitting, run `bun run version:check`, `bun run format:check`, `bun run typecheck`, `bun run lint`, `bun run test:coverage`, and `bun run build`. Run `bun run test:e2e` after the build when a supported local browser is available.
 
 ## 📝 License
 

@@ -8,7 +8,7 @@
 
 基于 AI 的 Chrome 扩展程序，用于评论提取和洞察分析 ✨
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+[English](README.md) | [简体中文](README.zh-CN.md) | [隐私政策](PRIVACY.zh-CN.md)
 
 [![Chrome 网上应用店](https://img.shields.io/badge/Chrome%20网上应用店-安装-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.4-000000)](https://crxjs.dev/vite-plugin/)
 
@@ -43,7 +43,7 @@
 - 基于 Manifest V3 的 Chrome 扩展，包含 Popup、选项页、历史记录和日志视图。
 - 使用 Vite、React、TypeScript 和 `@crxjs/vite-plugin` 构建。
 - 结合选择器配置与 AI 发现技术，稳健地提取评论（包括嵌套回复），展示流式 AI 分析进度，并生成包含表格和结构化数据的 Markdown 洞察报告。
-- 使用 Dexie 驱动的 IndexedDB 保存历史记录，支持轻量元数据分页、完整评论搜索和本地任务/日志存储。
+- 使用 Dexie 驱动的 IndexedDB 保存历史记录，支持轻量元数据分页与搜索，并在本地保存任务和日志。
 
 ## 📸 演示截图
 
@@ -90,13 +90,14 @@
   - **思考过程过滤**: 自动识别并移除 DeepSeek 等推理模型产生的 `<think>` 标签，确保报告内容纯净。
   - **无效输出防护**: 空模型响应会被拒绝并重试，不会再保存为空白的成功报告。
   - 全方位报告：包含情感分布、热门评论、核心议题和互动分析。
+  - **动态可视化报告**（默认开启）：通过第二次模型调用生成 HTML 仪表盘，移除脚本、表单、框架、事件处理器和外部 URL 后，在禁止联网的沙箱中渲染静态结果。
   - 可自定义提示词模板，支持一键恢复默认。
 - 🧩 **爬虫配置**:
   - 支持按站点全自动生成、编辑、导入/导出爬取配置。
   - 可视化选择器验证与性能缓存。
 - 🗂️ **历史与日志**:
   - **Token 消耗统计**: 本地记录每次 AI 调用的 Token 消耗，帮助掌握使用成本。
-  - 使用 IndexedDB 保存历史记录，并通过元数据分页提升列表浏览性能，需要时再执行完整评论搜索。
+  - 使用 IndexedDB 保存历史记录，并通过元数据分页和搜索提升列表浏览性能。
   - 对 AI/系统日志进行敏感信息清洗，并提供本地调试查看工具。
   - 支持搜索、过滤和排序（时间、点赞数、回复数）。
 - 🌐 **多语言支持**: 现已支持 English, 中文 (简体), 日本語, Français (法语), 及 Español (西班牙语)。
@@ -105,16 +106,18 @@
 
 ## 🔑 API 密钥安全说明
 
-API 密钥存储在本地（经过简单的混淆处理），且导出设置时永远不会包含 API 密钥，旨在防止误操作导致的泄漏。这**不足以**抵御针对性的恶意软件或其他扩展程序的攻击。
+API 密钥会在扩展本地存储中加密，但密钥材料也保存在同一浏览器配置文件中。这能避免意外明文暴露，但**不足以**抵御恶意软件或其他具有本地访问权限的主体。设置导出永远不会包含 API 密钥；如果导入设置时更换了 API 端点却未提供新密钥，扩展会清除原有密钥。
+
+AI 提取、选择器生成、分析、模型发现和可视化报告会把 API 密钥及相关页面或报告数据直接发送到用户选择的端点。远程端点必须使用 HTTPS，只有回环开发服务可以使用 HTTP。完整数据流说明见[隐私政策](PRIVACY.zh-CN.md)。
 
 ## 🧱 架构设计
 
-- **Background (后台)**: Service Worker 负责调度统筹管理后台长任务流的 `TaskManager` 和流式 AI 服务调用（含并发控制、Token 跟踪与 `<think>` 标签清洗）。数据访问通过 `ServiceContainer` 注入的独立 Store 完成（Dexie 的 `HistoryStore`，以及 `SettingsStore`、`CrawlingConfigStore`、`LogStore`、`TokenStatsStore`）。
-- **Content Scripts (内容脚本)**: 执行可取消的 `MutationObserver` 网络监听器 DOM 滚动交互模拟任务（点击"查看回复"并等待）和深层数据提取。
-- **Popup (弹窗)**: 控制中心，用于触发任务、实时掌握扩展内状态以及获得细粒度的人类可读的任务进度播报。
-- **Options (选项)**: 配置不同服务商的 AI 模型（OpenAI、Ollama、OpenRouter 免费模型等）、提示词和爬虫规则。
-- **History (历史)**: 丰富的数据可视化界面，浏览提取内容、重新分析、监控流式进度并导出报告。
-- **Sandbox (沙箱)**: 不透明源的 iframe 页面，用于渲染 LLM 生成的动态报告，不向其暴露 `chrome.*` API 或扩展页面权限。
+- **Background（后台）**: Service Worker 先执行数据迁移，再初始化 `TaskManager`，统一处理流式 `AIService` 调用，并通过 `ServiceContainer` 注入的 Store 持久化数据。UI 使用 `START_*` 消息创建任务，后台任务再向内容脚本发送经过验证的 `RUN_*` 命令。
+- **Content Scripts（内容脚本）**: 只接受经过验证的内容端命令，执行可取消的 DOM 遍历和 `MutationObserver` 交互，并把提取或配置结果返回后台任务。
+- **Popup（弹窗）**: 控制中心，用于触发任务、查看页面状态以及监控细粒度实时进度。
+- **Options（选项）**: 配置 OpenAI 兼容服务或本地 AI 端点、提示词和爬虫规则。
+- **History（历史）**: 浏览基于 Dexie 保存的提取记录、重新分析、监控流式进度并导出经过清洗的报告。
+- **Sandbox（沙箱）**: 禁止联网的不透明源 iframe；对模型生成的 HTML 进行清洗，只渲染静态 HTML/CSS，不具备 `chrome.*` API 或扩展页面权限。
 
 ## 📦 项目结构
 
@@ -157,7 +160,7 @@ vitest.config.ts        # 测试配置
 
 ### 从源码构建
 
-1. **环境准备**: Node.js 20.19+ 或 22.12+, Bun 1.3.11+, Chrome 浏览器。
+1. **环境准备**: Node.js 20.19+ 或 22.12+、Bun 1.3.11+、Chrome 116+。
 2. **安装依赖**:
    ```bash
    bun install
@@ -170,7 +173,7 @@ vitest.config.ts        # 测试配置
    - 打开 `chrome://extensions`
    - 启用右上角的 **开发者模式**
    - 点击 **加载已解压的扩展程序**，选择项目中的 `dist` 目录
-5. **正式版本打包**:
+5. **生产构建**:
    ```bash
    bun run build
    ```
@@ -212,7 +215,7 @@ OpenRouter 提供多种 AI 模型访问，包括免费选项。以下是配置�
 
 ## ⚙️ 配置说明
 
-- **AI 模型**: 支持任意 OpenAI 兼容的 Chat Completions 端点（OpenAI、Anthropic、DeepSeek、Kimi、Qwen、OpenRouter、Ollama、vLLM 等）。
+- **AI 模型**: 支持任意 OpenAI 兼容的 Chat Completions 端点（OpenAI、DeepSeek、Kimi、Qwen、OpenRouter、Ollama、vLLM 等）。远程 URL 必须使用 HTTPS，回环开发端点可以使用 HTTP。
 - **DOM 分析**: 针对复杂页面，支持配置 `initialDepth` (初始深度), `expandDepth` (展开深度) 等高级参数。
 - **提示词**: 可通过 `{comments_data}`, `{post_content}` 等占位符自定义分析逻辑。
 - **开发者模式**: 开启后可在弹窗中查看“AI 日志”和选择器测试工具。
@@ -241,12 +244,14 @@ OpenRouter 提供多种 AI 模型访问，包括免费选项。以下是配置�
 - `bun run format`: 使用 Prettier 格式化代码
 - `bun run format:check`: 使用 Prettier 检查格式
 - `bun run test`: 运行单元测试
-- `bun run test:coverage`: 运行测试并生成覆盖率报告
-- `bun run audit`: 检查高危依赖安全问题
+- `bun run test:coverage`: 运行测试并强制执行覆盖率阈值
+- `bun run test:e2e`: 使用本地浏览器和测试页面验证已构建的扩展
+- `bun run version:check`: 校验 package、manifest 和发布 tag 的版本一致性
+- `bun run audit`: 检查生产依赖中的高危安全问题
 
 ## 🤝 贡献指南
 
-欢迎提交 Issue 和 PR！在提交之前，请确保通过了 `bun run format:check`、`bun run typecheck`、`bun run lint`、`bun run test` 和 `bun run build`。
+欢迎提交 Issue 和 PR！提交前请运行 `bun run version:check`、`bun run format:check`、`bun run typecheck`、`bun run lint`、`bun run test:coverage` 和 `bun run build`；本地有受支持的浏览器时，再在构建后运行 `bun run test:e2e`。
 
 ## 📝 开源协议
 

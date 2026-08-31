@@ -400,10 +400,8 @@ export class SettingsStore {
   async exportSettings(): Promise<string> {
     try {
       const settings = await this.getSettings();
-      // Never export the API key in plaintext: getSettings returns it
-      // decrypted for runtime use, but an exported file may be shared or
-      // attached to bug reports. importSettings merges aiModel over the
-      // current one, so an absent key simply keeps the stored key.
+      // Never export the decrypted API key. Import keeps the current key only
+      // for the same endpoint and clears it when an exported endpoint changes.
       const {
         crawlingConfigs: _crawlingConfigs,
         selectorCache: _selectorCache,
