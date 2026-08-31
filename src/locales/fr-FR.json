@@ -370,6 +370,7 @@
     "taskNotFound": "Tâche non trouvée. Elle a peut-être été annulée ou terminée.",
     "taskAlreadyRunning": "Une tâche est déjà en cours. Veuillez attendre qu'elle soit terminée.",
     "taskCancelled": "La tâche a été annulée.",
+    "initializationFailed": "L'initialisation de l'extension a échoué. Rechargez-la puis réessayez.",
     "unknownError": "Une erreur inconnue s'est produite. Veuillez réessayer.",
     "validationError": "La validation a échoué. Veuillez vérifier votre saisie.",
     "requestAborted": "La requête a été abandonnée.",

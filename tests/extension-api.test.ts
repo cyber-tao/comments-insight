@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExtensionAPI } from '../src/utils/extension-api';
 import { MESSAGES, TEXT } from '../src/config/constants';
+import { ErrorCode } from '../src/utils/error-types';
 
 const sendMessageMock = vi.hoisted(() => vi.fn());
 
@@ -222,5 +223,20 @@ describe('ExtensionAPI', () => {
       }
       await expect(calls[i]()).rejects.toThrow('background failed');
     }
+  });
+
+  it('preserves structured background error codes', async () => {
+    sendMessageMock.mockResolvedValueOnce({
+      error: {
+        code: ErrorCode.INITIALIZATION_FAILED,
+        message: 'Extension initialization failed',
+        retryable: false,
+      },
+    });
+
+    await expect(ExtensionAPI.getSettings()).rejects.toMatchObject({
+      code: ErrorCode.INITIALIZATION_FAILED,
+      message: 'Extension initialization failed',
+    });
   });
 });

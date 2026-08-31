@@ -370,6 +370,7 @@
     "taskNotFound": "未找到任务，可能已被取消或已完成。",
     "taskAlreadyRunning": "任务正在运行中，请等待完成。",
     "taskCancelled": "任务已取消。",
+    "initializationFailed": "扩展初始化失败，请重新加载扩展后重试。",
     "unknownError": "发生未知错误，请重试。",
     "validationError": "验证失败，请检查输入。",
     "requestAborted": "请求已中止。",

@@ -48,6 +48,15 @@ describe('TaskManager', () => {
   });
 
   describe('initialize', () => {
+    it('should propagate task-state storage failures', async () => {
+      mockStorageGet.mockRejectedValueOnce(new Error('storage unavailable'));
+      const persistentTaskManager = new TaskManager(mockNotificationService as any, {
+        enablePersistence: true,
+      });
+
+      await expect(persistentTaskManager.initialize()).rejects.toThrow('storage unavailable');
+    });
+
     it('should mark persisted running and pending tasks as interrupted', async () => {
       const now = Date.now();
       mockStorageGet.mockResolvedValue({

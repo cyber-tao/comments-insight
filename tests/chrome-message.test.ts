@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { sendMessage, sendMessageToTab, sendMessageVoid } from '@/utils/chrome-message';
-import type { Message } from '@/types';
+import type { ContentMessage, Message } from '@/types';
 
 // Mock chrome API
 const mockChrome = {
@@ -198,7 +198,7 @@ describe('chrome-message', () => {
   describe('sendMessageToTab', () => {
     it('should send message to specific tab', async () => {
       const tabId = 123;
-      const testMessage: Message = { type: 'GET_PLATFORM_INFO' };
+      const testMessage: ContentMessage = { type: 'GET_PLATFORM_INFO' };
       const testResponse = { platform: 'youtube' };
 
       mockChrome.tabs.sendMessage.mockImplementation(
@@ -219,7 +219,7 @@ describe('chrome-message', () => {
 
     it('should reject on timeout for tab message', async () => {
       const tabId = 456;
-      const testMessage: Message = { type: 'GET_PLATFORM_INFO' };
+      const testMessage: ContentMessage = { type: 'GET_PLATFORM_INFO' };
 
       mockChrome.tabs.sendMessage.mockImplementation(() => {
         // Never call callback
@@ -234,7 +234,7 @@ describe('chrome-message', () => {
 
     it('should reject on chrome.runtime.lastError for tab message', async () => {
       const tabId = 789;
-      const testMessage: Message = { type: 'GET_PLATFORM_INFO' };
+      const testMessage: ContentMessage = { type: 'GET_PLATFORM_INFO' };
       const errorMessage = 'Tab not found';
 
       mockChrome.tabs.sendMessage.mockImplementation(
@@ -249,7 +249,7 @@ describe('chrome-message', () => {
 
     it('should handle settled flag for tab messages', async () => {
       const tabId = 111;
-      const testMessage: Message = { type: 'GET_PLATFORM_INFO' };
+      const testMessage: ContentMessage = { type: 'GET_PLATFORM_INFO' };
       let capturedCallback: ((response: unknown) => void) | null = null;
 
       mockChrome.tabs.sendMessage.mockImplementation(

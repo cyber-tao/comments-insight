@@ -1,7 +1,12 @@
 import { Logger } from '@/utils/logger';
 import { PORT_CANCEL_MESSAGE_TYPE, PortMessage, PortMessageResponse } from '@/types/handlers';
 import { AI, TEXT } from '@/config/constants';
-import { ErrorCode, ExtensionError } from '@/utils/error-types';
+import {
+  ErrorCode,
+  ExtensionError,
+  fromExtensionErrorPayload,
+  isExtensionErrorPayload,
+} from '@/utils/error-types';
 
 type PortState = 'idle' | 'connecting' | 'connected' | 'disconnected';
 
@@ -99,7 +104,7 @@ export class ContentAIService {
     this.clearPending(pending);
     this.pendingRequests.delete(msg.id);
     if (this.isErrorResponse(msg.response)) {
-      pending.reject(new Error(msg.response.error));
+      pending.reject(fromExtensionErrorPayload(msg.response.error));
       return;
     }
     pending.resolve(msg.response);
@@ -183,13 +188,12 @@ export class ContentAIService {
     }
   }
 
-  private isErrorResponse(value: unknown): value is { error: string } {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      'error' in value &&
-      typeof (value as { error?: unknown }).error === 'string'
-    );
+  private isErrorResponse(value: unknown): value is { error: unknown } {
+    if (typeof value !== 'object' || value === null || !('error' in value)) {
+      return false;
+    }
+    const error = (value as { error?: unknown }).error;
+    return typeof error === 'string' || isExtensionErrorPayload(error);
   }
 
   private createCancelledError(): ExtensionError {

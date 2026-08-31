@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { TIMING } from '@/config/constants';
+import { RETRY, TIMING } from '@/config/constants';
 import { Comment, Task, TaskProgress } from '@/types';
 import { Logger } from '@/utils/logger';
 import { ExtensionAPI } from '@/utils/extension-api';
@@ -49,6 +49,7 @@ export function useTask(options: UseTaskOptions = {}) {
         monitorTimeoutRef.current = null;
       }
 
+      let consecutiveErrors = 0;
       const checkStatus = async () => {
         if (isUnmountedRef.current || monitorGenerationRef.current !== currentGeneration) return;
 
@@ -56,6 +57,7 @@ export function useTask(options: UseTaskOptions = {}) {
           const task = await ExtensionAPI.getTaskStatus(taskId);
 
           if (isUnmountedRef.current || monitorGenerationRef.current !== currentGeneration) return;
+          consecutiveErrors = 0;
 
           if (!task) {
             Logger.warn('[useTask] Task status returned empty result', { taskId });
@@ -95,6 +97,28 @@ export function useTask(options: UseTaskOptions = {}) {
           }
         } catch (error) {
           Logger.error('[useTask] Failed to check task status', { error });
+          consecutiveErrors += 1;
+          if (
+            consecutiveErrors < RETRY.MAX_ATTEMPTS &&
+            !isUnmountedRef.current &&
+            monitorGenerationRef.current === currentGeneration
+          ) {
+            monitorTimeoutRef.current = setTimeout(
+              checkStatus,
+              TIMING.POLL_TASK_RUNNING_MS * consecutiveErrors,
+            );
+            return;
+          }
+
+          const message = error instanceof Error ? error.message : String(error);
+          setCurrentTask((current) =>
+            current?.id === taskId ? { ...current, status: 'failed', message } : current,
+          );
+          monitorTimeoutRef.current = setTimeout(() => {
+            if (!isUnmountedRef.current) {
+              setCurrentTask(null);
+            }
+          }, TIMING.CLEAR_TASK_FAILED_MS);
         }
       };
 

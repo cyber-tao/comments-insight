@@ -24,8 +24,7 @@ export class DataMigrator {
     for (let version = from + 1; version <= target; version += 1) {
       const step = this.migrations[version];
       if (!step) {
-        Logger.debug('[DataMigrator] No migration step defined, skipping', { version });
-        continue;
+        throw new Error(`Missing data migration step for version ${version}`);
       }
       try {
         await step();
@@ -67,6 +66,7 @@ export class DataMigrator {
         version,
         error: error instanceof Error ? error.message : String(error),
       });
+      throw error;
     }
   }
 

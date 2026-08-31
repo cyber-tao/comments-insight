@@ -2,7 +2,14 @@ import { ICONS, RETRY } from '@/config/constants';
 import i18n from './i18n';
 import { Logger } from './logger';
 
-export { ErrorCode, ExtensionError } from './error-types';
+export {
+  ErrorCode,
+  ExtensionError,
+  fromExtensionErrorPayload,
+  isExtensionErrorPayload,
+  toExtensionErrorPayload,
+} from './error-types';
+export type { ExtensionErrorPayload } from './error-types';
 import { ErrorCode, ExtensionError } from './error-types';
 
 // interface ErrorConstructorWithCapture removed
@@ -341,6 +348,7 @@ const ERROR_CODE_TO_I18N_KEY: Record<ErrorCode, string> = {
   [ErrorCode.TASK_NOT_FOUND]: 'errors.taskNotFound',
   [ErrorCode.TASK_ALREADY_RUNNING]: 'errors.taskAlreadyRunning',
   [ErrorCode.TASK_CANCELLED]: 'errors.taskCancelled',
+  [ErrorCode.INITIALIZATION_FAILED]: 'errors.initializationFailed',
   [ErrorCode.UNKNOWN_ERROR]: 'errors.unknownError',
   [ErrorCode.VALIDATION_ERROR]: 'errors.validationError',
 };

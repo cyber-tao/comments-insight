@@ -69,9 +69,17 @@ describe('ContentAIService', () => {
       response: unknown;
     }) => void;
 
-    messageListener({ id: postedMessage.id, response: { error: 'Bridge failed' } });
+    messageListener({
+      id: postedMessage.id,
+      response: {
+        error: { code: ErrorCode.AI_TIMEOUT, message: 'Bridge failed', retryable: false },
+      },
+    });
 
-    await expect(promise).rejects.toThrow('Bridge failed');
+    await expect(promise).rejects.toMatchObject({
+      code: ErrorCode.AI_TIMEOUT,
+      message: 'Bridge failed',
+    });
     expect(vi.getTimerCount()).toBe(0);
   });
 

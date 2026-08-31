@@ -52,7 +52,7 @@ export class TaskPersistence {
       };
     } catch (error) {
       Logger.warn('[TaskPersistence] Failed to load task state', { error });
-      return null;
+      throw error;
     }
   }
 

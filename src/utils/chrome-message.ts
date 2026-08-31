@@ -1,4 +1,4 @@
-import { Message } from '../types';
+import { ContentMessage, Message } from '../types';
 import { CHROME_MESSAGE_ERRORS, TIMEOUT } from '@/config/constants';
 import { Logger } from './logger';
 
@@ -53,7 +53,7 @@ export function sendMessage<T = unknown>(
 
 export function sendMessageToTab<T = unknown>(
   tabId: number,
-  message: Message,
+  message: ContentMessage,
   options: MessageOptions = {},
 ): Promise<T> {
   const timeoutMs = options.timeoutMs ?? TIMEOUT.MESSAGE_RESPONSE_MS;

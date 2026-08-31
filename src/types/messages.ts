@@ -8,9 +8,7 @@ import {
   ProgressStage,
 } from './index';
 
-export type SystemMessage =
-  | { type: 'PING'; payload?: never }
-  | { type: 'GET_PLATFORM_INFO'; payload?: never };
+export type SystemMessage = { type: 'PING'; payload?: never };
 
 export type InjectionMessage = {
   type: 'ENSURE_CONTENT_SCRIPT';
@@ -38,7 +36,6 @@ export type ExtractionMessage =
       type: 'START_CONFIG_GENERATION';
       payload: { url: string; tabId?: number };
     }
-  | { type: 'CANCEL_EXTRACTION'; payload: { taskId: string } }
   | {
       type: 'EXTRACTION_PROGRESS';
       payload: { taskId: string; data?: unknown } & (
@@ -76,7 +73,6 @@ export type ExtractionMessage =
         error?: string;
       };
     }
-  | { type: 'GET_DOM_STRUCTURE'; payload?: never }
   | {
       type: 'TEST_SELECTOR';
       payload: { selector: string; selectorType: 'css' | 'xpath'; tabId?: number };
@@ -156,6 +152,18 @@ export type Message =
   | GenerateCrawlingConfigMessage;
 
 export type MessageType = Message['type'];
+
+export type ContentMessage =
+  | { type: 'PING'; payload?: never }
+  | { type: 'GET_PLATFORM_INFO'; payload?: never }
+  | { type: 'RUN_EXTRACTION'; payload: { taskId: string; maxComments: number } }
+  | { type: 'RUN_CONFIG_GENERATION'; payload: { taskId: string } }
+  | { type: 'CANCEL_EXTRACTION'; payload: { taskId: string } }
+  | { type: 'GET_DOM_STRUCTURE'; payload?: never }
+  | {
+      type: 'TEST_SELECTOR';
+      payload: { selector: string; selectorType: 'css' | 'xpath' };
+    };
 
 export interface ExtractionResponse {
   success: boolean;

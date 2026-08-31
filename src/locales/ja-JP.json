@@ -370,6 +370,7 @@
     "taskNotFound": "タスクが見つかりません。キャンセルまたは完了した可能性があります。",
     "taskAlreadyRunning": "タスクが既に実行中です。完了をお待ちください。",
     "taskCancelled": "タスクがキャンセルされました。",
+    "initializationFailed": "拡張機能の初期化に失敗しました。再読み込みしてから再試行してください。",
     "unknownError": "不明なエラーが発生しました。再試行してください。",
     "validationError": "検証に失敗しました。入力を確認してください。",
     "requestAborted": "リクエストが中止されました。",

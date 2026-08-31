@@ -1,6 +1,7 @@
 import { MESSAGES, TEXT, AI, TIMEOUT } from '@/config/constants';
 import type { Comment, HistoryItem, Message, Settings, Task } from '@/types';
 import { sendMessage } from './chrome-message';
+import { fromExtensionErrorPayload } from './error-types';
 
 interface GetSettingsResponse {
   settings?: Settings;
@@ -94,11 +95,16 @@ async function sendMessageOrThrow<T>(
   options?: { timeoutMs?: number },
 ): Promise<T> {
   const response = options
-    ? await sendMessage<T & { error?: string }>(message, options)
-    : await sendMessage<T & { error?: string }>(message);
+    ? await sendMessage<T & { error?: unknown }>(message, options)
+    : await sendMessage<T & { error?: unknown }>(message);
 
-  if (response && typeof response === 'object' && typeof response.error === 'string') {
-    throw new Error(response.error);
+  if (
+    response &&
+    typeof response === 'object' &&
+    'error' in response &&
+    response.error !== undefined
+  ) {
+    throw fromExtensionErrorPayload(response.error);
   }
 
   return response;

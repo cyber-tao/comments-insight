@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { TIMING } from '@/config/constants';
+import { RETRY, TIMING } from '@/config/constants';
 import { type HistoryItem, type TaskProgress } from '@/types';
 import { ExtensionAPI } from '@/utils/extension-api';
 import { Logger } from '@/utils/logger';
@@ -61,6 +61,7 @@ export function useHistoryReanalyze({
     (taskId: string, historyId: string) => {
       clearPollTimeout();
 
+      let consecutiveErrors = 0;
       const pollTaskStatus = async () => {
         if (isUnmountedRef.current) {
           return;
@@ -68,6 +69,7 @@ export function useHistoryReanalyze({
 
         try {
           const task = await ExtensionAPI.getTaskStatus(taskId);
+          consecutiveErrors = 0;
           if (!task) {
             throw new Error(t('history.reanalyzeTaskMissing'));
           }
@@ -98,6 +100,14 @@ export function useHistoryReanalyze({
           clearPollTimeout();
         } catch (error) {
           Logger.error('[History] Failed to monitor reanalyze task', { taskId, error });
+          consecutiveErrors += 1;
+          if (consecutiveErrors < RETRY.MAX_ATTEMPTS && !isUnmountedRef.current) {
+            pollTimeoutRef.current = setTimeout(
+              () => void pollTaskStatus(),
+              TIMING.POLL_TASK_RUNNING_MS * consecutiveErrors,
+            );
+            return;
+          }
           if (!isUnmountedRef.current) {
             setReanalyzeError(
               error instanceof Error ? error.message : t('history.reanalyzeFailed'),

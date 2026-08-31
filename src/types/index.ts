@@ -238,6 +238,7 @@ export interface AnalysisMetadata {
 export {
   type Message,
   type MessageType,
+  type ContentMessage,
   type SystemMessage,
   type SettingsMessage,
   type ExtractionMessage,

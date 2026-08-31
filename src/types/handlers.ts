@@ -3,6 +3,7 @@
  * Defines function signatures and related types for message handlers
  */
 
+import type { ExtensionErrorPayload } from '@/utils/error-types';
 import type { Message, MessageType } from './messages';
 
 export const PORT_CANCEL_MESSAGE_TYPE = 'CANCEL_AI_REQUEST' as const;
@@ -45,7 +46,7 @@ export interface PortMessageErrorResponse {
   id: string;
   /** Error response */
   response: {
-    error: string;
+    error: ExtensionErrorPayload;
   };
 }
 

@@ -177,6 +177,11 @@ describe('extraction handlers', () => {
       const rejection = expect(running).rejects.toMatchObject({
         code: ErrorCode.TIMEOUT_ERROR,
       });
+      await flushMicrotasks();
+      expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(1, {
+        type: 'RUN_EXTRACTION',
+        payload: { taskId: 'task_123', maxComments: 50 },
+      });
 
       await vi.advanceTimersByTimeAsync(TIMEOUT.EXTRACTION_TASK_COMPLETION_MS + 1);
       await rejection;
@@ -245,6 +250,11 @@ describe('extraction handlers', () => {
       const running = executor({ id: 'task_123', tabId: 1 }, controller.signal);
       const rejection = expect(running).rejects.toMatchObject({
         code: ErrorCode.TIMEOUT_ERROR,
+      });
+      await flushMicrotasks();
+      expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(1, {
+        type: 'RUN_CONFIG_GENERATION',
+        payload: { taskId: 'task_123' },
       });
 
       await vi.advanceTimersByTimeAsync(TIMEOUT.CONFIG_TASK_COMPLETION_MS + 1);

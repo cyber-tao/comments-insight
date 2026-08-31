@@ -6,7 +6,7 @@ import {
   PORT_CANCEL_MESSAGE_TYPE,
 } from '../types';
 import { Logger } from '../utils/logger';
-import { ErrorHandler, ExtensionError, ErrorCode } from '../utils/errors';
+import { ErrorHandler, ExtensionError, ErrorCode, toExtensionErrorPayload } from '../utils/errors';
 import { MESSAGES } from '@/config/constants';
 import { HandlerContext } from './handlers/types';
 import type { ServiceInstances } from './ServiceContainer';
@@ -20,7 +20,16 @@ import * as historyHandlers from './handlers/history';
 import * as taskHandlers from './handlers/task';
 import * as miscHandlers from './handlers/misc';
 
-const KNOWN_MESSAGE_TYPES = new Set<string>(Object.values(MESSAGES));
+const CONTENT_ONLY_MESSAGE_TYPES = new Set<string>([
+  MESSAGES.RUN_EXTRACTION,
+  MESSAGES.RUN_CONFIG_GENERATION,
+  MESSAGES.CANCEL_EXTRACTION,
+  MESSAGES.GET_PLATFORM_INFO,
+  MESSAGES.GET_DOM_STRUCTURE,
+]);
+const KNOWN_MESSAGE_TYPES = new Set<string>(
+  Object.values(MESSAGES).filter((type) => !CONTENT_ONLY_MESSAGE_TYPES.has(type)),
+);
 
 function isKnownMessageType(type: unknown): type is Message['type'] {
   return typeof type === 'string' && KNOWN_MESSAGE_TYPES.has(type);
@@ -80,12 +89,18 @@ export class MessageRouter {
   }
 
   private async ensureReady(): Promise<void> {
-    if (this.readyPromise) {
-      try {
-        await this.readyPromise;
-      } catch {
-        // Initialization errors are logged at startup; don't throw from guard
-      }
+    if (!this.readyPromise) {
+      return;
+    }
+    try {
+      await this.readyPromise;
+    } catch (error) {
+      throw new ExtensionError(
+        ErrorCode.INITIALIZATION_FAILED,
+        'Extension initialization failed',
+        { originalError: error instanceof Error ? error.message : String(error) },
+        false,
+      );
     }
   }
 
@@ -157,7 +172,7 @@ export class MessageRouter {
         'Port message correlation ID is required',
       );
       Logger.error('[MessageRouter] Port message handling failed', { error, type: message.type });
-      port.postMessage({ id: correlationId, response: { error: error.message } });
+      port.postMessage({ id: correlationId, response: { error: toExtensionErrorPayload(error) } });
       return;
     }
 
@@ -182,7 +197,7 @@ export class MessageRouter {
       port.postMessage({ id: correlationId, response });
     } catch (error) {
       Logger.error('[MessageRouter] Port message handling failed', { error, type: message.type });
-      const response = { error: error instanceof Error ? error.message : String(error) };
+      const response = { error: toExtensionErrorPayload(error) };
       try {
         port.postMessage({ id: correlationId, response });
       } catch (postError) {
@@ -228,10 +243,6 @@ export class MessageRouter {
     const handler = this.handlers.get(validatedMessage.type);
 
     if (!handler) {
-      if (this.isContentScriptMessage(validatedMessage.type)) {
-        return;
-      }
-
       throw new ExtensionError(
         ErrorCode.VALIDATION_ERROR,
         `Unknown message type: ${validatedMessage.type}`,
@@ -248,16 +259,5 @@ export class MessageRouter {
       );
       throw error;
     }
-  }
-
-  /**
-   * Check if a message type is handled by content script
-   */
-  private isContentScriptMessage(type: MessageType): boolean {
-    return (
-      type === MESSAGES.GET_PLATFORM_INFO ||
-      type === MESSAGES.GET_DOM_STRUCTURE ||
-      type === MESSAGES.CANCEL_EXTRACTION
-    );
   }
 }

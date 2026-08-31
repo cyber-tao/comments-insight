@@ -173,6 +173,32 @@ describe('popup hooks', () => {
     expect(result.current.currentTask).toBeNull();
   });
 
+  it('useTask retries a transient task status error', async () => {
+    vi.useFakeTimers();
+    extensionApiMock.getTasks.mockResolvedValue([
+      createTask({ id: TASK_ID, type: 'extract', status: 'pending', progress: 0 }),
+    ]);
+    extensionApiMock.getTaskStatus
+      .mockRejectedValueOnce(new Error('service worker restarted'))
+      .mockResolvedValueOnce(
+        createTask({ id: TASK_ID, type: 'extract', status: 'running', progress: 35 }),
+      );
+
+    const { result } = renderHook(() => useTask());
+    await act(async () => {
+      await result.current.loadCurrentTask(PAGE_URL);
+      await Promise.resolve();
+    });
+
+    expect(result.current.currentTask).toMatchObject({ id: TASK_ID, status: 'pending' });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMING.POLL_TASK_RUNNING_MS);
+    });
+
+    expect(extensionApiMock.getTaskStatus).toHaveBeenCalledTimes(2);
+    expect(result.current.currentTask).toMatchObject({ status: 'running', progress: 35 });
+  });
+
   it('useTask matches current task by tab id when multiple tabs share the same url', async () => {
     extensionApiMock.getTasks.mockResolvedValue([
       createTask({

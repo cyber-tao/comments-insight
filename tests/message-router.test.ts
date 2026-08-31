@@ -111,28 +111,32 @@ const mockTokenStatsStore = {};
 const mockCrawlingConfigStore = {};
 const mockNotificationService = {};
 
-const createRouter = (): MessageRouter =>
-  new MessageRouter({
-    taskManager: mockTaskManager as unknown as import('../src/background/TaskManager').TaskManager,
-    aiService: mockAIService as unknown as import('../src/background/AIService').AIService,
-    commentAnalyzer:
-      mockCommentAnalyzer as unknown as import('../src/background/ai/CommentAnalyzer').CommentAnalyzer,
-    timestampNormalizer:
-      mockTimestampNormalizer as unknown as import('../src/background/ai/TimestampNormalizer').TimestampNormalizer,
-    settingsStore:
-      mockSettingsStore as unknown as import('../src/background/storage/SettingsStore').SettingsStore,
-    historyStore:
-      mockHistoryStore as unknown as import('../src/background/storage/HistoryStore').HistoryStore,
-    encryptionService:
-      mockEncryptionService as unknown as import('../src/background/storage/EncryptionService').EncryptionService,
-    logStore: mockLogStore as unknown as import('../src/background/storage/LogStore').LogStore,
-    tokenStatsStore:
-      mockTokenStatsStore as unknown as import('../src/background/storage/TokenStatsStore').TokenStatsStore,
-    crawlingConfigStore:
-      mockCrawlingConfigStore as unknown as import('../src/background/storage/CrawlingConfigStore').CrawlingConfigStore,
-    notificationService:
-      mockNotificationService as unknown as import('../src/background/NotificationService').NotificationService,
-  });
+const createRouter = (options?: ConstructorParameters<typeof MessageRouter>[1]): MessageRouter =>
+  new MessageRouter(
+    {
+      taskManager:
+        mockTaskManager as unknown as import('../src/background/TaskManager').TaskManager,
+      aiService: mockAIService as unknown as import('../src/background/AIService').AIService,
+      commentAnalyzer:
+        mockCommentAnalyzer as unknown as import('../src/background/ai/CommentAnalyzer').CommentAnalyzer,
+      timestampNormalizer:
+        mockTimestampNormalizer as unknown as import('../src/background/ai/TimestampNormalizer').TimestampNormalizer,
+      settingsStore:
+        mockSettingsStore as unknown as import('../src/background/storage/SettingsStore').SettingsStore,
+      historyStore:
+        mockHistoryStore as unknown as import('../src/background/storage/HistoryStore').HistoryStore,
+      encryptionService:
+        mockEncryptionService as unknown as import('../src/background/storage/EncryptionService').EncryptionService,
+      logStore: mockLogStore as unknown as import('../src/background/storage/LogStore').LogStore,
+      tokenStatsStore:
+        mockTokenStatsStore as unknown as import('../src/background/storage/TokenStatsStore').TokenStatsStore,
+      crawlingConfigStore:
+        mockCrawlingConfigStore as unknown as import('../src/background/storage/CrawlingConfigStore').CrawlingConfigStore,
+      notificationService:
+        mockNotificationService as unknown as import('../src/background/NotificationService').NotificationService,
+    },
+    options,
+  );
 
 const createUnknownMessage = (type: string): Message => ({ type }) as unknown as Message;
 
@@ -176,6 +180,21 @@ describe('MessageRouter', () => {
       const result = await router.handleMessage({ type: MESSAGES.PING }, mockSender);
 
       expect(result).toEqual({ pong: true });
+    });
+
+    it('should fail closed when background initialization failed', async () => {
+      const readyPromise = Promise.reject(new Error('migration failed'));
+      void readyPromise.catch(() => undefined);
+      router = createRouter({ readyPromise });
+      const miscHandlers = await import('../src/background/handlers/misc');
+
+      await expect(router.handleMessage({ type: MESSAGES.PING }, mockSender)).rejects.toMatchObject(
+        {
+          code: ErrorCode.INITIALIZATION_FAILED,
+          message: 'Extension initialization failed',
+        },
+      );
+      expect(miscHandlers.handlePing).not.toHaveBeenCalled();
     });
 
     it('should handle GET_SETTINGS message', async () => {
@@ -285,20 +304,18 @@ describe('MessageRouter', () => {
       });
     });
 
-    it('should ignore content script messages', async () => {
-      const result1 = await router.handleMessage({ type: MESSAGES.GET_PLATFORM_INFO }, mockSender);
-      const result2 = await router.handleMessage({ type: MESSAGES.GET_DOM_STRUCTURE }, mockSender);
-      const result3 = await router.handleMessage(
-        {
-          type: MESSAGES.CANCEL_EXTRACTION,
-          payload: { taskId: 'task_test' },
-        } as unknown as Message,
-        mockSender,
-      );
-
-      expect(result1).toBeUndefined();
-      expect(result2).toBeUndefined();
-      expect(result3).toBeUndefined();
+    it('should reject content-only commands at the background boundary', async () => {
+      await expect(
+        router.handleMessage(
+          {
+            type: MESSAGES.RUN_EXTRACTION,
+            payload: { taskId: 'task_test', maxComments: 10 },
+          } as unknown as Message,
+          mockSender,
+        ),
+      ).rejects.toMatchObject({
+        code: ErrorCode.VALIDATION_ERROR,
+      });
     });
   });
 
@@ -328,7 +345,7 @@ describe('MessageRouter', () => {
       expect(mockPort.postMessage).toHaveBeenCalledWith({
         id: 'correlation-456',
         response: expect.objectContaining({
-          error: expect.any(String),
+          error: expect.objectContaining({ message: expect.any(String) }),
         }),
       });
     });
@@ -344,7 +361,10 @@ describe('MessageRouter', () => {
       expect(mockPort.postMessage).toHaveBeenCalledWith({
         id: '',
         response: expect.objectContaining({
-          error: expect.stringContaining('correlation ID is required'),
+          error: expect.objectContaining({
+            code: ErrorCode.VALIDATION_ERROR,
+            message: expect.stringContaining('correlation ID is required'),
+          }),
         }),
       });
     });
@@ -360,7 +380,10 @@ describe('MessageRouter', () => {
       expect(mockPort.postMessage).toHaveBeenCalledWith({
         id: 'correlation-789',
         response: expect.objectContaining({
-          error: expect.stringContaining('Port sender is required'),
+          error: expect.objectContaining({
+            code: ErrorCode.VALIDATION_ERROR,
+            message: expect.stringContaining('Port sender is required'),
+          }),
         }),
       });
     });
@@ -440,7 +463,13 @@ describe('MessageRouter', () => {
       expect(requestSignal?.aborted).toBe(true);
       expect(port.postMessage).toHaveBeenCalledWith({
         id: request.id,
-        response: { error: 'Request aborted' },
+        response: {
+          error: {
+            code: ErrorCode.UNKNOWN_ERROR,
+            message: 'Request aborted',
+            retryable: false,
+          },
+        },
       });
     });
   });

@@ -72,7 +72,7 @@ export async function handleStartExtraction(
     // The content script acks immediately then reports completion later.
     try {
       await chrome.tabs.sendMessage(task.tabId, {
-        type: MESSAGES.START_EXTRACTION,
+        type: MESSAGES.RUN_EXTRACTION,
         payload: { taskId: task.id, maxComments: finalMaxComments },
       });
     } catch (error) {

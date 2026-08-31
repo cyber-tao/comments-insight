@@ -51,7 +51,7 @@ export async function handleStartConfigGeneration(
 
     try {
       await chrome.tabs.sendMessage(task.tabId, {
-        type: MESSAGES.START_CONFIG_GENERATION,
+        type: MESSAGES.RUN_CONFIG_GENERATION,
         payload: { taskId: task.id },
       });
     } catch (error) {

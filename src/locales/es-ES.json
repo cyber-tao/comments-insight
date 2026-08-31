@@ -370,6 +370,7 @@
     "taskNotFound": "Tarea no encontrada. Puede haber sido cancelada o completada.",
     "taskAlreadyRunning": "Ya hay una tarea en ejecución. Por favor espera a que termine.",
     "taskCancelled": "La tarea fue cancelada.",
+    "initializationFailed": "No se pudo inicializar la extensión. Vuelve a cargarla e inténtalo de nuevo.",
     "unknownError": "Ocurrió un error desconocido. Por favor inténtalo de nuevo.",
     "validationError": "La validación falló. Por favor verifica tu entrada.",
     "requestAborted": "La solicitud fue abortada.",

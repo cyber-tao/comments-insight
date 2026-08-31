@@ -140,6 +140,7 @@ export class TaskManager {
       }
     } catch (error) {
       Logger.warn('[TaskManager] Failed to initialize task state', { error });
+      throw error;
     }
   }
 

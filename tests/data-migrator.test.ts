@@ -114,12 +114,28 @@ describe('DataMigrator', () => {
     }
   });
 
+  it('fails closed when a required migration step is missing', async () => {
+    const migrator = new DataMigrator({});
+
+    await expect(migrator.migrate()).rejects.toThrow('Missing data migration step for version 2');
+    expect(mockStorageSet).not.toHaveBeenCalled();
+  });
+
   it('propagates errors from failing migration step and does not bump version', async () => {
     const failing = vi.fn().mockRejectedValue(new Error('boom'));
     const migrator = new DataMigrator({ 2: failing });
 
     await expect(migrator.migrate()).rejects.toThrow('boom');
     expect(mockStorageSet).not.toHaveBeenCalled();
+  });
+
+  it('propagates version marker write failures after migrations complete', async () => {
+    const step = vi.fn().mockResolvedValue(undefined);
+    const migrator = new DataMigrator({ 2: step });
+    mockStorageSet.mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await expect(migrator.migrate()).rejects.toThrow('storage unavailable');
+    expect(step).toHaveBeenCalledOnce();
   });
 
   it('tolerates chrome.storage.get failures and treats as initial version', async () => {

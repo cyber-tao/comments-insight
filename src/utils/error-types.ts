@@ -72,6 +72,8 @@ export enum ErrorCode {
   TASK_CANCELLED = 'TASK_CANCELLED',
 
   // General errors
+  /** Extension startup or migration failed */
+  INITIALIZATION_FAILED = 'INITIALIZATION_FAILED',
   /** Unknown/unexpected error */
   UNKNOWN_ERROR = 'UNKNOWN_ERROR',
   /** Input validation failed */
@@ -98,6 +100,12 @@ export enum ErrorCode {
  * );
  * ```
  */
+export interface ExtensionErrorPayload {
+  code: ErrorCode;
+  message: string;
+  retryable: boolean;
+}
+
 export class ExtensionError extends Error {
   /** Error code for categorization */
   public readonly code: ErrorCode;
@@ -135,4 +143,37 @@ export class ExtensionError extends Error {
       ErrorWithStack.captureStackTrace(this, ExtensionError);
     }
   }
+}
+
+const ERROR_CODE_VALUES = new Set<string>(Object.values(ErrorCode));
+
+export function toExtensionErrorPayload(error: unknown): ExtensionErrorPayload {
+  if (error instanceof ExtensionError) {
+    return { code: error.code, message: error.message, retryable: error.retryable };
+  }
+  return {
+    code: ErrorCode.UNKNOWN_ERROR,
+    message: error instanceof Error ? error.message : String(error),
+    retryable: false,
+  };
+}
+
+export function isExtensionErrorPayload(value: unknown): value is ExtensionErrorPayload {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as Partial<ExtensionErrorPayload>;
+  return (
+    typeof candidate.code === 'string' &&
+    ERROR_CODE_VALUES.has(candidate.code) &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.retryable === 'boolean'
+  );
+}
+
+export function fromExtensionErrorPayload(value: unknown): Error {
+  if (isExtensionErrorPayload(value)) {
+    return new ExtensionError(value.code, value.message, undefined, value.retryable);
+  }
+  return new Error(typeof value === 'string' ? value : 'Unknown extension error');
 }

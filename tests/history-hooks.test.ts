@@ -275,6 +275,39 @@ describe('history hooks', () => {
     expect(result.current.reanalyzeDetailedProgress).toBeNull();
   });
 
+  it('retries a transient reanalyze status error', async () => {
+    vi.useFakeTimers();
+    extensionApiMock.getTaskStatus
+      .mockRejectedValueOnce(new Error('service worker restarted'))
+      .mockResolvedValueOnce({ status: 'completed', progress: 100 });
+    const initialItem = createHistoryItem(HISTORY_ID);
+    const refreshedItem = createHistoryItem(HISTORY_ID, HISTORY_TITLE_UPDATED);
+    const fetchHistoryItemById = vi.fn().mockResolvedValue(refreshedItem);
+
+    const { result } = renderHook(() => {
+      const [selectedItem, setSelectedItem] = React.useState<HistoryItem | null>(initialItem);
+      return {
+        selectedItem,
+        ...useHistoryReanalyze({ selectedItem, fetchHistoryItemById, setSelectedItem }),
+      };
+    });
+
+    await act(async () => {
+      await result.current.handleReanalyze();
+      await Promise.resolve();
+    });
+    expect(result.current.isReanalyzing).toBe(true);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMING.POLL_TASK_RUNNING_MS);
+    });
+
+    expect(extensionApiMock.getTaskStatus).toHaveBeenCalledTimes(2);
+    expect(fetchHistoryItemById).toHaveBeenCalledWith(HISTORY_ID, { force: true });
+    expect(result.current.selectedItem?.title).toBe(HISTORY_TITLE_UPDATED);
+    expect(result.current.reanalyzeError).toBe('');
+  });
+
   it('surfaces task failure during reanalyze polling', async () => {
     extensionApiMock.getTaskStatus.mockResolvedValue({
       status: 'failed',

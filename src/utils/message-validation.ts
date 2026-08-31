@@ -36,20 +36,16 @@ const coreCommentSchema = z.object({
 const historyExportSchema = z.object({ type: z.literal('settings') });
 
 const optionalUndefinedPayload = z.undefined().optional();
-const taskIdPayload = z.object({ taskId: nonEmptyString });
 
 const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
   PING: optionalUndefinedPayload,
-  GET_PLATFORM_INFO: optionalUndefinedPayload,
   GET_SETTINGS: optionalUndefinedPayload,
-  GET_DOM_STRUCTURE: optionalUndefinedPayload,
   CLEAR_ALL_HISTORY: optionalUndefinedPayload,
   TASK_UPDATE: z
     .object({
       id: nonEmptyString,
     })
     .passthrough(),
-  CANCEL_EXTRACTION: taskIdPayload,
   ENSURE_CONTENT_SCRIPT: z
     .object({
       tabId: z.number().int().positive().optional(),

@@ -9,6 +9,7 @@ import { MessageRouter } from './MessageRouter';
 import { DataMigrator } from './storage/DataMigrator';
 import { Message } from '../types';
 import { Logger } from '../utils/logger';
+import { toExtensionErrorPayload } from '@/utils/error-types';
 import { STORAGE } from '@/config/constants';
 import i18n, { changeLanguage } from '../utils/i18n';
 
@@ -23,18 +24,17 @@ chrome.storage.local
   );
 
 const initPromise = (async () => {
-  try {
-    await new DataMigrator().migrate();
-    await getTaskManager().initialize();
-    // Apply the user's language preference before any background-originated
-    // strings (notifications, persisted task errors) are produced.
-    const settings = await getSettingsStore().getSettings();
-    await changeLanguage(settings.language);
-    Logger.info('[Background] Migration and TaskManager initialized');
-  } catch (error) {
-    Logger.error('[Background] Service worker initialization failed', { error });
-  }
+  await new DataMigrator().migrate();
+  await getTaskManager().initialize();
+  // Apply the user's language preference before any background-originated
+  // strings (notifications, persisted task errors) are produced.
+  const settings = await getSettingsStore().getSettings();
+  await changeLanguage(settings.language);
+  Logger.info('[Background] Migration and TaskManager initialized');
 })();
+void initPromise.catch((error) => {
+  Logger.error('[Background] Service worker initialization failed', { error });
+});
 
 // Keep the service worker locale in sync when the user changes it in Options,
 // mirroring how Logger tracks developerMode via the same listener.
@@ -84,6 +84,6 @@ chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) =>
   messageRouter
     .handleMessage(message, sender)
     .then((response) => sendResponse(response))
-    .catch((error) => sendResponse({ error: (error as Error).message }));
+    .catch((error) => sendResponse({ error: toExtensionErrorPayload(error) }));
   return true;
 });
