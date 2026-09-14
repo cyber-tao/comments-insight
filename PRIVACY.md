@@ -17,7 +17,7 @@ Comments Insight is a browser extension that extracts comments from webpages and
 
 When the user starts extraction, configuration generation, or analysis, the extension may process the current page URL, title, post content, comment text, usernames, timestamps, likes, replies, and simplified portions of the page DOM. This data is used only to provide the requested extraction, selector generation, analysis, and report features.
 
-The extension does not send browsing history to the developer or build a developer-operated browsing profile. Its content script is available on HTTP and HTTPS pages so the user can run the extension on supported websites and can therefore access the current page URL. Normal feature records are created after user action; if local developer diagnostics are enabled, sanitized page metadata may also be written to local logs. None of this data is used for advertising or profiling.
+The extension does not send browsing history to the developer or build a developer-operated browsing profile. Its content script is available on HTTP and HTTPS pages so the user can run the extension on supported websites and can therefore access the current page URL. Normal feature records are created after user action. If Developer Mode is enabled, detailed AI prompts and responses may also be stored in local logs after credential sanitization; those logs can contain page DOM, post text, usernames, and comments. None of this data is used for advertising or profiling.
 
 ### AI configuration and credentials
 
@@ -31,7 +31,7 @@ The extension stores the following data locally:
 
 - extracted comments, page metadata, Markdown analysis, and generated visual reports in IndexedDB;
 - settings, crawling rules, task state, selector cache, and token usage counters in extension storage;
-- sanitized AI and system logs when needed for local diagnostics.
+- credential-sanitized AI and system logs for local diagnostics; in Developer Mode, AI logs can contain full prompts, responses, and related page/comment content.
 
 This data remains on the device until it is deleted or overwritten through the extension, the browser's extension data is cleared, or the extension is uninstalled.
 

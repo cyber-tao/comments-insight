@@ -31,7 +31,7 @@ Chrome Web Store policy treats local processing and storage as handling user dat
 
 If a future supported workflow handles private messages, health data, financial data, or another listed category, update the Dashboard, privacy policy, and prominent in-product disclosure before release.
 
-For each category, state that data is used only for extension functionality. Page data and credentials are transferred to the user-selected AI provider only when required by a requested AI feature. Locally stored history, settings, logs, and token counters are not sent to a developer-operated backend. A manual crawling-rule sync fetches public rules from GitHub without attaching the AI key or extracted content.
+For each category, state that data is used only for extension functionality. Page data and credentials are transferred to the user-selected AI provider only when required by a requested AI feature. Locally stored history, settings, logs, and token counters are not sent to a developer-operated backend. Developer Mode AI logs may contain credential-sanitized prompts, responses, page DOM, and comments. A manual crawling-rule sync fetches public rules from GitHub without attaching the AI key or extracted content.
 
 Complete all Limited Use certifications truthfully. Do not state that the extension handles no user data.
 
@@ -46,6 +46,8 @@ Complete all Limited Use certifications truthfully. Do not state that the extens
 - **HTTP/HTTPS host access**: supports the extension's stated cross-site comment-extraction purpose and communication with user-selected AI endpoints. The implementation rejects non-loopback remote AI endpoints that do not use HTTPS.
 
 ## Release review
+
+The GitHub Release CRX is signed with an ephemeral in-memory key. Its extension ID is not stable and does not match the Chrome Web Store listing, so treat it as a development side-load artifact rather than an update package. The Web Store upload uses `dist/extension.zip`. A stable self-hosted CRX would require a separately protected signing key.
 
 Before submission:
 

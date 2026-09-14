@@ -1,36 +1,11 @@
 import fs from 'fs/promises';
-import { existsSync } from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import puppeteer from 'puppeteer';
+import { requireChromeExecutablePath } from './browser-locator.js';
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const extensionPath = path.resolve(scriptDirectory, '../dist');
-
-function getChromeExecutablePath() {
-  const candidatePaths = [
-    process.env.PUPPETEER_EXECUTABLE_PATH,
-    process.env.CHROME_BIN,
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    process.env.LOCALAPPDATA &&
-      path.join(process.env.LOCALAPPDATA, 'Google/Chrome/Application/chrome.exe'),
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  ].filter(Boolean);
-
-  for (const p of candidatePaths) {
-    if (existsSync(p)) {
-      return p;
-    }
-  }
-  return undefined;
-}
 const settingsPathEnv = 'COMMENTS_INSIGHT_SETTINGS_PATH';
 const videoUrlEnv = 'COMMENTS_INSIGHT_VIDEO_URL';
 const maxCommentsEnv = 'COMMENTS_INSIGHT_MAX_COMMENTS';
@@ -114,44 +89,47 @@ async function injectSettings(browser, backgroundTarget, settings) {
     await settingsPage.goto(`chrome-extension://${extensionId}/src/options/index.html`, {
       waitUntil: 'domcontentloaded',
     });
-    await settingsPage.evaluate(async (data) => {
-      const response = await chrome.runtime.sendMessage({
-        type: 'SAVE_SETTINGS',
-        payload: { settings: data },
-      });
-      if (!response?.success) {
-        throw new Error(response?.error || 'Failed to save test settings');
-      }
-    }, minimalSettings);
+    const response = await sendExtensionMessage(settingsPage, {
+      type: 'SAVE_SETTINGS',
+      payload: { settings: minimalSettings },
+    });
+    if (!response?.success) {
+      throw new Error('Failed to save test settings');
+    }
   } finally {
     await settingsPage.close();
   }
 }
 
-function createTestResultPromise(page) {
-  return new Promise((resolve, reject) => {
-    page.on('console', (message) => {
-      const text = message.text();
-      console.log('[PAGE CONSOLE]', text);
+async function sendExtensionMessage(page, message) {
+  const response = await page.evaluate(
+    async (request) => chrome.runtime.sendMessage(request),
+    message,
+  );
+  if (response?.error) {
+    const errorMessage =
+      typeof response.error === 'string' ? response.error : response.error.message;
+    throw new Error(errorMessage || 'Extension message failed');
+  }
+  return response;
+}
 
-      if (!text.includes('__TEST_RESULT__:')) {
-        return;
-      }
-
-      const jsonText = text.replace('__TEST_RESULT__:', '').trim();
-      try {
-        resolve(JSON.parse(jsonText));
-      } catch (error) {
-        reject(error);
-      }
+async function waitForTask(page, taskId, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const response = await sendExtensionMessage(page, {
+      type: 'GET_TASK_STATUS',
+      payload: { taskId },
     });
-
-    page.on('pageerror', (error) => console.error('[PAGE ERROR]', error));
-    page.on('requestfailed', (request) => {
-      const failure = request.failure();
-      console.error('[REQUEST FAILED]', request.url(), failure?.errorText ?? 'unknown');
-    });
-  });
+    if (response?.task?.status === 'completed') {
+      return response.task;
+    }
+    if (response?.task?.status === 'failed') {
+      throw new Error(response.task.error || 'Extraction task failed');
+    }
+    await delay(serviceWorkerRetryDelayMs);
+  }
+  throw new Error(`Task ${taskId} did not complete within ${timeoutMs}ms`);
 }
 
 async function runTest() {
@@ -174,8 +152,8 @@ async function runTest() {
   console.log('Extension path:', extensionPath);
   console.log('Target URL:', videoUrl);
 
-  const executablePath = getChromeExecutablePath();
-  console.log('Browser executable:', executablePath || 'default puppeteer bundle');
+  const executablePath = requireChromeExecutablePath();
+  console.log('Browser executable:', executablePath);
 
   const browser = await puppeteer.launch({
     headless: false,
@@ -197,56 +175,66 @@ async function runTest() {
   try {
     console.log('Identifying extension background worker...');
     const backgroundTarget = await findBackgroundTarget(browser);
-
-    if (backgroundTarget) {
-      if (settings) {
-        await injectSettings(browser, backgroundTarget, settings);
-      } else {
-        console.log(`${settingsPathEnv} is not set; using existing extension settings.`);
-      }
-    } else {
-      console.warn('Could not find background service worker; using existing extension settings.');
+    if (!backgroundTarget) {
       const targets = await browser.targets();
-      console.log(
-        'Available targets:',
-        targets.map((target) => `${target.type()} - ${target.url()}`).join('\n'),
+      throw new Error(
+        `Could not find background service worker. Available targets:\n${targets
+          .map((target) => `${target.type()} - ${target.url()}`)
+          .join('\n')}`,
       );
     }
 
+    const extensionId = new URL(backgroundTarget.url()).host;
+    if (settings) {
+      await injectSettings(browser, backgroundTarget, settings);
+    } else {
+      console.log(`${settingsPathEnv} is not set; using default extension settings.`);
+    }
+
     const page = await browser.newPage();
-    const testResultPromise = createTestResultPromise(page);
-
-    console.log('Navigating to example.com to check injection...');
-    await page.goto('https://example.com', { waitUntil: 'domcontentloaded' });
-    await delay(pageWaitShortMs);
-
     console.log(`Navigating to ${videoUrl}...`);
     await page.goto(videoUrl, { waitUntil: 'domcontentloaded', timeout: pageLoadTimeoutMs });
-
-    console.log('Waiting for content script hook injection...');
     await delay(pageWaitLongMs);
     await page.evaluate((scrollY) => window.scrollBy(0, scrollY), pageScrollY);
     await delay(pageWaitShortMs);
 
-    console.log('Triggering extraction test...');
-    await page.evaluate((count) => {
-      window.postMessage({ type: 'COMMENTS_INSIGHT_TEST_TRIGGER', maxComments: count }, '*');
-    }, maxComments);
-
-    const timeoutPromise = delay(testTimeoutMs).then(() => {
-      throw new Error(`Test timed out after ${testTimeoutMs}ms`);
+    const controlPage = await browser.newPage();
+    await controlPage.goto(`chrome-extension://${extensionId}/src/options/index.html`, {
+      waitUntil: 'domcontentloaded',
     });
-    const result = await Promise.race([testResultPromise, timeoutPromise]);
+    const pageUrl = page.url();
+    const tabId = await controlPage.evaluate(async (targetUrl) => {
+      const tabs = await chrome.tabs.query({});
+      return tabs.find((tab) => tab.url === targetUrl)?.id;
+    }, pageUrl);
+    if (typeof tabId !== 'number') {
+      throw new Error(`Could not resolve target tab for ${pageUrl}`);
+    }
 
-    if (!result.success) {
-      throw new Error(`Extraction failed: ${result.error ?? 'unknown error'}`);
+    console.log('Starting extraction through the background task flow...');
+    const startResponse = await sendExtensionMessage(controlPage, {
+      type: 'START_EXTRACTION',
+      payload: { url: pageUrl, tabId, maxComments },
+    });
+    if (!startResponse?.taskId) {
+      throw new Error('Background did not create an extraction task');
+    }
+    await waitForTask(controlPage, startResponse.taskId, testTimeoutMs);
+
+    const historyResponse = await sendExtensionMessage(controlPage, {
+      type: 'GET_HISTORY_BY_URL',
+      payload: { url: pageUrl },
+    });
+    const comments = historyResponse?.item?.comments;
+    if (!Array.isArray(comments) || comments.length === 0) {
+      throw new Error('Extraction completed without persisted comments');
     }
 
     console.log('Extraction successful.');
-    console.log(`Extracted ${result.comments?.length ?? 0} comments.`);
-    if (result.comments?.length > 0) {
-      console.log('Sample comment:', JSON.stringify(result.comments[0], null, 2));
-    }
+    console.log(`Extracted ${comments.length} comments.`);
+    console.log('Sample comment:', JSON.stringify(comments[0], null, 2));
+    await controlPage.close();
+    await page.close();
   } finally {
     try {
       await browser.close();

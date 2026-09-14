@@ -12,10 +12,10 @@ The repository provides two Puppeteer scripts:
 ## Prerequisites
 
 - `bun install`
-- Chrome/Chromium/Edge 116 or newer
+- `bunx puppeteer browsers install chrome` (Chrome for Testing; Chromium or Edge 116+ also work)
 - `bun run build` before each browser run
 
-Set `PUPPETEER_EXECUTABLE_PATH` or `CHROME_BIN` to select a browser explicitly. The scripts also check common Chrome, Chromium, and Edge locations on Windows, Linux, and macOS before falling back to Puppeteer's downloaded browser.
+`scripts/browser-locator.js` resolves the browser: it prefers any Chrome for Testing build in the Puppeteer cache, then Chromium and Edge, and only then branded Chrome. Official Chrome builds 137 and newer ignore `--load-extension`, so the extension would silently fail to load there. Set `PUPPETEER_EXECUTABLE_PATH` or `CHROME_BIN` to choose a browser explicitly; both scripts fail with actionable guidance when no usable browser exists.
 
 ## Deterministic local suite
 
@@ -23,6 +23,7 @@ Run:
 
 ```bash
 bun run build
+bunx puppeteer browsers install chrome
 bun run test:e2e
 ```
 
@@ -35,15 +36,16 @@ The suite starts a local HTTP page containing a fixed comment fixture, creates a
 5. the sandbox renders safe static report content while removing scripts, event handlers, external image URLs, and frames;
 6. a real `START_EXTRACTION` request creates a `TaskManager` task, dispatches `RUN_EXTRACTION` to the content script, extracts the fixture comments, and persists a readable history record.
 
-The final extraction assertion reads the persisted record through `GET_HISTORY_BY_URL`; it does not use the development-only page hook and does not accept an empty page or an unmodified sandbox document as success.
+The final extraction assertion reads the persisted record through `GET_HISTORY_BY_URL`; it does not use a webpage test hook and does not accept an empty page or an unmodified sandbox document as success.
 
 This suite needs no API key and makes no AI-provider request. It uses a configured crawling rule for `127.0.0.1` so the extraction path is deterministic.
 
 ### CI
 
-CI runs the browser suite after the production build:
+CI installs Chrome for Testing and runs the browser suite after the production build:
 
 ```bash
+bunx puppeteer browsers install chrome
 xvfb-run -a bun run test:e2e
 ```
 
@@ -51,7 +53,7 @@ The suite launches in headful mode because extension service workers and extensi
 
 ## Optional live YouTube test
 
-`scripts/test-youtube.js` exercises the unpacked extension against a configurable public page. It uses the unpacked-development content-script hook to start extraction and reports the final outcome through a page console marker. Extracted history is still persisted through the normal background flow.
+`scripts/test-youtube.js` exercises the unpacked extension against a configurable public page. An extension control page sends `START_EXTRACTION`, waits for the background task, and reads the persisted result through `GET_HISTORY_BY_URL`, using the same production message flow as the deterministic suite.
 
 This test can invoke a real AI provider and is intentionally not part of CI.
 
@@ -77,12 +79,12 @@ bun scripts/test-youtube.js
 
 Keep the settings file outside version control. The test sends relevant page data and credentials to the configured AI endpoint and prints extraction diagnostics, including a sample comment, to the local terminal. Do not use sensitive pages or credentials that are not intended for that provider.
 
-The development hook is exposed only when the loaded manifest has no `update_url`; a Web Store installation does not expose it.
+No webpage-to-content-script test hook is exposed; both browser scripts enter through the validated extension message boundary.
 
 ## Troubleshooting
 
 - Rebuild before testing; Puppeteer loads files from `dist/`, not directly from `src/`.
 - If the service worker is not found, confirm that the browser allows unpacked extensions and that no enterprise policy disables them.
-- If launch fails, set `PUPPETEER_EXECUTABLE_PATH` or `CHROME_BIN` to a compatible local browser.
+- If launch fails or the service worker never appears, run `bunx puppeteer browsers install chrome`, or point `PUPPETEER_EXECUTABLE_PATH` / `CHROME_BIN` to Chrome for Testing, Chromium, or Edge rather than branded Chrome 137+. A branded-Chrome or Edge launcher stub can exit immediately when another instance of that browser is already running.
 - Inspect page and service-worker console output for task errors. The deterministic suite fails on page errors, failed tasks, missing comments, missing history, or sandbox sanitization regressions.
 - Use mocked `chrome.storage`, IndexedDB, and extension APIs for isolated unit tests; reserve browser E2E for cross-context wiring and browser behavior.

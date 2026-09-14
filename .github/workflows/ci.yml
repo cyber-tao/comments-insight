@@ -21,4 +21,6 @@ jobs:
       - name: Security audit
         run: bun run audit
       - run: bun run build
+      - name: Install Chrome for Testing
+        run: bunx puppeteer browsers install chrome
       - run: xvfb-run -a bun run test:e2e

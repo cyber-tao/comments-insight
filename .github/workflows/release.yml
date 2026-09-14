@@ -12,6 +12,8 @@ jobs:
   build-and-release:
     name: Build and Release
     runs-on: ubuntu-latest
+    env:
+      HAS_CHROME_SECRETS: ${{ secrets.CHROME_EXTENSION_ID != '' && secrets.CHROME_CLIENT_ID != '' && secrets.CHROME_CLIENT_SECRET != '' && secrets.CHROME_REFRESH_TOKEN != '' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -47,11 +49,14 @@ jobs:
       - name: Build
         run: bun run build
 
+      - name: Install Chrome for Testing
+        run: bunx puppeteer browsers install chrome
+
       - name: Browser E2E
         run: xvfb-run -a bun run test:e2e
 
       - name: Generate CRX
-        run: bunx --no-install crx3 dist -o "comments-insight-${{ github.ref_name }}.crx"
+        run: node node_modules/crx3/bin/crx3.js dist -o "comments-insight-${{ github.ref_name }}.crx"
 
       - name: Package ZIP
         run: bun scripts/package.js
@@ -120,7 +125,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload to Chrome Web Store
-        if: env.HAS_CHROME_SECRETS != ''
+        if: env.HAS_CHROME_SECRETS == 'true'
         uses: mnao305/chrome-extension-upload@v5.0.0
         with:
           file-path: dist/extension.zip
@@ -129,5 +134,3 @@ jobs:
           client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
           refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
           publish: true
-        env:
-          HAS_CHROME_SECRETS: ${{ secrets.CHROME_EXTENSION_ID }}

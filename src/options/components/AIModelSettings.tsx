@@ -426,7 +426,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
               <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
                 {t(
                   'options.generateDynamicReportDesc',
-                  '分析完成后，通过独立的第二次 LLM API 调用生成图形化响应式动态单页看板（避免单次调用超出上下文或输出限制）。',
+                  '分析完成后，通过独立的第二次 LLM API 调用生成响应式可视化 HTML 看板；脚本和外部资源会在沙箱渲染前被移除。',
                 )}
               </p>
             </div>

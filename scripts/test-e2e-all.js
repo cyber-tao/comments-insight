@@ -4,34 +4,10 @@ import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import puppeteer from 'puppeteer';
+import { requireChromeExecutablePath } from './browser-locator.js';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const extensionPath = path.resolve(scriptDir, '../dist');
-
-function getChromeExecutablePath() {
-  const candidatePaths = [
-    process.env.PUPPETEER_EXECUTABLE_PATH,
-    process.env.CHROME_BIN,
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    process.env.LOCALAPPDATA &&
-      path.join(process.env.LOCALAPPDATA, 'Google/Chrome/Application/chrome.exe'),
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  ].filter(Boolean);
-
-  for (const p of candidatePaths) {
-    if (fs.existsSync(p)) {
-      return p;
-    }
-  }
-  return undefined;
-}
 
 const SERVICE_WORKER_RETRIES = 15;
 const RETRY_DELAY_MS = 800;
@@ -175,8 +151,8 @@ async function runAllAutomatedTests() {
   const mockPageUrl = `http://127.0.0.1:${port}/test-comments.html`;
   console.log(`Local test server running at: ${mockPageUrl}`);
 
-  const executablePath = getChromeExecutablePath();
-  console.log(`Browser executable: ${executablePath || 'default puppeteer bundle'}`);
+  const executablePath = requireChromeExecutablePath();
+  console.log(`Browser executable: ${executablePath}`);
 
   const tempProfileDir = path.join(os.tmpdir(), 'comments-insight-e2e-' + Date.now());
 

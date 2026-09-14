@@ -6,7 +6,7 @@
 
 ## Build, Test, and Development Commands
 
-Use `bun install` to install dependencies and `bun install --frozen-lockfile` in CI or release validation. `bun run dev` starts the Vite + CRXJS development workflow. `bun run build` performs a TypeScript compile and production build. `bun run package` builds and runs `scripts/package.js` to assemble `dist/extension.zip`. Quality checks: `bun run version:check`, `bun run typecheck`, `bun run format:check`, `bun run lint` (ESLint plus `bun run i18n:check`, which verifies every referenced i18n key exists and all five locale files share the same key set), `bun run test`, `bun run test:coverage`, `bun run audit`, and—after building—`bun run test:e2e`. For manual browser verification, load unpacked `dist/` in Chrome 116+ from `chrome://extensions`.
+Use `bun install` to install dependencies and `bun install --frozen-lockfile` in CI or release validation. `bun run dev` starts the Vite + CRXJS development workflow. `bun run build` performs a TypeScript compile and production build. `bun run package` builds and runs `scripts/package.js` to assemble `dist/extension.zip`. Quality checks: `bun run version:check`, `bun run typecheck`, `bun run format:check`, `bun run lint` (ESLint plus `bun run i18n:check`, which verifies every referenced i18n key exists and all five locale files share the same key set), `bun run test`, `bun run test:coverage`, `bun run audit`, and—after building and `bunx puppeteer browsers install chrome`—`bun run test:e2e`. For manual browser verification, load unpacked `dist/` in Chrome 116+ from `chrome://extensions`.
 
 ## Coding Style & Naming Conventions
 
@@ -25,7 +25,7 @@ User data (Dexie tables, `chrome.storage.local` keys such as `settings`, `task_s
 3. Preserve existing `STORAGE.*` key names and Dexie table names/indexes; extend rather than rename.
 4. Add a regression test in `tests/storage-compat.test.ts` covering the previous shape.
 
-The migrator runs once on service worker startup (see `src/background/index.ts`) before `TaskManager.initialize()`.
+The migrator runs once on service worker startup (see `src/background/index.ts`) before `TaskManager.initialize()`. Bundled crawling rules are merged at read time; persist only modified/custom rules plus `disabledDefaultConfigDomains`, not a full bundled-rule snapshot.
 
 ## Testing Guidelines
 
@@ -37,7 +37,7 @@ Recent history follows Conventional Commits with optional scopes, for example `f
 
 ## Release & Versioning
 
-Keep the extension version in `package.json` and `src/manifest.json` synchronized; `bun run version:check` also validates a `vX.Y.Z` release tag when running on a tag ref. Tags trigger `.github/workflows/release.yml`, which verifies coverage and browser E2E, builds the extension, packages `dist/extension.zip`, uses the pinned `crx3` dependency under Node 22 to generate a CRX, and creates the GitHub Release. Do not commit packaged artifacts from `dist/` unless a release task explicitly requires them. Before a Web Store submission, reconcile the external Dashboard with `docs/chrome-web-store-disclosure.md`; repository changes cannot update Dashboard answers.
+Keep the extension version in `package.json` and `src/manifest.json` synchronized; `bun run version:check` also validates a `vX.Y.Z` release tag when running on a tag ref. Tags trigger `.github/workflows/release.yml`, which verifies coverage and browser E2E, builds the extension, packages `dist/extension.zip`, uses the pinned `crx3` dependency under Node 22 to generate an ephemerally signed side-load CRX, and creates the GitHub Release. Do not commit packaged artifacts from `dist/` unless a release task explicitly requires them. Before a Web Store submission, reconcile the external Dashboard with `docs/chrome-web-store-disclosure.md`; repository changes cannot update Dashboard answers.
 
 ## Security & Configuration Tips
 
