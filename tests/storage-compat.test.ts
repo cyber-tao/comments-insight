@@ -5,7 +5,7 @@ import { DEFAULT_SETTINGS, SettingsStore } from '../src/background/storage/Setti
 import { CrawlingConfigStore } from '../src/background/storage/CrawlingConfigStore';
 import type { EncryptionService } from '../src/background/storage/EncryptionService';
 import type { AIConfig, CrawlingConfig, HistoryItem, Settings } from '../src/types';
-import { ANALYSIS_FORMAT, STORAGE } from '../src/config/constants';
+import { ANALYSIS_FORMAT, SECURITY, STORAGE } from '../src/config/constants';
 import {
   sanitizePersistedTaskState,
   sanitizeStoredSettings,
@@ -386,6 +386,32 @@ describe('SettingsStore crawling config persistence', () => {
     expect(settings.crawlingConfigs).toHaveLength(DEFAULT_SETTINGS.crawlingConfigs.length);
   });
 
+  it('does not snapshot unchanged bundled configs when saving other settings', async () => {
+    const storage = useInMemorySettingsStorage();
+    const store = new SettingsStore(createEncryptionServiceMock());
+
+    await store.saveSettings({ theme: 'dark' });
+
+    expect((storage.read() as Settings).crawlingConfigs).toEqual([]);
+    expect((await store.getSettings()).crawlingConfigs).toHaveLength(
+      DEFAULT_SETTINGS.crawlingConfigs.length,
+    );
+  });
+
+  it('persists a modified bundled config as a sparse override', async () => {
+    const storage = useInMemorySettingsStorage();
+    const store = new SettingsStore(createEncryptionServiceMock());
+    const settings = await store.getSettings();
+    const modified = { ...settings.crawlingConfigs[0], siteName: 'Custom site name' };
+
+    await store.saveSettings({
+      crawlingConfigs: [modified, ...settings.crawlingConfigs.slice(1)],
+    });
+
+    expect((storage.read() as Settings).crawlingConfigs).toEqual([modified]);
+    expect((await store.getSettings()).crawlingConfigs[0].siteName).toBe('Custom site name');
+  });
+
   it('keeps a deleted bundled config removed after save and reload', async () => {
     const storage = useInMemorySettingsStorage();
     const store = new SettingsStore(createEncryptionServiceMock());
@@ -659,6 +685,30 @@ describe('SettingsStore decryption resilience', () => {
     const savedSettings = savedPayload[STORAGE.SETTINGS_KEY] as { aiModel: AIConfig };
     expect(savedSettings.aiModel.apiUrl).toBe('https://provider-b.example/v1');
     expect(savedSettings.aiModel.apiKey).toBe('');
+  });
+
+  it('rejects an imported API key protected by another browser profile', async () => {
+    mockStorageGet.mockResolvedValue({
+      [STORAGE.SETTINGS_KEY]: {
+        aiModel: {
+          apiUrl: 'https://provider.example/v1',
+          apiKey: '',
+          model: 'model',
+        },
+      },
+    });
+    const store = new SettingsStore(createEncryptionServiceMock());
+
+    await expect(
+      store.importSettings(
+        JSON.stringify({
+          aiModel: {
+            apiKey: `${SECURITY.ENCRYPTION_PREFIX}opaque-ciphertext`,
+          },
+        }),
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(mockStorageSet).not.toHaveBeenCalled();
   });
 
   it('round-trips exported settings before an AI provider is configured', async () => {

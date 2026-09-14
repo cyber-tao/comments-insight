@@ -1,4 +1,7 @@
 import { APP_DATA_VERSION, STORAGE } from '@/config/constants';
+import DEFAULT_CRAWLING_RULES from '@/config/default_rules.json';
+import type { CrawlingConfig } from '@/types';
+import { hasPersistedCrawlingConfigChanged } from '@/utils/crawling-config';
 import { Logger } from '@/utils/logger';
 
 type MigrationStep = () => Promise<void>;
@@ -80,8 +83,8 @@ export class DataMigrator {
         // no-op
       },
       // Version 3: Settings records persist tombstones for bundled crawling
-      // configs that users explicitly removed. Do not create Settings on a
-      // fresh install; SettingsStore remains responsible for initialization.
+      // configs that users explicitly removed and only store modified bundled
+      // rules as overrides. Do not create Settings on a fresh install.
       3: async () => {
         const stored = await chrome.storage.local.get(STORAGE.SETTINGS_KEY);
         const settings = stored[STORAGE.SETTINGS_KEY];
@@ -89,18 +92,44 @@ export class DataMigrator {
           return;
         }
 
-        const disabledDomains = (settings as Record<string, unknown>).disabledDefaultConfigDomains;
-        if (
+        const settingsRecord = settings as Record<string, unknown>;
+        const disabledDomains = settingsRecord.disabledDefaultConfigDomains;
+        const hasValidDisabledDomains =
           Array.isArray(disabledDomains) &&
-          disabledDomains.every((domain) => typeof domain === 'string')
-        ) {
+          disabledDomains.every((domain) => typeof domain === 'string');
+        const storedConfigs = settingsRecord.crawlingConfigs;
+        const defaultsByDomain = new Map(
+          (DEFAULT_CRAWLING_RULES as CrawlingConfig[]).map((config) => [
+            config.domain.trim().toLowerCase(),
+            config,
+          ]),
+        );
+        const configOverrides = Array.isArray(storedConfigs)
+          ? storedConfigs.filter((value) => {
+              if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+                return true;
+              }
+              const config = value as CrawlingConfig;
+              if (typeof config.domain !== 'string') {
+                return true;
+              }
+              const bundledConfig = defaultsByDomain.get(config.domain.trim().toLowerCase());
+              return !bundledConfig || hasPersistedCrawlingConfigChanged(bundledConfig, config);
+            })
+          : storedConfigs;
+        const configsChanged =
+          Array.isArray(storedConfigs) &&
+          Array.isArray(configOverrides) &&
+          configOverrides.length !== storedConfigs.length;
+        if (hasValidDisabledDomains && !configsChanged) {
           return;
         }
 
         await chrome.storage.local.set({
           [STORAGE.SETTINGS_KEY]: {
-            ...(settings as Record<string, unknown>),
-            disabledDefaultConfigDomains: [],
+            ...settingsRecord,
+            disabledDefaultConfigDomains: hasValidDisabledDomains ? disabledDomains : [],
+            ...(Array.isArray(configOverrides) ? { crawlingConfigs: configOverrides } : {}),
           },
         });
       },

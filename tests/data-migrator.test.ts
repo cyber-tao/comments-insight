@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DataMigrator } from '../src/background/storage/DataMigrator';
+import { DEFAULT_SETTINGS } from '../src/background/storage/SettingsStore';
 import { APP_DATA_VERSION, STORAGE } from '../src/config/constants';
 
 const mockStorageGet = vi.fn();
@@ -178,6 +179,41 @@ describe('DataMigrator', () => {
     expect(mockStorageSet).toHaveBeenNthCalledWith(2, {
       [STORAGE.APP_DATA_VERSION_KEY]: 3,
     });
+  });
+
+  it('removes bundled config snapshots while retaining overrides during v3 migration', async () => {
+    const unchanged = structuredClone(DEFAULT_SETTINGS.crawlingConfigs[0]);
+    const modified = {
+      ...structuredClone(DEFAULT_SETTINGS.crawlingConfigs[1]),
+      siteName: 'Customized bundled rule',
+    };
+    const custom = {
+      ...structuredClone(DEFAULT_SETTINGS.crawlingConfigs[0]),
+      id: 'custom-rule',
+      domain: 'custom.example.com',
+      siteName: 'Custom rule',
+    };
+    const storage: Record<string, unknown> = {
+      [STORAGE.APP_DATA_VERSION_KEY]: 2,
+      [STORAGE.SETTINGS_KEY]: {
+        disabledDefaultConfigDomains: [],
+        crawlingConfigs: [unchanged, modified, custom],
+      },
+    };
+    mockStorageGet.mockImplementation(async (key: string) =>
+      Object.prototype.hasOwnProperty.call(storage, key) ? { [key]: storage[key] } : {},
+    );
+    mockStorageSet.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(storage, values);
+    });
+
+    await new DataMigrator().migrate();
+
+    expect(storage[STORAGE.SETTINGS_KEY]).toEqual({
+      disabledDefaultConfigDomains: [],
+      crawlingConfigs: [modified, custom],
+    });
+    expect(storage[STORAGE.APP_DATA_VERSION_KEY]).toBe(APP_DATA_VERSION.CURRENT);
   });
 
   it('keeps the v3 Settings migration idempotent when the step is retried', async () => {

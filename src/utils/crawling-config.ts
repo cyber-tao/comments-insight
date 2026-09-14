@@ -13,6 +13,28 @@ const toComparableCrawlingConfig = ({
   ...config
 }: CrawlingConfig): ComparableCrawlingConfig => config;
 
+// Persisted configs are rewritten by the storage schema, which emits keys in
+// declaration order rather than the bundled JSON order. Compare canonically so
+// an untouched bundled rule is never mistaken for a user override.
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, entryValue]) => entryValue !== undefined)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entryValue]) => [key, canonicalize(entryValue)]),
+    );
+  }
+  return value;
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(canonicalize(value));
+}
+
 export function hasCrawlingConfigContentChanged(
   previous: CrawlingConfig | null | undefined,
   next: CrawlingConfig,
@@ -22,8 +44,19 @@ export function hasCrawlingConfigContentChanged(
   }
 
   return (
-    JSON.stringify(toComparableCrawlingConfig(previous)) !==
-    JSON.stringify(toComparableCrawlingConfig(next))
+    stableStringify(toComparableCrawlingConfig(previous)) !==
+    stableStringify(toComparableCrawlingConfig(next))
+  );
+}
+
+export function hasPersistedCrawlingConfigChanged(
+  previous: CrawlingConfig | null | undefined,
+  next: CrawlingConfig,
+): boolean {
+  return (
+    hasCrawlingConfigContentChanged(previous, next) ||
+    stableStringify(previous?.fieldValidation ?? null) !==
+      stableStringify(next.fieldValidation ?? null)
   );
 }
 

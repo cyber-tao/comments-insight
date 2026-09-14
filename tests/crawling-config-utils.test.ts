@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { CrawlingConfig } from '../src/types';
 import {
   hasCrawlingConfigContentChanged,
+  hasPersistedCrawlingConfigChanged,
   resolveCrawlingConfigLastUpdated,
 } from '../src/utils/crawling-config';
 
@@ -37,6 +38,37 @@ describe('crawling-config utils', () => {
     });
 
     expect(hasCrawlingConfigContentChanged(previous, next)).toBe(false);
+  });
+
+  it('ignores key order differences introduced by the storage schema', () => {
+    const bundled = createConfig();
+    const reordered = JSON.parse(
+      JSON.stringify({
+        lastUpdated: bundled.lastUpdated,
+        fields: bundled.fields,
+        item: bundled.item,
+        container: bundled.container,
+        siteName: bundled.siteName,
+        domain: bundled.domain,
+        id: bundled.id,
+      }),
+    ) as CrawlingConfig;
+
+    expect(hasCrawlingConfigContentChanged(bundled, reordered)).toBe(false);
+    expect(hasPersistedCrawlingConfigChanged(bundled, reordered)).toBe(false);
+  });
+
+  it('retains field validation changes in sparse persisted overrides', () => {
+    const previous = createConfig({ fieldValidation: { username: 'success' } });
+    const same = createConfig({
+      id: 'other-id',
+      lastUpdated: 1800000000000,
+      fieldValidation: { username: 'success' },
+    });
+    const changed = createConfig({ fieldValidation: { username: 'failed' } });
+
+    expect(hasPersistedCrawlingConfigChanged(previous, same)).toBe(false);
+    expect(hasPersistedCrawlingConfigChanged(previous, changed)).toBe(true);
   });
 
   it('keeps lastUpdated when only runtime fields change', () => {

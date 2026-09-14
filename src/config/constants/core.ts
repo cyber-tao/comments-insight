@@ -70,7 +70,7 @@ export const STORAGE = {
  * Semantics:
  *   1 = pre-refactor baseline (extension version <= 0.6.0)
  *   2 = refactored layout (no persisted-shape change; version bump only)
- *   3 = Settings persists disabled bundled crawling-config domains
+ *   3 = Settings persists bundled-config tombstones and sparse overrides
  *
  * Versions 0.7.x-0.8.x also added the sandbox page and dynamic reports without
  * further persisted-shape changes; optional fields remain tolerated by the

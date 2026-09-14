@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TaskManager } from '../src/background/TaskManager';
-import { AI, STORAGE } from '../src/config/constants';
+import { AI, STORAGE, TASK } from '../src/config/constants';
 
 const mockSendMessage = vi.fn().mockResolvedValue(undefined);
 const mockStorageGet = vi.fn().mockResolvedValue({});
@@ -654,6 +654,15 @@ describe('TaskManager', () => {
 
       const task = taskManager.getTask(taskId);
       expect(task?.status).toBe('failed');
+    });
+
+    it('should retain only the configured number of cancelled tasks', () => {
+      for (let index = 0; index < TASK.MAX_FINISHED_TASKS + 2; index += 1) {
+        const taskId = taskManager.createTask('extract', `https://example.com/${index}`, 'Generic');
+        taskManager.cancelTask(taskId);
+      }
+
+      expect(taskManager.getTasksByStatus('failed')).toHaveLength(TASK.MAX_FINISHED_TASKS);
     });
 
     it('should not cancel completed task', async () => {

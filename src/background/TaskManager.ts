@@ -479,6 +479,7 @@ export class TaskManager {
 
     Logger.info(`[TaskManager] Task cancelled: ${taskId}`);
     this.notifyTaskUpdate(task, { immediate: true });
+    this.autoCleanFinishedTasks();
     this.saveState().catch((error) => {
       Logger.warn('[TaskManager] Failed to persist cancelled task state', { error });
     });

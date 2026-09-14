@@ -4,6 +4,7 @@ import {
   LANGUAGES,
   THEME,
   RETRY,
+  SECURITY,
   STORAGE,
   EXTRACTION_DEFAULTS,
   DOM_ANALYSIS_DEFAULTS,
@@ -23,6 +24,7 @@ import {
   settingsPatchSchema,
 } from '@/utils/storage-validation';
 import { normalizeAiApiUrl } from '@/utils/url';
+import { hasPersistedCrawlingConfigChanged } from '@/utils/crawling-config';
 
 export const DEFAULT_SETTINGS: Settings = {
   maxComments: EXTRACTION_DEFAULTS.MAX_COMMENTS,
@@ -82,6 +84,19 @@ export class SettingsStore {
 
   private normalizeCrawlingDomain(domain: string): string {
     return domain.trim().toLowerCase();
+  }
+
+  private getCrawlingConfigOverrides(configs: CrawlingConfig[]): CrawlingConfig[] {
+    const defaultsByDomain = new Map(
+      DEFAULT_SETTINGS.crawlingConfigs.map((config) => [
+        this.normalizeCrawlingDomain(config.domain),
+        config,
+      ]),
+    );
+    return configs.filter((config) => {
+      const bundledConfig = defaultsByDomain.get(this.normalizeCrawlingDomain(config.domain));
+      return !bundledConfig || hasPersistedCrawlingConfigChanged(bundledConfig, config);
+    });
   }
 
   async getSettings(): Promise<Settings> {
@@ -351,7 +366,10 @@ export class SettingsStore {
         .analyzerModel;
 
       await chrome.storage.local.set({
-        [STORAGE.SETTINGS_KEY]: updatedSettings,
+        [STORAGE.SETTINGS_KEY]: {
+          ...updatedSettings,
+          crawlingConfigs: this.getCrawlingConfigOverrides(updatedSettings.crawlingConfigs),
+        },
       });
       this.invalidateSettingsCache();
 
@@ -441,6 +459,15 @@ export class SettingsStore {
           ...rest
         } = sanitized;
         const importedModel = rest.aiModel;
+        if (
+          typeof importedModel?.apiKey === 'string' &&
+          importedModel.apiKey.startsWith(SECURITY.ENCRYPTION_PREFIX)
+        ) {
+          throw new ExtensionError(
+            ErrorCode.VALIDATION_ERROR,
+            'Encrypted API keys cannot be imported; enter the key again',
+          );
+        }
         const importedApiUrl = importedModel?.apiUrl;
         const currentEndpoint = normalizeAiApiUrl(currentSettings.aiModel.apiUrl);
         const importedEndpoint =
