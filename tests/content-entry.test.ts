@@ -52,12 +52,6 @@ let registeredListener: RuntimeMessageListener | undefined;
 const addListenerMock = vi.fn((listener: RuntimeMessageListener) => {
   registeredListener = listener;
 });
-const getManifestMock = vi.fn(() => ({
-  manifest_version: 3,
-  name: 'Comments Insight Test',
-  version: '0.0.0',
-  update_url: 'https://updates.example.invalid/service/update2/crx',
-}));
 
 async function loadContentEntry(): Promise<RuntimeMessageListener> {
   await import('@/content/index');
@@ -95,7 +89,6 @@ beforeEach(() => {
   vi.stubGlobal('chrome', {
     runtime: {
       onMessage: { addListener: addListenerMock },
-      getManifest: getManifestMock,
     },
   });
 });
@@ -111,7 +104,6 @@ describe('content entry', () => {
     const firstListener = await loadContentEntry();
 
     expect(addListenerMock).toHaveBeenCalledOnce();
-    expect(getManifestMock).toHaveBeenCalledOnce();
     expect(contentMocks.logger.debug).toHaveBeenNthCalledWith(
       1,
       'Comments Insight Content Script loaded',
@@ -125,7 +117,6 @@ describe('content entry', () => {
     await import('@/content/index');
 
     expect(addListenerMock).toHaveBeenCalledOnce();
-    expect(getManifestMock).toHaveBeenCalledOnce();
     expect(contentMocks.logger.debug).toHaveBeenCalledTimes(2);
     expect(registeredListener).toBe(firstListener);
   });

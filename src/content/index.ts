@@ -1,4 +1,4 @@
-import { MESSAGES, EXTRACTION_DEFAULTS } from '@/config/constants';
+import { MESSAGES } from '@/config/constants';
 import type { ContentMessage } from '@/types';
 import { Logger } from '@/utils/logger';
 import { handleStartExtraction, handleCancelExtraction } from './handlers/extraction';
@@ -100,31 +100,4 @@ if (!globalInsight.__COMMENTS_INSIGHT_CONTENT_SCRIPT_LOADED) {
 
     return true;
   });
-
-  // Expose test hook only in unpacked/development runtime
-  const manifest = chrome.runtime.getManifest() as chrome.runtime.Manifest & {
-    update_url?: string;
-  };
-  const isDevelopmentRuntime = !manifest.update_url;
-  if (isDevelopmentRuntime) {
-    window.addEventListener('message', (event) => {
-      if (event.source !== window) return;
-      if (event.data && event.data.type === 'COMMENTS_INSIGHT_TEST_TRIGGER') {
-        Logger.info('[Content] 🚀 TEST TRIGGER RECEIVED', event.data);
-
-        const maxComments = event.data.maxComments || EXTRACTION_DEFAULTS.TEST_MAX_COMMENTS;
-        const taskId = 'test-' + Date.now();
-
-        handleStartExtraction(
-          { taskId, maxComments },
-          () => {},
-          (outcome) => {
-            // Consumed by scripts/test-youtube.js via page console scraping.
-            // eslint-disable-next-line no-console
-            console.log(`__TEST_RESULT__:${JSON.stringify(outcome)}`);
-          },
-        );
-      }
-    });
-  }
 }

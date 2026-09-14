@@ -23,9 +23,14 @@ describe('Settings Handlers', () => {
     saveCrawlingConfig: vi.fn(),
   };
 
+  const mockAIService = {
+    clearVerifiedConfig: vi.fn(),
+  };
+
   const context = {
     settingsStore: mockSettingsStore,
     crawlingConfigStore: mockCrawlingConfigStore,
+    aiService: mockAIService,
   } as unknown as import('../../src/background/handlers/types').HandlerContext;
 
   const mockSettings: Settings = {
@@ -122,6 +127,7 @@ describe('Settings Handlers', () => {
 
       expect(result).toEqual({ success: true });
       expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith(partialSettings);
+      expect(mockAIService.clearVerifiedConfig).toHaveBeenCalledOnce();
     });
 
     it('should throw error when settings are missing', async () => {
@@ -160,6 +166,17 @@ describe('Settings Handlers', () => {
       expect(result).toEqual({ success: true });
       expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith({});
     });
+
+    it('should retain the verified config when persistence fails', async () => {
+      mockSettingsStore.saveSettings.mockRejectedValueOnce(new Error('storage unavailable'));
+      const message: Extract<Message, { type: 'SAVE_SETTINGS' }> = {
+        type: 'SAVE_SETTINGS',
+        payload: { settings: { aiModel: { ...mockSettings.aiModel, apiKey: '' } } },
+      };
+
+      await expect(handleSaveSettings(message, context)).rejects.toThrow('storage unavailable');
+      expect(mockAIService.clearVerifiedConfig).not.toHaveBeenCalled();
+    });
   });
 
   describe('handleImportSettings', () => {
@@ -175,6 +192,7 @@ describe('Settings Handlers', () => {
 
       expect(result).toEqual({ success: true });
       expect(mockSettingsStore.importSettings).toHaveBeenCalledWith('{"maxComments":200}');
+      expect(mockAIService.clearVerifiedConfig).toHaveBeenCalledOnce();
     });
 
     it('should throw error when import data is missing', async () => {
@@ -187,6 +205,17 @@ describe('Settings Handlers', () => {
         'Settings import data is required',
       );
       expect(mockSettingsStore.importSettings).not.toHaveBeenCalled();
+    });
+
+    it('should retain the verified config when import persistence fails', async () => {
+      mockSettingsStore.importSettings.mockRejectedValueOnce(new Error('storage unavailable'));
+      const message: Extract<Message, { type: 'IMPORT_SETTINGS' }> = {
+        type: 'IMPORT_SETTINGS',
+        payload: { data: '{"aiModel":{"apiKey":""}}' },
+      };
+
+      await expect(handleImportSettings(message, context)).rejects.toThrow('storage unavailable');
+      expect(mockAIService.clearVerifiedConfig).not.toHaveBeenCalled();
     });
   });
 

@@ -6,7 +6,6 @@ export const EXTRACTION = {
 
 export const EXTRACTION_DEFAULTS = {
   MAX_COMMENTS: 100,
-  TEST_MAX_COMMENTS: 10,
 };
 
 export const EXTRACTION_PROGRESS = {

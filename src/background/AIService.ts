@@ -56,6 +56,11 @@ export class AIService {
     this.lastVerifiedConfigTimestamp = Date.now();
   }
 
+  clearVerifiedConfig(): void {
+    this.lastVerifiedConfig = null;
+    this.lastVerifiedConfigTimestamp = 0;
+  }
+
   private isLastVerifiedConfigExpired(): boolean {
     if (!this.lastVerifiedConfigTimestamp) {
       return true;
@@ -66,8 +71,7 @@ export class AIService {
 
   private clearExpiredVerifiedConfig(): void {
     if (this.isLastVerifiedConfigExpired()) {
-      this.lastVerifiedConfig = null;
-      this.lastVerifiedConfigTimestamp = 0;
+      this.clearVerifiedConfig();
       Logger.debug('[AIService] Cleared expired lastVerifiedConfig');
     }
   }

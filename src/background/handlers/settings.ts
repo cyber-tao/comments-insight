@@ -24,6 +24,7 @@ export async function handleSaveSettings(
   }
 
   await context.settingsStore.saveSettings(settings);
+  context.aiService.clearVerifiedConfig();
   return { success: true };
 }
 
@@ -38,6 +39,7 @@ export async function handleImportSettings(
   }
 
   await context.settingsStore.importSettings(data);
+  context.aiService.clearVerifiedConfig();
   return { success: true };
 }
 

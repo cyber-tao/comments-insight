@@ -122,6 +122,33 @@ describe('AIService', () => {
       expect(result.tokensUsed).toBe(100);
     });
 
+    it('should stop using a remembered key after it is explicitly cleared', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }],
+          usage: { total_tokens: 1 },
+        }),
+      });
+      const verifiedConfig = mockAIConfig({
+        apiUrl: 'https://api.example.com/v1',
+        apiKey: 'remembered-key',
+      });
+      const configWithoutKey = { ...verifiedConfig, apiKey: '' };
+      aiService.rememberVerifiedConfig(verifiedConfig);
+
+      await aiService.callAI({ prompt: 'Before clear', config: configWithoutKey });
+      expect((mockFetch.mock.calls[0]?.[1] as RequestInit).headers).toMatchObject({
+        Authorization: 'Bearer remembered-key',
+      });
+
+      aiService.clearVerifiedConfig();
+      await aiService.callAI({ prompt: 'After clear', config: configWithoutKey });
+      expect((mockFetch.mock.calls[1]?.[1] as RequestInit).headers).not.toHaveProperty(
+        'Authorization',
+      );
+    });
+
     it('should parse streamed chat completion chunks', async () => {
       const streamProgress = vi.fn();
       mockFetch.mockResolvedValue(
