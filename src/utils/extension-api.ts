@@ -1,5 +1,5 @@
 import { MESSAGES, TEXT, AI, TIMEOUT } from '@/config/constants';
-import type { Comment, HistoryItem, Message, Settings, Task } from '@/types';
+import type { Comment, HistoryItem, Message, Settings, SettingsPatch, Task } from '@/types';
 import { sendMessage } from './chrome-message';
 import { fromExtensionErrorPayload } from './error-types';
 
@@ -130,10 +130,18 @@ export const ExtensionAPI = {
     return response?.settings ?? null;
   },
 
-  async saveSettings(settings: Partial<Settings>): Promise<SaveSettingsResponse> {
+  async saveSettings(
+    settings: SettingsPatch,
+    expectedCrawlingConfigsFingerprint?: string,
+  ): Promise<SaveSettingsResponse> {
     return sendMessageOrThrow<SaveSettingsResponse>({
       type: MESSAGES.SAVE_SETTINGS,
-      payload: { settings },
+      payload: {
+        settings,
+        ...(expectedCrawlingConfigsFingerprint !== undefined
+          ? { expectedCrawlingConfigsFingerprint }
+          : {}),
+      },
     });
   },
 

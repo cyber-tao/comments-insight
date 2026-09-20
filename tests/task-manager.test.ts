@@ -554,6 +554,30 @@ describe('TaskManager', () => {
   });
 
   describe('setExecutor', () => {
+    it('does not run an executor cancelled while its running state is being saved', async () => {
+      let releaseSave!: () => void;
+      const saved = new Promise<void>((resolve) => {
+        releaseSave = resolve;
+      });
+      const start = taskManager.startTask.bind(taskManager);
+      vi.spyOn(taskManager, 'startTask').mockImplementationOnce(async (id) => {
+        await start(id);
+        await saved;
+      });
+      const first = taskManager.createTask('analyze', 'https://a.com', 'Generic');
+      const second = taskManager.createTask('analyze', 'https://b.com', 'Generic');
+      const executor = vi.fn().mockResolvedValue({});
+      const next = vi.fn().mockResolvedValue({});
+      taskManager.setExecutor(first, executor);
+      taskManager.setExecutor(second, next);
+      taskManager.cancelTask(first);
+      releaseSave();
+      await vi.waitFor(() => expect(next).toHaveBeenCalledOnce());
+      expect(executor).not.toHaveBeenCalled();
+      expect(taskManager.getTask(first)?.status).toBe('failed');
+      expect(taskManager.getAbortSignal(first)).toBeUndefined();
+    });
+
     it('should continue queued executors after the current task completes', async () => {
       const firstTaskId = taskManager.createTask('extract', 'https://a.com', 'Generic');
       const secondTaskId = taskManager.createTask('analyze', 'https://b.com', 'Generic');

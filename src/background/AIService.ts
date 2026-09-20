@@ -157,7 +157,7 @@ export class AIService {
     onStreamActivity: () => void,
     onStreamProgress?: (progress: AIStreamProgress) => void,
   ): Promise<StreamingAIResult> {
-    if (!response.body) {
+    if (!response.body || response.headers?.get('content-type')?.includes('application/json')) {
       const data = (await response.json()) as ChatCompletionData;
       const result = this.parseChatCompletionData(data);
       onStreamProgress?.({
@@ -233,7 +233,6 @@ export class AIService {
       }
     };
 
-    let streamFailed = false;
     try {
       while (!streamDone) {
         const { value, done } = await reader.read();
@@ -253,8 +252,15 @@ export class AIService {
       if (buffer.trim()) {
         consumeLine(buffer);
       }
+      if (!streamDone && finishReason === AI_CONST.STREAM.UNKNOWN_FINISH_REASON) {
+        throw createAIError(
+          ErrorCode.AI_INVALID_RESPONSE,
+          'Model stream ended before completion',
+          {},
+          false,
+        );
+      }
     } catch (streamError) {
-      streamFailed = true;
       try {
         await reader.cancel();
       } catch (cancelError) {
@@ -264,9 +270,8 @@ export class AIService {
       }
       throw streamError;
     } finally {
-      if (!streamFailed) {
-        reader.releaseLock();
-      }
+      if (streamDone) await reader.cancel().catch(() => undefined);
+      reader.releaseLock();
     }
 
     return { content, tokensUsed, finishReason };
@@ -381,6 +386,14 @@ export class AIService {
             let content = streamResult.content;
             const tokensUsed = streamResult.tokensUsed;
             const finishReason = streamResult.finishReason;
+            if (finishReason !== 'stop' && finishReason !== AI_CONST.STREAM.UNKNOWN_FINISH_REASON) {
+              throw createAIError(
+                ErrorCode.AI_INVALID_RESPONSE,
+                `Model output is incomplete (${finishReason})`,
+                { finishReason },
+                false,
+              );
+            }
 
             content = DataNormalizer.removeThinkTags(content);
 

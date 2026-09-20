@@ -143,6 +143,7 @@
     "saving": "Enregistrement...",
     "savedSuccess": "Paramètres enregistrés avec succès !",
     "savedError": "Échec de l'enregistrement des paramètres",
+    "settingsConflict": "Les règles ont changé dans une autre page. Rechargez les paramètres avant d'enregistrer vos modifications.",
     "importedSuccess": "Paramètres importés. Cliquez sur Enregistrer pour appliquer.",
     "domAnalysisConfig": "Configuration de l'analyse DOM",
     "domAnalysisHint": "Configurer les paramètres de profondeur pour que l'IA analyse la structure de la page lors de la recherche de sélecteurs de commentaires (options avancées)",

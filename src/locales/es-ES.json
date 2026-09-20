@@ -143,6 +143,7 @@
     "saving": "Guardando...",
     "savedSuccess": "¡Configuración guardada exitosamente!",
     "savedError": "Error al guardar la configuración",
+    "settingsConflict": "Las reglas cambiaron en otra página. Recarga la configuración antes de guardar tus cambios.",
     "importedSuccess": "Configuración importada. Haz clic en Guardar para aplicar.",
     "domAnalysisConfig": "Configuración de análisis DOM",
     "domAnalysisHint": "Configurar parámetros de profundidad para que la IA analice la estructura de la página al buscar selectores de comentarios (opciones avanzadas)",

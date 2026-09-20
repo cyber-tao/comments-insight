@@ -226,13 +226,18 @@ export class AIStrategy implements ExtractionStrategy {
 
         if (elementsBatch.length > 0) {
           const simplifier = this.simplifier;
-          const batchSimplifiedNodes = elementsBatch.map((el) =>
-            simplifier.simplifyElement(el, {
+          const batchSimplifiedNodes: import('../../types').SimplifiedNode[] = [];
+          for (let index = 0; index < elementsBatch.length; index += 1) {
+            checkAborted(signal);
+            const node = simplifier.simplifyElement(elementsBatch[index], {
               maxDepth: domConfig.maxDepth,
               includeText: true,
+              textMode: 'full',
               maxNodes: extractMaxNodes,
-            }),
-          );
+            });
+            batchSimplifiedNodes.push(node);
+            elementsBatch.push(...simplifier.takeDeferredElements());
+          }
 
           const simplifiedRoot: import('../../types').SimplifiedNode = {
             tag: 'div',

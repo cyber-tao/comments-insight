@@ -246,9 +246,10 @@ describe('AIStrategy execution', () => {
   }
 
   it('extracts comments, applies the platform, and reports completion', async () => {
+    const longContent = `${'complete text '.repeat(30)}TAIL_SENTINEL`;
     document.body.innerHTML = `
       <section id="comments">
-        <article class="comment-item"><p class="content">A comment</p></article>
+        <article class="comment-item"><p class="content">${longContent}</p></article>
       </section>
     `;
     const comment = createComment('');
@@ -271,6 +272,7 @@ describe('AIStrategy execution', () => {
       1,
     );
     expect(aiServiceMock.callAI).toHaveBeenCalledTimes(1);
+    expect(aiServiceMock.callAI.mock.calls[0][0].payload.chunks.join('')).toContain(longContent);
   });
 
   it('fails when AI cannot locate a comment section', async () => {

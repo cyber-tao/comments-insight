@@ -53,10 +53,17 @@ export function hasPersistedCrawlingConfigChanged(
   previous: CrawlingConfig | null | undefined,
   next: CrawlingConfig,
 ): boolean {
-  return (
-    hasCrawlingConfigContentChanged(previous, next) ||
-    stableStringify(previous?.fieldValidation ?? null) !==
-      stableStringify(next.fieldValidation ?? null)
+  return hasCrawlingConfigContentChanged(previous, next);
+}
+
+export function crawlingConfigsFingerprint(configs: CrawlingConfig[]): string {
+  return stableStringify(
+    configs
+      .map((config) => ({
+        domain: config.domain.trim().toLowerCase(),
+        ...toComparableCrawlingConfig(config),
+      }))
+      .sort((a, b) => a.domain.localeCompare(b.domain)),
   );
 }
 

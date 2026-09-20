@@ -6,14 +6,14 @@ import {
   DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
   DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
 } from '@/utils/prompts';
-import { Settings } from '@/types';
+import { Settings, SettingsPatch } from '@/types';
 import { ExtensionAPI } from '@/utils/extension-api';
 import { parseFiniteIntegerInput, parseFiniteNumberInput } from '@/utils/number';
 import { SearchableModelSelect } from './SearchableModelSelect';
 
 interface AIModelSettingsProps {
   settings: Settings;
-  onSettingsChange: (settings: Partial<Settings>) => void;
+  onSettingsChange: (settings: SettingsPatch) => void;
   toast: {
     success: (message: string) => void;
     error: (message: string) => void;
@@ -63,8 +63,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
 
         if (!models.includes(config.model) || models.length === 1) {
           onSettingsChange({
-            ...settings,
-            aiModel: { ...settings.aiModel, model: models[0] },
+            aiModel: { model: models[0] },
           });
         }
       } else {
@@ -125,8 +124,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             value={settings.aiModel.apiUrl}
             onChange={(e) =>
               onSettingsChange({
-                ...settings,
-                aiModel: { ...settings.aiModel, apiUrl: e.target.value },
+                aiModel: { apiUrl: e.target.value },
               })
             }
             className="w-full theme-input"
@@ -147,8 +145,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
               value={settings.aiModel.apiKey}
               onChange={(e) =>
                 onSettingsChange({
-                  ...settings,
-                  aiModel: { ...settings.aiModel, apiKey: e.target.value },
+                  aiModel: { apiKey: e.target.value },
                 })
               }
               className="flex-1 theme-input"
@@ -180,8 +177,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
               value={settings.aiModel.model}
               onChange={(model) =>
                 onSettingsChange({
-                  ...settings,
-                  aiModel: { ...settings.aiModel, model },
+                  aiModel: { model },
                 })
               }
             />
@@ -191,8 +187,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
               value={settings.aiModel.model}
               onChange={(e) =>
                 onSettingsChange({
-                  ...settings,
-                  aiModel: { ...settings.aiModel, model: e.target.value },
+                  aiModel: { model: e.target.value },
                 })
               }
               className="w-full theme-input"
@@ -222,9 +217,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   contextWindowSize - AI.INPUT_TOKEN_BUFFER - AI.MIN_AVAILABLE_TOKENS,
                 );
                 onSettingsChange({
-                  ...settings,
                   aiModel: {
-                    ...settings.aiModel,
                     contextWindowSize,
                     maxOutputTokens: Math.min(maxOutputTokens, maxAllowed),
                   },
@@ -250,9 +243,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   return;
                 }
                 onSettingsChange({
-                  ...settings,
                   aiModel: {
-                    ...settings.aiModel,
                     maxOutputTokens: Math.min(parsedMaxOutputTokens, maxAllowedOutputTokens),
                   },
                 });
@@ -282,9 +273,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   return;
                 }
                 onSettingsChange({
-                  ...settings,
                   aiModel: {
-                    ...settings.aiModel,
                     temperature,
                   },
                 });
@@ -311,9 +300,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   return;
                 }
                 onSettingsChange({
-                  ...settings,
                   aiModel: {
-                    ...settings.aiModel,
                     topP,
                   },
                 });
@@ -357,7 +344,6 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
               type="button"
               onClick={() =>
                 onSettingsChange({
-                  ...settings,
                   analyzerPromptTemplate: DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
                 })
               }
@@ -368,9 +354,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           </div>
           <textarea
             value={settings.analyzerPromptTemplate}
-            onChange={(e) =>
-              onSettingsChange({ ...settings, analyzerPromptTemplate: e.target.value })
-            }
+            onChange={(e) => onSettingsChange({ analyzerPromptTemplate: e.target.value })}
             className="w-full theme-input font-mono text-sm"
             rows={UI_LIMITS.PROMPT_TEXTAREA_ROWS}
           />
@@ -436,7 +420,6 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 checked={settings.generateDynamicReport !== false}
                 onChange={(e) =>
                   onSettingsChange({
-                    ...settings,
                     generateDynamicReport: e.target.checked,
                   })
                 }
@@ -459,7 +442,6 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   type="button"
                   onClick={() =>
                     onSettingsChange({
-                      ...settings,
                       dynamicReportPromptTemplate: DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
                     })
                   }
@@ -474,7 +456,6 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 }
                 onChange={(e) =>
                   onSettingsChange({
-                    ...settings,
                     dynamicReportPromptTemplate: e.target.value,
                   })
                 }

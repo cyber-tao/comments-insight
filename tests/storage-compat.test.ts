@@ -3,6 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CommentsInsightDatabase, HistoryStore } from '../src/background/storage/HistoryStore';
 import { DEFAULT_SETTINGS, SettingsStore } from '../src/background/storage/SettingsStore';
 import { CrawlingConfigStore } from '../src/background/storage/CrawlingConfigStore';
+import { DataMigrator } from '../src/background/storage/DataMigrator';
+import { crawlingConfigsFingerprint } from '../src/utils/crawling-config';
 import type { EncryptionService } from '../src/background/storage/EncryptionService';
 import type { AIConfig, CrawlingConfig, HistoryItem, Settings } from '../src/types';
 import { ANALYSIS_FORMAT, SECURITY, STORAGE } from '../src/config/constants';
@@ -374,6 +376,86 @@ describe('SettingsStore crawling config persistence', () => {
     vi.clearAllMocks();
     mockStorageGet.mockReset();
     mockStorageSet.mockReset();
+  });
+
+  it('rejects stale rule replacement while preserving unrelated field patches', async () => {
+    useInMemorySettingsStorage();
+    const store = new SettingsStore(createEncryptionServiceMock());
+    const snapshot = await store.getSettings();
+    await new CrawlingConfigStore(store).saveCrawlingConfig(
+      createCrawlingConfig('new.example.com'),
+    );
+    await store.saveSettings({ theme: 'dark', aiModel: { model: 'new-model' } });
+    await store.saveSettings({ aiModel: { temperature: 0.5 } });
+    await expect(
+      store.saveSettings(
+        { crawlingConfigs: snapshot.crawlingConfigs },
+        crawlingConfigsFingerprint(snapshot.crawlingConfigs),
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    const latest = await store.getSettings();
+    expect(latest.crawlingConfigs.some((config) => config.domain === 'new.example.com')).toBe(true);
+    expect(latest.aiModel).toMatchObject({ model: 'new-model', temperature: 0.5 });
+    expect(latest.theme).toBe('dark');
+  });
+
+  it('stores validation independently so later bundled selector updates remain visible', async () => {
+    const storage = useInMemorySettingsStorage();
+    const store = new SettingsStore(createEncryptionServiceMock());
+    const bundled = DEFAULT_SETTINGS.crawlingConfigs[0];
+    await store.updateFieldValidation(bundled.domain, { item: 'success' });
+    expect((storage.read() as Settings).crawlingConfigs).toEqual([]);
+    const original = bundled.item.selector;
+    try {
+      bundled.item.selector = '.updated-bundled-selector';
+      const latest = await new SettingsStore(createEncryptionServiceMock()).getSettings();
+      expect(latest.crawlingConfigs[0]).toMatchObject({
+        item: { selector: '.updated-bundled-selector' },
+        fieldValidation: { item: 'success' },
+      });
+    } finally {
+      bundled.item.selector = original;
+    }
+  });
+
+  it('migrates v3 validation-only snapshots without losing custom rules or credentials', async () => {
+    const validated = {
+      ...structuredClone(DEFAULT_SETTINGS.crawlingConfigs[0]),
+      fieldValidation: { item: 'success' },
+    };
+    const custom = {
+      ...createCrawlingConfig('custom.example.com'),
+      fieldValidation: { item: 'failed' },
+    };
+    const data: Record<string, unknown> = {
+      [STORAGE.APP_DATA_VERSION_KEY]: 3,
+      [STORAGE.SETTINGS_KEY]: {
+        aiModel: { apiKey: 'enc:untouched' },
+        crawlingConfigs: [validated, custom],
+        disabledDefaultConfigDomains: ['disabled.example.com'],
+      },
+    };
+    mockStorageGet.mockImplementation(async (key: string) => ({
+      [key]: structuredClone(data[key]),
+    }));
+    mockStorageSet.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(data, structuredClone(values));
+    });
+    await new DataMigrator().migrate();
+    const migrated = data[STORAGE.SETTINGS_KEY] as Settings;
+    expect(migrated.crawlingConfigs).toHaveLength(1);
+    expect(migrated.crawlingConfigs[0].domain).toBe(custom.domain);
+    expect(migrated.crawlingConfigs[0]).not.toHaveProperty('fieldValidation');
+    expect(migrated.crawlingConfigValidationByDomain).toEqual({
+      [validated.domain]: { item: 'success' },
+      [custom.domain]: { item: 'failed' },
+    });
+    expect(migrated.aiModel.apiKey).toBe('enc:untouched');
+    expect(migrated.disabledDefaultConfigDomains).toEqual(['disabled.example.com']);
+    data[STORAGE.APP_DATA_VERSION_KEY] = 3;
+    mockStorageSet.mockClear();
+    await new DataMigrator().migrate();
+    expect(mockStorageSet).toHaveBeenCalledTimes(1);
   });
 
   it('reads a legacy Settings object without tombstones', async () => {

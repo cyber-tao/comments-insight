@@ -30,6 +30,25 @@ describe('DOMSimplifier', () => {
   });
 
   describe('simplifyElement', () => {
+    it('bounds each full-text batch and eventually includes deferred text intact', () => {
+      document.body.innerHTML = `<div id="root">${Array.from({ length: 100 }, (_, i) => `<p id="p${i}">${'x'.repeat(200)}-tail-${i}</p>`).join('')}</div>`;
+      const simplifier = new DOMSimplifier();
+      const pending: Element[] = [document.getElementById('root')!];
+      const text: string[] = [];
+      const count = (node: SimplifiedNode): number =>
+        (node.tag === '#shadow-root' ? 0 : 1) +
+        (node.children || []).reduce((sum, child) => sum + count(child), 0);
+      for (let i = 0; i < pending.length; i++) {
+        const node = simplifier.simplifyElement(pending[i], { maxNodes: 2, textMode: 'full' });
+        expect(count(node)).toBeLessThanOrEqual(2);
+        text.push(simplifier.nodeToString(node));
+        pending.push(...simplifier.takeDeferredElements());
+      }
+      expect(text.join('')).toContain(`${'x'.repeat(200)}-tail-99`);
+      expect(text.join('').match(/-tail-/g)).toHaveLength(100);
+      expect(document.querySelectorAll('p')).toHaveLength(100);
+    });
+
     it('should simplify a basic element', () => {
       document.body.innerHTML = '<div id="test" class="container">Hello</div>';
       const element = document.getElementById('test')!;

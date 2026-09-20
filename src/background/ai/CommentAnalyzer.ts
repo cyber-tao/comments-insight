@@ -370,13 +370,18 @@ export class CommentAnalyzer {
         }
 
         if (commentTokens > availableTokens) {
-          Logger.warn('[CommentAnalyzer] Dropping oversize comment after truncation', {
-            commentId: comment.id,
-            commentTokens,
-            availableTokens,
-            replyCount: comment.replies?.length ?? 0,
-          });
-          continue;
+          throw createAIError(
+            ErrorCode.AI_INVALID_RESPONSE,
+            TEXT.NO_ANALYZABLE_COMMENTS,
+            {
+              commentId: comment.id,
+              commentTokens,
+              availableTokens,
+              reason:
+                'A comment thread exceeds the context budget; no partial report was generated',
+            },
+            false,
+          );
         }
       }
 

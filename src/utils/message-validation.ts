@@ -53,6 +53,7 @@ const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
     .optional(),
   SAVE_SETTINGS: z.object({
     settings: settingsPatchSchema,
+    expectedCrawlingConfigsFingerprint: z.string().optional(),
   }),
   IMPORT_SETTINGS: z.object({
     data: nonEmptyString,

@@ -160,8 +160,6 @@ describe('AdvancedSettings', () => {
       expect.objectContaining({
         domAnalysisConfig: expect.objectContaining({
           initialDepth: 4,
-          expandDepth: 2,
-          maxDepth: 10,
         }),
       }),
     );
@@ -170,9 +168,7 @@ describe('AdvancedSettings', () => {
     expect(onSettingsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         domAnalysisConfig: expect.objectContaining({
-          initialDepth: 3,
           expandDepth: 3,
-          maxDepth: 10,
         }),
       }),
     );
@@ -181,8 +177,6 @@ describe('AdvancedSettings', () => {
     expect(onSettingsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         domAnalysisConfig: expect.objectContaining({
-          initialDepth: 3,
-          expandDepth: 2,
           maxDepth: 12,
         }),
       }),
@@ -218,8 +212,6 @@ describe('AdvancedSettings', () => {
       expect.objectContaining({
         domAnalysisConfig: {
           initialDepth: 6,
-          expandDepth: 3,
-          maxDepth: 25,
         },
       }),
     );

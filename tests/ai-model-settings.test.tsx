@@ -77,7 +77,8 @@ function renderComponent(initialSettings: Settings = createSettings()) {
           setSettings((current) => ({
             ...current,
             ...next,
-            aiModel: next.aiModel ?? current.aiModel,
+            aiModel: { ...current.aiModel, ...next.aiModel },
+            domAnalysisConfig: { ...current.domAnalysisConfig, ...next.domAnalysisConfig },
           }));
         }}
         toast={toast}

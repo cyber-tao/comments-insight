@@ -76,6 +76,47 @@ describe('AIService', () => {
   });
 
   describe('callAI', () => {
+    it.each([null, 'length', 'content_filter'])(
+      'rejects incomplete streams (%s) without retrying',
+      async (finishReason) => {
+        mockFetch.mockResolvedValue(
+          createStreamingResponse([
+            `data: ${JSON.stringify({ choices: [{ delta: { content: 'partial' }, finish_reason: finishReason }] })}\n\n`,
+          ]),
+        );
+        await expect(
+          aiService.callAI({ prompt: 'Test', config: mockAIConfig() }),
+        ).rejects.toMatchObject({ code: ErrorCode.AI_INVALID_RESPONSE });
+        expect(mockFetch).toHaveBeenCalledOnce();
+      },
+    );
+
+    it('accepts a DONE marker without a finish reason and pretty-printed JSON', async () => {
+      mockFetch.mockResolvedValueOnce(
+        createStreamingResponse([
+          'data: {"choices":[{"delta":{"content":"done"}}]}\n\ndata: [DONE]\n\n',
+        ]),
+      );
+      expect((await aiService.callAI({ prompt: 'Test', config: mockAIConfig() })).content).toBe(
+        'done',
+      );
+      mockFetch.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify(
+            {
+              choices: [{ message: { content: 'json' }, finish_reason: 'stop' }],
+            },
+            null,
+            2,
+          ),
+          { headers: { 'content-type': 'application/json' } },
+        ),
+      );
+      expect((await aiService.callAI({ prompt: 'Test', config: mockAIConfig() })).content).toBe(
+        'json',
+      );
+    });
+
     it('should make API request with correct parameters', async () => {
       const mockResponse = {
         ok: true,
@@ -745,7 +786,7 @@ describe('AIService', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('should skip unfit comments and analyze remaining comments', async () => {
+    it('rejects mixed input before calling AI instead of silently dropping a thread', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: vi.fn().mockResolvedValue({
@@ -762,23 +803,10 @@ describe('AIService', () => {
       });
       const keptComment = mockComment({ id: 'kept-comment', content: 'small comment' });
 
-      const promise = commentAnalyzer.analyzeComments(
-        [skippedComment, keptComment],
-        config,
-        'Analyze',
-      );
-
-      await vi.runAllTimersAsync();
-      const result = await promise;
-
-      const fetchCall = mockFetch.mock.calls[0];
-      const body = JSON.parse(fetchCall[1].body);
-      const userMessage = body.messages.find(
-        (message: { role: string }) => message.role === 'user',
-      );
-      expect(userMessage.content).toContain('small comment');
-      expect(userMessage.content).not.toContain('reply content');
-      expect(result.markdown).toBe('Analysis');
+      await expect(
+        commentAnalyzer.analyzeComments([skippedComment, keptComment], config, 'Analyze'),
+      ).rejects.toMatchObject({ code: ErrorCode.AI_INVALID_RESPONSE });
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it('should pass metadata to prompt', async () => {

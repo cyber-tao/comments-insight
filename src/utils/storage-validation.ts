@@ -49,6 +49,10 @@ const fieldSelectorSchema = z.object({
   rule: selectorRuleSchema,
   attribute: z.string().optional(),
 });
+export const crawlingValidationSchema = z.record(
+  nonEmptyStringSchema,
+  z.record(nonEmptyStringSchema, z.enum(['success', 'failed'])),
+);
 const replyConfigSchema = z.object({
   container: selectorRuleSchema,
   item: selectorRuleSchema,
@@ -217,6 +221,7 @@ export const settingsPatchSchema = z
     selectorRetryAttempts: positiveIntegerSchema.max(RETRY.SELECTOR_MAX_ATTEMPTS).optional(),
     selectorCache: z.array(selectorCacheSchema).optional(),
     crawlingConfigs: z.array(crawlingConfigSchema).optional(),
+    crawlingConfigValidationByDomain: crawlingValidationSchema.optional(),
     disabledDefaultConfigDomains: normalizedDomainListSchema.optional(),
     domAnalysisConfig: domAnalysisConfigSchema.partial().optional(),
     developerMode: z.boolean().optional(),
@@ -416,6 +421,10 @@ export function sanitizeStoredSettings(value: unknown): Partial<Settings> {
     raw.crawlingConfigs,
     crawlingConfigSchema,
   ) as CrawlingConfig[];
+  const validation = crawlingValidationSchema.safeParse(raw.crawlingConfigValidationByDomain);
+  if (validation.success) {
+    sanitized.crawlingConfigValidationByDomain = validation.data;
+  }
 
   return sanitized;
 }

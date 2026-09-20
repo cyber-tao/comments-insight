@@ -58,7 +58,7 @@ describe('crawling-config utils', () => {
     expect(hasPersistedCrawlingConfigChanged(bundled, reordered)).toBe(false);
   });
 
-  it('retains field validation changes in sparse persisted overrides', () => {
+  it('does not turn runtime validation changes into content overrides', () => {
     const previous = createConfig({ fieldValidation: { username: 'success' } });
     const same = createConfig({
       id: 'other-id',
@@ -68,7 +68,7 @@ describe('crawling-config utils', () => {
     const changed = createConfig({ fieldValidation: { username: 'failed' } });
 
     expect(hasPersistedCrawlingConfigChanged(previous, same)).toBe(false);
-    expect(hasPersistedCrawlingConfigChanged(previous, changed)).toBe(true);
+    expect(hasPersistedCrawlingConfigChanged(previous, changed)).toBe(false);
   });
 
   it('keeps lastUpdated when only runtime fields change', () => {

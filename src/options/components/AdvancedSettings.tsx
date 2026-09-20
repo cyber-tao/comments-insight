@@ -9,13 +9,13 @@ import {
   STORAGE,
   LOG_LEVELS,
 } from '@/config/constants';
-import { Settings } from '@/types';
+import { Settings, SettingsPatch } from '@/types';
 import { parseFiniteIntegerInput } from '@/utils/number';
 import { Logger, LogLevel } from '@/utils/logger';
 
 interface AdvancedSettingsProps {
   settings: Settings;
-  onSettingsChange: (settings: Partial<Settings>) => void;
+  onSettingsChange: (settings: SettingsPatch) => void;
 }
 
 export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
@@ -64,7 +64,6 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                 return;
               }
               onSettingsChange({
-                ...settings,
                 aiTimeout: aiTimeoutSeconds * TIMEOUT.MS_PER_SEC,
               });
             }}
@@ -104,15 +103,8 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                     return;
                   }
                   onSettingsChange({
-                    ...settings,
                     domAnalysisConfig: {
-                      ...settings.domAnalysisConfig,
                       initialDepth,
-                      expandDepth:
-                        settings.domAnalysisConfig?.expandDepth ||
-                        DOM_ANALYSIS_DEFAULTS.expandDepth,
-                      maxDepth:
-                        settings.domAnalysisConfig?.maxDepth || DOM_ANALYSIS_DEFAULTS.maxDepth,
                     },
                   });
                 }}
@@ -144,15 +136,8 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                     return;
                   }
                   onSettingsChange({
-                    ...settings,
                     domAnalysisConfig: {
-                      ...settings.domAnalysisConfig,
-                      initialDepth:
-                        settings.domAnalysisConfig?.initialDepth ||
-                        DOM_ANALYSIS_DEFAULTS.initialDepth,
                       expandDepth,
-                      maxDepth:
-                        settings.domAnalysisConfig?.maxDepth || DOM_ANALYSIS_DEFAULTS.maxDepth,
                     },
                   });
                 }}
@@ -184,15 +169,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                     return;
                   }
                   onSettingsChange({
-                    ...settings,
                     domAnalysisConfig: {
-                      ...settings.domAnalysisConfig,
-                      initialDepth:
-                        settings.domAnalysisConfig?.initialDepth ||
-                        DOM_ANALYSIS_DEFAULTS.initialDepth,
-                      expandDepth:
-                        settings.domAnalysisConfig?.expandDepth ||
-                        DOM_ANALYSIS_DEFAULTS.expandDepth,
                       maxDepth,
                     },
                   });
@@ -214,7 +191,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
               type="checkbox"
               id="developerMode"
               checked={settings.developerMode || false}
-              onChange={(e) => onSettingsChange({ ...settings, developerMode: e.target.checked })}
+              onChange={(e) => onSettingsChange({ developerMode: e.target.checked })}
               className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
               style={{ borderColor: 'var(--border-primary)' }}
             />

@@ -1,4 +1,4 @@
-import { Settings, AIConfig, CrawlingConfig } from '@/types';
+import { Settings, SettingsPatch, AIConfig, CrawlingConfig, FieldValidationStatus } from '@/types';
 import {
   AI,
   LANGUAGES,
@@ -24,7 +24,10 @@ import {
   settingsPatchSchema,
 } from '@/utils/storage-validation';
 import { normalizeAiApiUrl } from '@/utils/url';
-import { hasPersistedCrawlingConfigChanged } from '@/utils/crawling-config';
+import {
+  crawlingConfigsFingerprint,
+  hasPersistedCrawlingConfigChanged,
+} from '@/utils/crawling-config';
 
 export const DEFAULT_SETTINGS: Settings = {
   maxComments: EXTRACTION_DEFAULTS.MAX_COMMENTS,
@@ -52,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
     lastUpdated: typeof config.lastUpdated === 'number' ? config.lastUpdated : Date.now(),
   })) as CrawlingConfig[],
   disabledDefaultConfigDomains: [],
+  crawlingConfigValidationByDomain: {},
   domAnalysisConfig: DOM_ANALYSIS_DEFAULTS,
   developerMode: false,
 };
@@ -93,10 +97,12 @@ export class SettingsStore {
         config,
       ]),
     );
-    return configs.filter((config) => {
-      const bundledConfig = defaultsByDomain.get(this.normalizeCrawlingDomain(config.domain));
-      return !bundledConfig || hasPersistedCrawlingConfigChanged(bundledConfig, config);
-    });
+    return configs
+      .filter((config) => {
+        const bundledConfig = defaultsByDomain.get(this.normalizeCrawlingDomain(config.domain));
+        return !bundledConfig || hasPersistedCrawlingConfigChanged(bundledConfig, config);
+      })
+      .map(({ fieldValidation: _fieldValidation, ...config }) => config);
   }
 
   async getSettings(): Promise<Settings> {
@@ -201,7 +207,12 @@ export class SettingsStore {
         domain: this.normalizeCrawlingDomain(rawDomain),
       });
     }
-    merged.crawlingConfigs = Array.from(configMap.values());
+    merged.crawlingConfigs = Array.from(configMap.values()).map((config) => ({
+      ...config,
+      ...(stored.crawlingConfigValidationByDomain?.[config.domain]
+        ? { fieldValidation: stored.crawlingConfigValidationByDomain[config.domain] }
+        : {}),
+    }));
     merged.disabledDefaultConfigDomains = disabledDefaultConfigDomains;
     merged.selectorCache = Array.isArray(stored.selectorCache) ? stored.selectorCache : [];
     merged.maxComments =
@@ -259,8 +270,44 @@ export class SettingsStore {
     return merged;
   }
 
-  async saveSettings(settings: Partial<Settings>): Promise<void> {
-    return this.saveMutex.withLock(() => this._saveSettings(settings));
+  async saveSettings(
+    settings: SettingsPatch,
+    expectedCrawlingConfigsFingerprint?: string,
+  ): Promise<void> {
+    return this.saveMutex.withLock(async () => {
+      if (settings.crawlingConfigs && expectedCrawlingConfigsFingerprint !== undefined) {
+        const current = await this.getSettings();
+        if (
+          crawlingConfigsFingerprint(current.crawlingConfigs) !== expectedCrawlingConfigsFingerprint
+        ) {
+          throw new ExtensionError(
+            ErrorCode.VALIDATION_ERROR,
+            'Crawling rules changed; reload settings before saving',
+            {
+              messageKey: 'options.settingsConflict',
+            },
+          );
+        }
+      }
+      await this._saveSettings(settings);
+    });
+  }
+
+  async updateFieldValidation(
+    domain: string,
+    validation: Record<string, FieldValidationStatus>,
+  ): Promise<void> {
+    return this.saveMutex.withLock(async () => {
+      const settings = await this.getSettings();
+      const normalized = this.normalizeCrawlingDomain(domain);
+      if (!settings.crawlingConfigs.some((config) => config.domain === normalized)) return;
+      await this._saveSettings({
+        crawlingConfigValidationByDomain: {
+          ...settings.crawlingConfigValidationByDomain,
+          [normalized]: validation,
+        },
+      });
+    });
   }
 
   async updateCrawlingConfigs(
@@ -273,7 +320,7 @@ export class SettingsStore {
     });
   }
 
-  private async _saveSettings(settings: Partial<Settings>): Promise<void> {
+  private async _saveSettings(settings: SettingsPatch): Promise<void> {
     try {
       const updatesCrawlingConfigs =
         Object.prototype.hasOwnProperty.call(settings, 'crawlingConfigs') &&
@@ -365,9 +412,16 @@ export class SettingsStore {
       delete (updatedSettings as Settings & { extractorModel?: AIConfig; analyzerModel?: AIConfig })
         .analyzerModel;
 
+      const validation = { ...updatedSettings.crawlingConfigValidationByDomain };
+      for (const config of updatedSettings.crawlingConfigs) {
+        if (config.fieldValidation && !validation[this.normalizeCrawlingDomain(config.domain)]) {
+          validation[this.normalizeCrawlingDomain(config.domain)] = config.fieldValidation;
+        }
+      }
       await chrome.storage.local.set({
         [STORAGE.SETTINGS_KEY]: {
           ...updatedSettings,
+          crawlingConfigValidationByDomain: validation,
           crawlingConfigs: this.getCrawlingConfigOverrides(updatedSettings.crawlingConfigs),
         },
       });
@@ -424,6 +478,7 @@ export class SettingsStore {
         crawlingConfigs: _crawlingConfigs,
         selectorCache: _selectorCache,
         disabledDefaultConfigDomains: _disabledDefaultConfigDomains,
+        crawlingConfigValidationByDomain: _crawlingConfigValidationByDomain,
         ...settingsToExport
       } = settings;
       const { apiKey: _apiKey, ...aiModelWithoutKey } = settingsToExport.aiModel;
@@ -456,6 +511,7 @@ export class SettingsStore {
           crawlingConfigs: _crawlingConfigs,
           selectorCache: _selectorCache,
           disabledDefaultConfigDomains: _disabledDefaultConfigDomains,
+          crawlingConfigValidationByDomain: _crawlingConfigValidationByDomain,
           ...rest
         } = sanitized;
         const importedModel = rest.aiModel;

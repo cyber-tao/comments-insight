@@ -60,6 +60,7 @@ export interface SimplifiedNode {
   children?: SimplifiedNode[];
   selector: string;
   depth: number;
+  truncated?: boolean;
 }
 
 export interface Task {
@@ -188,10 +189,16 @@ export interface Settings {
   selectorRetryAttempts: number;
   selectorCache: SelectorCache[];
   crawlingConfigs: CrawlingConfig[];
+  crawlingConfigValidationByDomain?: Record<string, Record<string, FieldValidationStatus>>;
   disabledDefaultConfigDomains: string[];
   domAnalysisConfig: DOMAnalysisConfig; // DOM analysis configuration for structure analysis
   developerMode: boolean;
 }
+
+export type SettingsPatch = Partial<Omit<Settings, 'aiModel' | 'domAnalysisConfig'>> & {
+  aiModel?: Partial<AIConfig>;
+  domAnalysisConfig?: Partial<DOMAnalysisConfig>;
+};
 
 export interface AnalysisResultSummary {
   totalComments: number;

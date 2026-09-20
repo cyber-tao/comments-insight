@@ -2,13 +2,13 @@ import * as React from 'react';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LANGUAGES, UI_LIMITS, THEME } from '@/config/constants';
-import { Settings } from '@/types';
+import { Settings, SettingsPatch } from '@/types';
 import { changeLanguage } from '@/utils/i18n';
 import { parseFiniteIntegerInput } from '@/utils/number';
 
 interface BasicSettingsProps {
   settings: Settings;
-  onSettingsChange: (settings: Partial<Settings>) => void;
+  onSettingsChange: (settings: SettingsPatch) => void;
   onThemeChange?: (theme: 'light' | 'dark' | 'system') => void;
 }
 
@@ -20,7 +20,7 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
   const { t } = useTranslation();
 
   const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
-    onSettingsChange({ ...settings, theme: newTheme });
+    onSettingsChange({ theme: newTheme });
     onThemeChange?.(newTheme);
   };
 
@@ -30,9 +30,9 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
       if (maxComments === null) {
         return;
       }
-      onSettingsChange({ ...settings, maxComments });
+      onSettingsChange({ maxComments });
     },
-    [settings, onSettingsChange],
+    [onSettingsChange],
   );
 
   return (
@@ -69,7 +69,7 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
           value={settings.language}
           onChange={(e) => {
             const newLang = e.target.value;
-            onSettingsChange({ ...settings, language: newLang });
+            onSettingsChange({ language: newLang });
             void changeLanguage(newLang);
           }}
           className="w-full theme-input"
@@ -114,7 +114,7 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
           type="checkbox"
           id="normalizeTimestamps"
           checked={settings.normalizeTimestamps}
-          onChange={(e) => onSettingsChange({ ...settings, normalizeTimestamps: e.target.checked })}
+          onChange={(e) => onSettingsChange({ normalizeTimestamps: e.target.checked })}
           className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
           style={{ borderColor: 'var(--border-primary)' }}
         />
@@ -137,9 +137,7 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
           type="checkbox"
           id="exportPostContentInMarkdown"
           checked={settings.exportPostContentInMarkdown}
-          onChange={(e) =>
-            onSettingsChange({ ...settings, exportPostContentInMarkdown: e.target.checked })
-          }
+          onChange={(e) => onSettingsChange({ exportPostContentInMarkdown: e.target.checked })}
           className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
           style={{ borderColor: 'var(--border-primary)' }}
         />

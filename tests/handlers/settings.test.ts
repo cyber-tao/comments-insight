@@ -126,7 +126,7 @@ describe('Settings Handlers', () => {
       const result = await handleSaveSettings(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith(partialSettings);
+      expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith(partialSettings, undefined);
       expect(mockAIService.clearVerifiedConfig).toHaveBeenCalledOnce();
     });
 
@@ -164,7 +164,7 @@ describe('Settings Handlers', () => {
       const result = await handleSaveSettings(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith({});
+      expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith({}, undefined);
     });
 
     it('should retain the verified config when persistence fails', async () => {

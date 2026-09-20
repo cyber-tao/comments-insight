@@ -192,7 +192,10 @@ describe('useSettings', () => {
         developerMode: true,
       }),
     );
-    expect(extensionApiMock.saveSettings.mock.calls[0][0]).not.toHaveProperty('selectorCache');
+    expect(extensionApiMock.saveSettings.mock.calls[0][0]).toEqual({
+      maxComments: 250,
+      developerMode: true,
+    });
     expect(toastMock.success).toHaveBeenCalledWith('options.savedSuccess');
     expect(result.current.saving).toBe(false);
   });
@@ -218,6 +221,36 @@ describe('useSettings', () => {
       maxComments: 250,
     });
     expect(extensionApiMock.getSettings).toHaveBeenCalledOnce();
+  });
+
+  it('sends only nested edits and protects rule replacement with the loaded fingerprint', async () => {
+    const { result } = renderHook(() => useSettings());
+    await act(async () => {
+      await flushMicrotasks();
+      await vi.advanceTimersByTimeAsync(TIMING.MICRO_WAIT_MS);
+    });
+    await act(async () => {
+      result.current.handleSettingsChange({ aiModel: { temperature: 0.2 } });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
+    });
+    expect(extensionApiMock.saveSettings).toHaveBeenLastCalledWith({
+      aiModel: { temperature: 0.2 },
+    });
+    expect(result.current.settings?.aiModel.model).toBe('gpt-4o-mini');
+    await act(async () => {
+      result.current.handleSettingsChange({
+        crawlingConfigs: [createCrawlingConfig('new.example.com')],
+      });
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
+    });
+    expect(extensionApiMock.saveSettings).toHaveBeenLastCalledWith(
+      { crawlingConfigs: [expect.objectContaining({ domain: 'new.example.com' })] },
+      '[]',
+    );
   });
 
   it('shows error toast when saving fails', async () => {

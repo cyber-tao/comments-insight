@@ -1,7 +1,7 @@
 import {
   Comment,
   Task,
-  Settings,
+  SettingsPatch,
   AIConfig,
   CrawlingConfig,
   FieldValidationStatus,
@@ -17,7 +17,10 @@ export type InjectionMessage = {
 
 export type SettingsMessage =
   | { type: 'GET_SETTINGS'; payload?: never }
-  | { type: 'SAVE_SETTINGS'; payload: { settings: Partial<Settings> } }
+  | {
+      type: 'SAVE_SETTINGS';
+      payload: { settings: SettingsPatch; expectedCrawlingConfigsFingerprint?: string };
+    }
   | { type: 'IMPORT_SETTINGS'; payload: { data: string } }
   | { type: 'CACHE_SELECTOR'; payload: { hostname: string; selector: string } }
   | { type: 'GET_CRAWLING_CONFIG'; payload: { domain: string } }

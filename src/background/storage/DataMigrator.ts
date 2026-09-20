@@ -3,6 +3,7 @@ import DEFAULT_CRAWLING_RULES from '@/config/default_rules.json';
 import type { CrawlingConfig } from '@/types';
 import { hasPersistedCrawlingConfigChanged } from '@/utils/crawling-config';
 import { Logger } from '@/utils/logger';
+import { crawlingConfigSchema, crawlingValidationSchema } from '@/utils/storage-validation';
 
 type MigrationStep = () => Promise<void>;
 
@@ -114,7 +115,11 @@ export class DataMigrator {
                 return true;
               }
               const bundledConfig = defaultsByDomain.get(config.domain.trim().toLowerCase());
-              return !bundledConfig || hasPersistedCrawlingConfigChanged(bundledConfig, config);
+              return (
+                !bundledConfig ||
+                config.fieldValidation !== undefined ||
+                hasPersistedCrawlingConfigChanged(bundledConfig, config)
+              );
             })
           : storedConfigs;
         const configsChanged =
@@ -132,6 +137,42 @@ export class DataMigrator {
             ...(Array.isArray(configOverrides) ? { crawlingConfigs: configOverrides } : {}),
           },
         });
+      },
+      4: async () => {
+        const stored = await chrome.storage.local.get(STORAGE.SETTINGS_KEY);
+        const value = stored[STORAGE.SETTINGS_KEY];
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+        const settings = value as Record<string, unknown>;
+        const existingValidation = crawlingValidationSchema.safeParse(
+          settings.crawlingConfigValidationByDomain,
+        );
+        const validation = existingValidation.success ? { ...existingValidation.data } : {};
+        const configs = Array.isArray(settings.crawlingConfigs) ? settings.crawlingConfigs : [];
+        const overrides = configs.flatMap((value: unknown) => {
+          const parsed = crawlingConfigSchema.safeParse(value);
+          // Preserve unknown legacy payloads instead of guessing user intent.
+          if (!parsed.success) return [value];
+          const config = parsed.data;
+          const domain = config.domain.trim().toLowerCase();
+          if (config.fieldValidation && !validation[domain]) {
+            validation[domain] = config.fieldValidation;
+          }
+          const bundled = DEFAULT_CRAWLING_RULES.find(
+            (rule) => rule.domain.toLowerCase() === domain,
+          );
+          if (bundled && !hasPersistedCrawlingConfigChanged(bundled as CrawlingConfig, config))
+            return [];
+          const { fieldValidation: _fieldValidation, ...content } = config;
+          return [content];
+        });
+        const next = {
+          ...settings,
+          crawlingConfigValidationByDomain: validation,
+          ...(Array.isArray(settings.crawlingConfigs) ? { crawlingConfigs: overrides } : {}),
+        };
+        if (JSON.stringify(next) !== JSON.stringify(settings)) {
+          await chrome.storage.local.set({ [STORAGE.SETTINGS_KEY]: next });
+        }
       },
     };
   }

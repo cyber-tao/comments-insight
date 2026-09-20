@@ -143,6 +143,7 @@
     "saving": "Saving...",
     "savedSuccess": "Settings saved successfully!",
     "savedError": "Failed to save settings",
+    "settingsConflict": "Crawling rules changed in another page. Reload settings before saving your edits.",
     "importedSuccess": "Settings imported. Click Save to apply.",
     "domAnalysisConfig": "DOM Analysis Configuration",
     "domAnalysisHint": "Configure depth parameters for AI to analyze page structure (advanced options)",

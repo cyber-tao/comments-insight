@@ -647,15 +647,15 @@ export class TaskManager {
       return;
     }
 
+    // Cancellation must own the signal before persistence can yield.
+    const controller = new AbortController();
+    this.registerAbortController(nextTaskId, controller);
     this.startTask(nextTaskId)
       .then(async () => {
         const task = this.tasks.get(nextTaskId);
-        if (!task) {
+        if (!task || task.status !== 'running' || controller.signal.aborted) {
           return;
         }
-
-        const controller = new AbortController();
-        this.registerAbortController(nextTaskId, controller);
 
         try {
           const result = await executor(task, controller.signal);
@@ -671,12 +671,6 @@ export class TaskManager {
           }
           Logger.error(`[TaskManager] Executor failed for task ${nextTaskId}`, { error });
           this.failTask(nextTaskId, error instanceof Error ? error.message : String(error));
-        } finally {
-          this.executors.delete(nextTaskId);
-          this.clearAbortController(nextTaskId);
-          if (this.currentTaskId === nextTaskId) {
-            this.currentTaskId = null;
-          }
         }
       })
       .catch((error) => {
@@ -684,6 +678,11 @@ export class TaskManager {
         this.failTask(nextTaskId, error instanceof Error ? error.message : String(error));
       })
       .finally(() => {
+        this.executors.delete(nextTaskId);
+        this.clearAbortController(nextTaskId);
+        if (this.currentTaskId === nextTaskId) {
+          this.currentTaskId = null;
+        }
         this.isProcessing = false;
         this.processQueue();
       });

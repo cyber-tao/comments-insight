@@ -28,6 +28,7 @@ function buildCurrentMigrations(step2: () => Promise<void>): Record<number, () =
   return {
     2: step2,
     3: async () => undefined,
+    4: async () => undefined,
   };
 }
 
@@ -176,8 +177,8 @@ describe('DataMigrator', () => {
         disabledDefaultConfigDomains: [],
       },
     });
-    expect(mockStorageSet).toHaveBeenNthCalledWith(2, {
-      [STORAGE.APP_DATA_VERSION_KEY]: 3,
+    expect(mockStorageSet).toHaveBeenLastCalledWith({
+      [STORAGE.APP_DATA_VERSION_KEY]: APP_DATA_VERSION.CURRENT,
     });
   });
 
@@ -211,6 +212,7 @@ describe('DataMigrator', () => {
 
     expect(storage[STORAGE.SETTINGS_KEY]).toEqual({
       disabledDefaultConfigDomains: [],
+      crawlingConfigValidationByDomain: {},
       crawlingConfigs: [modified, custom],
     });
     expect(storage[STORAGE.APP_DATA_VERSION_KEY]).toBe(APP_DATA_VERSION.CURRENT);
@@ -236,6 +238,7 @@ describe('DataMigrator', () => {
     expect(storage[STORAGE.SETTINGS_KEY]).toEqual({
       theme: 'dark',
       disabledDefaultConfigDomains: [],
+      crawlingConfigValidationByDomain: {},
     });
     expect(mockStorageSet).toHaveBeenCalledTimes(1);
     expect(mockStorageSet).toHaveBeenCalledWith({

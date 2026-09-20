@@ -23,7 +23,11 @@ export async function handleSaveSettings(
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Settings data is required');
   }
 
-  await context.settingsStore.saveSettings(settings);
+  const { crawlingConfigValidationByDomain: _runtimeValidation, ...userSettings } = settings;
+  await context.settingsStore.saveSettings(
+    userSettings,
+    message.payload.expectedCrawlingConfigsFingerprint,
+  );
   context.aiService.clearVerifiedConfig();
   return { success: true };
 }
@@ -91,12 +95,7 @@ export async function handleUpdateFieldValidation(
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Domain and fieldValidation are required');
   }
 
-  const config = await context.crawlingConfigStore.getCrawlingConfig(domain);
-  if (config) {
-    config.fieldValidation = fieldValidation;
-    await context.crawlingConfigStore.saveCrawlingConfig(config);
-    Logger.debug('[SettingsHandler] Field validation updated', { domain });
-  }
+  await context.settingsStore.updateFieldValidation(domain, fieldValidation);
 
   return { success: true };
 }

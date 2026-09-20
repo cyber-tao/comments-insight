@@ -15,6 +15,7 @@ interface SimplificationOptions {
   forceExpandParent?: boolean;
   /** Include text content in output */
   includeText?: boolean;
+  textMode?: 'preview' | 'full';
   /** Maximum number of nodes to process */
   maxNodes?: number;
   /** Elements to ignore during simplification */
@@ -50,6 +51,13 @@ interface SimplificationOptions {
 export class DOMSimplifier {
   private selectorCache = new WeakMap<Element, string>();
   private nodeCount = 0;
+  private deferredElements: Element[] = [];
+
+  takeDeferredElements(): Element[] {
+    const pending = this.deferredElements;
+    this.deferredElements = [];
+    return pending;
+  }
 
   /**
    * Simplify a DOM element to a lightweight structure
@@ -66,6 +74,7 @@ export class DOMSimplifier {
     // Reset node counter at the entry point (when called externally, not recursively)
     if (currentDepth === 0) {
       this.nodeCount = 0;
+      this.deferredElements = [];
     }
 
     this.nodeCount++;
@@ -74,7 +83,7 @@ export class DOMSimplifier {
     const forceExpandCurrent = shadowRoot !== null || this.shouldForceExpandElement(element);
 
     // Stop expanding if we hit node limit (but allow current node)
-    const nodeLimitReached = this.nodeCount > maxNodes;
+    const nodeLimitReached = this.nodeCount >= Math.max(1, maxNodes);
 
     const shouldExpand =
       !nodeLimitReached && (forceExpandParent || forceExpandCurrent || currentDepth < maxDepth);
@@ -86,6 +95,27 @@ export class DOMSimplifier {
 
     let children: SimplifiedNode[] | undefined;
     let currentSelector = '';
+    let truncated = false;
+    const simplifyChildren = (elements: Element[]): SimplifiedNode[] => {
+      const result: SimplifiedNode[] = [];
+      for (const child of elements) {
+        if (this.shouldIgnoreElement(child, options)) continue;
+        if (this.nodeCount >= Math.max(1, maxNodes)) {
+          truncated = true;
+          if (options.textMode === 'full') this.deferredElements.push(child);
+          continue;
+        }
+        result.push(
+          this.simplifyElement(child, {
+            ...options,
+            currentDepth: currentDepth + 1,
+            forceExpandParent: forceExpandParent || forceExpandCurrent,
+            parentSelector: currentSelector,
+          }),
+        );
+      }
+      return result;
+    };
 
     if (shouldExpand) {
       currentSelector = this.generateSelector(element, options.parentSelector);
@@ -95,14 +125,7 @@ export class DOMSimplifier {
       if (shadowRoot) {
         const shadowChildrenRaw = Array.from(shadowRoot.children);
         // We typically want to see inside shadow root if we are expanding the host
-        const shadowChildrenProcessed = shadowChildrenRaw.map((child) =>
-          this.simplifyElement(child as Element, {
-            ...options,
-            currentDepth: currentDepth + 1,
-            forceExpandParent: forceExpandParent || forceExpandCurrent,
-            parentSelector: currentSelector,
-          }),
-        );
+        const shadowChildrenProcessed = simplifyChildren(shadowChildrenRaw);
 
         if (shadowChildrenProcessed.length > 0) {
           children.push({
@@ -121,17 +144,19 @@ export class DOMSimplifier {
       }
 
       // 2. Add Light DOM children
-      const lightChildrenProcessed = lightChildren.map((child) =>
-        this.simplifyElement(child as Element, {
-          ...options,
-          currentDepth: currentDepth + 1,
-          forceExpandParent: forceExpandParent || forceExpandCurrent,
-          parentSelector: currentSelector,
-        }),
-      );
+      const lightChildrenProcessed = simplifyChildren(lightChildren);
       children.push(...lightChildrenProcessed);
     } else {
       currentSelector = this.generateSelector(element, options.parentSelector);
+      truncated = lightChildren.length > 0 || Boolean(shadowRoot?.children.length);
+      if (options.textMode === 'full') {
+        this.deferredElements.push(
+          ...lightChildren,
+          ...Array.from(shadowRoot?.children || []).filter(
+            (child) => !this.shouldIgnoreElement(child, options),
+          ),
+        );
+      }
     }
 
     const node: SimplifiedNode = {
@@ -139,12 +164,13 @@ export class DOMSimplifier {
       id: element.id || undefined,
       classes: this.getClasses(element),
       attributes: this.getKeyAttributes(element),
-      text: includeText ? this.getTextPreview(element) : undefined,
+      text: includeText ? this.getTextPreview(element, options.textMode === 'full') : undefined,
       childCount: lightChildren.length + (shadowRoot ? 1 : 0),
       expanded: shouldExpand && (children ? children.length > 0 : false),
       children,
       selector: currentSelector,
       depth: currentDepth,
+      ...(truncated ? { truncated: true } : {}),
     };
 
     // Mark if element has Shadow DOM (keep this attribute for reference)
@@ -301,7 +327,7 @@ export class DOMSimplifier {
   /**
    * Get a preview of text content (first 100 chars)
    */
-  private getTextPreview(element: Element): string | undefined {
+  private getTextPreview(element: Element, full: boolean = false): string | undefined {
     // Get direct text nodes only (not from children)
     const textNodes: string[] = [];
     for (const node of element.childNodes) {
@@ -316,7 +342,7 @@ export class DOMSimplifier {
     const fullText = textNodes.join(' ').trim();
     if (!fullText) return undefined;
 
-    return fullText.length > DOM.TEXT_PREVIEW_LENGTH
+    return !full && fullText.length > DOM.TEXT_PREVIEW_LENGTH
       ? fullText.substring(0, DOM.TEXT_PREVIEW_LENGTH) + '...'
       : fullText;
   }
