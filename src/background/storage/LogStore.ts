@@ -1,12 +1,8 @@
-import { STORAGE, LOG_DEFAULTS, LIMITS, TEXT } from '@/config/constants';
-import { Logger } from '@/utils/logger';
+import { STORAGE, LOG_DEFAULTS, LIMITS, TEXT, LOG_PREFIX } from '@/config/constants';
+import type { LogEntry } from '@/utils/logger';
 import { Mutex } from '@/utils/promise';
-import { sanitizeLogText } from '@/utils/log-sanitize';
-import {
-  sanitizeAiLogEntry,
-  sanitizeStringIndex,
-  type StoredAiLogEntry,
-} from '@/utils/storage-validation';
+import { sanitizeLogText, sanitizeLogObject } from '@/utils/log-sanitize';
+import { sanitizeStringIndex, type StoredAiLogEntry } from '@/utils/storage-validation';
 
 export class LogStore {
   private logMutex = new Mutex();
@@ -31,103 +27,88 @@ export class LogStore {
     };
   }
 
-  private estimateEntrySize(entry: StoredAiLogEntry): number {
-    return JSON.stringify(entry).length;
-  }
-
   async saveAiLog(
     logKey: string,
     entry: { type: 'extraction' | 'analysis'; timestamp: number; prompt: string; response: string },
   ): Promise<void> {
     try {
-      const sanitizedEntry = this.sanitizeLogEntry(entry);
-      await chrome.storage.local.set({
-        [logKey]: sanitizedEntry,
-      });
-      await this.appendAiLogKey(logKey);
+      await this.appendLog(logKey, this.sanitizeLogEntry(entry), 'ai');
     } catch (error) {
-      Logger.warn('[LogStore] Failed to save AI log', {
-        logKey,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      console.warn('[LogStore] Failed to save AI log', sanitizeLogText(String(error)));
     }
   }
 
-  private async getAiLogIndex(): Promise<string[]> {
-    try {
-      const result = await chrome.storage.local.get(STORAGE.AI_LOG_INDEX_KEY);
-      return sanitizeStringIndex(result[STORAGE.AI_LOG_INDEX_KEY]);
-    } catch {
-      return [];
-    }
+  async saveSystemLog(entry: LogEntry): Promise<void> {
+    const key = `${LOG_PREFIX.SYSTEM}${entry.level.toLowerCase()}_${entry.timestamp}_${crypto.randomUUID()}`;
+    const sanitized = {
+      ...entry,
+      message: sanitizeLogText(entry.message),
+      ...(entry.data ? { data: sanitizeLogObject(entry.data) } : {}),
+      ...(entry.stack ? { stack: sanitizeLogText(entry.stack) } : {}),
+    };
+    await this.appendLog(key, sanitized, 'system');
   }
 
-  private async setAiLogIndex(index: string[]): Promise<void> {
-    try {
-      await chrome.storage.local.set({ [STORAGE.AI_LOG_INDEX_KEY]: index });
-    } catch {
-      return;
-    }
+  private indexKey(kind: 'ai' | 'system'): string {
+    return kind === 'ai' ? STORAGE.AI_LOG_INDEX_KEY : STORAGE.SYSTEM_LOG_INDEX_KEY;
   }
 
-  private async appendAiLogKey(logKey: string): Promise<void> {
+  private async appendLog(
+    logKey: string,
+    entry: StoredAiLogEntry | LogEntry,
+    kind: 'ai' | 'system',
+  ): Promise<void> {
     return this.logMutex.withLock(async () => {
-      try {
-        const index = await this.getAiLogIndex();
-        const next = index.includes(logKey) ? index : [...index, logKey];
-
-        const storedLogs = next.length > 0 ? await chrome.storage.local.get(next) : {};
-        const keysToRemove = new Set<string>();
-
-        while (next.length - keysToRemove.size > LOG_DEFAULTS.AI_LOGS_MAX_STORED) {
-          const oldestKey = next[keysToRemove.size];
-          if (typeof oldestKey === 'string') {
-            keysToRemove.add(oldestKey);
-          }
-        }
-
-        let totalChars = next.reduce((sum, key) => {
-          if (keysToRemove.has(key)) {
-            return sum;
-          }
-
-          const entry = sanitizeAiLogEntry(storedLogs[key]);
-          if (!entry) {
-            return sum;
-          }
-
-          return sum + this.estimateEntrySize(entry);
-        }, 0);
-
-        for (const key of next) {
-          if (totalChars <= LIMITS.AI_LOG_TOTAL_CHAR_BUDGET) {
-            break;
-          }
-          if (keysToRemove.has(key)) {
-            continue;
-          }
-
-          const entry = sanitizeAiLogEntry(storedLogs[key]);
-          keysToRemove.add(key);
-          if (entry) {
-            totalChars -= this.estimateEntrySize(entry);
-          }
-        }
-
-        if (keysToRemove.size > 0) {
-          const removalList = Array.from(keysToRemove);
-          const kept = next.filter((key) => !keysToRemove.has(key));
-          await chrome.storage.local.remove(removalList);
-          await this.setAiLogIndex(kept);
-          return;
-        }
-
-        await this.setAiLogIndex(next);
-      } catch (error) {
-        Logger.warn('[LogStore] Failed to cleanup AI logs', {
-          error: error instanceof Error ? error.message : String(error),
-        });
+      const indexKey = this.indexKey(kind);
+      const stored = await chrome.storage.local.get(indexKey);
+      const index = [...new Set(sanitizeStringIndex(stored[indexKey]))].filter(
+        (key) => key !== logKey,
+      );
+      const next = [...index, logKey];
+      const rows = {
+        ...(index.length ? await chrome.storage.local.get(index) : {}),
+        [logKey]: entry,
+      };
+      const maxCount =
+        kind === 'ai' ? LOG_DEFAULTS.AI_LOGS_MAX_STORED : LOG_DEFAULTS.LOGS_MAX_STORED;
+      let chars = next.reduce((sum, key) => sum + JSON.stringify(rows[key] ?? null).length, 0);
+      const removed: string[] = [];
+      while (next.length > maxCount || (kind === 'ai' && chars > LIMITS.AI_LOG_TOTAL_CHAR_BUDGET)) {
+        const key = next.shift()!;
+        chars -= JSON.stringify(rows[key] ?? null).length;
+        removed.push(key);
       }
+      await chrome.storage.local.set({ [logKey]: entry, [indexKey]: next });
+      if (removed.length) await chrome.storage.local.remove(removed);
+    });
+  }
+
+  async deleteLog(key: string, kind: 'ai' | 'system'): Promise<void> {
+    const prefix = kind === 'ai' ? LOG_PREFIX.AI : LOG_PREFIX.SYSTEM;
+    if (!key.startsWith(prefix) || key === this.indexKey(kind) || key === STORAGE.LOG_LEVEL_KEY) {
+      throw new Error('Invalid log key');
+    }
+    return this.logMutex.withLock(async () => {
+      const indexKey = this.indexKey(kind);
+      const stored = await chrome.storage.local.get(indexKey);
+      await chrome.storage.local.set({
+        [indexKey]: sanitizeStringIndex(stored[indexKey]).filter((item) => item !== key),
+      });
+      await chrome.storage.local.remove([key]);
+    });
+  }
+
+  async clearLogs(kind: 'ai' | 'system' | 'all' = 'all'): Promise<void> {
+    return this.logMutex.withLock(async () => {
+      // Explicit user cleanup also removes records orphaned by older versions.
+      const stored = await chrome.storage.local.get(null);
+      const keys = Object.keys(stored).filter(
+        (key) =>
+          (kind !== 'system' && key.startsWith(LOG_PREFIX.AI)) ||
+          (kind !== 'ai' && key.startsWith(LOG_PREFIX.SYSTEM) && key !== STORAGE.LOG_LEVEL_KEY) ||
+          (kind !== 'ai' && key === STORAGE.SYSTEM_LOG_INDEX_KEY),
+      );
+      if (keys.length) await chrome.storage.local.remove(keys);
     });
   }
 }

@@ -37,6 +37,7 @@ export default function Logs() {
   } = useLogs();
 
   const [activeTab, setActiveTab] = useState<Tab>('ai');
+  const [operationError, setOperationError] = useState<string | null>(null);
 
   useEffect(() => {
     void loadLogs();
@@ -63,7 +64,13 @@ export default function Logs() {
       destructive: true,
     });
     if (!confirmed) return;
-    await clearAllLogs();
+    setOperationError(null);
+    try {
+      await clearAllLogs();
+    } catch {
+      // The hook retains the loaded rows and records the sanitized diagnostic.
+      setOperationError(t('errors.storageWriteError'));
+    }
   };
 
   const handleExport = async () => {
@@ -89,7 +96,12 @@ export default function Logs() {
       destructive: true,
     });
     if (!confirmed) return;
-    await deleteLog(key, activeTab);
+    setOperationError(null);
+    try {
+      await deleteLog(key, activeTab);
+    } catch {
+      setOperationError(t('errors.storageWriteError'));
+    }
   };
 
   return (
@@ -147,6 +159,12 @@ export default function Logs() {
           <span>Debug: {systemStats.debugs}</span>
           <span>Info: {systemStats.infos}</span>
           <span>Warn: {systemStats.warns}</span>
+        </div>
+      )}
+
+      {operationError && (
+        <div role="alert" style={{ color: 'var(--accent-danger)', padding: '0.75rem 1rem' }}>
+          {operationError}
         </div>
       )}
 

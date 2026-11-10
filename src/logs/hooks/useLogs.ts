@@ -1,7 +1,9 @@
 import { useState, useCallback, useMemo } from 'react';
-import { STORAGE, LOG_PREFIX } from '@/config/constants';
+import { STORAGE, LOG_PREFIX, MESSAGES } from '@/config/constants';
 import { Logger, LogLevel } from '@/utils/logger';
 import { sanitizeAiLogEntry, sanitizeStringIndex } from '@/utils/storage-validation';
+import { sendMessage } from '@/utils/chrome-message';
+import { fromExtensionErrorPayload } from '@/utils/error-types';
 
 export interface AILog {
   type: 'extraction' | 'analysis';
@@ -103,29 +105,30 @@ export function useLogs() {
 
   const clearAllLogs = useCallback(async () => {
     try {
-      const allKeys = [...aiLogs.map((l) => l.key), ...systemLogs.map((l) => l.key)];
-      await chrome.storage.local.remove([
-        ...allKeys,
-        STORAGE.AI_LOG_INDEX_KEY,
-        STORAGE.SYSTEM_LOG_INDEX_KEY,
-      ]);
+      const response = await sendMessage<{ success?: boolean; error?: unknown }>({
+        type: MESSAGES.CLEAR_LOGS,
+        payload: { kind: 'all' },
+      });
+      if (!response?.success) {
+        throw fromExtensionErrorPayload(response?.error ?? 'Failed to clear logs');
+      }
       setAiLogs([]);
       setSystemLogs([]);
     } catch (error) {
       Logger.error('[Logs] Failed to clear logs', { error });
       throw error;
     }
-  }, [aiLogs, systemLogs]);
+  }, []);
 
   const deleteLog = useCallback(async (key: string, logType: 'ai' | 'system') => {
     try {
-      await chrome.storage.local.remove(key);
-      const indexKey = logType === 'ai' ? STORAGE.AI_LOG_INDEX_KEY : STORAGE.SYSTEM_LOG_INDEX_KEY;
-
-      const result = await chrome.storage.local.get(indexKey);
-      const index = sanitizeStringIndex(result[indexKey]);
-      const next = index.filter((k) => k !== key);
-      await chrome.storage.local.set({ [indexKey]: next });
+      const response = await sendMessage<{ success?: boolean; error?: unknown }>({
+        type: MESSAGES.DELETE_LOG,
+        payload: { key, kind: logType },
+      });
+      if (!response?.success) {
+        throw fromExtensionErrorPayload(response?.error ?? 'Failed to delete log');
+      }
 
       if (logType === 'ai') {
         setAiLogs((prev) => prev.filter((l) => l.key !== key));

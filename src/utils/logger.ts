@@ -14,9 +14,8 @@
  * ```
  */
 
-import { LOG_PREFIX, STORAGE, LOG_DEFAULTS, LOG_LEVELS } from '@/config/constants';
+import { STORAGE, LOG_DEFAULTS, LOG_LEVELS, MESSAGES } from '@/config/constants';
 import { sanitizeLogObject, sanitizeLogText } from './log-sanitize';
-import { Mutex } from './promise';
 
 interface StoredSettings {
   developerMode?: boolean;
@@ -124,7 +123,11 @@ export class Logger {
   private static isDevelopment = false;
   private static initialized = false;
   private static storageConfigLoaded = false;
-  private static logMutex = new Mutex();
+  private static storageWriter?: (entry: LogEntry) => Promise<void>;
+
+  static setStorageWriter(writer: (entry: LogEntry) => Promise<void>): void {
+    this.storageWriter = writer;
+  }
 
   private static initializeSync(): void {
     if (this.initialized) {
@@ -335,14 +338,13 @@ export class Logger {
 
   private static async logToStorage(entry: LogEntry): Promise<void> {
     try {
-      const uniqueSuffix = Math.random().toString(36).substring(2, 7);
-      const logKey = `${LOG_PREFIX.SYSTEM}${entry.level.toLowerCase()}_${entry.timestamp}_${uniqueSuffix}`;
-      await chrome.storage.local.set({
-        [logKey]: entry,
-      });
-      void this.appendSystemLogKey(logKey);
+      if (this.storageWriter) {
+        await this.storageWriter(entry);
+      } else {
+        await chrome.runtime.sendMessage({ type: MESSAGES.APPEND_SYSTEM_LOG, payload: { entry } });
+      }
     } catch (error) {
-      console.error('[Logger] Storage error:', error);
+      console.error('[Logger] Storage error:', sanitizeLogText(String(error)));
     }
   }
 
@@ -354,35 +356,6 @@ export class Logger {
     } catch {
       return [];
     }
-  }
-
-  private static async setSystemLogIndex(index: string[]): Promise<void> {
-    try {
-      await chrome.storage.local.set({ [STORAGE.SYSTEM_LOG_INDEX_KEY]: index });
-    } catch {
-      return;
-    }
-  }
-
-  private static async appendSystemLogKey(logKey: string): Promise<void> {
-    return this.logMutex.withLock(async () => {
-      try {
-        const index = await this.getSystemLogIndex();
-        const next = index.includes(logKey) ? index : [...index, logKey];
-
-        if (next.length > this.config.maxStoredLogs) {
-          const toRemove = next.slice(0, next.length - this.config.maxStoredLogs);
-          const kept = next.slice(next.length - this.config.maxStoredLogs);
-          await chrome.storage.local.remove(toRemove);
-          await this.setSystemLogIndex(kept);
-          return;
-        }
-
-        await this.setSystemLogIndex(next);
-      } catch (error) {
-        console.error('[Logger] Cleanup error:', error);
-      }
-    });
   }
 
   static async getLogs(level?: LogLevel, limit?: number): Promise<LogEntry[]> {
@@ -443,22 +416,11 @@ export class Logger {
 
   static async clearLogs(): Promise<void> {
     try {
-      const index = await this.getSystemLogIndex();
-      if (index.length > 0) {
-        const keys = [...index];
-        keys.push(STORAGE.SYSTEM_LOG_INDEX_KEY);
-        await chrome.storage.local.remove(keys);
-      } else {
-        const storage = await chrome.storage.local.get(null);
-        const logKeys = Object.keys(storage).filter((key) => key.startsWith(LOG_PREFIX.SYSTEM));
-
-        if (logKeys.length > 0) {
-          await chrome.storage.local.remove(logKeys);
-        }
-
-        await chrome.storage.local.remove([STORAGE.SYSTEM_LOG_INDEX_KEY]);
-      }
-      this.info('[Logger] All logs cleared');
+      const response = await chrome.runtime.sendMessage({
+        type: MESSAGES.CLEAR_LOGS,
+        payload: { kind: 'system' },
+      });
+      if (response?.error) throw new Error('Failed to clear system logs');
     } catch (error) {
       console.error('[Logger] Failed to clear logs:', error);
       throw error;

@@ -11,6 +11,7 @@ import { MESSAGES } from '@/config/constants';
 import { HandlerContext } from './handlers/types';
 import type { ServiceInstances } from './ServiceContainer';
 import { validateMessagePayload } from '@/utils/message-validation';
+import { PORT_ACTIVITY_MESSAGE_TYPE } from '@/types/handlers';
 
 import * as extractionHandlers from './handlers/extraction';
 import * as analysisHandlers from './handlers/analysis';
@@ -30,6 +31,13 @@ const CONTENT_ONLY_MESSAGE_TYPES = new Set<string>([
 const KNOWN_MESSAGE_TYPES = new Set<string>(
   Object.values(MESSAGES).filter((type) => !CONTENT_ONLY_MESSAGE_TYPES.has(type)),
 );
+export function isLogMessageType(type: unknown): boolean {
+  return (
+    type === MESSAGES.APPEND_SYSTEM_LOG ||
+    type === MESSAGES.DELETE_LOG ||
+    type === MESSAGES.CLEAR_LOGS
+  );
+}
 
 function isKnownMessageType(type: unknown): type is Message['type'] {
   return typeof type === 'string' && KNOWN_MESSAGE_TYPES.has(type);
@@ -78,6 +86,10 @@ export class MessageRouter {
   private handlers = new Map<MessageType, HandlerFunction>();
   private portMessageInFlight = new Map<string, Promise<unknown>>();
   private portRequestControllers = new Map<string, AbortController>();
+  private portActivity = new Map<
+    string,
+    { ports: Set<chrome.runtime.Port>; timer: ReturnType<typeof setInterval> }
+  >();
   private readyPromise?: Promise<unknown>;
 
   private context: Omit<HandlerContext, 'sender'>;
@@ -191,7 +203,19 @@ export class MessageRouter {
         });
         this.portRequestControllers.set(correlationId, controller);
         this.portMessageInFlight.set(correlationId, responsePromise);
+        const ports = new Set<chrome.runtime.Port>();
+        const timer = setInterval(() => {
+          for (const target of ports) {
+            try {
+              target.postMessage({ id: correlationId, type: PORT_ACTIVITY_MESSAGE_TYPE });
+            } catch {
+              ports.delete(target);
+            }
+          }
+        }, 1000);
+        this.portActivity.set(correlationId, { ports, timer });
       }
+      this.portActivity.get(correlationId)?.ports.add(port);
 
       const response = await responsePromise;
       port.postMessage({ id: correlationId, response });
@@ -208,6 +232,9 @@ export class MessageRouter {
       }
     } finally {
       if (this.portMessageInFlight.get(correlationId) === responsePromise) {
+        const activity = this.portActivity.get(correlationId);
+        if (activity) clearInterval(activity.timer);
+        this.portActivity.delete(correlationId);
         this.portMessageInFlight.delete(correlationId);
       }
       if (this.portRequestControllers.get(correlationId) === controller) {
@@ -229,6 +256,23 @@ export class MessageRouter {
   ): Promise<unknown> {
     await this.ensureReady();
     const validatedMessage = validateMessagePayload(message);
+
+    // Logging its own transport would enqueue another log indefinitely.
+    if (validatedMessage.type === MESSAGES.APPEND_SYSTEM_LOG) {
+      await this.context.logStore.saveSystemLog(validatedMessage.payload.entry);
+      return { success: true };
+    }
+    if (validatedMessage.type === MESSAGES.DELETE_LOG) {
+      await this.context.logStore.deleteLog(
+        validatedMessage.payload.key,
+        validatedMessage.payload.kind,
+      );
+      return { success: true };
+    }
+    if (validatedMessage.type === MESSAGES.CLEAR_LOGS) {
+      await this.context.logStore.clearLogs(validatedMessage.payload.kind);
+      return { success: true };
+    }
 
     Logger.debug('[MessageRouter] Handling message', {
       type: validatedMessage.type,

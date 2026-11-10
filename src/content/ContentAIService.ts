@@ -1,6 +1,12 @@
 import { Logger } from '@/utils/logger';
-import { PORT_CANCEL_MESSAGE_TYPE, PortMessage, PortMessageResponse } from '@/types/handlers';
-import { AI, TEXT } from '@/config/constants';
+import {
+  PORT_CANCEL_MESSAGE_TYPE,
+  PORT_ACTIVITY_MESSAGE_TYPE,
+  PortActivityMessage,
+  PortMessage,
+  PortMessageResponse,
+} from '@/types/handlers';
+import { AI, TEXT, TIMEOUT } from '@/config/constants';
 import {
   ErrorCode,
   ExtensionError,
@@ -18,6 +24,8 @@ interface PendingRequest {
   message: Omit<PortMessage, 'id'>;
   signal?: AbortSignal;
   abortHandler?: () => void;
+  onTimeout: () => void;
+  idleTimeoutMs: number;
 }
 
 export class ContentAIService {
@@ -94,13 +102,19 @@ export class ContentAIService {
     }
   }
 
-  private handleMessage = (msg: PortMessageResponse): void => {
+  private handleMessage = (msg: PortMessageResponse | PortActivityMessage): void => {
     const pending = this.pendingRequests.get(msg.id);
     if (!pending) {
       Logger.warn('[ContentAIService] Received response for unknown request', { id: msg.id });
       return;
     }
 
+    if ('type' in msg && msg.type === PORT_ACTIVITY_MESSAGE_TYPE) {
+      clearTimeout(pending.timer);
+      pending.timer = setTimeout(pending.onTimeout, pending.idleTimeoutMs);
+      return;
+    }
+    if (!('response' in msg)) return;
     this.clearPending(pending);
     this.pendingRequests.delete(msg.id);
     if (this.isErrorResponse(msg.response)) {
@@ -240,7 +254,8 @@ export class ContentAIService {
               ).join('');
         id = requestId;
 
-        timer = setTimeout(() => {
+        const idleTimeoutMs = timeoutMs + TIMEOUT.MESSAGE_OVERHEAD_MS;
+        const onTimeout = () => {
           const pending = this.pendingRequests.get(requestId);
           if (pending) {
             this.notifyCancellation(requestId);
@@ -251,7 +266,8 @@ export class ContentAIService {
             }
           }
           reject(new Error('AI Bridge response timeout'));
-        }, timeoutMs);
+        };
+        timer = setTimeout(onTimeout, idleTimeoutMs);
 
         abortHandler = () => {
           const pending = this.pendingRequests.get(requestId);
@@ -275,6 +291,8 @@ export class ContentAIService {
           message,
           signal,
           abortHandler,
+          onTimeout,
+          idleTimeoutMs,
         });
 
         try {

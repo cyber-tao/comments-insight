@@ -7,6 +7,12 @@ import type { ExtensionErrorPayload } from '@/utils/error-types';
 import type { Message, MessageType } from './messages';
 
 export const PORT_CANCEL_MESSAGE_TYPE = 'CANCEL_AI_REQUEST' as const;
+export const PORT_ACTIVITY_MESSAGE_TYPE = 'AI_REQUEST_ACTIVITY' as const;
+
+export interface PortActivityMessage {
+  type: typeof PORT_ACTIVITY_MESSAGE_TYPE;
+  id: string;
+}
 
 /**
  * Port message with correlation ID

@@ -7,10 +7,12 @@ const mockStorageGet = vi.fn();
 const mockStorageSet = vi.fn();
 const mockStorageRemove = vi.fn();
 const mockStorageOnChanged = { addListener: vi.fn() };
+const mockSendMessage = vi.fn();
 
 const mockChrome = {
   runtime: {
     getManifest: vi.fn(),
+    sendMessage: mockSendMessage,
   },
   storage: {
     local: {
@@ -27,6 +29,8 @@ vi.stubGlobal('chrome', mockChrome);
 describe('Logger', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockSendMessage.mockResolvedValue({ success: true });
+    (Logger as unknown as { storageWriter?: unknown }).storageWriter = undefined;
     (Logger as unknown as { initialized: boolean }).initialized = false;
     (Logger as unknown as { isDevelopment: boolean }).isDevelopment = false;
     (Logger as unknown as { storageConfigLoaded: boolean }).storageConfigLoaded = false;
@@ -99,10 +103,59 @@ describe('Logger', () => {
       vi.clearAllMocks();
     });
 
-    it('should log info message', () => {
+    it('delegates UI and content logs through the background transport', () => {
       Logger.info('Test info');
       expect(console.info).toHaveBeenCalled();
-      expect(mockStorageSet).toHaveBeenCalled();
+      expect(mockSendMessage).toHaveBeenCalledWith({
+        type: 'APPEND_SYSTEM_LOG',
+        payload: { entry: expect.objectContaining({ level: 'INFO', message: 'Test info' }) },
+      });
+      expect(mockStorageSet).not.toHaveBeenCalled();
+    });
+
+    it('writes background logs through the registered writer without sending itself messages', async () => {
+      const writer = vi.fn().mockResolvedValue(undefined);
+      Logger.setStorageWriter(writer);
+
+      Logger.info('Background request sk-abcdefghijklmnopqrstuvwx', {
+        apiKey: 'plain-secret-value',
+        nested: { password: 'another-secret-value', safe: 42 },
+      });
+
+      expect(writer).toHaveBeenCalledOnce();
+      expect(writer).toHaveBeenCalledWith({
+        level: LogLevel.INFO,
+        timestamp: expect.any(Number),
+        message: 'Background request sk-a********uvwx',
+        data: {
+          apiKey: 'plai********alue',
+          nested: { password: 'anot********alue', safe: 42 },
+        },
+      });
+      await expect(writer.mock.results[0]?.value).resolves.toBeUndefined();
+      expect(mockSendMessage).not.toHaveBeenCalled();
+      expect(mockStorageGet).not.toHaveBeenCalled();
+      expect(mockStorageSet).not.toHaveBeenCalled();
+      expect(mockStorageRemove).not.toHaveBeenCalled();
+    });
+
+    it('does not recursively transport logs when the background writer rejects', async () => {
+      const writer = vi
+        .fn()
+        .mockRejectedValue(new Error('storage failed sk-abcdefghijklmnopqrstuvwx'));
+      Logger.setStorageWriter(writer);
+
+      Logger.error('Background failure');
+
+      await vi.waitFor(() => {
+        expect(console.error).toHaveBeenCalledWith(
+          '[Logger] Storage error:',
+          'Error: storage failed sk-a********uvwx',
+        );
+      });
+      expect(writer).toHaveBeenCalledOnce();
+      expect(mockSendMessage).not.toHaveBeenCalled();
+      expect(mockStorageSet).not.toHaveBeenCalled();
     });
 
     it('should respect log levels', () => {
@@ -122,26 +175,40 @@ describe('Logger', () => {
       // Check console call
       expect(console.info).toHaveBeenCalledWith(expect.stringContaining('Test with data'), data);
 
-      // Check storage call
-      expect(mockStorageSet).toHaveBeenCalled();
-
-      const logCall = mockStorageSet.mock.calls
-        .map((c) => c[0] as Record<string, unknown>)
-        .find((payload) => Object.keys(payload).some((k) => /^log_info_/.test(k)));
-      expect(logCall).toBeTruthy();
-
-      const callArgs = logCall as Record<string, unknown>;
-      const keys = Object.keys(callArgs);
-      const logKey = keys.find((k) => /^log_info_/.test(k));
-      expect(logKey).toBeTruthy();
-      expect(callArgs[logKey as string]).toEqual(
-        expect.objectContaining({
-          message: 'Test with data',
-          data: data,
-        }),
-      );
+      expect(mockSendMessage).toHaveBeenCalledWith({
+        type: 'APPEND_SYSTEM_LOG',
+        payload: {
+          entry: expect.objectContaining({
+            message: 'Test with data',
+            data,
+          }),
+        },
+      });
+      expect(mockStorageSet).not.toHaveBeenCalled();
     });
   });
+
+  it.each([false, true])(
+    'does not persist logs with developer mode disabled (background writer: %s)',
+    async (useBackgroundWriter) => {
+      const writer = vi.fn().mockResolvedValue(undefined);
+      if (useBackgroundWriter) Logger.setStorageWriter(writer);
+      mockChrome.runtime.getManifest.mockReturnValue({ version: '0.0.0' });
+      mockStorageGet.mockResolvedValue({ settings: { developerMode: false } });
+      await Logger.initialize();
+      vi.clearAllMocks();
+
+      Logger.error('Console-only error');
+
+      expect(console.error).toHaveBeenCalled();
+      expect(Logger.getConfig().enableStorage).toBe(false);
+      expect(writer).not.toHaveBeenCalled();
+      expect(mockSendMessage).not.toHaveBeenCalled();
+      expect(mockStorageGet).not.toHaveBeenCalled();
+      expect(mockStorageSet).not.toHaveBeenCalled();
+      expect(mockStorageRemove).not.toHaveBeenCalled();
+    },
+  );
 
   describe('storage operations', () => {
     it('should get logs', async () => {
@@ -179,11 +246,11 @@ describe('Logger', () => {
 
       await Logger.clearLogs();
 
-      expect(mockStorageRemove).toHaveBeenCalledWith([
-        'log_system_1',
-        'log_system_2',
-        'system_log_index',
-      ]);
+      expect(mockSendMessage).toHaveBeenCalledWith({
+        type: 'CLEAR_LOGS',
+        payload: { kind: 'system' },
+      });
+      expect(mockStorageRemove).not.toHaveBeenCalled();
     });
   });
 });

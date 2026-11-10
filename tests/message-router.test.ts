@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MessageRouter } from '../src/background/MessageRouter';
+import { MessageRouter, isLogMessageType } from '../src/background/MessageRouter';
+import { Logger } from '../src/utils/logger';
+import type { LogEntry } from '../src/utils/logger';
 import { MESSAGES } from '../src/config/constants';
 import { ErrorCode } from '../src/utils/errors';
 import { PORT_CANCEL_MESSAGE_TYPE } from '../src/types';
@@ -106,7 +108,11 @@ const mockSettingsStore = {
 
 const mockHistoryStore = {};
 const mockEncryptionService = {};
-const mockLogStore = {};
+const mockLogStore = {
+  saveSystemLog: vi.fn().mockResolvedValue(undefined),
+  deleteLog: vi.fn().mockResolvedValue(undefined),
+  clearLogs: vi.fn().mockResolvedValue(undefined),
+};
 const mockTokenStatsStore = {};
 const mockCrawlingConfigStore = {};
 const mockNotificationService = {};
@@ -316,6 +322,135 @@ describe('MessageRouter', () => {
       ).rejects.toMatchObject({
         code: ErrorCode.VALIDATION_ERROR,
       });
+    });
+  });
+
+  describe('log transport', () => {
+    const entry: LogEntry = {
+      level: 'INFO' as LogEntry['level'],
+      timestamp: 1234,
+      message: 'Background-owned log',
+      data: { safe: true },
+    };
+
+    it('awaits system log persistence and acknowledges without logging its own transport', async () => {
+      let resolve!: () => void;
+      const persisted = new Promise<void>((resolvePromise) => {
+        resolve = resolvePromise;
+      });
+      mockLogStore.saveSystemLog.mockReturnValueOnce(persisted);
+      const message: Message = { type: MESSAGES.APPEND_SYSTEM_LOG, payload: { entry } };
+      const request = router.handleMessage(message, mockSender);
+      let settled = false;
+      void request.then(() => {
+        settled = true;
+      });
+      await vi.waitFor(() => {
+        expect(mockLogStore.saveSystemLog).toHaveBeenCalledExactlyOnceWith(entry);
+      });
+
+      expect(settled).toBe(false);
+      expect(Logger.debug).not.toHaveBeenCalled();
+      resolve();
+      await expect(request).resolves.toEqual({ success: true });
+      expect(Logger.debug).not.toHaveBeenCalled();
+      expect(Logger.info).not.toHaveBeenCalled();
+    });
+
+    it.each(['ai', 'system'] as const)(
+      'deletes %s logs through LogStore without recursive logs',
+      async (kind) => {
+        const key = kind === 'ai' ? 'ai_log_1' : 'log_info_1';
+        const result = await router.handleMessage(
+          {
+            type: MESSAGES.DELETE_LOG,
+            payload: { key, kind },
+          },
+          mockSender,
+        );
+
+        expect(result).toEqual({ success: true });
+        expect(mockLogStore.deleteLog).toHaveBeenCalledExactlyOnceWith(key, kind);
+        expect(Logger.debug).not.toHaveBeenCalled();
+        expect(Logger.info).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(['ai', 'system', 'all'] as const)(
+      'clears %s logs through LogStore without recursive logs',
+      async (kind) => {
+        await expect(
+          router.handleMessage(
+            {
+              type: MESSAGES.CLEAR_LOGS,
+              payload: { kind },
+            },
+            mockSender,
+          ),
+        ).resolves.toEqual({ success: true });
+
+        expect(mockLogStore.clearLogs).toHaveBeenCalledExactlyOnceWith(kind);
+        expect(Logger.debug).not.toHaveBeenCalled();
+        expect(Logger.info).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      { type: MESSAGES.APPEND_SYSTEM_LOG, payload: { entry: { ...entry, level: 'INVALID' } } },
+      { type: MESSAGES.APPEND_SYSTEM_LOG, payload: { entry: { ...entry, timestamp: Infinity } } },
+      { type: MESSAGES.APPEND_SYSTEM_LOG, payload: { entry: { ...entry, message: 42 } } },
+      { type: MESSAGES.DELETE_LOG, payload: { key: '', kind: 'system' } },
+      { type: MESSAGES.DELETE_LOG, payload: { key: 'ai_log_1', kind: 'all' } },
+      { type: MESSAGES.CLEAR_LOGS, payload: { kind: 'unknown' } },
+    ])('validates log messages before touching storage ($type)', async (message) => {
+      await expect(router.handleMessage(message as Message, mockSender)).rejects.toMatchObject({
+        code: ErrorCode.VALIDATION_ERROR,
+      });
+
+      expect(mockLogStore.saveSystemLog).not.toHaveBeenCalled();
+      expect(mockLogStore.deleteLog).not.toHaveBeenCalled();
+      expect(mockLogStore.clearLogs).not.toHaveBeenCalled();
+      expect(Logger.debug).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      {
+        method: 'saveSystemLog' as const,
+        message: { type: MESSAGES.APPEND_SYSTEM_LOG, payload: { entry } },
+      },
+      {
+        method: 'deleteLog' as const,
+        message: { type: MESSAGES.DELETE_LOG, payload: { key: 'ai_log_1', kind: 'ai' } },
+      },
+      {
+        method: 'clearLogs' as const,
+        message: { type: MESSAGES.CLEAR_LOGS, payload: { kind: 'all' } },
+      },
+    ])(
+      'does not acknowledge failed $method operations or recursively log them',
+      async ({ method, message }) => {
+        const failure = new Error('storage unavailable');
+        mockLogStore[method].mockRejectedValueOnce(failure);
+
+        await expect(router.handleMessage(message as Message, mockSender)).rejects.toBe(failure);
+
+        expect(Logger.debug).not.toHaveBeenCalled();
+        expect(Logger.info).not.toHaveBeenCalled();
+        expect(Logger.error).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([
+      [MESSAGES.APPEND_SYSTEM_LOG, true],
+      [MESSAGES.DELETE_LOG, true],
+      [MESSAGES.CLEAR_LOGS, true],
+      [MESSAGES.PING, false],
+      ['APPEND_SYSTEM_LOG_EXTRA', false],
+      [undefined, false],
+      [null, false],
+      [{ type: MESSAGES.APPEND_SYSTEM_LOG }, false],
+    ])('classifies only exact log transport types (%s)', (type, expected) => {
+      expect(isLogMessageType(type)).toBe(expected);
     });
   });
 

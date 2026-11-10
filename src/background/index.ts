@@ -4,8 +4,9 @@ import {
   getSettingsStore,
   getTaskManager,
   getNotificationService,
+  getLogStore,
 } from './ServiceContainer';
-import { MessageRouter } from './MessageRouter';
+import { MessageRouter, isLogMessageType } from './MessageRouter';
 import { DataMigrator } from './storage/DataMigrator';
 import { Message } from '../types';
 import { Logger } from '../utils/logger';
@@ -13,6 +14,9 @@ import { toExtensionErrorPayload } from '@/utils/error-types';
 import { STORAGE } from '@/config/constants';
 import i18n, { changeLanguage } from '../utils/i18n';
 
+// Runtime messages do not loop back to their sending context. Keep background
+// writes local while UI/content contexts delegate to this same LogStore.
+Logger.setStorageWriter((entry) => getLogStore().saveSystemLog(entry));
 Logger.info('Comments Insight Service Worker loaded');
 
 // Migration: remove legacy plaintext AI key persisted under chrome.storage.local
@@ -80,7 +84,9 @@ chrome.runtime.onConnect.addListener((port) => {
 
 // Listen for messages from content scripts and popup
 chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) => {
-  Logger.debug('Message received', { message });
+  if (!isLogMessageType(message?.type)) {
+    Logger.debug('Message received', { message });
+  }
   messageRouter
     .handleMessage(message, sender)
     .then((response) => sendResponse(response))

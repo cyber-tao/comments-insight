@@ -1,17 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { STORAGE } from '../src/config/constants';
+import { MESSAGES, STORAGE } from '../src/config/constants';
+import type { LogEntry } from '../src/utils/logger';
 
 const backgroundMocks = vi.hoisted(() => {
   const services = { source: 'service-container' };
   const taskManager = { initialize: vi.fn() };
   const settingsStore = { getSettings: vi.fn() };
   const notificationService = { setupNotificationHandlers: vi.fn() };
+  const logStore = { saveSystemLog: vi.fn() };
 
   return {
     services,
     taskManager,
     settingsStore,
     notificationService,
+    logStore,
+    getLogStore: vi.fn(),
+    setStorageWriter: vi.fn(),
     containerGetAll: vi.fn(),
     containerResetAll: vi.fn(),
     getTaskManager: vi.fn(),
@@ -38,9 +43,12 @@ vi.mock('../src/background/ServiceContainer', () => ({
   getTaskManager: backgroundMocks.getTaskManager,
   getSettingsStore: backgroundMocks.getSettingsStore,
   getNotificationService: backgroundMocks.getNotificationService,
+  getLogStore: backgroundMocks.getLogStore,
 }));
 
-vi.mock('../src/background/MessageRouter', () => ({
+vi.mock('../src/background/MessageRouter', async (importOriginal) => ({
+  isLogMessageType: (await importOriginal<typeof import('../src/background/MessageRouter')>())
+    .isLogMessageType,
   MessageRouter: class {
     constructor(services: unknown, options: unknown) {
       backgroundMocks.messageRouterConstructor(services, options);
@@ -70,6 +78,7 @@ vi.mock('../src/utils/logger', () => ({
     debug: backgroundMocks.loggerDebug,
     warn: backgroundMocks.loggerWarn,
     error: backgroundMocks.loggerError,
+    setStorageWriter: backgroundMocks.setStorageWriter,
   },
 }));
 
@@ -139,6 +148,8 @@ describe('background entry wiring', () => {
     backgroundMocks.getTaskManager.mockReturnValue(backgroundMocks.taskManager);
     backgroundMocks.getSettingsStore.mockReturnValue(backgroundMocks.settingsStore);
     backgroundMocks.getNotificationService.mockReturnValue(backgroundMocks.notificationService);
+    backgroundMocks.getLogStore.mockReturnValue(backgroundMocks.logStore);
+    backgroundMocks.logStore.saveSystemLog.mockResolvedValue(undefined);
     backgroundMocks.migrate.mockResolvedValue(undefined);
     backgroundMocks.taskManager.initialize.mockResolvedValue(undefined);
     backgroundMocks.settingsStore.getSettings.mockResolvedValue({ language: 'en-US' });
@@ -181,6 +192,79 @@ describe('background entry wiring', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('registers the background log writer before the first startup log', async () => {
+    await importInitializedBackground();
+
+    expect(backgroundMocks.setStorageWriter).toHaveBeenCalledOnce();
+    expect(backgroundMocks.setStorageWriter).toHaveBeenCalledWith(expect.any(Function));
+    expect(backgroundMocks.setStorageWriter.mock.invocationCallOrder[0]).toBeLessThan(
+      backgroundMocks.loggerInfo.mock.invocationCallOrder[0],
+    );
+    expect(backgroundMocks.loggerInfo).toHaveBeenNthCalledWith(
+      1,
+      'Comments Insight Service Worker loaded',
+    );
+  });
+
+  it('lazily resolves LogStore and delegates each background writer call to saveSystemLog', async () => {
+    await importInitializedBackground();
+    const writer = backgroundMocks.setStorageWriter.mock.calls[0]?.[0] as (
+      entry: LogEntry,
+    ) => Promise<void>;
+    const entry = {
+      level: 'INFO',
+      timestamp: 1234,
+      message: 'Persisted by the service worker',
+    } as LogEntry;
+    const persistence = createDeferred<void>();
+    backgroundMocks.logStore.saveSystemLog.mockReturnValueOnce(persistence.promise);
+
+    expect(backgroundMocks.getLogStore).not.toHaveBeenCalled();
+    const result = writer(entry);
+
+    expect(backgroundMocks.getLogStore).toHaveBeenCalledOnce();
+    expect(backgroundMocks.logStore.saveSystemLog).toHaveBeenCalledExactlyOnceWith(entry);
+    expect(backgroundMocks.logStore.saveSystemLog.mock.calls[0]?.[0]).toBe(entry);
+    expect(result).toBe(persistence.promise);
+    persistence.resolve(undefined);
+    await expect(result).resolves.toBeUndefined();
+
+    const replacementStore = { saveSystemLog: vi.fn().mockResolvedValue(undefined) };
+    backgroundMocks.getLogStore.mockReturnValueOnce(replacementStore);
+    await writer(entry);
+    expect(replacementStore.saveSystemLog).toHaveBeenCalledExactlyOnceWith(entry);
+  });
+
+  it('does not emit receipt logs for log transport messages but still routes and responds', async () => {
+    await importInitializedBackground();
+    backgroundMocks.loggerDebug.mockClear();
+    backgroundMocks.handleMessage.mockResolvedValue({ success: true });
+    const onMessage = getListener(runtimeMessageListener);
+    const sender = { id: 'logs-page' } as chrome.runtime.MessageSender;
+    const sendResponse = vi.fn();
+    const messages = [
+      {
+        type: MESSAGES.APPEND_SYSTEM_LOG,
+        payload: { entry: { level: 'INFO', timestamp: 1234, message: 'Transport log' } },
+      },
+      { type: MESSAGES.DELETE_LOG, payload: { kind: 'system', key: 'log_info_1' } },
+      { type: MESSAGES.CLEAR_LOGS, payload: { kind: 'all' } },
+    ];
+
+    for (const message of messages) {
+      expect(onMessage(message, sender, sendResponse)).toBe(true);
+      expect(backgroundMocks.handleMessage).toHaveBeenCalledWith(message, sender);
+    }
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledTimes(messages.length));
+    expect(sendResponse).toHaveBeenCalledWith({ success: true });
+    expect(backgroundMocks.loggerDebug).not.toHaveBeenCalled();
+
+    onMessage({ type: MESSAGES.PING }, sender, sendResponse);
+    expect(backgroundMocks.loggerDebug).toHaveBeenCalledExactlyOnceWith('Message received', {
+      message: { type: MESSAGES.PING },
+    });
   });
 
   it('runs migration before task initialization, then loads settings and changes language', async () => {
