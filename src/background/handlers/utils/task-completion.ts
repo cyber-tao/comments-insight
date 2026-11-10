@@ -1,8 +1,23 @@
 import { Task } from '@/types';
 import { Logger } from '@/utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
-import { CHROME_MESSAGE_ERRORS, MESSAGES, TIMEOUT, TIMING } from '@/config/constants';
+import { CHROME_MESSAGE_ERRORS, MESSAGES, TIMEOUT, TIMING, TEXT } from '@/config/constants';
 import type { HandlerContext } from '../types';
+
+export function createAnalysisDeadline(parentSignal: AbortSignal) {
+  const wallClock = new AbortController();
+  const timer = setTimeout(() => wallClock.abort(), TIMEOUT.ANALYSIS_TASK_COMPLETION_MS);
+  return {
+    signal: AbortSignal.any([parentSignal, wallClock.signal]),
+    dispose: () => clearTimeout(timer),
+    rethrow(error: unknown): never {
+      if (wallClock.signal.aborted && !parentSignal.aborted) {
+        throw new ExtensionError(ErrorCode.TIMEOUT_ERROR, TEXT.ANALYSIS_TASK_TIMEOUT);
+      }
+      throw error;
+    },
+  };
+}
 
 export type PendingTaskResult = {
   tokensUsed: number;

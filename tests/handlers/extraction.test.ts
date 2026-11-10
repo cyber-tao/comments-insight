@@ -9,12 +9,25 @@ import {
   handleConfigGenerationCompleted,
 } from '../../src/background/handlers/config-generation';
 import { HandlerContext } from '../../src/background/handlers/types';
-import { ErrorCode } from '../../src/utils/errors';
-import { TIMEOUT, TEXT } from '../../src/config/constants';
+import { ExtensionError, ErrorCode } from '../../src/utils/errors';
+import { STORAGE, TIMEOUT, TEXT } from '../../src/config/constants';
+import { TaskManager } from '../../src/background/TaskManager';
+import type { NotificationService } from '../../src/background/NotificationService';
+import type { Comment, Task } from '../../src/types';
 
 type TabRemoveInfo = { windowId: number; isWindowClosing: boolean };
 
 const tabRemovedListeners = new Set<(tabId: number, removeInfo: TabRemoveInfo) => void>();
+const mockStorageGet = vi.fn().mockResolvedValue({});
+const mockStorageSet = vi.fn().mockResolvedValue(undefined);
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((fulfill) => {
+    resolve = fulfill;
+  });
+  return { promise, resolve };
+}
 
 async function flushMicrotasks(iterations = 4): Promise<void> {
   for (let index = 0; index < iterations; index += 1) {
@@ -41,7 +54,13 @@ vi.stubGlobal('chrome', {
     },
   },
   runtime: {
-    sendMessage: vi.fn(),
+    sendMessage: vi.fn().mockResolvedValue(undefined),
+  },
+  storage: {
+    local: {
+      get: mockStorageGet,
+      set: mockStorageSet,
+    },
   },
 });
 
@@ -90,9 +109,85 @@ function createMockContext(overrides: Partial<HandlerContext> = {}): HandlerCont
   } as unknown as HandlerContext;
 }
 
+async function createRestartedContext(): Promise<HandlerContext> {
+  const now = Date.now();
+  const persistedTask: Task = {
+    id: 'task_restored',
+    type: 'extract',
+    status: 'running',
+    url: 'https://example.com/restored',
+    platform: 'example.com',
+    tabId: 1,
+    progress: 80,
+    startTime: now - 1000,
+    tokensUsed: 0,
+  };
+  mockStorageGet.mockResolvedValueOnce({
+    [STORAGE.TASK_STATE_KEY]: {
+      tasks: [persistedTask],
+      queue: [],
+      currentTaskId: persistedTask.id,
+      savedAt: now - 100,
+    },
+  });
+  const notifications = {
+    showTaskCompleted: vi.fn(),
+    showTaskFailed: vi.fn(),
+  } as unknown as NotificationService;
+  const taskManager = new TaskManager(notifications, { enablePersistence: true });
+  await taskManager.initialize();
+  expect(taskManager.getTask(persistedTask.id)?.interruptedByRestart).toBe(true);
+  return createMockContext({ taskManager });
+}
+
+const restoredComments: Comment[] = [
+  {
+    id: 'comment-restored',
+    username: 'user',
+    content: 'content',
+    likes: 1,
+    timestamp: '1 hour ago',
+    replies: [],
+  },
+];
+const restoredCompletion = {
+  type: 'EXTRACTION_COMPLETED' as const,
+  payload: {
+    taskId: 'task_restored',
+    success: true,
+    comments: restoredComments,
+    postInfo: { title: 'Restored extraction' },
+  },
+};
+
+function gateNormalization(context: HandlerContext) {
+  const entered = deferred<AbortSignal | undefined>();
+  const gate = deferred<void>();
+  vi.mocked(context.settingsStore.getSettings).mockResolvedValue({
+    normalizeTimestamps: true,
+    aiModel: {},
+    aiTimeout: 1000,
+  } as Awaited<ReturnType<HandlerContext['settingsStore']['getSettings']>>);
+  vi.mocked(context.timestampNormalizer.normalizeCommentTimestamps).mockImplementation(
+    async (_comments, _model, _referenceTime, _timeout, signal) => {
+      entered.resolve(signal);
+      await gate.promise;
+      return restoredComments;
+    },
+  );
+  return { entered: entered.promise, release: () => gate.resolve() };
+}
+
+function lastPersistedState() {
+  const calls = mockStorageSet.mock.calls;
+  return calls[calls.length - 1]?.[0]?.[STORAGE.TASK_STATE_KEY];
+}
+
 describe('extraction handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockStorageGet.mockResolvedValue({});
+    mockStorageSet.mockResolvedValue(undefined);
     tabRemovedListeners.clear();
   });
 
@@ -319,6 +414,118 @@ describe('extraction handlers', () => {
     });
   });
 
+  describe('restored completion lifecycle', () => {
+    it('aborts restored normalization and releases its slot before the normalizer settles', async () => {
+      const context = await createRestartedContext();
+      const normalization = gateNormalization(context);
+      const completion = handleExtractionCompleted(restoredCompletion, context);
+      try {
+        const signal = await normalization.entered;
+        expect(signal).toBeInstanceOf(AbortSignal);
+        expect(signal?.aborted).toBe(false);
+
+        context.taskManager.cancelTask('task_restored');
+        expect(signal?.aborted).toBe(true);
+        expect(context.taskManager.getTask('task_restored')?.status).toBe('failed');
+        expect(context.taskManager.getAbortSignal('task_restored')).toBeUndefined();
+
+        const nextId = context.taskManager.createTask(
+          'analyze',
+          'https://example.com/new',
+          'Generic',
+        );
+        const nextExecutor = vi.fn().mockResolvedValue({ tokensUsed: 2 });
+        context.taskManager.setExecutor(nextId, nextExecutor);
+        // The restored completion has no executor-finally to wait for. The new
+        // executor must finish while the cancelled normalizer is still gated.
+        await vi.waitFor(() =>
+          expect(context.taskManager.getTask(nextId)?.status).toBe('completed'),
+        );
+        expect(nextExecutor).toHaveBeenCalledOnce();
+
+        normalization.release();
+        await expect(completion).resolves.toEqual({ success: false });
+        expect(context.historyStore.createHistory).not.toHaveBeenCalled();
+        expect(context.timestampNormalizer.normalizeSingleTimestamp).not.toHaveBeenCalled();
+        expect(context.taskManager.getTask(nextId)?.status).toBe('completed');
+      } finally {
+        normalization.release();
+        await completion;
+      }
+    });
+
+    it.each(['complete', 'cancel'] as const)(
+      'does not steal or clear a newer executor slot when a restored completion will %s',
+      async (ending) => {
+        const context = await createRestartedContext();
+        const activeGate = deferred<void>();
+        const activeEntered = deferred<AbortSignal>();
+        const activeId = context.taskManager.createTask(
+          'analyze',
+          'https://example.com/active',
+          'Generic',
+        );
+        context.taskManager.setExecutor(activeId, async (_task, signal) => {
+          activeEntered.resolve(signal);
+          await activeGate.promise;
+          return {};
+        });
+        const activeSignal = await activeEntered.promise;
+        const normalization = gateNormalization(context);
+        const completion = handleExtractionCompleted(restoredCompletion, context);
+        try {
+          const restoredSignal = await normalization.entered;
+          expect(restoredSignal).toBeInstanceOf(AbortSignal);
+          expect(restoredSignal).not.toBe(activeSignal);
+          await vi.waitFor(() => expect(lastPersistedState()?.currentTaskId).toBe(activeId));
+
+          const queuedId = context.taskManager.createTask(
+            'analyze',
+            'https://example.com/queued',
+            'Generic',
+          );
+          const queuedExecutor = vi.fn().mockResolvedValue({});
+          context.taskManager.setExecutor(queuedId, queuedExecutor);
+          if (ending === 'cancel') {
+            context.taskManager.cancelTask('task_restored');
+            expect(restoredSignal?.aborted).toBe(true);
+          }
+          normalization.release();
+          await expect(completion).resolves.toEqual({ success: ending === 'complete' });
+          await vi.waitFor(() => {
+            expect(lastPersistedState()?.currentTaskId).toBe(activeId);
+            expect(
+              lastPersistedState()?.tasks.find((task: Task) => task.id === 'task_restored')?.status,
+            ).toBe(ending === 'complete' ? 'completed' : 'failed');
+          });
+          expect(activeSignal.aborted).toBe(false);
+          expect(context.taskManager.getAbortSignal(activeId)).toBe(activeSignal);
+          expect(context.taskManager.getTask(activeId)?.status).toBe('running');
+          expect(queuedExecutor).not.toHaveBeenCalled();
+          expect(context.taskManager.getTask(queuedId)?.status).toBe('pending');
+          if (ending === 'complete') {
+            expect(context.historyStore.createHistory).toHaveBeenCalledWith(
+              expect.objectContaining({ comments: restoredComments }),
+              restoredSignal,
+            );
+          } else {
+            expect(context.historyStore.createHistory).not.toHaveBeenCalled();
+          }
+
+          activeGate.resolve();
+          await vi.waitFor(() =>
+            expect(context.taskManager.getTask(queuedId)?.status).toBe('completed'),
+          );
+          expect(context.taskManager.getTask(activeId)?.status).toBe('completed');
+        } finally {
+          normalization.release();
+          activeGate.resolve();
+          await completion;
+        }
+      },
+    );
+  });
+
   describe('completion payload validation', () => {
     it('should persist successful extraction even when no comments are found', async () => {
       const context = createMockContext({
@@ -358,6 +565,7 @@ describe('extraction handlers', () => {
           commentsCount: 0,
           comments: [],
         }),
+        undefined,
       );
       expect(context.taskManager.completeTask).toHaveBeenCalledWith(
         'task_123',
@@ -429,6 +637,46 @@ describe('extraction handlers', () => {
       );
       expect(context.historyStore.createHistory).not.toHaveBeenCalled();
       expect(context.taskManager.completeTask).not.toHaveBeenCalled();
+    });
+
+    it('preserves cancellation when createHistory aborts before its transaction commits', async () => {
+      const controller = new AbortController();
+      const task: Task = {
+        id: 'task_123',
+        type: 'extract',
+        status: 'running',
+        url: 'https://example.com',
+        platform: 'example.com',
+        progress: 80,
+        startTime: Date.now(),
+        tokensUsed: 0,
+      };
+      const context = createMockContext({
+        taskManager: {
+          ...createMockContext().taskManager,
+          getTask: vi.fn().mockReturnValue(task),
+          getAbortSignal: vi.fn().mockReturnValue(controller.signal),
+        },
+        historyStore: {
+          ...createMockContext().historyStore,
+          createHistory: vi.fn().mockImplementation(async (_item, signal) => {
+            expect(signal).toBe(controller.signal);
+            controller.abort();
+            throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'History write cancelled');
+          }),
+        },
+      } as unknown as Partial<HandlerContext>);
+      await expect(
+        handleExtractionCompleted(
+          {
+            type: 'EXTRACTION_COMPLETED',
+            payload: { taskId: task.id, success: true, comments: [] },
+          },
+          context,
+        ),
+      ).resolves.toEqual({ success: false });
+      expect(context.taskManager.completeTask).not.toHaveBeenCalled();
+      expect(context.taskManager.failTask).not.toHaveBeenCalled();
     });
 
     it('should return false for extraction completion without taskId', async () => {

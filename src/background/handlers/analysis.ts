@@ -2,7 +2,8 @@ import { Message, Comment, Task, CrawlingConfig } from '@/types';
 import { HandlerContext } from './types';
 import { Logger } from '@/utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
-import { AI as AI_CONST, ANALYSIS_FORMAT, TEXT, TIMEOUT } from '@/config/constants';
+import { AI as AI_CONST, ANALYSIS_FORMAT, TEXT } from '@/config/constants';
+import { createAnalysisDeadline } from './utils/task-completion';
 import { getDomain } from '@/utils/url';
 import { generateUniqueId } from '@/utils/id-generator';
 import { runWithConcurrencyLimit } from '@/utils/promise';
@@ -61,9 +62,8 @@ export async function handleStartAnalysis(
 
     // Analyze tasks have no tab to watch, so enforce a wall clock instead of
     // letting a wedged LLM call leave the task running forever.
-    const wallClock = new AbortController();
-    const wallClockTimer = setTimeout(() => wallClock.abort(), TIMEOUT.ANALYSIS_TASK_COMPLETION_MS);
-    const combinedSignal = AbortSignal.any([signal, wallClock.signal]);
+    const deadline = createAnalysisDeadline(signal);
+    const combinedSignal = deadline.signal;
 
     try {
       context.taskManager.updateDetailedProgress(taskId, {
@@ -190,25 +190,35 @@ export async function handleStartAnalysis(
           if (!historyItem) {
             throw createHistoryNotFoundError(historyId);
           }
-          historyItem.analysis = result;
-          historyItem.analyzedAt = Date.now();
-          const updated = await context.historyStore.updateHistory(historyItem);
+          if (combinedSignal.aborted) {
+            throw new ExtensionError(
+              ErrorCode.TASK_CANCELLED,
+              'Analysis cancelled before persistence',
+            );
+          }
+          const updated = await context.historyStore.updateHistory(
+            { ...historyItem, analysis: result, analyzedAt: Date.now() },
+            combinedSignal,
+          );
           if (!updated) {
             throw createHistoryNotFoundError(historyId);
           }
         } else {
-          await context.historyStore.createHistory({
-            id: generateUniqueId('history'),
-            url: task.url,
-            title: `Analysis ${new Date().toLocaleString()}`,
-            platform: task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM,
-            postContent: metadata?.postContent,
-            extractedAt: Date.now(),
-            commentsCount: comments.length,
-            comments,
-            analysis: result,
-            analyzedAt: Date.now(),
-          });
+          await context.historyStore.createHistory(
+            {
+              id: generateUniqueId('history'),
+              url: task.url,
+              title: `Analysis ${new Date().toLocaleString()}`,
+              platform: task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM,
+              postContent: metadata?.postContent,
+              extractedAt: Date.now(),
+              commentsCount: comments.length,
+              comments,
+              analysis: result,
+              analyzedAt: Date.now(),
+            },
+            combinedSignal,
+          );
         }
       } catch (saveError) {
         Logger.error('[AnalysisHandler] Failed to save analysis history', { saveError });
@@ -224,12 +234,9 @@ export async function handleStartAnalysis(
         title,
       };
     } catch (error) {
-      if (wallClock.signal.aborted && !signal.aborted) {
-        throw new ExtensionError(ErrorCode.TIMEOUT_ERROR, TEXT.ANALYSIS_TASK_TIMEOUT);
-      }
-      throw error;
+      return deadline.rethrow(error);
     } finally {
-      clearTimeout(wallClockTimer);
+      deadline.dispose();
     }
   });
 
@@ -268,87 +275,98 @@ export async function handleGenerateDynamicReport(
   const taskId = context.taskManager.createTask('analyze', historyItem.url || TEXT.UNKNOWN, domain);
 
   context.taskManager.setExecutor(taskId, async (_task: Task, signal: AbortSignal) => {
-    const settings = await context.settingsStore.getSettings();
-    const analysisModel = settings.aiModel;
+    const deadline = createAnalysisDeadline(signal);
+    signal = deadline.signal;
+    try {
+      const historyItem = await context.historyStore.getHistoryItem(historyId);
+      if (!historyItem) throw createHistoryNotFoundError(historyId);
+      if (!historyItem.analysis?.markdown) {
+        throw new ExtensionError(
+          ErrorCode.VALIDATION_ERROR,
+          'Analysis report does not exist for this history item',
+        );
+      }
+      const source = {
+        markdown: historyItem.analysis.markdown,
+        generatedAt: historyItem.analysis.generatedAt,
+      };
+      const settings = await context.settingsStore.getSettings();
+      const analysisModel = settings.aiModel;
 
-    context.taskManager.updateDetailedProgress(taskId, {
-      stage: 'generating',
-      current: 0,
-      total: 100,
-      stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.GENERATING_DYNAMIC,
-    });
+      context.taskManager.updateDetailedProgress(taskId, {
+        stage: 'generating',
+        current: 0,
+        total: 100,
+        stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.GENERATING_DYNAMIC,
+      });
 
-    const dynamicResult = await context.commentAnalyzer.generateDynamicHtml(
-      historyItem.analysis!.markdown,
-      analysisModel,
-      settings.dynamicReportPromptTemplate,
-      settings.language,
-      {
-        platform: historyItem.platform,
-        url: historyItem.url,
-        title: historyItem.title,
-        videoTime: historyItem.videoTime,
-        postContent: historyItem.postContent,
-      },
-      historyItem.commentsCount || historyItem.comments?.length || 0,
-      signal,
-      settings.aiTimeout,
-      (progress) => {
-        context.taskManager.updateDetailedProgress(taskId, {
-          stage: 'generating',
-          current: Math.min(
-            100,
-            Math.floor(
-              progress.charactersReceived / AI_CONST.DYNAMIC_REPORT_PROGRESS_CHARS_PER_UNIT,
+      const dynamicResult = await context.commentAnalyzer.generateDynamicHtml(
+        historyItem.analysis!.markdown,
+        analysisModel,
+        settings.dynamicReportPromptTemplate,
+        settings.language,
+        {
+          platform: historyItem.platform,
+          url: historyItem.url,
+          title: historyItem.title,
+          videoTime: historyItem.videoTime,
+          postContent: historyItem.postContent,
+        },
+        historyItem.commentsCount || historyItem.comments?.length || 0,
+        signal,
+        settings.aiTimeout,
+        (progress) => {
+          context.taskManager.updateDetailedProgress(taskId, {
+            stage: 'generating',
+            current: Math.min(
+              100,
+              Math.floor(
+                progress.charactersReceived / AI_CONST.DYNAMIC_REPORT_PROGRESS_CHARS_PER_UNIT,
+              ),
             ),
-          ),
-          total: 100,
-          stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
-          stageMessageParams: {
-            [AI_CONST.ANALYSIS_PROGRESS_PARAM_KEYS.CHARACTERS]: progress.charactersReceived,
-          },
-        });
-      },
-      historyItem.comments,
-    );
-
-    if (!dynamicResult.html) {
-      throw new ExtensionError(ErrorCode.AI_INVALID_RESPONSE, 'Empty HTML received from model');
-    }
-    if (signal.aborted) {
-      throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Report generation cancelled');
-    }
-
-    const latestItem = await context.historyStore.getHistoryItem(historyId);
-    if (!latestItem) {
-      throw createHistoryNotFoundError(historyId);
-    }
-    if (!latestItem.analysis) {
-      throw new ExtensionError(
-        ErrorCode.VALIDATION_ERROR,
-        'Analysis report does not exist for this history item',
+            total: 100,
+            stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
+            stageMessageParams: {
+              [AI_CONST.ANALYSIS_PROGRESS_PARAM_KEYS.CHARACTERS]: progress.charactersReceived,
+            },
+          });
+        },
+        historyItem.comments,
       );
+
+      if (!dynamicResult.html) {
+        throw new ExtensionError(ErrorCode.AI_INVALID_RESPONSE, 'Empty HTML received from model');
+      }
+      if (signal.aborted) {
+        throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Report generation cancelled');
+      }
+
+      const updated = await context.historyStore.updateDynamicReport(
+        historyId,
+        source,
+        dynamicResult,
+        signal,
+      );
+      if (!updated) {
+        throw createHistoryNotFoundError(historyId);
+      }
+
+      context.taskManager.updateDetailedProgress(taskId, {
+        stage: 'complete',
+        current: 100,
+        total: 100,
+        stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.DYNAMIC_COMPLETE,
+      });
+
+      return {
+        tokensUsed: dynamicResult.tokensUsed,
+        title: historyItem.title,
+      };
+    } catch (error) {
+      return deadline.rethrow(error);
+    } finally {
+      deadline.dispose();
     }
-
-    latestItem.analysis.dynamicHtml = dynamicResult.html;
-    latestItem.analysis.tokensUsed =
-      (latestItem.analysis.tokensUsed || 0) + dynamicResult.tokensUsed;
-    const updated = await context.historyStore.updateHistory(latestItem);
-    if (!updated) {
-      throw createHistoryNotFoundError(historyId);
-    }
-
-    context.taskManager.updateDetailedProgress(taskId, {
-      stage: 'complete',
-      current: 100,
-      total: 100,
-      stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.DYNAMIC_COMPLETE,
-    });
-
-    return {
-      tokensUsed: dynamicResult.tokensUsed,
-      title: latestItem.title,
-    };
   });
 
   return { success: true, taskId };

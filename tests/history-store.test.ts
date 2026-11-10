@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { HistoryStore } from '../src/background/storage/HistoryStore';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import Dexie, { type PromiseExtended } from 'dexie';
+import { HistoryStore, CommentsInsightDatabase } from '../src/background/storage/HistoryStore';
 import { HISTORY } from '../src/config/constants';
 import { ErrorCode } from '../src/utils/errors';
 import type { HistoryItem } from '../src/types';
@@ -22,6 +23,54 @@ function createHistoryItem(
   };
 }
 
+// Keep the real IndexedDB transaction alive while the test controls the exact
+// read/write await boundary. No product promise or storage operation is mocked out.
+function gateHistoryOperation(
+  tableName: 'history' | 'historyMetadata',
+  operation: 'get' | 'put' | 'count' | 'bulkDelete',
+) {
+  let enter!: () => void;
+  let release!: () => void;
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let restoreOperation: () => void = () => {};
+  const originalTransaction = CommentsInsightDatabase.prototype.transaction;
+  const transactionSpy = vi
+    .spyOn(CommentsInsightDatabase.prototype, 'transaction')
+    .mockImplementationOnce(function (
+      this: CommentsInsightDatabase,
+      ...args: Parameters<typeof originalTransaction>
+    ) {
+      type Operation = (...args: unknown[]) => PromiseExtended<unknown>;
+      const table = this[tableName] as unknown as Record<string, Operation>;
+      const originalOperation = table[operation];
+      const operationSpy = vi.spyOn(table, operation).mockImplementationOnce(function (
+        this: typeof table,
+        ...operationArgs: unknown[]
+      ) {
+        return originalOperation.apply(this, operationArgs).then((result) => {
+          enter();
+          return Dexie.waitFor(gate).then(() => result);
+        });
+      });
+      restoreOperation = () => operationSpy.mockRestore();
+      return originalTransaction.apply(this, args);
+    });
+  return {
+    entered,
+    release,
+    restore: () => {
+      release();
+      restoreOperation();
+      transactionSpy.mockRestore();
+    },
+  };
+}
+
 vi.mock('../src/utils/logger', () => ({
   Logger: {
     info: vi.fn(),
@@ -33,12 +82,18 @@ vi.mock('../src/utils/logger', () => ({
 
 describe('HistoryStore (IndexedDB)', () => {
   let store: HistoryStore;
+  let database: CommentsInsightDatabase;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     vi.unstubAllGlobals();
     store = new HistoryStore();
+    database = new CommentsInsightDatabase();
     await store.clearAllHistory();
+  });
+
+  afterEach(() => {
+    database.close();
   });
 
   it('should save and retrieve a history item', async () => {
@@ -118,6 +173,145 @@ describe('HistoryStore (IndexedDB)', () => {
     expect(await store.getHistoryItem(invalidItem.id)).toBeUndefined();
     expect((await store.getHistoryMetadataPage(0, 10)).total).toBe(0);
   });
+
+  it('rolls back a cancelled create after both tables were written but before commit', async () => {
+    const item = createHistoryItem('cancelled_create', 1000, {
+      analysis: { markdown: '# New analysis', generatedAt: 2000, tokensUsed: 5 },
+      analyzedAt: 2000,
+    });
+    const controller = new AbortController();
+    const gate = gateHistoryOperation('history', 'count');
+    try {
+      const writing = store.createHistory(item, controller.signal);
+      const rejected = expect(writing).rejects.toMatchObject({ code: ErrorCode.TASK_CANCELLED });
+      await gate.entered;
+      controller.abort();
+      gate.release();
+      await rejected;
+    } finally {
+      gate.restore();
+    }
+
+    expect(await store.getHistoryItem(item.id)).toBeUndefined();
+    expect(await database.historyMetadata.get(item.id)).toBeUndefined();
+  });
+
+  it.each([
+    ['history', 'get'],
+    ['history', 'put'],
+    ['historyMetadata', 'put'],
+  ] as const)(
+    'rolls back a cancelled update after %s.%s without changing analysis or metadata',
+    async (table, operation) => {
+      const original = createHistoryItem('cancelled_update', 1000, {
+        title: 'Original title',
+        analysis: { markdown: '# Original analysis', generatedAt: 1000, tokensUsed: 3 },
+        analyzedAt: 1000,
+      });
+      await store.createHistory(original);
+      const metadataBefore = await database.historyMetadata.get(original.id);
+      const replacement = {
+        ...original,
+        title: 'Must not overwrite',
+        analysis: { markdown: '# Cancelled analysis', generatedAt: 2000, tokensUsed: 9 },
+        analyzedAt: 2000,
+      };
+      const controller = new AbortController();
+      const gate = gateHistoryOperation(table, operation);
+      try {
+        const writing = store.updateHistory(replacement, controller.signal);
+        const rejected = expect(writing).rejects.toMatchObject({ code: ErrorCode.TASK_CANCELLED });
+        await gate.entered;
+        controller.abort();
+        gate.release();
+        await rejected;
+      } finally {
+        gate.restore();
+      }
+
+      expect(await store.getHistoryItem(original.id)).toEqual(original);
+      expect(await database.historyMetadata.get(original.id)).toEqual(metadataBefore);
+    },
+  );
+
+  it('rolls back cancelled create and retention deletions after the final pruning await', async () => {
+    const historyConfig = HISTORY as { MAX_ITEMS: number };
+    const originalLimit = historyConfig.MAX_ITEMS;
+    historyConfig.MAX_ITEMS = 1;
+    try {
+      const original = createHistoryItem('retained_original', 1000);
+      await store.createHistory(original);
+      const metadataBefore = await database.historyMetadata.get(original.id);
+      const controller = new AbortController();
+      const gate = gateHistoryOperation('historyMetadata', 'bulkDelete');
+      try {
+        const writing = store.createHistory(
+          createHistoryItem('cancelled_prune', 2000),
+          controller.signal,
+        );
+        const rejected = expect(writing).rejects.toMatchObject({ code: ErrorCode.TASK_CANCELLED });
+        await gate.entered;
+        controller.abort();
+        gate.release();
+        await rejected;
+      } finally {
+        gate.restore();
+      }
+      expect(await store.getHistoryItem(original.id)).toEqual(original);
+      expect(await database.historyMetadata.get(original.id)).toEqual(metadataBefore);
+      expect(await store.getHistoryItem('cancelled_prune')).toBeUndefined();
+      expect(await database.historyMetadata.get('cancelled_prune')).toBeUndefined();
+    } finally {
+      historyConfig.MAX_ITEMS = originalLimit;
+    }
+  });
+
+  it.each(['create', 'update'] as const)(
+    'preserves a committed %s when cancellation arrives after commit',
+    async (operation) => {
+      const original = createHistoryItem(`committed_${operation}`, 1000);
+      if (operation === 'update') {
+        await store.createHistory(original);
+      }
+      const item = {
+        ...original,
+        title: 'Committed analysis',
+        analysis: { markdown: '# Committed', generatedAt: 2000, tokensUsed: 7 },
+        analyzedAt: 2000,
+      };
+      const controller = new AbortController();
+      const originalTransaction = CommentsInsightDatabase.prototype.transaction;
+      const transactionSpy = vi
+        .spyOn(CommentsInsightDatabase.prototype, 'transaction')
+        .mockImplementationOnce(function (
+          this: CommentsInsightDatabase,
+          ...args: Parameters<typeof originalTransaction>
+        ) {
+          return originalTransaction.apply(this, args).then((result) => {
+            // Dexie's transaction promise resolves only after IndexedDB commits.
+            controller.abort();
+            return result;
+          });
+        });
+      try {
+        if (operation === 'create') {
+          await expect(store.createHistory(item, controller.signal)).resolves.toBeUndefined();
+        } else {
+          await expect(store.updateHistory(item, controller.signal)).resolves.toBe(true);
+        }
+      } finally {
+        transactionSpy.mockRestore();
+      }
+      expect(controller.signal.aborted).toBe(true);
+      expect(await store.getHistoryItem(item.id)).toEqual(item);
+      expect(await database.historyMetadata.get(item.id)).toMatchObject({
+        id: item.id,
+        title: item.title,
+        analyzedAt: 2000,
+        hasAnalysis: true,
+      });
+    },
+  );
 
   it('should retrieve latest history id by url', async () => {
     await store.createHistory({

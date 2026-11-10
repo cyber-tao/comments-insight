@@ -82,7 +82,9 @@ export class TaskManager {
   private currentTaskId: string | null = null;
   private abortControllers: Map<string, AbortController> = new Map();
   private executors: Map<string, TaskExecutor> = new Map();
-  private isProcessing = false;
+  // The executor chain owns its slot until finally, even after cancellation.
+  // Recovered completions have no executor chain and must release their own slot.
+  private executingTaskId: string | null = null;
   private pendingTaskUpdates: Map<string, Task> = new Map();
   private taskUpdateThrottleTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly persistence: TaskPersistence;
@@ -399,7 +401,9 @@ export class TaskManager {
     const notificationTitle = result?.title?.trim() || task.url;
     this.notificationService.showTaskCompleted(task.type, notificationTitle, result?.commentsCount);
 
-    this.currentTaskId = null;
+    if (this.currentTaskId === taskId) {
+      this.currentTaskId = null;
+    }
     this.notifyTaskUpdate(task, { immediate: true });
     this.autoCleanFinishedTasks();
     this.saveState().catch((error) => {
@@ -435,7 +439,9 @@ export class TaskManager {
 
     this.notificationService.showTaskFailed(task.type, error);
 
-    this.currentTaskId = null;
+    if (this.currentTaskId === taskId) {
+      this.currentTaskId = null;
+    }
     this.notifyTaskUpdate(task, { immediate: true });
     this.autoCleanFinishedTasks();
     this.saveState().catch((err) => {
@@ -466,7 +472,11 @@ export class TaskManager {
       this.queue.splice(queueIndex, 1);
     }
 
-    const wasCurrentTask = this.currentTaskId === taskId;
+    // An ordinary executor still owns cleanup until its finally runs. A
+    // completion recovered after restart has no such chain to release its slot.
+    if (this.currentTaskId === taskId && this.executingTaskId !== taskId) {
+      this.currentTaskId = null;
+    }
     this.executors.delete(taskId);
 
     this.abortTask(taskId);
@@ -483,9 +493,7 @@ export class TaskManager {
     this.saveState().catch((error) => {
       Logger.warn('[TaskManager] Failed to persist cancelled task state', { error });
     });
-    if (!wasCurrentTask) {
-      this.processQueue();
-    }
+    this.processQueue();
   }
 
   /**
@@ -537,7 +545,15 @@ export class TaskManager {
       task.message = undefined;
       task.interruptedByRestart = undefined;
       task.endTime = undefined;
-      this.currentTaskId = taskId;
+      // A late completion can coexist with a newer active executor. It owns a
+      // cancellation signal, but may only claim the running slot when it is free.
+      if (!this.abortControllers.has(taskId)) {
+        this.registerAbortController(taskId, new AbortController());
+      }
+      if (this.currentTaskId === null && this.executingTaskId === null) {
+        this.currentTaskId = taskId;
+      }
+      this.queue = this.queue.filter((id) => id !== taskId);
       this.notifyTaskUpdate(task, { immediate: true });
       // Recovery is itself a key transition; persist immediately so the next
       // service worker eviction does not roll back to "interrupted" state.
@@ -628,25 +644,22 @@ export class TaskManager {
    * Process the task queue
    */
   private processQueue(): void {
-    if (this.isProcessing || this.currentTaskId !== null || this.queue.length === 0) {
+    if (this.executingTaskId !== null || this.currentTaskId !== null || this.queue.length === 0) {
       return;
     }
 
-    this.isProcessing = true;
-
     const nextIndex = this.queue.findIndex((id) => this.executors.has(id));
     if (nextIndex === -1) {
-      this.isProcessing = false;
       return;
     }
 
     const nextTaskId = this.queue.splice(nextIndex, 1)[0];
     const executor = this.executors.get(nextTaskId);
     if (!executor) {
-      this.isProcessing = false;
       return;
     }
 
+    this.executingTaskId = nextTaskId;
     // Cancellation must own the signal before persistence can yield.
     const controller = new AbortController();
     this.registerAbortController(nextTaskId, controller);
@@ -683,7 +696,9 @@ export class TaskManager {
         if (this.currentTaskId === nextTaskId) {
           this.currentTaskId = null;
         }
-        this.isProcessing = false;
+        if (this.executingTaskId === nextTaskId) {
+          this.executingTaskId = null;
+        }
         this.processQueue();
       });
   }

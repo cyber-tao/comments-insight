@@ -5,8 +5,9 @@ import {
   handleAIExtractContent,
 } from '@/background/handlers/analysis';
 import { HandlerContext } from '@/background/handlers/types';
-import { ErrorCode } from '@/utils/errors';
+import { ExtensionError, ErrorCode } from '@/utils/errors';
 import { ANALYSIS_FORMAT } from '@/config/constants';
+import type { HistoryItem, Task } from '@/types';
 
 vi.mock('@/utils/logger', () => ({
   Logger: {
@@ -40,6 +41,7 @@ function createMockContext(overrides: Partial<HandlerContext> = {}): HandlerCont
       getHistoryItem: vi.fn().mockResolvedValue(null),
       createHistory: vi.fn().mockResolvedValue(undefined),
       updateHistory: vi.fn().mockResolvedValue(true),
+      updateDynamicReport: vi.fn().mockResolvedValue(true),
     },
     commentAnalyzer: {
       analyzeComments: vi.fn().mockResolvedValue({
@@ -201,9 +203,127 @@ describe('analysis handlers', () => {
           comments: message.payload.comments,
           analysis: analysisResult,
         }),
+        expect.any(AbortSignal),
       );
       expect(localContext.historyStore.updateHistory).not.toHaveBeenCalled();
     });
+
+    it('does not mutate or save reanalysis cancelled while re-reading the history target', async () => {
+      const original: HistoryItem = {
+        id: 'history_read_gate',
+        url: 'https://example.com/post',
+        title: 'Original',
+        platform: 'example.com',
+        extractedAt: 1000,
+        commentsCount: 0,
+        comments: [],
+        analysis: { markdown: '# Original', generatedAt: 1000, tokensUsed: 3 },
+        analyzedAt: 1000,
+      };
+      const originalSnapshot = structuredClone(original);
+      let enterRead!: () => void;
+      let releaseRead!: (item: HistoryItem) => void;
+      const entered = new Promise<void>((resolve) => {
+        enterRead = resolve;
+      });
+      const readGate = new Promise<HistoryItem>((resolve) => {
+        releaseRead = resolve;
+      });
+      const localContext = createMockContext({
+        historyStore: {
+          ...createMockContext().historyStore,
+          getHistoryItem: vi
+            .fn()
+            .mockResolvedValueOnce(original)
+            .mockImplementationOnce(() => {
+              enterRead();
+              return readGate;
+            }),
+        },
+      } as unknown as Partial<HandlerContext>);
+      await handleStartAnalysis(
+        { type: 'START_ANALYSIS', payload: { comments: [], historyId: original.id } },
+        localContext,
+      );
+      const executor = vi.mocked(localContext.taskManager.setExecutor).mock.calls[0][1];
+      const controller = new AbortController();
+      const task: Task = {
+        id: 'task_analysis_123',
+        type: 'analyze',
+        status: 'running',
+        url: original.url,
+        platform: original.platform,
+        progress: 0,
+        startTime: Date.now(),
+        tokensUsed: 0,
+      };
+      const running = executor(task, controller.signal);
+      const rejected = expect(running).rejects.toMatchObject({ code: ErrorCode.TASK_CANCELLED });
+      try {
+        await entered;
+        controller.abort();
+        releaseRead(original);
+        await rejected;
+      } finally {
+        releaseRead(original);
+      }
+      expect(original).toEqual(originalSnapshot);
+      expect(localContext.historyStore.updateHistory).not.toHaveBeenCalled();
+      expect(localContext.historyStore.createHistory).not.toHaveBeenCalled();
+    });
+
+    it.each(['create', 'update'] as const)(
+      'passes the task signal into %s and preserves storage cancellation errors',
+      async (operation) => {
+        const history: HistoryItem = {
+          id: 'history_signal',
+          url: 'https://example.com/post',
+          title: 'Post',
+          platform: 'example.com',
+          extractedAt: 1000,
+          commentsCount: 0,
+          comments: [],
+        };
+        const localContext = createMockContext();
+        vi.mocked(localContext.historyStore.getHistoryItem).mockResolvedValue(history);
+        const controller = new AbortController();
+        let persistenceSignal: AbortSignal | undefined;
+        const cancelledWrite = async (_item: HistoryItem, signal?: AbortSignal) => {
+          persistenceSignal = signal;
+          controller.abort();
+          throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'History write cancelled');
+        };
+        if (operation === 'create')
+          vi.mocked(localContext.historyStore.createHistory).mockImplementation(cancelledWrite);
+        else vi.mocked(localContext.historyStore.updateHistory).mockImplementation(cancelledWrite);
+        await handleStartAnalysis(
+          {
+            type: 'START_ANALYSIS',
+            payload: { comments: [], historyId: operation === 'update' ? history.id : undefined },
+          },
+          localContext,
+        );
+        const executor = vi.mocked(localContext.taskManager.setExecutor).mock.calls[0][1];
+        const task: Task = {
+          id: 'task_analysis_123',
+          type: 'analyze',
+          status: 'running',
+          url: history.url,
+          platform: history.platform,
+          progress: 0,
+          startTime: Date.now(),
+          tokensUsed: 0,
+        };
+        await expect(executor(task, controller.signal)).rejects.toMatchObject({
+          code: ErrorCode.TASK_CANCELLED,
+          message: 'History write cancelled',
+        });
+        expect(persistenceSignal).toBe(
+          vi.mocked(localContext.commentAnalyzer.analyzeComments).mock.calls[0][5],
+        );
+        expect(persistenceSignal?.aborted).toBe(true);
+      },
+    );
 
     it('should fail analysis when history target is missing', async () => {
       const localContext = createMockContext({
@@ -321,6 +441,7 @@ describe('analysis handlers', () => {
       });
       expect(localContext.historyStore.updateHistory).toHaveBeenCalledWith(
         expect.objectContaining({ id: historyItem.id, analysis: analysisResult }),
+        expect.any(AbortSignal),
       );
       expect(localContext.historyStore.createHistory).not.toHaveBeenCalled();
     });
@@ -487,14 +608,19 @@ describe('analysis handlers', () => {
       // Execute the task executor
       const taskResult = await executorFn({ id: 'task_dynamic_123' }, new AbortController().signal);
       expect(taskResult.tokensUsed).toBe(50);
-      expect(localContext.historyStore.updateHistory).toHaveBeenCalledWith(
-        expect.objectContaining({
-          analysis: expect.objectContaining({
-            dynamicHtml: '<!DOCTYPE html><html><body>Dashboard</body></html>',
-            tokensUsed: 150,
-          }),
-        }),
+      expect(localContext.historyStore.updateDynamicReport).toHaveBeenCalledWith(
+        mockHistoryItem.id,
+        {
+          markdown: mockHistoryItem.analysis.markdown,
+          generatedAt: mockHistoryItem.analysis.generatedAt,
+        },
+        {
+          html: '<!DOCTYPE html><html><body>Dashboard</body></html>',
+          tokensUsed: 50,
+        },
+        expect.any(AbortSignal),
       );
+      expect(localContext.historyStore.updateHistory).not.toHaveBeenCalled();
       expect(localContext.historyStore.createHistory).not.toHaveBeenCalled();
     });
 
@@ -525,7 +651,7 @@ describe('analysis handlers', () => {
         historyStore: {
           ...createMockContext().historyStore,
           getHistoryItem: vi.fn().mockResolvedValue(historyItem),
-          updateHistory: vi.fn().mockResolvedValue(false),
+          updateDynamicReport: vi.fn().mockResolvedValue(false),
         },
         commentAnalyzer: {
           generateDynamicHtml: vi.fn().mockResolvedValue({
@@ -549,7 +675,8 @@ describe('analysis handlers', () => {
         code: ErrorCode.TASK_NOT_FOUND,
         message: `History item not found: ${historyItem.id}`,
       });
-      expect(localContext.historyStore.updateHistory).toHaveBeenCalledOnce();
+      expect(localContext.historyStore.updateDynamicReport).toHaveBeenCalledOnce();
+      expect(localContext.historyStore.updateHistory).not.toHaveBeenCalled();
       expect(localContext.historyStore.createHistory).not.toHaveBeenCalled();
     });
   });

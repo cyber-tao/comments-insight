@@ -192,6 +192,62 @@ describe('TaskManager', () => {
       expect(recovered?.interruptedByRestart).toBeUndefined();
     });
 
+    it.each(['complete', 'fail', 'cancel'] as const)(
+      'keeps the newer running slot when a recovered task will %s',
+      async (ending) => {
+        const now = Date.now();
+        mockStorageGet.mockResolvedValueOnce({
+          [STORAGE.TASK_STATE_KEY]: {
+            tasks: [
+              {
+                id: 'task_restored',
+                type: 'extract',
+                status: 'running',
+                url: 'https://example.com/restored',
+                platform: 'Generic',
+                progress: 50,
+                startTime: now - 1000,
+                tokensUsed: 0,
+              },
+            ],
+            queue: [],
+            currentTaskId: 'task_restored',
+            savedAt: now - 100,
+          },
+        });
+        const manager = new TaskManager(mockNotificationService as any, {
+          enablePersistence: true,
+        });
+        await manager.initialize();
+        const activeId = manager.createTask('extract', 'https://example.com/new', 'Generic');
+        await manager.startTask(activeId);
+        manager.recoverInterruptedTask('task_restored');
+        const signal = manager.getAbortSignal('task_restored');
+        expect(signal).toBeInstanceOf(AbortSignal);
+        await vi.waitFor(() => {
+          const calls = mockStorageSet.mock.calls;
+          expect(calls[calls.length - 1][0][STORAGE.TASK_STATE_KEY].currentTaskId).toBe(activeId);
+        });
+
+        if (ending === 'complete') manager.completeTask('task_restored', {});
+        if (ending === 'fail') manager.failTask('task_restored', 'Restored failure');
+        if (ending === 'cancel') manager.cancelTask('task_restored');
+        expect(signal?.aborted).toBe(ending === 'cancel');
+        const queuedId = manager.createTask('analyze', 'https://example.com/queued', 'Generic');
+        const executor = vi.fn().mockResolvedValue({});
+        manager.setExecutor(queuedId, executor);
+        await vi.waitFor(() => {
+          const calls = mockStorageSet.mock.calls;
+          expect(calls[calls.length - 1][0][STORAGE.TASK_STATE_KEY].currentTaskId).toBe(activeId);
+        });
+        expect(executor).not.toHaveBeenCalled();
+        expect(manager.getTask(queuedId)?.status).toBe('pending');
+
+        manager.completeTask(activeId, {});
+        await vi.waitFor(() => expect(manager.getTask(queuedId)?.status).toBe('completed'));
+      },
+    );
+
     it('should normalize malformed persisted state instead of crashing', async () => {
       mockStorageGet.mockResolvedValue({
         [STORAGE.TASK_STATE_KEY]: {

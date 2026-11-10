@@ -137,16 +137,26 @@ function requireValidHistoryItem(value: unknown): HistoryItem {
   });
 }
 
+function checkHistoryWriteCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'History write cancelled');
+  }
+}
+
 export class HistoryStore {
-  async createHistory(item: HistoryItem): Promise<void> {
+  async createHistory(item: HistoryItem, signal?: AbortSignal): Promise<void> {
     const historyId = getHistoryId(item);
     try {
       const sanitizedItem = requireValidHistoryItem(item);
       const prunedCount = await db.transaction('rw', db.history, db.historyMetadata, async () => {
+        checkHistoryWriteCancelled(signal);
         await db.history.add(sanitizedItem);
+        checkHistoryWriteCancelled(signal);
         await db.historyMetadata.put(toHistoryMetadata(sanitizedItem));
+        checkHistoryWriteCancelled(signal);
 
         const count = await db.history.count();
+        checkHistoryWriteCancelled(signal);
         if (count <= HISTORY.MAX_ITEMS) {
           return 0;
         }
@@ -156,9 +166,12 @@ export class HistoryStore {
           .reverse()
           .offset(HISTORY.MAX_ITEMS)
           .toArray();
+        checkHistoryWriteCancelled(signal);
         const idsToDelete = itemsToDelete.map((historyItem) => historyItem.id);
         await db.history.bulkDelete(idsToDelete);
+        checkHistoryWriteCancelled(signal);
         await db.historyMetadata.bulkDelete(idsToDelete);
+        checkHistoryWriteCancelled(signal);
         return idsToDelete.length;
       });
 
@@ -173,18 +186,22 @@ export class HistoryStore {
     }
   }
 
-  async updateHistory(item: HistoryItem): Promise<boolean> {
+  async updateHistory(item: HistoryItem, signal?: AbortSignal): Promise<boolean> {
     const historyId = getHistoryId(item);
     try {
       const sanitizedItem = requireValidHistoryItem(item);
       const updated = await db.transaction('rw', db.history, db.historyMetadata, async () => {
+        checkHistoryWriteCancelled(signal);
         const existingItem = await db.history.get(sanitizedItem.id);
+        checkHistoryWriteCancelled(signal);
         if (!existingItem) {
           return false;
         }
 
         await db.history.put(sanitizedItem);
+        checkHistoryWriteCancelled(signal);
         await db.historyMetadata.put(toHistoryMetadata(sanitizedItem));
+        checkHistoryWriteCancelled(signal);
         return true;
       });
 
@@ -196,6 +213,45 @@ export class HistoryStore {
       const wrappedError = toHistoryWriteError('Failed to update history', error, { historyId });
       Logger.error('[HistoryStore] Failed to update history', { error: wrappedError });
       throw wrappedError;
+    }
+  }
+
+  async updateDynamicReport(
+    id: string,
+    source: { markdown: string; generatedAt: number },
+    result: { html: string; tokensUsed: number },
+    signal?: AbortSignal,
+  ): Promise<boolean> {
+    try {
+      return await db.transaction('rw', db.history, db.historyMetadata, async () => {
+        const stored = await db.history.get(id);
+        if (!stored) return false;
+        if (signal?.aborted)
+          throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Report generation cancelled');
+        const item = requireValidHistoryItem(stored);
+        if (
+          !item.analysis ||
+          item.analysis.markdown !== source.markdown ||
+          item.analysis.generatedAt !== source.generatedAt
+        ) {
+          throw new ExtensionError(
+            ErrorCode.VALIDATION_ERROR,
+            'Source analysis changed; generate the report again',
+          );
+        }
+        item.analysis = {
+          ...item.analysis,
+          dynamicHtml: result.html,
+          tokensUsed: item.analysis.tokensUsed + result.tokensUsed,
+        };
+        await db.history.put(requireValidHistoryItem(item));
+        await db.historyMetadata.put(toHistoryMetadata(item));
+        if (signal?.aborted)
+          throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Report generation cancelled');
+        return true;
+      });
+    } catch (error) {
+      throw toHistoryWriteError('Failed to update dynamic report', error, { historyId: id });
     }
   }
 

@@ -123,6 +123,9 @@ export async function handleExtractionCompleted(
     let normalizedPostTime = postInfo?.videoTime;
     try {
       const settings = await context.settingsStore.getSettings();
+      if (taskSignal?.aborted || task.status !== 'running') {
+        return { success: false };
+      }
       if (settings.normalizeTimestamps && rawComments.length > 0) {
         const totalCount = rawComments.length + (postInfo?.videoTime ? 1 : 0);
         context.taskManager.updateDetailedProgress(taskId, {
@@ -144,6 +147,9 @@ export async function handleExtractionCompleted(
           settings.aiTimeout,
           taskSignal,
         );
+        if (taskSignal?.aborted || task.status !== 'running') {
+          return { success: false };
+        }
         normalizedPostTime = await context.timestampNormalizer.normalizeSingleTimestamp(
           postInfo?.videoTime,
           settings.aiModel,
@@ -158,7 +164,7 @@ export async function handleExtractionCompleted(
         });
       }
     } catch (normalizationError) {
-      if (taskSignal?.aborted) {
+      if (taskSignal?.aborted || task.status !== 'running') {
         return { success: false };
       }
       Logger.warn('[ExtractionHandler] Timestamp normalization failed', {
@@ -182,8 +188,15 @@ export async function handleExtractionCompleted(
       comments: normalizedComments,
     };
     try {
-      await context.historyStore.createHistory(historyItem);
+      await context.historyStore.createHistory(historyItem, taskSignal);
     } catch (saveError) {
+      if (
+        taskSignal?.aborted ||
+        task.status !== 'running' ||
+        (saveError instanceof ExtensionError && saveError.code === ErrorCode.TASK_CANCELLED)
+      ) {
+        return { success: false };
+      }
       Logger.error('[ExtractionHandler] Failed to save extraction history', { saveError });
       const historyError = new ExtensionError(
         ErrorCode.STORAGE_WRITE_ERROR,
