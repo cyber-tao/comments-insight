@@ -2,7 +2,8 @@ import { z } from 'zod';
 import type { Message, ProgressStage } from '@/types';
 import { ExtensionError, ErrorCode } from './errors';
 import { settingsPatchSchema } from '@/utils/storage-validation';
-import { ANALYSIS_FORMAT } from '@/config/constants';
+import { ANALYSIS_FORMAT, UI_LIMITS } from '@/config/constants';
+import { isWithinValidationBudget, VALIDATION_BUDGET } from '@/utils/validation-budget';
 
 const nonEmptyString = z.string().trim().min(1);
 const looseObjectSchema = z.object({}).passthrough();
@@ -30,7 +31,7 @@ const coreCommentSchema = z.object({
   timestamp: z.string().catch(ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP),
   likes: z.number().catch(0),
   content: z.string(),
-  replies: z.array(looseObjectSchema),
+  replies: z.array(looseObjectSchema).max(UI_LIMITS.MAX_COMMENTS_MAX),
 });
 
 const historyExportSchema = z.object({ type: z.literal('settings') });
@@ -44,7 +45,7 @@ const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
       timestamp: z.number().finite(),
       message: z.string(),
       context: z.string().optional(),
-      data: z.record(z.unknown()).optional(),
+      data: z.record(z.string(), z.unknown()).optional(),
       stack: z.string().optional(),
     }),
   }),
@@ -125,7 +126,7 @@ const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
   EXTRACTION_COMPLETED: z.object({
     taskId: nonEmptyString,
     success: z.boolean(),
-    comments: z.array(looseObjectSchema).optional(),
+    comments: z.array(looseObjectSchema).max(UI_LIMITS.MAX_COMMENTS_MAX).optional(),
     postInfo: z
       .object({
         url: z.string().optional(),
@@ -142,7 +143,7 @@ const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
     error: z.string().optional(),
   }),
   START_ANALYSIS: z.object({
-    comments: z.array(coreCommentSchema),
+    comments: z.array(coreCommentSchema).max(UI_LIMITS.MAX_COMMENTS_MAX),
     historyId: nonEmptyString.optional(),
     promptTemplate: z.string().optional(),
     language: z.string().optional(),
@@ -155,7 +156,7 @@ const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
     prompt: nonEmptyString,
   }),
   AI_EXTRACT_CONTENT: z.object({
-    chunks: z.array(z.string()).min(1),
+    chunks: z.array(z.string()).max(VALIDATION_BUDGET.maxArrayLength).min(1),
     systemPrompt: z.string().optional(),
   }),
   GET_TASK_STATUS: z
@@ -220,6 +221,16 @@ export function validateMessagePayload(message: Message): Message {
       ErrorCode.VALIDATION_ERROR,
       `Unknown message type has no payload schema: ${message.type}`,
       { type: message.type },
+    );
+  }
+
+  if (!isWithinValidationBudget(message.payload)) {
+    throw new ExtensionError(
+      ErrorCode.VALIDATION_ERROR,
+      `Payload for ${message.type} is too large`,
+      {
+        type: message.type,
+      },
     );
   }
 

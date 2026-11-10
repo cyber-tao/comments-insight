@@ -1018,6 +1018,20 @@ describe('SettingsStore decryption resilience', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
   });
 
+  it('rejects oversized settings writes and imports before validation or storage', async () => {
+    mockStorageGet.mockResolvedValue({});
+    const store = new SettingsStore(createEncryptionServiceMock());
+    const oversized = new Array(10_001).fill({ invalid: true });
+
+    await expect(store.saveSettings({ crawlingConfigs: oversized } as never)).rejects.toMatchObject(
+      { code: 'VALIDATION_ERROR', message: 'Settings data is too large' },
+    );
+    await expect(
+      store.importSettings(JSON.stringify({ crawlingConfigs: oversized })),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR', message: 'Settings import is too large' });
+    expect(mockStorageSet).not.toHaveBeenCalled();
+  });
+
   it('creates secret and salt in a single atomic storage write', async () => {
     const { EncryptionService: RealEncryptionService } =
       await import('../src/background/storage/EncryptionService');

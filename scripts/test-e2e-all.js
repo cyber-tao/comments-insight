@@ -203,12 +203,28 @@ async function runAllAutomatedTests() {
 
     const optionsErrors = [];
     optionsPage.on('pageerror', (err) => optionsErrors.push(err.message));
+    await optionsPage.evaluateOnNewDocument(() => {
+      globalThis.e2eCspViolations = [];
+      document.addEventListener('securitypolicyviolation', (event) => {
+        globalThis.e2eCspViolations.push({
+          directive: event.effectiveDirective,
+          blocked: event.blockedURI,
+        });
+      });
+    });
 
     await optionsPage.goto(optionsUrl, { waitUntil: 'domcontentloaded' });
     await delay(1500);
 
     assert(optionsErrors.length === 0, `Options page had JS errors: ${optionsErrors.join(', ')}`);
     recordPass('OptionsPage', 'Loaded Options page cleanly without console errors');
+    const evalViolations = await optionsPage.evaluate(() =>
+      globalThis.e2eCspViolations.filter(
+        (event) => event.directive.startsWith('script-src') && event.blocked === 'eval',
+      ),
+    );
+    assert(evalViolations.length === 0, 'Options page attempted CSP-blocked dynamic code');
+    recordPass('OptionsPage', 'Validated schemas without a CSP-blocked eval probe');
 
     const mockRule = {
       id: 'local_test_rule',

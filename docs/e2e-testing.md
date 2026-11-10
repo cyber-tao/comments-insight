@@ -30,7 +30,7 @@ bun run test:e2e
 The suite starts a local HTTP page containing a fixed comment fixture, creates a temporary browser profile, loads the extension, and verifies:
 
 1. the background service worker starts;
-2. Options renders and settings round-trip through `chrome.storage.local`;
+2. Options renders without CSP-blocked dynamic code and settings round-trip through `chrome.storage.local`;
 3. History renders a valid Dexie/IndexedDB report and filters the saved record;
 4. model-provided Markdown images become alt text, raw HTML and JavaScript links stay inert, and ordinary text links remain user-operated; all HTTP(S) requests from the report page are intercepted and any attempted automatic request fails the test;
 5. Logs and Popup render without page errors; a real background diagnostic is persisted through the local writer, and clearing indexed/orphaned logs preserves settings, token usage, and the log-level setting;

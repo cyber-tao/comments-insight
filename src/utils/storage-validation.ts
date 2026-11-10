@@ -14,6 +14,9 @@ import type {
 import { Logger } from '@/utils/logger';
 import { AI, ANALYSIS_FORMAT, RETRY, TIMEOUT, UI_LIMITS } from '@/config/constants';
 
+// MV3 extension pages prohibit eval: prevent Zod's object JIT from probing it.
+z.config({ jitless: true });
+
 export type StoredAiLogEntry = {
   type: 'extraction' | 'analysis';
   timestamp: number;

@@ -24,6 +24,7 @@ import {
   settingsPatchSchema,
 } from '@/utils/storage-validation';
 import { normalizeAiApiUrl } from '@/utils/url';
+import { isWithinValidationBudget } from '@/utils/validation-budget';
 import {
   crawlingConfigsFingerprint,
   hasPersistedCrawlingConfigChanged,
@@ -328,6 +329,9 @@ export class SettingsStore {
       const updatesCrawlingConfigs =
         Object.prototype.hasOwnProperty.call(settings, 'crawlingConfigs') &&
         Array.isArray(settings.crawlingConfigs);
+      if (!isWithinValidationBudget(settings)) {
+        throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Settings data is too large');
+      }
       const settingsResult = settingsPatchSchema.safeParse(settings);
       if (!settingsResult.success) {
         throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Invalid settings data', {
@@ -535,6 +539,9 @@ export class SettingsStore {
   async importSettings(data: string): Promise<void> {
     return this.saveMutex.withLock(async () => {
       try {
+        if (data.length > 10_000_000) {
+          throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Settings import is too large');
+        }
         let parsed: unknown;
         try {
           parsed = JSON.parse(data);
@@ -544,6 +551,9 @@ export class SettingsStore {
           });
         }
 
+        if (!isWithinValidationBudget(parsed)) {
+          throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Settings import is too large');
+        }
         // Reuse the same zod-driven sanitizer that protects stored settings, so
         // imported payloads cannot inject unknown fields or bypass type checks.
         const sanitized = sanitizeStoredSettings(parsed);
