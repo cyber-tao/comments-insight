@@ -6,6 +6,7 @@ import * as React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import History from '../src/history/History';
+import type { Comment } from '../src/types';
 
 const extensionApiMock = vi.hoisted(() => ({
   getSettings: vi.fn(),
@@ -20,6 +21,7 @@ const loggerMock = vi.hoisted(() => ({
   error: vi.fn(),
 }));
 
+const detailPanelMock = vi.hoisted(() => vi.fn());
 const useHistoryDataMock = vi.hoisted(() => vi.fn());
 const useHistoryReanalyzeMock = vi.hoisted(() => vi.fn());
 const useThemeMock = vi.hoisted(() => vi.fn());
@@ -90,16 +92,8 @@ vi.mock('../src/history/components/HistorySidebar', () => ({
 }));
 
 vi.mock('../src/history/components/HistoryDetailPanel', () => ({
-  HistoryDetailPanel: ({
-    selectedItemError,
-    totalComments,
-    totalPages,
-    onViewModeChange,
-    onReanalyze,
-    onCommentSearchTermChange,
-    onCommentsPerPageChange,
-    onCurrentPageChange,
-  }: {
+  HistoryDetailPanel: (props: {
+    paginatedComments: Comment[];
     selectedItemError: string | null;
     totalComments: number;
     totalPages: number;
@@ -108,19 +102,32 @@ vi.mock('../src/history/components/HistoryDetailPanel', () => ({
     onCommentSearchTermChange: (value: string) => void;
     onCommentsPerPageChange: (value: number) => void;
     onCurrentPageChange: (value: number) => void;
-  }) => (
-    <div>
+  }) => {
+    detailPanelMock(props);
+    const {
+      selectedItemError,
+      totalComments,
+      totalPages,
+      onViewModeChange,
+      onReanalyze,
+      onCommentSearchTermChange,
+      onCommentsPerPageChange,
+      onCurrentPageChange,
+    } = props;
+    return (
       <div>
-        detail:{totalComments}:{totalPages}
+        <div>
+          detail:{totalComments}:{totalPages}
+        </div>
+        <div>detail-error:{selectedItemError ?? 'none'}</div>
+        <button onClick={() => onViewModeChange('comments')}>detail-view</button>
+        <button onClick={onReanalyze}>detail-reanalyze</button>
+        <button onClick={() => onCommentSearchTermChange('needle')}>detail-search</button>
+        <button onClick={() => onCommentsPerPageChange(10)}>detail-per-page</button>
+        <button onClick={() => onCurrentPageChange(3)}>detail-page</button>
       </div>
-      <div>detail-error:{selectedItemError ?? 'none'}</div>
-      <button onClick={() => onViewModeChange('comments')}>detail-view</button>
-      <button onClick={onReanalyze}>detail-reanalyze</button>
-      <button onClick={() => onCommentSearchTermChange('needle')}>detail-search</button>
-      <button onClick={() => onCommentsPerPageChange(10)}>detail-per-page</button>
-      <button onClick={() => onCurrentPageChange(3)}>detail-page</button>
-    </div>
-  ),
+    );
+  },
 }));
 
 vi.mock('react-i18next', () => ({
@@ -254,6 +261,61 @@ describe('History page', () => {
     expect(firstHistoryDataCall?.onResetListScroll).toBe(lastHistoryDataCall?.onResetListScroll);
     expect(firstHistoryDataCall?.onResetListScroll).toBe(lastHistoryDataCall?.onResetListScroll);
   });
+
+  it.each(['username', 'content', 'timestamp'] as const)(
+    'keeps the complete ancestor path when only a grandchild %s matches the search',
+    async (field) => {
+      const leaf: Comment = {
+        id: 'grandchild',
+        username: 'Leaf author',
+        content: 'Leaf body',
+        timestamp: '2026-02-01T00:00:00Z',
+        likes: 0,
+        replies: [],
+      };
+      leaf[field] = field === 'timestamp' ? 'needle-time' : 'NEEDLE';
+      const sibling: Comment = {
+        ...leaf,
+        id: 'unmatched-leaf',
+        username: 'Other author',
+        content: 'Other body',
+        timestamp: '2026-02-02T00:00:00Z',
+      };
+      const child: Comment = {
+        ...sibling,
+        id: 'child',
+        username: 'Child author',
+        replies: [leaf, sibling],
+      };
+      const parent: Comment = {
+        ...sibling,
+        id: 'parent',
+        username: 'Parent author',
+        replies: [child, { ...sibling, id: 'other-child' }],
+      };
+      const historyData = useHistoryDataMock();
+      const sourceComments = [parent, { ...sibling, id: 'other-root' }];
+      useHistoryDataMock.mockReturnValue({
+        ...historyData,
+        selectedItem: { ...historyData.selectedItem, comments: sourceComments },
+      });
+      render(<History />);
+      await waitFor(() => expect(extensionApiMock.getSettings).toHaveBeenCalledOnce());
+
+      fireEvent.click(screen.getByText('detail-search'));
+
+      const props = detailPanelMock.mock.lastCall?.[0] as {
+        paginatedComments: Comment[];
+        totalComments: number;
+      };
+      expect(props.totalComments).toBe(1);
+      expect(props.paginatedComments).toEqual([
+        { ...parent, replies: [{ ...child, replies: [leaf] }] },
+      ]);
+      expect(sourceComments[0].replies).toHaveLength(2);
+      expect(sourceComments[0].replies[0].replies).toHaveLength(2);
+    },
+  );
 
   it('logs settings load failures without breaking render', async () => {
     extensionApiMock.getSettings.mockRejectedValueOnce(new Error('boom'));

@@ -127,30 +127,19 @@ const History: React.FC = () => {
     const searchLower = searchTerm.toLowerCase();
 
     const filterRecursive = (items: Comment[]): Comment[] =>
-      items
-        .filter((comment) => {
-          const commentTimestamp = formatCommentTimestamp(comment.timestamp);
-          const commentMatches =
-            comment.username.toLowerCase().includes(searchLower) ||
-            comment.content.toLowerCase().includes(searchLower) ||
-            (commentTimestamp && commentTimestamp.toLowerCase().includes(searchLower));
+      items.reduce<Comment[]>((matches, comment) => {
+        const replies = filterRecursive(comment.replies || []);
+        const commentTimestamp = formatCommentTimestamp(comment.timestamp);
+        const commentMatches =
+          comment.username.toLowerCase().includes(searchLower) ||
+          comment.content.toLowerCase().includes(searchLower) ||
+          (commentTimestamp && commentTimestamp.toLowerCase().includes(searchLower));
 
-          const replyMatches =
-            comment.replies &&
-            comment.replies.some(
-              (reply) =>
-                reply.username.toLowerCase().includes(searchLower) ||
-                reply.content.toLowerCase().includes(searchLower) ||
-                (formatCommentTimestamp(reply.timestamp) &&
-                  formatCommentTimestamp(reply.timestamp).toLowerCase().includes(searchLower)),
-            );
-
-          return commentMatches || replyMatches;
-        })
-        .map((comment) => ({
-          ...comment,
-          replies: comment.replies ? filterRecursive(comment.replies) : [],
-        }));
+        if (commentMatches || replies.length > 0) {
+          matches.push({ ...comment, replies });
+        }
+        return matches;
+      }, []);
 
     return filterRecursive(comments);
   }, []);
