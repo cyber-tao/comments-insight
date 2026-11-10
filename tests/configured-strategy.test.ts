@@ -3,12 +3,62 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ConfiguredStrategy } from '@/content/strategies/ConfiguredStrategy';
 import { PageController } from '@/content/PageController';
 import { setExtractionActive, resetExtractionState } from '@/content/extractionState';
-import { CrawlingConfig } from '@/types';
+import type { Comment, CrawlingConfig, SelectorRule } from '@/types';
+import { CommentExtractor } from '@/content/CommentExtractor';
+import { DOM, EXTRACTION, MESSAGES } from '@/config/constants';
+import defaultRules from '@/config/default_rules.json';
+import { findElementsByRule, readField } from '@/content/utils/selector-rule';
+
+const sendMessageMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/utils/chrome-message', () => ({ sendMessage: sendMessageMock }));
+vi.mock('@/utils/logger', () => ({
+  Logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+function createConfig(type: SelectorRule['type'] = 'css'): CrawlingConfig {
+  const rule = (css: string, xpath: string): SelectorRule => ({
+    type,
+    selector: type === 'css' ? css : xpath,
+  });
+  return {
+    id: `test-${type}`,
+    domain: 'example.com',
+    container: rule('#comments-root', "//section[@id='comments-root']"),
+    item: rule('.comment-item', ".//*[@class='comment-item']"),
+    fields: [
+      { name: 'username', rule: rule('.user', ".//*[@class='user']") },
+      { name: 'content', rule: rule('.text', ".//*[@class='text']") },
+    ],
+    replies: {
+      container: rule('.reply-container', ".//*[@class='reply-container']"),
+      item: rule('.reply-item', ".//*[@class='reply-item']"),
+      fields: [
+        { name: 'username', rule: rule('.user', ".//*[@class='user']") },
+        { name: 'content', rule: rule('.text', ".//*[@class='text']") },
+      ],
+    },
+    lastUpdated: 1,
+  };
+}
+
+function commentTree(comments: Comment[]): unknown[] {
+  return comments.map((comment) => [comment.username, commentTree(comment.replies)]);
+}
+
+async function executeStrategy(strategy: ConfiguredStrategy, maxComments = 1): Promise<Comment[]> {
+  const result = strategy.execute(maxComments, 'example.com');
+  await vi.runAllTimersAsync();
+  return result;
+}
 
 describe('ConfiguredStrategy', () => {
   let mockPageController: PageController;
 
   beforeEach(() => {
+    vi.useFakeTimers();
+    sendMessageMock.mockReset();
+    sendMessageMock.mockResolvedValue({ success: true });
     document.body.innerHTML = '';
     setExtractionActive(true, 'test-task');
     mockPageController = {
@@ -18,6 +68,8 @@ describe('ConfiguredStrategy', () => {
 
   afterEach(() => {
     resetExtractionState();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('should extract comments using standard CSS selectors', async () => {
@@ -47,7 +99,7 @@ describe('ConfiguredStrategy', () => {
     };
 
     const strategy = new ConfiguredStrategy(mockPageController, config);
-    const comments = await strategy.execute(10, 'example.com');
+    const comments = await executeStrategy(strategy, 10);
 
     expect(comments).toHaveLength(1);
     expect(comments[0].username).toBe('Alice');
@@ -88,7 +140,7 @@ describe('ConfiguredStrategy', () => {
     };
 
     const strategy = new ConfiguredStrategy(mockPageController, config);
-    const comments = await strategy.execute(10, 'example.com');
+    const comments = await executeStrategy(strategy, 10);
 
     expect(comments).toHaveLength(1);
     expect(comments[0].username).toBe('Bob');
@@ -159,7 +211,7 @@ describe('ConfiguredStrategy', () => {
     };
 
     const strategy = new ConfiguredStrategy(mockPageController, config);
-    const comments = await strategy.execute(10, 'example.com');
+    const comments = await executeStrategy(strategy, 10);
 
     expect(comments).toHaveLength(1);
     expect(comments[0].username).toBe('Parent');
@@ -167,5 +219,348 @@ describe('ConfiguredStrategy', () => {
     expect(comments[0].replies[0].username).toBe('Child');
     expect(comments[0].replies[0].content).toBe('Sub reply');
     expect(comments[0].replies[0].likes).toBe(5);
+  });
+
+  it.each([2, 3])('preserves %i Reddit levels with the unmodified bundled rule', async (levels) => {
+    const grandchild =
+      levels === 3
+        ? '<shreddit-comment><a noun="comment_author">Grandchild</a><div slot="comment">Third level</div></shreddit-comment>'
+        : '';
+    document.body.innerHTML = `
+      <shreddit-comment-tree>
+        <shreddit-comment>
+          <a noun="comment_author">Parent</a><div slot="comment">Main comment</div>
+          <shreddit-comment>
+            <a noun="comment_author">Child</a><div slot="comment">Child comment</div>
+            ${grandchild}
+          </shreddit-comment>
+          <shreddit-comment><a noun="comment_author">Sibling reply</a><div slot="comment">Other reply</div></shreddit-comment>
+        </shreddit-comment>
+        <shreddit-comment><a noun="comment_author">Other root</a><div slot="comment">Another thread</div></shreddit-comment>
+      </shreddit-comment-tree>
+    `;
+    const config = defaultRules.find((rule) => rule.id === 'reddit') as CrawlingConfig;
+    const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 2);
+
+    expect(commentTree(comments)).toEqual([
+      [
+        'Parent',
+        [
+          ['Child', levels === 3 ? [['Grandchild', []]] : []],
+          ['Sibling reply', []],
+        ],
+      ],
+      ['Other root', []],
+    ]);
+  });
+
+  it.each(['css', 'xpath'] as const)(
+    'includes reply containers that are themselves items with %s selectors',
+    async (type) => {
+      document.body.innerHTML = `
+        <section id="comments-root">
+          <article class="node"><b class="user">Parent</b><p class="text">Main</p>
+            <article class="node"><b class="user">Child</b><p class="text">Reply</p>
+              <article class="node"><b class="user">Grandchild</b><p class="text">Nested</p></article>
+            </article>
+            <article class="node"><b class="user">Sibling</b><p class="text">Other reply</p></article>
+          </article>
+          <article class="node"><b class="user">Other root</b><p class="text">Other thread</p></article>
+        </section>
+      `;
+      const config = createConfig(type);
+      config.item = { type, selector: type === 'css' ? '.node' : ".//*[@class='node']" };
+      config.replies!.container = config.item;
+      config.replies!.item = config.item;
+
+      const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 2);
+
+      expect(commentTree(comments)).toEqual([
+        [
+          'Parent',
+          [
+            ['Child', [['Grandchild', []]]],
+            ['Sibling', []],
+          ],
+        ],
+        ['Other root', []],
+      ]);
+    },
+  );
+
+  it.each(['css', 'xpath', 'shadow'] as const)(
+    'collects sibling and overlapping reply containers with nearest-parent ownership (%s)',
+    async (mode) => {
+      const html = `
+        <section id="comments-root">
+          <article class="comment-item"><b class="user">Parent</b><p class="text">Main</p>
+            <div class="reply-container">
+              <article class="reply-item"><b class="user">Child</b><p class="text">Reply</p>
+                <div class="reply-container">
+                  <article class="reply-item"><b class="user">Grandchild</b><p class="text">Nested</p></article>
+                </div>
+              </article>
+            </div>
+            <div class="reply-container">
+              <article class="reply-item"><b class="user">Sibling A</b><p class="text">Other reply</p></article>
+            </div>
+            <div class="reply-container"><div class="reply-container">
+              <article class="reply-item"><b class="user">Sibling B</b><p class="text">Overlapping containers</p></article>
+            </div></div>
+          </article>
+        </section>
+      `;
+      if (mode === 'shadow') {
+        const host = document.createElement('test-comments');
+        document.body.append(host);
+        host.attachShadow({ mode: 'open' }).innerHTML = html;
+        const parent = host.shadowRoot!.querySelector('.comment-item')!;
+        const replyHost = document.createElement('reply-host');
+        const replyRoot = replyHost.attachShadow({ mode: 'open' });
+        for (const group of Array.from(parent.children).filter((node) =>
+          node.matches('.reply-container'),
+        )) {
+          replyRoot.append(group);
+        }
+        parent.append(replyHost);
+      } else {
+        document.body.innerHTML = html;
+      }
+      const config = createConfig(mode === 'xpath' ? 'xpath' : 'css');
+      const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config));
+
+      expect(commentTree(comments)).toEqual([
+        [
+          'Parent',
+          [
+            ['Child', [['Grandchild', []]]],
+            ['Sibling A', []],
+            ['Sibling B', []],
+          ],
+        ],
+      ]);
+    },
+  );
+
+  it('does not promote nested shadow comments to top-level roots', async () => {
+    document.body.innerHTML =
+      '<section id="comments-root"><article class="node"><b class="user">Parent</b><p class="text">Main</p><reply-host></reply-host></article></section>';
+    document.querySelector('reply-host')!.attachShadow({ mode: 'open' }).innerHTML = `
+      <article class="node"><b class="user">Child</b><p class="text">Reply</p>
+        <article class="node"><b class="user">Grandchild</b><p class="text">Nested</p></article>
+      </article>
+      <article class="node"><b class="user">Sibling</b><p class="text">Other reply</p></article>
+    `;
+    const config = createConfig();
+    config.item = { type: 'css', selector: '.node' };
+    config.replies!.container = config.item;
+    config.replies!.item = config.item;
+
+    const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 10);
+
+    expect(commentTree(comments)).toEqual([
+      [
+        'Parent',
+        [
+          ['Child', [['Grandchild', []]]],
+          ['Sibling', []],
+        ],
+      ],
+    ]);
+  });
+
+  it.each(['css', 'xpath'] as const)(
+    'keeps selector helper self-exclusion unchanged (%s)',
+    (type) => {
+      document.body.innerHTML =
+        '<article class="node"><article class="node">Child</article></article>';
+      const parent = document.querySelector('article')!;
+      const rule: SelectorRule = {
+        type,
+        selector: type === 'css' ? '.node' : ".//*[@class='node']",
+      };
+
+      expect(findElementsByRule(parent, rule)).toEqual([parent.firstElementChild]);
+      expect(findElementsByRule(parent.firstElementChild!, rule)).toEqual([]);
+      expect(readField(parent.firstElementChild!, { name: 'content', rule })).toBeNull();
+    },
+  );
+
+  it('extracts a second comment when a virtualized list reuses the same DOM node', async () => {
+    document.body.innerHTML =
+      '<section id="comments-root"><article class="comment-item" data-comment-id="first"><b class="user">First user</b><p class="text">First comment</p></article></section>';
+    const item = document.querySelector<HTMLElement>('.comment-item')!;
+    item.scrollIntoView = vi.fn();
+    vi.mocked(mockPageController.scrollContainer).mockImplementationOnce(async () => {
+      item.dataset.commentId = 'second';
+      item.querySelector('.user')!.textContent = 'Second user';
+      item.querySelector('.text')!.textContent = 'Second comment';
+      return { contentChanged: true, scrollPositionChanged: true, hasMore: true };
+    });
+
+    const comments = await executeStrategy(
+      new ConfiguredStrategy(mockPageController, createConfig()),
+      2,
+    );
+
+    expect(comments.map((comment) => comment.content)).toEqual(['First comment', 'Second comment']);
+    expect(item.scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries an empty skeleton instead of marking it as permanently processed', async () => {
+    document.body.innerHTML =
+      '<section id="comments-root"><article class="comment-item"></article></section>';
+    const item = document.querySelector<HTMLElement>('.comment-item')!;
+    item.scrollIntoView = vi.fn();
+    vi.mocked(mockPageController.scrollContainer).mockImplementationOnce(async () => {
+      item.innerHTML = '<b class="user">Loaded user</b><p class="text">Loaded content</p>';
+      return { contentChanged: true, scrollPositionChanged: true, hasMore: true };
+    });
+
+    const comments = await executeStrategy(
+      new ConfiguredStrategy(mockPageController, createConfig()),
+    );
+
+    expect(comments).toHaveLength(1);
+    expect(comments[0].content).toBe('Loaded content');
+    expect(item.scrollIntoView).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries an author-only skeleton until its content arrives without consuming max=1', async () => {
+    document.body.innerHTML =
+      '<section id="comments-root"><article class="comment-item"><b class="user">Early author</b><p class="text"></p></article></section>';
+    const item = document.querySelector<HTMLElement>('.comment-item')!;
+    item.scrollIntoView = vi.fn();
+    vi.mocked(mockPageController.scrollContainer).mockImplementationOnce(async () => {
+      item.querySelector('.text')!.textContent = 'Content loaded later';
+      return { contentChanged: true };
+    });
+
+    const comments = await executeStrategy(
+      new ConfiguredStrategy(mockPageController, createConfig()),
+      1,
+    );
+
+    expect(comments).toHaveLength(1);
+    expect(comments[0]).toMatchObject({
+      username: 'Early author',
+      content: 'Content loaded later',
+    });
+    expect(item.scrollIntoView).toHaveBeenCalledTimes(2);
+    expect(mockPageController.scrollContainer).toHaveBeenCalledOnce();
+  });
+
+  it('does not re-scroll or re-click an unchanged successfully extracted item', async () => {
+    document.body.innerHTML =
+      '<section id="comments-root"><article class="comment-item"><b class="user">User</b><p class="text">Content</p><button class="expand">Expand</button></article></section>';
+    const item = document.querySelector<HTMLElement>('.comment-item')!;
+    const button = document.querySelector<HTMLButtonElement>('button')!;
+    item.scrollIntoView = vi.fn();
+    const click = vi.spyOn(button, 'click');
+    button.addEventListener('click', () => {
+      item.insertAdjacentHTML(
+        'beforeend',
+        '<div class="reply-container"><article class="reply-item"><b class="user">Loaded child</b><p class="text">Expanded reply</p></article></div>',
+      );
+    });
+    const config = createConfig();
+    config.replies!.expandBtn = { type: 'css', selector: '.expand' };
+
+    const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 2);
+
+    expect(comments).toHaveLength(1);
+    expect(mockPageController.scrollContainer).toHaveBeenCalledTimes(
+      DOM.NO_NEW_COMMENTS_THRESHOLD + 1,
+    );
+    expect(item.scrollIntoView).toHaveBeenCalledOnce();
+    expect(click).toHaveBeenCalledOnce();
+    expect(commentTree(comments)).toEqual([['User', [['Loaded child', []]]]]);
+  });
+
+  it('refreshes and deduplicates a previously extracted parent when its reply fields change', async () => {
+    document.body.innerHTML =
+      '<section id="comments-root"><article class="comment-item"><b class="user">Parent</b><p class="text">Main</p><div class="reply-container"><article class="reply-item"><b class="user">Child</b><p class="text">Reply</p><button class="expand">Child expand</button></article></div></article></section>';
+    const childClick = vi.spyOn(document.querySelector<HTMLButtonElement>('button')!, 'click');
+    const config = createConfig();
+    config.replies!.expandBtn = { type: 'css', selector: '.expand' };
+    vi.mocked(mockPageController.scrollContainer).mockImplementationOnce(async () => {
+      document
+        .querySelector('.reply-container')!
+        .insertAdjacentHTML(
+          'beforeend',
+          '<article class="reply-item"><b class="user">Second child</b><p class="text">New reply</p></article>',
+        );
+      return { contentChanged: true, scrollPositionChanged: true, hasMore: true };
+    });
+
+    const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 2);
+
+    expect(commentTree(comments)).toEqual([
+      [
+        'Parent',
+        [
+          ['Child', []],
+          ['Second child', []],
+        ],
+      ],
+    ]);
+    expect(childClick).toHaveBeenCalledOnce();
+  });
+
+  it.each([1, 3])(
+    'stops processing a visible batch as soon as %i roots are collected',
+    async (maxComments) => {
+      document.body.innerHTML = `<section id="comments-root">${Array.from({ length: 6 }, (_, index) => `<article class="comment-item"><b class="user">User ${index}</b><p class="text">Comment ${index}</p></article>`).join('')}</section>`;
+      const scrollIntoView = vi.fn();
+      for (const element of document.querySelectorAll<HTMLElement>('.comment-item')) {
+        element.scrollIntoView = scrollIntoView;
+      }
+      const strategy = new ConfiguredStrategy(mockPageController, createConfig());
+      const extract = vi.spyOn(
+        strategy as unknown as {
+          extractCommentFromElement(
+            element: HTMLElement,
+            platform: string,
+            signal?: AbortSignal,
+          ): Promise<Comment | null>;
+        },
+        'extractCommentFromElement',
+      );
+
+      const comments = await executeStrategy(strategy, maxComments);
+
+      expect(comments).toHaveLength(maxComments);
+      expect(extract).toHaveBeenCalledTimes(maxComments);
+      expect(scrollIntoView).toHaveBeenCalledTimes(maxComments);
+      expect(mockPageController.scrollContainer).not.toHaveBeenCalled();
+    },
+  );
+
+  it('honors the caller target including CommentExtractor validation buffering without processing the rest of the batch', async () => {
+    const config = createConfig();
+    const target =
+      1 +
+      Math.min(
+        EXTRACTION.VALIDATION_BUFFER_MAX,
+        Math.max(EXTRACTION.VALIDATION_BUFFER_MIN, Math.ceil(EXTRACTION.VALIDATION_BUFFER_RATIO)),
+      );
+    document.body.innerHTML = `<section id="comments-root">${Array.from({ length: target + 5 }, (_, index) => `<article class="comment-item"><b class="user">User ${index}</b><p class="text">Comment ${index}</p></article>`).join('')}</section>`;
+    const scrollIntoView = vi.fn();
+    for (const element of document.querySelectorAll<HTMLElement>('.comment-item')) {
+      element.scrollIntoView = scrollIntoView;
+    }
+    sendMessageMock.mockImplementation(async (message: { type: string }) =>
+      message.type === MESSAGES.GET_CRAWLING_CONFIG ? { config } : { success: true },
+    );
+    const execute = vi.spyOn(ConfiguredStrategy.prototype, 'execute');
+    const result = new CommentExtractor(mockPageController).extractWithAI(1, 'example.com');
+    await vi.runAllTimersAsync();
+    const comments = await result;
+
+    expect(execute).toHaveBeenCalledWith(target, 'example.com', undefined, undefined);
+    expect(comments).toHaveLength(1);
+    expect(comments[0].content).toBe('Comment 0');
+    expect(scrollIntoView).toHaveBeenCalledTimes(target);
+    expect(mockPageController.scrollContainer).not.toHaveBeenCalled();
   });
 });

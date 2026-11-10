@@ -19,7 +19,8 @@ import { getCurrentHostname } from '@/utils/url';
 import { DOMSimplifier } from '../DOMSimplifier';
 import { Tokenizer } from '@/utils/tokenizer';
 import { ContentAIService } from '../ContentAIService';
-import { querySelectorAllDeep, querySelectorDeep, queryXPathAll } from '@/utils/dom-query';
+import { querySelectorDeep } from '@/utils/dom-query';
+import { findElementByRule, findElementsByRule, readField } from '../utils/selector-rule';
 import { checkAborted } from '../utils/abort';
 
 export type ConfigGenerationCallback = (progress: number, message: string) => void;
@@ -289,7 +290,7 @@ export class AIConfigGenerator {
     }
 
     const config = response.config;
-    if (!config.container || !config.item || !config.fields) {
+    if (!config.container || !config.item || !Array.isArray(config.fields)) {
       throw new ExtensionError(
         ErrorCode.DOM_ANALYSIS_FAILED,
         'Generated config missing required fields (container, item, fields)',
@@ -306,13 +307,11 @@ export class AIConfigGenerator {
       'Verifying AI-generated schema on live page...',
     );
     try {
-      const items =
-        config.item.type === 'xpath'
-          ? queryXPathAll(document, config.item.selector).slice(0, LIMITS.SELECTOR_TEST_MAX_RESULTS)
-          : querySelectorAllDeep(document, config.item.selector, {
-              maxResults: LIMITS.SELECTOR_TEST_MAX_RESULTS,
-              signal,
-            });
+      checkAborted(signal);
+      const container = findElementByRule(document, config.container);
+      const items = container
+        ? findElementsByRule(container, config.item, LIMITS.SELECTOR_TEST_MAX_RESULTS)
+        : [];
       if (items.length === 0) {
         Logger.warn(
           '[AIConfigGenerator] Self-correction failed: Generated config item selector found NO elements.',
@@ -321,6 +320,15 @@ export class AIConfigGenerator {
         throw new ExtensionError(
           ErrorCode.DOM_ANALYSIS_FAILED,
           'Generated configuration is invalid (hallucination detected: zero matched elements).',
+        );
+      }
+      const requiredFields = ['username', 'content'].map((name) =>
+        config.fields.find((field) => field && field.name === name),
+      );
+      if (!items.some((item) => requiredFields.every((field) => Boolean(readField(item, field))))) {
+        throw new ExtensionError(
+          ErrorCode.DOM_ANALYSIS_FAILED,
+          'Generated configuration cannot extract username and content from the same comment',
         );
       }
       Logger.info(

@@ -6,7 +6,6 @@ import {
   FieldSelector,
   FieldValidationStatus,
   ReplyConfig,
-  SelectorRule,
 } from '../../types';
 import { PageController } from '../PageController';
 import { Logger } from '../../utils/logger';
@@ -21,32 +20,13 @@ import {
   REGEX,
 } from '@/config/constants';
 import { sendMessage } from '@/utils/chrome-message';
-import { querySelectorAllDeep, querySelectorDeep, queryXPathAll } from '@/utils/dom-query';
+import { findElementByRule, findElementsByRule, readField } from '../utils/selector-rule';
 import { generateCommentHash } from '@/utils/comment-hash';
 import { checkAborted, abortableDelay } from '../utils/abort';
 
-function findElementByRule(
-  context: Document | Element,
-  rule?: SelectorRule | null,
-): Element | null {
-  if (!rule || !rule.selector) return null;
-  if (rule.type === 'xpath') {
-    const results = queryXPathAll(context, rule.selector);
-    return results.length > 0 ? results[0] : null;
-  }
-  return querySelectorDeep(context, rule.selector);
-}
-
-function findElementsByRule(context: Document | Element, rule?: SelectorRule | null): Element[] {
-  if (!rule || !rule.selector) return [];
-  if (rule.type === 'xpath') {
-    return queryXPathAll(context, rule.selector);
-  }
-  return querySelectorAllDeep(context, rule.selector);
-}
-
 export class ConfiguredStrategy implements ExtractionStrategy {
   private validationRecorded = false;
+  private processedVersions = new WeakMap<Element, { version: string; comment: Comment }>();
 
   constructor(
     private pageController: PageController,
@@ -54,7 +34,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
   ) {}
 
   cleanup(): void {
-    // No specific resources to cleanup for this strategy
+    this.processedVersions = new WeakMap();
   }
 
   async execute(
@@ -90,8 +70,8 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
     const allComments: Comment[] = [];
     let noNewCommentsCount = 0;
-    const seenHashes = new Set<string>();
-    const processedElements = new WeakSet<HTMLElement>();
+    const commentsByHash = new Map<string, Comment>();
+    this.processedVersions = new WeakMap();
 
     onProgress?.(
       EXTRACTION_PROGRESS.MIN + EXTRACTION_PROGRESS.STEPS.EXTRACTING_START,
@@ -113,30 +93,26 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
       // 1. Extract visible items (use deep query for Shadow DOM support and xpath)
       const items = findElementsByRule(container, this.config.item);
+      const itemSet = new Set(items);
       let added = 0;
 
       for (const itemElement of items) {
-        // 0. Skip if already processed (prevent re-clicking expand buttons)
-        if (processedElements.has(itemElement as HTMLElement)) {
-          continue;
-        }
-        processedElements.add(itemElement as HTMLElement);
+        // The caller already includes its validation buffer in this target.
+        if (allComments.length >= maxComments) break;
+        checkAborted(signal);
 
-        // DOM Hierarchy Check:
-        // If this element is nested inside another element that ALSO matches the item selector,
-        // then it is a child/reply, not a top-level comment. We should skip it here.
-        // It will be extracted when we process its parent.
-        if (this.config.item.type !== 'xpath') {
-          const parentItem = itemElement.parentElement?.closest(this.config.item.selector);
-          if (parentItem && container.contains(parentItem)) {
-            continue;
-          }
-        }
+        // Use matched elements rather than CSS closest() so XPath and shadow
+        // descendants have the same nearest-parent ownership.
+        if (this.nearestParentItem(itemElement, itemSet)) continue;
 
-        // Scroll element into view to trigger lazy loading before extraction
+        const version = this.getElementVersion(itemElement);
+        if (this.processedVersions.get(itemElement)?.version === version) continue;
+
+        // Scroll element into view to trigger lazy loading before extraction.
         (itemElement as HTMLElement).scrollIntoView?.({ behavior: 'smooth', block: 'center' });
         await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal);
 
+        const fieldsVersion = this.getFieldVersion(itemElement, this.config.fields);
         const comment = await this.extractCommentFromElement(
           itemElement as HTMLElement,
           platform,
@@ -144,11 +120,24 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         );
         if (comment) {
           const hash = generateCommentHash(comment);
-          if (!seenHashes.has(hash)) {
-            comment.id = hash;
-            seenHashes.add(hash);
+          comment.id = hash;
+          const existing = commentsByHash.get(hash);
+          if (existing) {
+            Object.assign(existing, comment, {
+              replies: this.mergeReplies(existing.replies, comment.replies),
+            });
+          } else {
+            commentsByHash.set(hash, comment);
             allComments.push(comment);
             added++;
+          }
+          // Expansion may have changed the reply fields. Only remember a
+          // successfully extracted, post-expansion version; skeletons retry.
+          if (fieldsVersion === this.getFieldVersion(itemElement, this.config.fields)) {
+            this.processedVersions.set(itemElement, {
+              version: this.getElementVersion(itemElement),
+              comment,
+            });
           }
         }
       }
@@ -187,6 +176,94 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     }
 
     return allComments.slice(0, maxComments);
+  }
+
+  private composedParent(element: Element): Element | null {
+    if (element.parentElement) return element.parentElement;
+    const root = element.getRootNode();
+    return root instanceof ShadowRoot ? root.host : null;
+  }
+
+  private nearestParentItem(element: Element, items: ReadonlySet<Element>): Element | null {
+    let parent = this.composedParent(element);
+    while (parent) {
+      if (items.has(parent)) return parent;
+      parent = this.composedParent(parent);
+    }
+    return null;
+  }
+
+  private collectReplyItems(element: Element, replyConfig: ReplyConfig): Element[] {
+    const items = new Set<Element>();
+    const owner = new Set([element]);
+    const matchedItems = new Set(findElementsByRule(element, replyConfig.item));
+    const addItem = (item: Element) => {
+      if (item !== element && this.nearestParentItem(item, owner) === element) items.add(item);
+    };
+
+    for (const container of findElementsByRule(element, replyConfig.container)) {
+      // A reply container can itself be a matched item (e.g. Reddit). This
+      // inclusion is local to replies; selector helpers stay descendant-only.
+      if (matchedItems.has(container)) addItem(container);
+      for (const item of findElementsByRule(container, replyConfig.item)) addItem(item);
+    }
+    return [...items];
+  }
+
+  private replyItemBoundaries(
+    element: Element,
+    replyConfig: ReplyConfig,
+    replyItems: Element[],
+  ): Set<Element> {
+    return new Set([
+      element,
+      ...findElementsByRule(element, this.config.item),
+      ...findElementsByRule(element, replyConfig.item),
+      ...replyItems,
+    ]);
+  }
+
+  private directReplyItems(element: Element, replyConfig: ReplyConfig): Element[] {
+    const items = this.collectReplyItems(element, replyConfig);
+    const boundaries = this.replyItemBoundaries(element, replyConfig, items);
+    return items.filter((item) => this.nearestParentItem(item, boundaries) === element);
+  }
+
+  private getFieldVersion(element: Element, fields: FieldSelector[]): string {
+    return JSON.stringify([
+      // Common virtual-list identity attributes are useful even when two
+      // comments temporarily have identical field text.
+      ['id', 'data-id', 'data-comment-id', 'thingid', 'data-fullname'].map((name) =>
+        element.getAttribute(name),
+      ),
+      fields.map((field) => readField(element, field)),
+    ]);
+  }
+
+  private getElementVersion(element: Element, fields = this.config.fields): string {
+    const replies = this.config.replies;
+    return JSON.stringify([
+      this.getFieldVersion(element, fields),
+      replies
+        ? this.collectReplyItems(element, replies).map((item) =>
+            this.getFieldVersion(item, replies.fields),
+          )
+        : [],
+    ]);
+  }
+
+  private mergeReplies(previous: Comment[], current: Comment[]): Comment[] {
+    const replies = new Map(previous.map((reply) => [reply.id, reply]));
+    for (const reply of current) {
+      const existing = replies.get(reply.id);
+      replies.set(
+        reply.id,
+        existing
+          ? { ...reply, replies: this.mergeReplies(existing.replies, reply.replies) }
+          : reply,
+      );
+    }
+    return [...replies.values()];
   }
 
   private async extractCommentFromElement(
@@ -236,6 +313,11 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       return null;
     }
 
+    const version = this.getElementVersion(element, replyConfig.fields);
+    const cached = this.processedVersions.get(element);
+    if (cached?.version === version) return cached.comment;
+
+    const fieldsVersion = this.getFieldVersion(element, replyConfig.fields);
     const comment = this.buildCommentFromElement(element, replyConfig.fields, platform);
     if (!comment) return null;
 
@@ -249,6 +331,12 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       depth + 1,
     );
 
+    if (fieldsVersion === this.getFieldVersion(element, replyConfig.fields)) {
+      this.processedVersions.set(element, {
+        version: this.getElementVersion(element, replyConfig.fields),
+        comment,
+      });
+    }
     return comment;
   }
 
@@ -265,7 +353,8 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     const username = getFieldValue('username');
     const content = getFieldValue('content');
 
-    if (!username && !content) return null;
+    // Author-only skeletons must not consume the target before content loads.
+    if (!content) return null;
 
     const timestamp = getFieldValue('timestamp') || ANALYSIS_FORMAT.UNKNOWN_TIMESTAMP;
     const likesStr = getFieldValue('likes') || '0';
@@ -291,35 +380,43 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     const replies: Comment[] = [];
 
     if (replyConfig.expandBtn) {
-      const expandBtn = findElementByRule(element, replyConfig.expandBtn) as HTMLElement;
+      const boundaries = this.replyItemBoundaries(
+        element,
+        replyConfig,
+        this.collectReplyItems(element, replyConfig),
+      );
+      const expandBtn = findElementsByRule(element, replyConfig.expandBtn).find(
+        (button) => this.nearestParentItem(button, boundaries) === element,
+      );
       if (expandBtn) {
-        await this.clickExpandButton(element, expandBtn, replyConfig, signal, depth > 0);
+        await this.clickExpandButton(
+          element,
+          expandBtn as HTMLElement,
+          replyConfig,
+          signal,
+          depth > 0,
+        );
       }
     }
 
-    const replyContainer = findElementByRule(element, replyConfig.container);
-    if (replyContainer) {
-      const replyItems = findElementsByRule(replyContainer, replyConfig.item);
-      if (replyItems.length > 0) {
-        Logger.info(
-          depth > 0
-            ? `[ReplyDebug] Found ${replyItems.length} nested replies`
-            : `[ReplyDebug] Found ${replyItems.length} reply items`,
-        );
-      }
+    const replyItems = this.directReplyItems(element, replyConfig);
+    if (replyItems.length > 0) {
+      Logger.info(
+        depth > 0
+          ? `[ReplyDebug] Found ${replyItems.length} nested replies`
+          : `[ReplyDebug] Found ${replyItems.length} reply items`,
+      );
+    }
 
-      for (const replyItem of replyItems) {
-        const reply = await this.extractReplyFromElement(
-          replyItem as HTMLElement,
-          platform,
-          replyConfig,
-          depth,
-          signal,
-        );
-        if (reply) {
-          replies.push(reply);
-        }
-      }
+    for (const replyItem of replyItems) {
+      const reply = await this.extractReplyFromElement(
+        replyItem as HTMLElement,
+        platform,
+        replyConfig,
+        depth,
+        signal,
+      );
+      if (reply) replies.push(reply);
     }
 
     return replies;
@@ -340,10 +437,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       text: expandBtn.textContent || '',
     });
 
-    const replyContainer = findElementByRule(element, replyConfig.container);
-    const currentReplyCount = replyContainer
-      ? findElementsByRule(replyContainer, replyConfig.item).length
-      : 0;
+    const currentReplyCount = this.directReplyItems(element, replyConfig).length;
 
     expandBtn.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
     await abortableDelay(TIMING.SCROLL_INTO_VIEW_WAIT_MS, signal);
@@ -384,11 +478,11 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     if (this.config.replies) {
       const replyConfig = this.config.replies;
       if (firstItem) {
-        const replyContainer = findElementByRule(firstItem, replyConfig.container);
-        validation['replies.container'] = replyContainer ? 'success' : 'failed';
-        if (replyContainer) {
-          const replyItem = findElementByRule(replyContainer, replyConfig.item);
-          validation['replies.item'] = replyItem ? 'success' : 'failed';
+        const replyContainers = findElementsByRule(firstItem, replyConfig.container);
+        validation['replies.container'] = replyContainers.length > 0 ? 'success' : 'failed';
+        if (replyContainers.length > 0) {
+          validation['replies.item'] =
+            this.directReplyItems(firstItem, replyConfig).length > 0 ? 'success' : 'failed';
         }
         if (replyConfig.expandBtn?.selector) {
           const expandBtn = findElementByRule(firstItem, replyConfig.expandBtn);
@@ -417,16 +511,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
   }
 
   private extractField(context: HTMLElement, field?: FieldSelector): string | null {
-    if (!field) return null;
-
-    const element = findElementByRule(context, field.rule);
-    if (!element) return null;
-
-    if (field.attribute) {
-      return element.getAttribute(field.attribute);
-    }
-
-    return element.textContent?.trim() || null;
+    return readField(context, field);
   }
 
   private parseLikes(likesStr: string): number {
@@ -450,19 +535,15 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     while (Date.now() - startTime < TIMING.REPLY_POLL_TIMEOUT_MS) {
       checkAborted(signal);
 
-      const replyContainer = findElementByRule(element, replyConfig.container);
-      if (replyContainer) {
-        const items = findElementsByRule(replyContainer, replyConfig.item);
-        // Wait for reply count to INCREASE from initial count
-        if (items.length > initialCount) {
-          Logger.info('[ReplyDebug] Reply count increased', {
-            from: initialCount,
-            to: items.length,
-          });
-          // Add a tiny extra delay for render stability
-          await abortableDelay(TIMING.RENDER_STABILITY_WAIT_MS, signal);
-          return;
-        }
+      const items = this.directReplyItems(element, replyConfig);
+      // Wait for the deduplicated, directly owned reply count to increase.
+      if (items.length > initialCount) {
+        Logger.info('[ReplyDebug] Reply count increased', {
+          from: initialCount,
+          to: items.length,
+        });
+        await abortableDelay(TIMING.RENDER_STABILITY_WAIT_MS, signal);
+        return;
       }
       await abortableDelay(TIMING.REPLY_POLL_INTERVAL_MS, signal);
     }

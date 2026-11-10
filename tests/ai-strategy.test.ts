@@ -57,7 +57,10 @@ function createConfig(itemSelector = '.comment-item'): CrawlingConfig {
     domain: 'localhost',
     container: { selector: '#comments', type: 'css' },
     item: { selector: itemSelector, type: 'css' },
-    fields: [{ name: 'content', rule: { selector: '.content', type: 'css' } }],
+    fields: [
+      { name: 'username', rule: { selector: '.username', type: 'css' } },
+      { name: 'content', rule: { selector: '.content', type: 'css' } },
+    ],
     lastUpdated: 1,
   };
 }
@@ -193,7 +196,7 @@ describe('AIConfigGenerator.generateIntelligentConfig', () => {
     document.body.innerHTML = `
       <article id="post">Post body</article>
       <section id="comments">
-        <article class="comment-item"><p class="content">A comment</p></article>
+        <article class="comment-item"><span class="username">Alice</span><p class="content">A comment</p></article>
       </section>
     `;
   });
@@ -215,8 +218,44 @@ describe('AIConfigGenerator.generateIntelligentConfig', () => {
     );
 
     expect(result).toBe(config);
+    expect(result?.fields.map((field) => field.name)).toEqual(['username', 'content']);
     expect(result?.postContent).toEqual({ selector: '#post', type: 'css' });
     expect(aiServiceMock.callAI).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    'missing username rule',
+    'empty username',
+    'fields on different items',
+    'item outside container',
+  ])('rejects an unusable generated config: %s', async (scenario) => {
+    const config = createConfig();
+    if (scenario === 'missing username rule') {
+      config.fields = config.fields.filter((field) => field.name !== 'username');
+    } else if (scenario === 'empty username') {
+      document.querySelector('.username')!.textContent = '   ';
+    } else if (scenario === 'fields on different items') {
+      document.querySelector('.username')!.remove();
+      document
+        .querySelector('#comments')!
+        .insertAdjacentHTML(
+          'beforeend',
+          '<article class="comment-item"><span class="username">Bob</span></article>',
+        );
+    } else {
+      document.body.append(document.querySelector('.comment-item')!);
+    }
+    aiServiceMock.callAI.mockResolvedValueOnce({ config: {} }).mockResolvedValueOnce({ config });
+
+    await expect(
+      createConfigGenerator().generateIntelligentConfig(
+        window.location.hostname,
+        { maxDepth: 8 },
+        100,
+        undefined,
+        '#comments',
+      ),
+    ).rejects.toMatchObject({ code: ErrorCode.DOM_ANALYSIS_FAILED });
   });
 
   it('throws DOM_ANALYSIS_FAILED when the generated item selector matches nothing', async () => {
