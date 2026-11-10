@@ -147,34 +147,42 @@ async function runAllAutomatedTests() {
   console.log('🚀 COMMENTS INSIGHT - FULL AUTOMATED E2E TEST SUITE');
   console.log('======================================================\n');
 
+  const executablePath = requireChromeExecutablePath();
+  console.log(`Browser executable: ${executablePath}`);
+
   const { server, port } = await startMockHttpServer();
   const mockPageUrl = `http://127.0.0.1:${port}/test-comments.html`;
   console.log(`Local test server running at: ${mockPageUrl}`);
 
-  const executablePath = requireChromeExecutablePath();
-  console.log(`Browser executable: ${executablePath}`);
+  const tempProfileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'comments-insight-e2e-'));
+  const resolvedProfileDir = path.resolve(tempProfileDir);
+  const resolvedTempRoot = path.resolve(os.tmpdir());
+  assert(
+    path.dirname(resolvedProfileDir) === resolvedTempRoot &&
+      path.basename(resolvedProfileDir).startsWith('comments-insight-e2e-'),
+    'Refusing to use a browser profile outside the isolated E2E temporary directory',
+  );
 
-  const tempProfileDir = path.join(os.tmpdir(), 'comments-insight-e2e-' + Date.now());
-
-  const browser = await puppeteer.launch({
-    headless: false,
-    executablePath,
-    ignoreDefaultArgs: [
-      '--disable-extensions',
-      '--disable-component-extensions-with-background-pages',
-      '--enable-automation',
-    ],
-    args: [
-      `--user-data-dir=${tempProfileDir}`,
-      `--load-extension=${extensionPath}`,
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-gpu',
-    ],
-    defaultViewport: { width: 1280, height: 800 },
-  });
-
+  let browser;
   try {
+    browser = await puppeteer.launch({
+      headless: false,
+      executablePath,
+      ignoreDefaultArgs: [
+        '--disable-extensions',
+        '--disable-component-extensions-with-background-pages',
+        '--enable-automation',
+      ],
+      args: [
+        `--user-data-dir=${tempProfileDir}`,
+        `--load-extension=${extensionPath}`,
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-gpu',
+      ],
+      defaultViewport: { width: 1280, height: 800 },
+    });
+
     // ----------------------------------------------------
     // Suite 1: Service Worker & Extension Target Discovery
     // ----------------------------------------------------
@@ -273,7 +281,17 @@ async function runAllAutomatedTests() {
     const historyUrl = `chrome-extension://${extensionId}/src/history/index.html`;
 
     const historyErrors = [];
+    const reportNetworkRequests = [];
     historyPage.on('pageerror', (err) => historyErrors.push(err.message));
+    await historyPage.setRequestInterception(true);
+    historyPage.on('request', (request) => {
+      if (/^https?:/i.test(request.url())) {
+        reportNetworkRequests.push(request.url());
+        void request.abort().catch(() => undefined);
+      } else {
+        void request.continue().catch(() => undefined);
+      }
+    });
 
     await historyPage.goto(historyUrl, { waitUntil: 'domcontentloaded' });
     await delay(1000);
@@ -311,16 +329,16 @@ async function runAllAutomatedTests() {
         },
       ],
       analysis: {
-        summary: 'Overall very positive feedback on the automated test suite.',
-        sentiment: {
-          positive: 70,
-          neutral: 20,
-          negative: 10,
-        },
-        topics: [
-          { name: 'Testing', percentage: 60 },
-          { name: 'Performance', percentage: 40 },
-        ],
+        markdown: [
+          '# E2E Markdown Privacy',
+          '![Blocked report image](https://audit.invalid/pixel?data=E2E_SYNTHETIC)',
+          '[Explicit external link](https://audit.invalid/manual)',
+          '[Unsafe link](javascript:alert%281%29)',
+          '<img id="model-raw-image" src="https://audit.invalid/raw">',
+          '<script>globalThis.modelMarkdownExecuted = true;</script>',
+        ].join('\n\n'),
+        tokensUsed: 1,
+        generatedAt: Date.now(),
       },
     };
 
@@ -356,9 +374,17 @@ async function runAllAutomatedTests() {
       'Inserted mock history record into CommentsInsightDatabase IndexedDB',
     );
 
-    // Reload history page to see updated list
-    await historyPage.reload({ waitUntil: 'domcontentloaded' });
-    await delay(1500);
+    // Select the persisted report, not just its list entry, so the Markdown
+    // security assertions exercise the production renderer.
+    await historyPage.goto(
+      `${historyUrl}?id=${encodeURIComponent(mockHistoryItem.id)}&tab=analysis`,
+      {
+        waitUntil: 'domcontentloaded',
+      },
+    );
+    await historyPage.waitForFunction(() =>
+      document.querySelector('.prose h1')?.textContent?.includes('E2E Markdown Privacy'),
+    );
 
     const historyPageContent = await historyPage.content();
     assert(
@@ -368,6 +394,43 @@ async function runAllAutomatedTests() {
       'History page did not display saved mock item title',
     );
     recordPass('HistoryPage', 'Verified saved history item is displayed in History UI');
+    const markdownResult = await historyPage.evaluate(() => {
+      const report = document.querySelector('.prose');
+      const links = Array.from(report?.querySelectorAll('a') || []);
+      return {
+        text: report?.textContent || '',
+        imageCount: report?.querySelectorAll('img').length ?? -1,
+        hasRawImage: Boolean(document.querySelector('#model-raw-image')),
+        scriptExecuted: Boolean(globalThis.modelMarkdownExecuted),
+        explicitLink: links.find((link) => link.textContent === 'Explicit external link')?.href,
+        hasUnsafeLink: links.some((link) => /^javascript:/i.test(link.getAttribute('href') || '')),
+        csp: chrome.runtime.getManifest().content_security_policy?.extension_pages || '',
+      };
+    });
+    assert(
+      markdownResult.text.includes('Blocked report image'),
+      'Markdown image alt text is missing',
+    );
+    assert(markdownResult.imageCount === 0, 'Markdown retained an automatically loaded image');
+    assert(!markdownResult.hasRawImage, 'Markdown rendered raw model HTML');
+    assert(!markdownResult.scriptExecuted, 'Markdown executed model JavaScript');
+    assert(!markdownResult.hasUnsafeLink, 'Markdown retained a JavaScript link');
+    assert(
+      markdownResult.explicitLink === 'https://audit.invalid/manual',
+      'Markdown did not retain the explicit user-operated text link',
+    );
+    assert(
+      markdownResult.csp.includes("img-src 'self' data: blob:"),
+      'Extension image CSP is missing',
+    );
+    assert(
+      reportNetworkRequests.length === 0,
+      `Report attempted ${reportNetworkRequests.length} unexpected HTTP(S) requests`,
+    );
+    recordPass(
+      'ReportSecurity',
+      'Rendered malicious Markdown without images, scripts or automatic network requests',
+    );
 
     // Test Search input if present
     const searchInput = await historyPage.$('input[type="text"], input[type="search"]');
@@ -402,6 +465,66 @@ async function runAllAutomatedTests() {
       'Logs page UI structure missing',
     );
     recordPass('LogsPage', 'Verified Logs page structure rendered');
+
+    const logStartTime = await logsPage.evaluate(() => Date.now());
+    await sendExtensionMessage(logsPage, { type: 'GET_SETTINGS' });
+    await logsPage.waitForFunction(
+      async (minimumTimestamp) => {
+        const index = (await chrome.storage.local.get('system_log_index')).system_log_index || [];
+        const rows = index.length ? await chrome.storage.local.get(index) : {};
+        return Object.values(rows).some(
+          (entry) =>
+            entry?.message === '[SettingsHandler] Getting settings' &&
+            entry.timestamp >= minimumTimestamp,
+        );
+      },
+      { timeout: 5000 },
+      logStartTime,
+    );
+    recordPass(
+      'LogStore',
+      'Persisted a real background-originated diagnostic through the local writer',
+    );
+
+    await logsPage.evaluate(async () => {
+      await chrome.storage.local.set({
+        log_orphan_e2e: { level: 'INFO', timestamp: 1, message: 'Unindexed system fixture' },
+        ai_log_orphan_e2e: {
+          type: 'analysis',
+          timestamp: 1,
+          prompt: 'fixture',
+          response: 'fixture',
+        },
+        log_min_level: 'WARN',
+        token_stats: { today: 7, total: 7, lastReset: Date.now() },
+      });
+    });
+    await sendExtensionMessage(logsPage, { type: 'CLEAR_LOGS', payload: { kind: 'all' } });
+    const logCleanup = await logsPage.evaluate(async () => {
+      const stored = await chrome.storage.local.get(null);
+      return {
+        remainingLogKeys: Object.keys(stored).filter(
+          (key) =>
+            key.startsWith('ai_log_') ||
+            (key.startsWith('log_') && key !== 'log_min_level') ||
+            key === 'system_log_index',
+        ),
+        hasSettings: typeof stored.settings === 'object' && stored.settings !== null,
+        retainedTokenTotal: stored.token_stats?.total,
+        retainedLogLevel: stored.log_min_level,
+      };
+    });
+    assert(
+      logCleanup.remainingLogKeys.length === 0,
+      'Log cleanup retained indexed or orphaned rows',
+    );
+    assert(logCleanup.hasSettings, 'Log cleanup removed settings');
+    assert(logCleanup.retainedTokenTotal === 7, 'Log cleanup removed token usage');
+    assert(logCleanup.retainedLogLevel === 'WARN', 'Log cleanup removed the log level');
+    recordPass(
+      'LogStore',
+      'Cleared indexed and orphaned logs without deleting user settings or usage',
+    );
 
     await logsPage.close();
 
@@ -541,13 +664,13 @@ async function runAllAutomatedTests() {
     recordFail('Runner', 'Execution halted prematurely', err);
   } finally {
     try {
-      await browser.close();
+      await browser?.close();
     } catch {}
     try {
       server.close();
     } catch {}
     try {
-      fs.rmSync(tempProfileDir, { recursive: true, force: true });
+      fs.rmSync(resolvedProfileDir, { recursive: true, force: true });
     } catch {}
   }
 

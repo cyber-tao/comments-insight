@@ -31,10 +31,11 @@ The suite starts a local HTTP page containing a fixed comment fixture, creates a
 
 1. the background service worker starts;
 2. Options renders and settings round-trip through `chrome.storage.local`;
-3. History renders a Dexie/IndexedDB record and filters it;
-4. Logs and Popup render without page errors;
-5. the sandbox renders safe static report content while removing scripts, event handlers, external image URLs, and frames;
-6. a real `START_EXTRACTION` request creates a `TaskManager` task, dispatches `RUN_EXTRACTION` to the content script, extracts the fixture comments, and persists a readable history record.
+3. History renders a valid Dexie/IndexedDB report and filters the saved record;
+4. model-provided Markdown images become alt text, raw HTML and JavaScript links stay inert, and ordinary text links remain user-operated; all HTTP(S) requests from the report page are intercepted and any attempted automatic request fails the test;
+5. Logs and Popup render without page errors; a real background diagnostic is persisted through the local writer, and clearing indexed/orphaned logs preserves settings, token usage, and the log-level setting;
+6. the sandbox renders safe static report content while removing scripts, event handlers, external image URLs, and frames;
+7. a real `START_EXTRACTION` request creates a `TaskManager` task, dispatches `RUN_EXTRACTION` to the content script, extracts the fixture comments, and persists a readable history record.
 
 The final extraction assertion reads the persisted record through `GET_HISTORY_BY_URL`; it does not use a webpage test hook and does not accept an empty page or an unmodified sandbox document as success.
 
