@@ -126,7 +126,11 @@ describe('Settings Handlers', () => {
       const result = await handleSaveSettings(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith(partialSettings, undefined);
+      expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith(
+        partialSettings,
+        undefined,
+        undefined,
+      );
       expect(mockAIService.clearVerifiedConfig).toHaveBeenCalledOnce();
     });
 
@@ -164,7 +168,28 @@ describe('Settings Handlers', () => {
       const result = await handleSaveSettings(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith({}, undefined);
+      expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith({}, undefined, undefined);
+    });
+
+    it('forwards the source endpoint and rules preconditions without persisting them as settings', async () => {
+      mockSettingsStore.saveSettings.mockResolvedValue(undefined);
+      const patch = { aiModel: { apiKey: 'edited-key' } };
+      await handleSaveSettings(
+        {
+          type: 'SAVE_SETTINGS',
+          payload: {
+            settings: patch,
+            expectedAiEndpoint: 'https://old.example/v1',
+            expectedCrawlingConfigsFingerprint: 'rules-fingerprint',
+          },
+        },
+        context,
+      );
+      expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith(
+        patch,
+        'rules-fingerprint',
+        'https://old.example/v1',
+      );
     });
 
     it('should retain the verified config when persistence fails', async () => {

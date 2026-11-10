@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { CrawlingConfigEditor } from './CrawlingConfigEditor';
 import { API } from '@/config/constants';
 import { resolveCrawlingConfigLastUpdated } from '@/utils/crawling-config';
+import { crawlingConfigSchema } from '@/utils/storage-validation';
 import { Logger } from '../../utils/logger';
 import { ConfigList } from './ConfigList';
 import { ConfigImportDialog, ConflictItem, MERGE_FIELDS } from './ConfigImportDialog';
@@ -317,17 +318,35 @@ export const ConfigSettings: React.FC<Props> = ({
 
   const handleSave = () => {
     if (tempConfig) {
-      const exists = configs.find((c) => c.id === tempConfig.id);
+      const result = crawlingConfigSchema.safeParse({
+        ...tempConfig,
+        ...(tempConfig.replies
+          ? {
+              replies: {
+                ...tempConfig.replies,
+                expandBtn: tempConfig.replies.expandBtn?.selector.trim()
+                  ? tempConfig.replies.expandBtn
+                  : undefined,
+              },
+            }
+          : {}),
+      });
+      if (!result.success) {
+        showToast(t('options.crawlingConfigs.invalidDraft'), 'error');
+        return;
+      }
+      const draft = result.data;
+      const exists = configs.find((c) => c.id === draft.id);
       const savedConfig = exists
         ? {
-            ...tempConfig,
+            ...draft,
             lastUpdated: resolveCrawlingConfigLastUpdated({
               previous: exists,
-              next: tempConfig,
+              next: draft,
             }),
           }
         : {
-            ...tempConfig,
+            ...draft,
             lastUpdated: Date.now(),
           };
       let newConfigs;

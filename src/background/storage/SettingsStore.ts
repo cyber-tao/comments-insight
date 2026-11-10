@@ -273,23 +273,22 @@ export class SettingsStore {
   async saveSettings(
     settings: SettingsPatch,
     expectedCrawlingConfigsFingerprint?: string,
+    expectedAiEndpoint?: string,
   ): Promise<void> {
     return this.saveMutex.withLock(async () => {
-      if (settings.crawlingConfigs && expectedCrawlingConfigsFingerprint !== undefined) {
-        const current = await this.getSettings();
-        if (
-          crawlingConfigsFingerprint(current.crawlingConfigs) !== expectedCrawlingConfigsFingerprint
-        ) {
-          throw new ExtensionError(
-            ErrorCode.VALIDATION_ERROR,
-            'Crawling rules changed; reload settings before saving',
-            {
-              messageKey: 'options.settingsConflict',
-            },
-          );
-        }
+      if (
+        (settings.aiModel?.apiUrl !== undefined || settings.aiModel?.apiKey !== undefined) &&
+        expectedAiEndpoint === undefined
+      ) {
+        throw new ExtensionError(
+          ErrorCode.VALIDATION_ERROR,
+          'AI endpoint precondition is required',
+          {
+            messageKey: 'options.settingsConflict',
+          },
+        );
       }
-      await this._saveSettings(settings);
+      await this._saveSettings(settings, expectedCrawlingConfigsFingerprint, expectedAiEndpoint);
     });
   }
 
@@ -320,7 +319,11 @@ export class SettingsStore {
     });
   }
 
-  private async _saveSettings(settings: SettingsPatch): Promise<void> {
+  private async _saveSettings(
+    settings: SettingsPatch,
+    expectedCrawlingConfigsFingerprint?: string,
+    expectedAiEndpoint?: string,
+  ): Promise<void> {
     try {
       const updatesCrawlingConfigs =
         Object.prototype.hasOwnProperty.call(settings, 'crawlingConfigs') &&
@@ -341,14 +344,52 @@ export class SettingsStore {
       const currentSettings = this.mergeSettingsWithDefaults(
         sanitizeStoredSettings(result[STORAGE.SETTINGS_KEY]),
       );
+      if (
+        sanitizedSettings.crawlingConfigs &&
+        expectedCrawlingConfigsFingerprint !== undefined &&
+        crawlingConfigsFingerprint(currentSettings.crawlingConfigs) !==
+          expectedCrawlingConfigsFingerprint
+      ) {
+        throw new ExtensionError(
+          ErrorCode.VALIDATION_ERROR,
+          'Crawling rules changed; reload settings before saving',
+          {
+            messageKey: 'options.settingsConflict',
+          },
+        );
+      }
+      const currentModel = this.normalizeAIModel(currentSettings);
+      if (
+        expectedAiEndpoint !== undefined &&
+        (normalizeAiApiUrl(currentModel.apiUrl) ?? currentModel.apiUrl.trim()) !==
+          (normalizeAiApiUrl(expectedAiEndpoint) ?? expectedAiEndpoint.trim())
+      ) {
+        throw new ExtensionError(
+          ErrorCode.VALIDATION_ERROR,
+          'AI endpoint changed; reload settings before saving',
+          {
+            messageKey: 'options.settingsConflict',
+          },
+        );
+      }
       const updatedSettings = { ...currentSettings, ...sanitizedSettings } as Settings & {
         extractorModel?: AIConfig;
         analyzerModel?: AIConfig;
       };
       updatedSettings.aiModel = {
-        ...currentSettings.aiModel,
+        ...currentModel,
         ...(sanitizedSettings.aiModel || {}),
       };
+      if (
+        sanitizedSettings.aiModel?.apiUrl !== undefined &&
+        (normalizeAiApiUrl(updatedSettings.aiModel.apiUrl) ??
+          updatedSettings.aiModel.apiUrl.trim()) !==
+          (normalizeAiApiUrl(currentModel.apiUrl) ?? currentModel.apiUrl.trim()) &&
+        sanitizedSettings.aiModel.apiKey === undefined
+      ) {
+        updatedSettings.aiModel.apiKey = '';
+      }
+
       updatedSettings.domAnalysisConfig = {
         ...currentSettings.domAnalysisConfig,
         ...(sanitizedSettings.domAnalysisConfig || {}),

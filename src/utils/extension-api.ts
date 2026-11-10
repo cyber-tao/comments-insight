@@ -133,6 +133,7 @@ export const ExtensionAPI = {
   async saveSettings(
     settings: SettingsPatch,
     expectedCrawlingConfigsFingerprint?: string,
+    expectedAiEndpoint?: string,
   ): Promise<SaveSettingsResponse> {
     return sendMessageOrThrow<SaveSettingsResponse>({
       type: MESSAGES.SAVE_SETTINGS,
@@ -141,6 +142,7 @@ export const ExtensionAPI = {
         ...(expectedCrawlingConfigsFingerprint !== undefined
           ? { expectedCrawlingConfigsFingerprint }
           : {}),
+        ...(expectedAiEndpoint !== undefined ? { expectedAiEndpoint } : {}),
       },
     });
   },

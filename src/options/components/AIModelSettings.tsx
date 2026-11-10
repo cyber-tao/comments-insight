@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AI, API, UI_LIMITS } from '@/config/constants';
 import {
@@ -9,6 +9,7 @@ import {
 import { Settings, SettingsPatch } from '@/types';
 import { ExtensionAPI } from '@/utils/extension-api';
 import { parseFiniteIntegerInput, parseFiniteNumberInput } from '@/utils/number';
+import { normalizeAiApiUrl } from '@/utils/url';
 import { SearchableModelSelect } from './SearchableModelSelect';
 
 interface AIModelSettingsProps {
@@ -44,6 +45,30 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
     settings.aiModel.contextWindowSize - AI.INPUT_TOKEN_BUFFER - AI.MIN_AVAILABLE_TOKENS,
   );
 
+  const configRef = useRef(settings.aiModel);
+  configRef.current = settings.aiModel;
+  const modelRequestRef = useRef(0);
+  const modelEditRevisionRef = useRef(0);
+  const testRequestRef = useRef(0);
+  const endpoint = normalizeAiApiUrl(settings.aiModel.apiUrl) ?? settings.aiModel.apiUrl.trim();
+
+  useEffect(() => {
+    modelRequestRef.current += 1;
+    testRequestRef.current += 1;
+    setAvailableModels([]);
+    setLoadingModels(false);
+    setTestingModel(false);
+    return () => {
+      modelRequestRef.current += 1;
+      testRequestRef.current += 1;
+    };
+  }, [endpoint, settings.aiModel.apiKey]);
+
+  const handleModelChange = (model: string) => {
+    modelEditRevisionRef.current += 1;
+    onSettingsChange({ aiModel: { model } });
+  };
+
   const handleFetchModels = async () => {
     const config = settings.aiModel;
 
@@ -52,27 +77,42 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
       return;
     }
 
+    const requestId = ++modelRequestRef.current;
+    const editRevision = modelEditRevisionRef.current;
+    const isCurrent = () =>
+      requestId === modelRequestRef.current &&
+      endpoint ===
+        (normalizeAiApiUrl(configRef.current.apiUrl) ?? configRef.current.apiUrl.trim()) &&
+      config.apiKey === configRef.current.apiKey;
     setLoadingModels(true);
 
     try {
       const models = await ExtensionAPI.getAvailableModels(config.apiUrl, config.apiKey);
+      if (!isCurrent()) return;
 
       if (models.length > 0) {
         setAvailableModels(models);
         toast.success(t('options.modelsFound', { count: models.length }));
 
-        if (!models.includes(config.model) || models.length === 1) {
+        if (
+          modelEditRevisionRef.current === editRevision &&
+          configRef.current.model === config.model &&
+          (!models.includes(config.model) || models.length === 1)
+        ) {
           onSettingsChange({
             aiModel: { model: models[0] },
           });
         }
       } else {
+        setAvailableModels([]);
         toast.info(t('options.noModelsFound'));
       }
     } catch (_error) {
+      if (!isCurrent()) return;
+      setAvailableModels([]);
       toast.error(t('options.fetchModelsFailed'));
     } finally {
-      setLoadingModels(false);
+      if (isCurrent()) setLoadingModels(false);
     }
   };
 
@@ -84,10 +124,18 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
       return;
     }
 
+    const requestId = ++testRequestRef.current;
+    const isCurrent = () =>
+      requestId === testRequestRef.current &&
+      endpoint ===
+        (normalizeAiApiUrl(configRef.current.apiUrl) ?? configRef.current.apiUrl.trim()) &&
+      config.apiKey === configRef.current.apiKey &&
+      config.model === configRef.current.model;
     setTestingModel(true);
 
     try {
       const response = await ExtensionAPI.testModel(config);
+      if (!isCurrent()) return;
 
       if (response?.success) {
         toast.success(
@@ -97,11 +145,12 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
         toast.error(t('options.testFailed') + ': ' + (response?.error || 'Unknown error'));
       }
     } catch (error) {
+      if (!isCurrent()) return;
       toast.error(
         t('options.testFailed') + ': ' + (error instanceof Error ? error.message : 'Unknown error'),
       );
     } finally {
-      setTestingModel(false);
+      if (requestId === testRequestRef.current) setTestingModel(false);
     }
   };
 
@@ -175,21 +224,13 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             <SearchableModelSelect
               models={availableModels}
               value={settings.aiModel.model}
-              onChange={(model) =>
-                onSettingsChange({
-                  aiModel: { model },
-                })
-              }
+              onChange={handleModelChange}
             />
           ) : (
             <input
               type="text"
               value={settings.aiModel.model}
-              onChange={(e) =>
-                onSettingsChange({
-                  aiModel: { model: e.target.value },
-                })
-              }
+              onChange={(e) => handleModelChange(e.target.value)}
               className="w-full theme-input"
               placeholder={t('options.modelPlaceholder')}
             />

@@ -71,6 +71,7 @@ export async function handleTestModel(
     throw new ExtensionError(ErrorCode.INVALID_CONFIG, 'Complete model configuration is required');
   }
 
+  const verificationEpoch = context.aiService.getVerificationEpoch();
   try {
     // Honor the user's aiTimeout so slow local models aren't killed by the
     // default 120s while the UI is still waiting for them (and vice versa).
@@ -82,7 +83,7 @@ export async function handleTestModel(
     });
 
     if (response && response.content) {
-      context.aiService.rememberVerifiedConfig(config);
+      context.aiService.rememberVerifiedConfig(config, verificationEpoch);
 
       return {
         success: true,

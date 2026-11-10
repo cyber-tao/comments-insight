@@ -38,6 +38,18 @@ const historyExportSchema = z.object({ type: z.literal('settings') });
 const optionalUndefinedPayload = z.undefined().optional();
 
 const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
+  APPEND_SYSTEM_LOG: z.object({
+    entry: z.object({
+      level: z.enum(['DEBUG', 'INFO', 'WARN', 'ERROR']),
+      timestamp: z.number().finite(),
+      message: z.string(),
+      context: z.string().optional(),
+      data: z.record(z.unknown()).optional(),
+      stack: z.string().optional(),
+    }),
+  }),
+  DELETE_LOG: z.object({ key: nonEmptyString, kind: z.enum(['ai', 'system']) }),
+  CLEAR_LOGS: z.object({ kind: z.enum(['ai', 'system', 'all']) }),
   PING: optionalUndefinedPayload,
   GET_SETTINGS: optionalUndefinedPayload,
   CLEAR_ALL_HISTORY: optionalUndefinedPayload,
@@ -54,6 +66,7 @@ const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
   SAVE_SETTINGS: z.object({
     settings: settingsPatchSchema,
     expectedCrawlingConfigsFingerprint: z.string().optional(),
+    expectedAiEndpoint: z.string().optional(),
   }),
   IMPORT_SETTINGS: z.object({
     data: nonEmptyString,

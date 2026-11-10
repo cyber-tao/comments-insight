@@ -163,6 +163,25 @@ describe('AIService', () => {
       expect(result.tokensUsed).toBe(100);
     });
 
+    it('ignores an old verification epoch without replacing a newer verified credential', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }] }),
+      });
+      const config = mockAIConfig({ apiUrl: 'https://api.example.com/v1', apiKey: 'old-key' });
+      const oldEpoch = aiService.getVerificationEpoch();
+      aiService.clearVerifiedConfig();
+      aiService.rememberVerifiedConfig(
+        { ...config, apiKey: 'new-key' },
+        aiService.getVerificationEpoch(),
+      );
+      aiService.rememberVerifiedConfig(config, oldEpoch);
+      await aiService.callAI({ prompt: 'After stale test', config: { ...config, apiKey: '' } });
+      expect((mockFetch.mock.calls[0][1] as RequestInit).headers).toMatchObject({
+        Authorization: 'Bearer new-key',
+      });
+    });
+
     it('should stop using a remembered key after it is explicitly cleared', async () => {
       mockFetch.mockResolvedValue({
         ok: true,

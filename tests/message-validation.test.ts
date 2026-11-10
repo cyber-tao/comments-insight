@@ -94,6 +94,20 @@ describe('validateMessagePayload SAVE_SETTINGS limits', () => {
     ).toThrowError(/SAVE_SETTINGS/);
   });
 
+  it('keeps empty endpoint preconditions and rejects non-string endpoint identities', () => {
+    const message: Message = {
+      type: 'SAVE_SETTINGS',
+      payload: { settings: { aiModel: { apiKey: 'new-key' } }, expectedAiEndpoint: '' },
+    };
+    expect(validateMessagePayload(message)).toEqual(message);
+    expect(() =>
+      validateMessagePayload({
+        ...message,
+        payload: { ...message.payload, expectedAiEndpoint: 123 },
+      } as unknown as Message),
+    ).toThrowError(/SAVE_SETTINGS/);
+  });
+
   it('accepts values on supported boundaries', () => {
     expect(() =>
       validateMessagePayload(

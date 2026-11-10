@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExtensionAPI } from '../src/utils/extension-api';
 import { MESSAGES, TEXT } from '../src/config/constants';
-import { ErrorCode } from '../src/utils/error-types';
+import { ErrorCode, ExtensionError, toExtensionErrorPayload } from '../src/utils/error-types';
 
 const sendMessageMock = vi.hoisted(() => vi.fn());
 
@@ -166,6 +166,36 @@ describe('ExtensionAPI', () => {
       [{ type: MESSAGES.DELETE_HISTORY, payload: { id: 'history-1' } }],
       [{ type: MESSAGES.CLEAR_ALL_HISTORY }],
     ]);
+  });
+
+  it('forwards an explicitly empty source endpoint and preserves conflict metadata across messages', async () => {
+    sendMessageMock.mockResolvedValueOnce({ success: true });
+    await ExtensionAPI.saveSettings(
+      { aiModel: { apiUrl: 'https://first.example/v1', apiKey: 'new-key' } },
+      undefined,
+      '',
+    );
+    expect(sendMessageMock).toHaveBeenLastCalledWith({
+      type: MESSAGES.SAVE_SETTINGS,
+      payload: {
+        settings: { aiModel: { apiUrl: 'https://first.example/v1', apiKey: 'new-key' } },
+        expectedAiEndpoint: '',
+      },
+    });
+    const error = new ExtensionError(ErrorCode.VALIDATION_ERROR, 'AI endpoint changed', {
+      messageKey: 'options.settingsConflict',
+    });
+    sendMessageMock.mockResolvedValueOnce({ error: toExtensionErrorPayload(error) });
+    await expect(
+      ExtensionAPI.saveSettings(
+        { aiModel: { apiKey: 'stale-key' } },
+        undefined,
+        'https://old.example/v1',
+      ),
+    ).rejects.toMatchObject({
+      code: ErrorCode.VALIDATION_ERROR,
+      details: { messageKey: 'options.settingsConflict' },
+    });
   });
 
   it('validates ensureContentScript success and failure responses', async () => {

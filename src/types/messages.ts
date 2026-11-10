@@ -7,6 +7,12 @@ import {
   FieldValidationStatus,
   ProgressStage,
 } from './index';
+import type { LogEntry } from '@/utils/logger';
+
+export type LogMessage =
+  | { type: 'APPEND_SYSTEM_LOG'; payload: { entry: LogEntry } }
+  | { type: 'DELETE_LOG'; payload: { key: string; kind: 'ai' | 'system' } }
+  | { type: 'CLEAR_LOGS'; payload: { kind: 'ai' | 'system' | 'all' } };
 
 export type SystemMessage = { type: 'PING'; payload?: never };
 
@@ -19,7 +25,11 @@ export type SettingsMessage =
   | { type: 'GET_SETTINGS'; payload?: never }
   | {
       type: 'SAVE_SETTINGS';
-      payload: { settings: SettingsPatch; expectedCrawlingConfigsFingerprint?: string };
+      payload: {
+        settings: SettingsPatch;
+        expectedCrawlingConfigsFingerprint?: string;
+        expectedAiEndpoint?: string;
+      };
     }
   | { type: 'IMPORT_SETTINGS'; payload: { data: string } }
   | { type: 'CACHE_SELECTOR'; payload: { hostname: string; selector: string } }
@@ -143,6 +153,7 @@ export interface GenerateCrawlingConfigMessage {
 }
 
 export type Message =
+  | LogMessage
   | SystemMessage
   | InjectionMessage
   | SettingsMessage

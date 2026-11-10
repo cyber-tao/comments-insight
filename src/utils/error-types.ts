@@ -104,6 +104,8 @@ export interface ExtensionErrorPayload {
   code: ErrorCode;
   message: string;
   retryable: boolean;
+  /** Safe UI translation metadata; arbitrary error details stay in their source context. */
+  messageKey?: string;
 }
 
 export class ExtensionError extends Error {
@@ -149,7 +151,14 @@ const ERROR_CODE_VALUES = new Set<string>(Object.values(ErrorCode));
 
 export function toExtensionErrorPayload(error: unknown): ExtensionErrorPayload {
   if (error instanceof ExtensionError) {
-    return { code: error.code, message: error.message, retryable: error.retryable };
+    return {
+      code: error.code,
+      message: error.message,
+      retryable: error.retryable,
+      ...(typeof error.details?.messageKey === 'string'
+        ? { messageKey: error.details.messageKey }
+        : {}),
+    };
   }
   return {
     code: ErrorCode.UNKNOWN_ERROR,
@@ -167,13 +176,19 @@ export function isExtensionErrorPayload(value: unknown): value is ExtensionError
     typeof candidate.code === 'string' &&
     ERROR_CODE_VALUES.has(candidate.code) &&
     typeof candidate.message === 'string' &&
-    typeof candidate.retryable === 'boolean'
+    typeof candidate.retryable === 'boolean' &&
+    (candidate.messageKey === undefined || typeof candidate.messageKey === 'string')
   );
 }
 
 export function fromExtensionErrorPayload(value: unknown): Error {
   if (isExtensionErrorPayload(value)) {
-    return new ExtensionError(value.code, value.message, undefined, value.retryable);
+    return new ExtensionError(
+      value.code,
+      value.message,
+      value.messageKey === undefined ? undefined : { messageKey: value.messageKey },
+      value.retryable,
+    );
   }
   return new Error(typeof value === 'string' ? value : 'Unknown extension error');
 }

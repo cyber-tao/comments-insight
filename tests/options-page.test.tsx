@@ -51,6 +51,10 @@ function createSettingsState(overrides: Partial<ReturnType<typeof useSettingsMoc
       aiModel: { model: 'gpt-4o-mini' },
     },
     saving: false,
+    loading: false,
+    loadError: null,
+    hasExternalConflict: false,
+    retryLoad: vi.fn(),
     handleSettingsChange: vi.fn(),
     handleExport: vi.fn(),
     handleImport: vi.fn(),
@@ -73,6 +77,31 @@ describe('Options', () => {
     render(<Options />);
 
     expect(screen.getByText('common.loading')).toBeTruthy();
+    expect(screen.getByText('toast-container')).toBeTruthy();
+  });
+
+  it('shows an initial load error with a visible toast host and working retry action', () => {
+    const retryLoad = vi.fn();
+    useSettingsMock.mockReturnValue(
+      createSettingsState({ settings: null, loadError: 'Storage unavailable', retryLoad }),
+    );
+    const { rerender } = render(<Options />);
+    expect(screen.getByRole('alert').textContent).toContain('Storage unavailable');
+    expect(screen.getByText('toast-container')).toBeTruthy();
+    expect(screen.queryByText('common.loading')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'options.retryLoadSettings' }));
+    expect(retryLoad).toHaveBeenCalledOnce();
+    useSettingsMock.mockReturnValue(createSettingsState());
+    rerender(<Options />);
+    expect(screen.getByText('ai-model-settings')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows an external conflict warning without replacing settings controls', () => {
+    useSettingsMock.mockReturnValue(createSettingsState({ hasExternalConflict: true }));
+    render(<Options />);
+    expect(screen.getByRole('alert').textContent).toBe('options.settingsConflict');
+    expect(screen.getByText('basic-settings')).toBeTruthy();
   });
 
   it('renders extension tab actions and delegates import/export/theme changes', () => {

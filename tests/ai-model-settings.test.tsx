@@ -3,7 +3,7 @@
  */
 
 import * as React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AIModelSettings } from '../src/options/components/AIModelSettings';
 import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '../src/utils/prompts';
@@ -205,6 +205,155 @@ describe('AIModelSettings', () => {
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith('options.testFailed: denied');
     });
+  });
+
+  it.each(['apiUrl', 'apiKey'] as const)(
+    'ignores an old model response after %s changes and a newer request completes',
+    async (field) => {
+      let resolveOld!: (models: string[]) => void;
+      extensionApiMock.getAvailableModels
+        .mockReturnValueOnce(
+          new Promise((resolve) => {
+            resolveOld = resolve;
+          }),
+        )
+        .mockResolvedValueOnce(['new-model']);
+      const { onSettingsChange, toast } = renderComponent();
+      fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
+      const input =
+        field === 'apiUrl'
+          ? screen.getByDisplayValue('https://api.example.com/v1')
+          : screen.getByPlaceholderText('options.apiKeyPlaceholder');
+      fireEvent.change(input, {
+        target: { value: field === 'apiUrl' ? 'https://second.example/v1' : 'new-key' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
+      await waitFor(() => expect(screen.getByDisplayValue('new-model')).toBeTruthy());
+      await act(async () => {
+        resolveOld(['old-model']);
+      });
+      expect(screen.getByDisplayValue('new-model')).toBeTruthy();
+      expect(screen.queryByDisplayValue('old-model')).toBeNull();
+      expect(onSettingsChange).toHaveBeenLastCalledWith({ aiModel: { model: 'new-model' } });
+      expect(toast.success).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('preserves a model entered by the user while discovery is pending', async () => {
+    let resolveModels!: (models: string[]) => void;
+    extensionApiMock.getAvailableModels.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveModels = resolve;
+      }),
+    );
+    const { onSettingsChange } = renderComponent();
+    fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
+    fireEvent.change(screen.getByPlaceholderText('options.modelPlaceholder'), {
+      target: { value: 'my-manual-model' },
+    });
+    await act(async () => {
+      resolveModels(['discovered-model']);
+    });
+    expect(screen.getByDisplayValue('my-manual-model')).toBeTruthy();
+    expect(onSettingsChange).toHaveBeenCalledOnce();
+    expect(onSettingsChange).toHaveBeenCalledWith({ aiModel: { model: 'my-manual-model' } });
+  });
+
+  it('uses request identity even when credentials change away and back to their original value', async () => {
+    let resolveOld!: (models: string[]) => void;
+    extensionApiMock.getAvailableModels
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        }),
+      )
+      .mockResolvedValueOnce(['current-model']);
+    const { toast } = renderComponent();
+    fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
+    const key = screen.getByPlaceholderText('options.apiKeyPlaceholder');
+    fireEvent.change(key, { target: { value: 'temporary-key' } });
+    fireEvent.change(key, { target: { value: 'secret-key' } });
+    fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
+    await waitFor(() => expect(screen.getByDisplayValue('current-model')).toBeTruthy());
+    await act(async () => {
+      resolveOld(['obsolete-model']);
+    });
+    expect(screen.getByDisplayValue('current-model')).toBeTruthy();
+    expect(toast.success).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['apiUrl', 'apiKey'] as const)(
+    'clears the discovered list when %s changes',
+    async (field) => {
+      extensionApiMock.getAvailableModels.mockResolvedValueOnce(['gpt-4o-mini', 'other-model']);
+      renderComponent();
+      fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
+      await waitFor(() =>
+        expect(screen.queryByPlaceholderText('options.modelPlaceholder')).toBeNull(),
+      );
+      const input =
+        field === 'apiUrl'
+          ? screen.getByDisplayValue('https://api.example.com/v1')
+          : screen.getByPlaceholderText('options.apiKeyPlaceholder');
+      fireEvent.change(input, {
+        target: { value: field === 'apiUrl' ? 'https://new.example/v1' : 'replacement-key' },
+      });
+      expect(screen.getByPlaceholderText('options.modelPlaceholder')).toBeTruthy();
+    },
+  );
+
+  it.each(['empty', 'failure'] as const)(
+    'restores manual model input after a discovery %s',
+    async (outcome) => {
+      extensionApiMock.getAvailableModels.mockResolvedValueOnce(['gpt-4o-mini', 'other-model']);
+      const { onSettingsChange, toast } = renderComponent();
+      fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
+      await waitFor(() => expect(toast.success).toHaveBeenCalledOnce());
+      if (outcome === 'empty') extensionApiMock.getAvailableModels.mockResolvedValueOnce([]);
+      else extensionApiMock.getAvailableModels.mockRejectedValueOnce(new Error('discovery failed'));
+      fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
+      const manualInput = await screen.findByPlaceholderText('options.modelPlaceholder');
+      fireEvent.change(manualInput, { target: { value: 'manual-after-failure' } });
+      expect(onSettingsChange).toHaveBeenLastCalledWith({
+        aiModel: { model: 'manual-after-failure' },
+      });
+      expect(outcome === 'empty' ? toast.info : toast.error).toHaveBeenCalledWith(
+        outcome === 'empty' ? 'options.noModelsFound' : 'options.fetchModelsFailed',
+      );
+    },
+  );
+
+  it('suppresses obsolete discovery errors without changing a newer pending request', async () => {
+    let rejectOld!: (reason: Error) => void;
+    let resolveNew!: (models: string[]) => void;
+    extensionApiMock.getAvailableModels
+      .mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          rejectOld = reject;
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveNew = resolve;
+        }),
+      );
+    const { toast } = renderComponent();
+    fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
+    fireEvent.change(screen.getByPlaceholderText('options.apiKeyPlaceholder'), {
+      target: { value: 'new-key' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
+    await act(async () => {
+      rejectOld(new Error('old request failed'));
+    });
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(
+      (screen.getByRole('button', { name: 'common.loading' }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    await act(async () => {
+      resolveNew(['new-model']);
+    });
+    expect(screen.getByDisplayValue('new-model')).toBeTruthy();
   });
 
   it('supports api key visibility, prompt reset, and placeholder details', () => {

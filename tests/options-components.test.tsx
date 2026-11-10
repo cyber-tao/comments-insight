@@ -3,10 +3,12 @@
  */
 
 import { fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
+import { CrawlingConfigEditor } from '../src/options/components/CrawlingConfigEditor';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BasicSettings } from '../src/options/components/BasicSettings';
 import { AdvancedSettings } from '../src/options/components/AdvancedSettings';
-import type { Settings } from '../src/types';
+import type { CrawlingConfig, Settings } from '../src/types';
 
 const i18nMock = vi.hoisted(() => ({
   changeLanguage: vi.fn(),
@@ -124,6 +126,49 @@ describe('BasicSettings', () => {
     fireEvent.change(screen.getByDisplayValue('100'), { target: { value: '' } });
 
     expect(onSettingsChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('CrawlingConfigEditor optional reply selector', () => {
+  it('leaves expansion absent when replies are enabled and normalizes a cleared expansion selector', () => {
+    const onChange = vi.fn();
+    const initial: CrawlingConfig = {
+      id: 'rule',
+      domain: 'example.com',
+      lastUpdated: 1,
+      container: { selector: '.comments', type: 'css' },
+      item: { selector: '.comment', type: 'css' },
+      fields: [],
+    };
+    function Harness() {
+      const [config, setConfig] = useState(initial);
+      return (
+        <CrawlingConfigEditor
+          config={config}
+          onChange={(next) => {
+            onChange(next);
+            setConfig(next);
+          }}
+          onSave={vi.fn()}
+          onCancel={vi.fn()}
+        />
+      );
+    }
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(onChange.mock.calls[0][0].replies.expandBtn).toBeUndefined();
+    const expansionInput = screen
+      .getByText('options.crawlingConfigs.replyToggle')
+      .closest('div')
+      ?.querySelector('input');
+    expect(expansionInput).toBeTruthy();
+    fireEvent.change(expansionInput!, { target: { value: '.expand' } });
+    expect(onChange.mock.lastCall?.[0].replies.expandBtn).toEqual({
+      selector: '.expand',
+      type: 'css',
+    });
+    fireEvent.change(expansionInput!, { target: { value: '   ' } });
+    expect(onChange.mock.lastCall?.[0].replies.expandBtn).toBeUndefined();
   });
 });
 

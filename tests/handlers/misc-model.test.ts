@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleTestModel } from '../../src/background/handlers/misc';
+import { handleSaveSettings, handleImportSettings } from '../../src/background/handlers/settings';
+import { AIService } from '../../src/background/AIService';
+import type { AIResponse } from '../../src/types';
 import type { HandlerContext } from '../../src/background/handlers/types';
 import { TEXT } from '../../src/config/constants';
 import type { Message } from '../../src/types';
@@ -28,6 +31,7 @@ const asAIService = (callAI: ReturnType<typeof vi.fn>): HandlerContext['aiServic
   ({
     callAI,
     rememberVerifiedConfig: vi.fn(),
+    getVerificationEpoch: vi.fn().mockReturnValue(0),
   }) as unknown as HandlerContext['aiService'];
 
 describe('misc handlers - model test', () => {
@@ -60,6 +64,7 @@ describe('misc handlers - model test', () => {
         aiService: {
           callAI,
           rememberVerifiedConfig,
+          getVerificationEpoch: vi.fn().mockReturnValue(7),
         } as unknown as HandlerContext['aiService'],
         settingsStore: {
           saveSettings,
@@ -69,12 +74,145 @@ describe('misc handlers - model test', () => {
     );
 
     expect(callAI).toHaveBeenCalledWith(expect.objectContaining({ timeout: 60000 }));
-    expect(rememberVerifiedConfig).toHaveBeenCalledWith(baseConfig);
+    expect(rememberVerifiedConfig).toHaveBeenCalledWith(baseConfig, 7);
     expect(saveSettings).not.toHaveBeenCalled();
     expect(res.success).toBe(true);
     expect(res.response).toBe('OK');
     expect(res.message).toBe('Model is working correctly');
   });
+
+  it.each(['save', 'import'] as const)(
+    'does not resurrect a deleted key when an older model test finishes after %s',
+    async (operation) => {
+      const settingsStore = {
+        getSettings: vi.fn().mockResolvedValue({ aiTimeout: 60000, developerMode: false }),
+        saveSettings: vi.fn().mockResolvedValue(undefined),
+        importSettings: vi.fn().mockResolvedValue(undefined),
+      };
+      const service = new AIService(
+        settingsStore as unknown as ConstructorParameters<typeof AIService>[0],
+        { saveAiLog: vi.fn() } as unknown as ConstructorParameters<typeof AIService>[1],
+        {
+          recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+        } as unknown as ConstructorParameters<typeof AIService>[2],
+      );
+      service.rememberVerifiedConfig(baseConfig);
+      let resolveTest!: (response: AIResponse) => void;
+      const callAI = vi.spyOn(service, 'callAI').mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveTest = resolve;
+        }),
+      );
+      const context = createMockHandlerContext({
+        aiService: service,
+        settingsStore: settingsStore as unknown as HandlerContext['settingsStore'],
+      });
+      const oldTest = handleTestModel(
+        { type: 'TEST_MODEL', payload: { config: baseConfig } },
+        context,
+      );
+      await Promise.resolve();
+      expect(callAI).toHaveBeenCalledOnce();
+      if (operation === 'save') {
+        await handleSaveSettings(
+          {
+            type: 'SAVE_SETTINGS',
+            payload: {
+              settings: { aiModel: { apiKey: '' } },
+              expectedAiEndpoint: baseConfig.apiUrl,
+            },
+          },
+          context,
+        );
+      } else {
+        await handleImportSettings(
+          { type: 'IMPORT_SETTINGS', payload: { data: '{"aiModel":{"apiKey":""}}' } },
+          context,
+        );
+      }
+      resolveTest({ content: 'OK', tokensUsed: 1, finishReason: 'stop' });
+      expect((await oldTest).success).toBe(true);
+      callAI.mockRestore();
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }] }),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      await service.callAI({ prompt: 'Use saved settings', config: { ...baseConfig, apiKey: '' } });
+      expect((fetchMock.mock.calls[0][1] as RequestInit).headers).not.toHaveProperty(
+        'Authorization',
+      );
+    },
+  );
+
+  it.each(['save', 'import'] as const)(
+    'keeps the previously verified key when %s persistence fails during a model test',
+    async (operation) => {
+      const settingsStore = {
+        getSettings: vi.fn().mockResolvedValue({ aiTimeout: 60000, developerMode: false }),
+        saveSettings: vi.fn().mockRejectedValue(new Error('storage unavailable')),
+        importSettings: vi.fn().mockRejectedValue(new Error('storage unavailable')),
+      };
+      const service = new AIService(
+        settingsStore as unknown as ConstructorParameters<typeof AIService>[0],
+        { saveAiLog: vi.fn() } as unknown as ConstructorParameters<typeof AIService>[1],
+        {
+          recordTokenUsage: vi.fn().mockResolvedValue(undefined),
+        } as unknown as ConstructorParameters<typeof AIService>[2],
+      );
+      service.rememberVerifiedConfig(baseConfig);
+      const epoch = service.getVerificationEpoch();
+      let resolveTest!: (response: AIResponse) => void;
+      const callAI = vi.spyOn(service, 'callAI').mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveTest = resolve;
+        }),
+      );
+      const context = createMockHandlerContext({
+        aiService: service,
+        settingsStore: settingsStore as unknown as HandlerContext['settingsStore'],
+      });
+      const oldTest = handleTestModel(
+        { type: 'TEST_MODEL', payload: { config: baseConfig } },
+        context,
+      );
+      await Promise.resolve();
+      await expect(
+        operation === 'save'
+          ? handleSaveSettings(
+              {
+                type: 'SAVE_SETTINGS',
+                payload: {
+                  settings: { aiModel: { apiKey: '' } },
+                  expectedAiEndpoint: baseConfig.apiUrl,
+                },
+              },
+              context,
+            )
+          : handleImportSettings(
+              { type: 'IMPORT_SETTINGS', payload: { data: '{"aiModel":{"apiKey":""}}' } },
+              context,
+            ),
+      ).rejects.toThrow('storage unavailable');
+      expect(service.getVerificationEpoch()).toBe(epoch);
+      resolveTest({ content: 'OK', tokensUsed: 1, finishReason: 'stop' });
+      await oldTest;
+      callAI.mockRestore();
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }] }),
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      await service.callAI({
+        prompt: 'Use prior verified settings',
+        config: { ...baseConfig, apiKey: '' },
+      });
+      expect((fetchMock.mock.calls[0][1] as RequestInit).headers).toMatchObject({
+        Authorization: 'Bearer key',
+      });
+    },
+  );
 
   it('should append hint on failure', async () => {
     const errorMessage = 'Network issue';

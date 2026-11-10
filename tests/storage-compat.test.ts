@@ -675,6 +675,147 @@ describe('SettingsStore crawling config persistence', () => {
   });
 });
 
+describe('SettingsStore endpoint-bound credential patches', () => {
+  const firstEndpoint = 'https://provider-one.example/v1';
+  const secondEndpoint = 'https://provider-two.example/v1';
+  const encryption = () =>
+    createEncryptionServiceMock({
+      decrypt: vi.fn(async (value: string) => value.replace(/^enc:/, '')),
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockStorageGet.mockReset();
+    mockStorageSet.mockReset();
+  });
+
+  it('rejects a late key-only edit from an old options page after an endpoint import', async () => {
+    const storage = useInMemorySettingsStorage({
+      theme: 'dark',
+      aiModel: { ...DEFAULT_SETTINGS.aiModel, apiUrl: firstEndpoint, apiKey: 'enc:first-key' },
+    });
+    const store = new SettingsStore(encryption());
+    const oldPage = await store.getSettings();
+    await store.importSettings(JSON.stringify({ aiModel: { apiUrl: secondEndpoint } }));
+    expect((storage.read() as Settings).aiModel.apiKey).toBe('');
+    mockStorageSet.mockClear();
+
+    await expect(
+      store.saveSettings(
+        { aiModel: { apiKey: oldPage.aiModel.apiKey } },
+        undefined,
+        oldPage.aiModel.apiUrl,
+      ),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      details: { messageKey: 'options.settingsConflict' },
+    });
+
+    await expect(
+      store.saveSettings(
+        { aiModel: { model: 'old-page-model' } },
+        undefined,
+        oldPage.aiModel.apiUrl,
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    expect(mockStorageSet).not.toHaveBeenCalled();
+    expect((storage.read() as Settings).aiModel).toMatchObject({
+      apiUrl: secondEndpoint,
+      apiKey: '',
+    });
+    expect((storage.read() as Settings).theme).toBe('dark');
+  });
+
+  it('compares endpoints inside the same save lock before merging queued credential edits', async () => {
+    const storage = useInMemorySettingsStorage({
+      aiModel: { ...DEFAULT_SETTINGS.aiModel, apiUrl: firstEndpoint, apiKey: 'enc:first-key' },
+    });
+    const store = new SettingsStore(encryption());
+    const outcomes = await Promise.allSettled([
+      store.saveSettings({ aiModel: { apiUrl: secondEndpoint } }, undefined, firstEndpoint),
+      store.saveSettings({ aiModel: { apiKey: 'late-first-key' } }, undefined, firstEndpoint),
+    ]);
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(['fulfilled', 'rejected']);
+    expect((storage.read() as Settings).aiModel).toMatchObject({
+      apiUrl: secondEndpoint,
+      apiKey: '',
+    });
+  });
+
+  it('requires the endpoint precondition for sensitive patches, but not ordinary partial edits', async () => {
+    const storage = useInMemorySettingsStorage({
+      aiModel: { ...DEFAULT_SETTINGS.aiModel, apiUrl: firstEndpoint, apiKey: 'enc:first-key' },
+    });
+    const store = new SettingsStore(encryption());
+    await expect(store.saveSettings({ aiModel: { apiKey: 'unbound-key' } })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
+    await store.saveSettings({ aiModel: { temperature: 0.3 } });
+    expect((storage.read() as Settings).aiModel).toMatchObject({
+      apiKey: 'enc:first-key',
+      temperature: 0.3,
+    });
+  });
+
+  it('allows initial configuration from an explicitly empty endpoint and encrypts a new key', async () => {
+    const storage = useInMemorySettingsStorage({ language: 'en-US' });
+    const store = new SettingsStore(encryption());
+    await store.saveSettings(
+      { aiModel: { apiUrl: firstEndpoint, apiKey: 'new-key' } },
+      undefined,
+      '',
+    );
+    expect((storage.read() as Settings).aiModel).toMatchObject({
+      apiUrl: firstEndpoint,
+      apiKey: 'enc:new-key',
+    });
+    await expect(
+      store.saveSettings({ aiModel: { apiKey: 'stale-initial-key' } }, undefined, ''),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+  });
+
+  it('keeps credentials for normalized-equivalent URLs and permits equivalent preconditions', async () => {
+    const storage = useInMemorySettingsStorage({
+      aiModel: {
+        ...DEFAULT_SETTINGS.aiModel,
+        apiUrl: 'https://API.example:443/v1/chat/completions?b=2&a=1#old',
+        apiKey: 'enc:first-key',
+      },
+    });
+    const store = new SettingsStore(encryption());
+    await store.saveSettings(
+      { aiModel: { apiUrl: 'https://api.example/v1/?a=1&b=2' } },
+      undefined,
+      ' https://api.example/v1?a=1&b=2 ',
+    );
+    expect((storage.read() as Settings).aiModel.apiKey).toBe('enc:first-key');
+    await store.saveSettings(
+      { aiModel: { apiKey: 'replacement' } },
+      undefined,
+      'https://api.example/v1/chat/completions?b=2&a=1',
+    );
+    expect((storage.read() as Settings).aiModel.apiKey).toBe('enc:replacement');
+  });
+
+  it('clears the key when a URL is removed and accepts an explicit key for a new endpoint', async () => {
+    const storage = useInMemorySettingsStorage({
+      aiModel: { ...DEFAULT_SETTINGS.aiModel, apiUrl: firstEndpoint, apiKey: 'enc:first-key' },
+    });
+    const store = new SettingsStore(encryption());
+    await store.saveSettings({ aiModel: { apiUrl: '' } }, undefined, firstEndpoint);
+    expect((storage.read() as Settings).aiModel.apiKey).toBe('');
+    await store.saveSettings(
+      { aiModel: { apiUrl: secondEndpoint, apiKey: 'second-key' } },
+      undefined,
+      '',
+    );
+    expect((storage.read() as Settings).aiModel).toMatchObject({
+      apiUrl: secondEndpoint,
+      apiKey: 'enc:second-key',
+    });
+  });
+});
+
 describe('SettingsStore decryption resilience', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -815,17 +956,24 @@ describe('SettingsStore decryption resilience', () => {
     const store = new SettingsStore(createEncryptionServiceMock());
 
     await expect(
-      store.saveSettings({
-        aiModel: {
-          apiUrl: 'http://provider.example/v1',
-          apiKey: '',
-          model: 'model',
-          contextWindowSize: 128_000,
-          temperature: 1,
-          topP: 1,
+      store.saveSettings(
+        {
+          aiModel: {
+            apiUrl: 'http://provider.example/v1',
+            apiKey: '',
+            model: 'model',
+            contextWindowSize: 128_000,
+            temperature: 1,
+            topP: 1,
+          },
         },
-      }),
-    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+        undefined,
+        '',
+      ),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+      message: 'AI API URL must use HTTPS, except for loopback development endpoints',
+    });
   });
 
   it('rejects AI token budgets that exceed the configured context window', async () => {
@@ -833,18 +981,22 @@ describe('SettingsStore decryption resilience', () => {
     const store = new SettingsStore(createEncryptionServiceMock());
 
     await expect(
-      store.saveSettings({
-        aiModel: {
-          apiUrl: 'https://provider.example/v1',
-          apiKey: '',
-          model: 'model',
-          contextWindowSize: 4096,
-          maxOutputTokens: 3000,
-          temperature: 1,
-          topP: 1,
+      store.saveSettings(
+        {
+          aiModel: {
+            apiUrl: 'https://provider.example/v1',
+            apiKey: '',
+            model: 'model',
+            contextWindowSize: 4096,
+            maxOutputTokens: 3000,
+            temperature: 1,
+            topP: 1,
+          },
         },
-      }),
-    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+        undefined,
+        '',
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR', message: 'Invalid AI model limits' });
   });
 
   it('rejects imported remote HTTP AI endpoints', async () => {

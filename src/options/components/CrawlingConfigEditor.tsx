@@ -279,7 +279,6 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
                       rule: { selector: '', type: 'css' },
                       attribute: '',
                     })),
-                    expandBtn: { selector: '', type: 'css' },
                   });
                 } else {
                   handleRepliesChange(undefined);
@@ -298,7 +297,12 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
             <SelectorInput
               label={t('options.crawlingConfigs.replyToggle')}
               rule={config.replies.expandBtn || { selector: '', type: 'css' }}
-              onChange={(r) => handleRepliesChange({ ...config.replies!, expandBtn: r })}
+              onChange={(r) =>
+                handleRepliesChange({
+                  ...config.replies!,
+                  expandBtn: r.selector.trim() ? r : undefined,
+                })
+              }
               validationStatus={fv?.['replies.expandBtn']}
             />
 
@@ -358,7 +362,7 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
           <SelectorInput
             label={t('options.crawlingConfigs.videoTimeSelector')}
             rule={config.videoTime || { selector: '', type: 'css' }}
-            onChange={(r) => onChange({ ...config, videoTime: r.selector ? r : undefined })}
+            onChange={(r) => onChange({ ...config, videoTime: r.selector.trim() ? r : undefined })}
             validationStatus={fv?.['videoTime']}
           />
         </div>
@@ -390,7 +394,9 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
           <SelectorInput
             label={t('options.crawlingConfigs.postContentSelector')}
             rule={config.postContent || { selector: '', type: 'css' }}
-            onChange={(r) => onChange({ ...config, postContent: r.selector ? r : undefined })}
+            onChange={(r) =>
+              onChange({ ...config, postContent: r.selector.trim() ? r : undefined })
+            }
             validationStatus={fv?.['postContent']}
           />
         </div>

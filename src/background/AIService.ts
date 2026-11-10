@@ -36,6 +36,7 @@ interface StreamingAIResult {
 export class AIService {
   private lastVerifiedConfig: AIConfig | null = null;
   private lastVerifiedConfigTimestamp: number = 0;
+  private verificationEpoch = 0;
 
   constructor(
     private readonly settingsStore: SettingsStore,
@@ -43,8 +44,13 @@ export class AIService {
     private readonly tokenStatsStore: TokenStatsStore,
   ) {}
 
-  rememberVerifiedConfig(config: AIConfig): void {
+  getVerificationEpoch(): number {
+    return this.verificationEpoch;
+  }
+
+  rememberVerifiedConfig(config: AIConfig, expectedEpoch = this.verificationEpoch): void {
     if (
+      expectedEpoch !== this.verificationEpoch ||
       typeof config.apiKey !== 'string' ||
       config.apiKey.trim().length === 0 ||
       !config.apiUrl ||
@@ -57,6 +63,7 @@ export class AIService {
   }
 
   clearVerifiedConfig(): void {
+    this.verificationEpoch += 1;
     this.lastVerifiedConfig = null;
     this.lastVerifiedConfigTimestamp = 0;
   }
@@ -70,7 +77,7 @@ export class AIService {
   }
 
   private clearExpiredVerifiedConfig(): void {
-    if (this.isLastVerifiedConfigExpired()) {
+    if (this.lastVerifiedConfig && this.isLastVerifiedConfigExpired()) {
       this.clearVerifiedConfig();
       Logger.debug('[AIService] Cleared expired lastVerifiedConfig');
     }

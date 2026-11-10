@@ -23,8 +23,8 @@ vi.mock('../src/options/components/CrawlingConfigEditor', () => ({
     onSave,
     onCancel,
   }: {
-    config: { domain: string };
-    onChange: (config: { domain: string; siteName?: string }) => void;
+    config: CrawlingConfig;
+    onChange: (config: CrawlingConfig) => void;
     onSave: () => void;
     onCancel: () => void;
   }) => (
@@ -32,6 +32,41 @@ vi.mock('../src/options/components/CrawlingConfigEditor', () => ({
       <div>editor:{config.domain}</div>
       <button onClick={() => onChange({ ...config, siteName: 'Updated Example' })}>
         editor-change-site-name
+      </button>
+      <button
+        onClick={() =>
+          onChange({
+            ...config,
+            container: { selector: '.comments', type: 'css' },
+            item: { selector: '.comment', type: 'css' },
+            fields: config.fields.map((field) => ({
+              ...field,
+              rule: { ...field.rule, selector: `.${field.name}` },
+            })),
+          })
+        }
+      >
+        editor-fill-required
+      </button>
+      <button
+        onClick={() => onChange({ ...config, container: { ...config.container, selector: '' } })}
+      >
+        editor-invalid
+      </button>
+      <button
+        onClick={() =>
+          onChange({
+            ...config,
+            replies: {
+              container: { selector: '.replies', type: 'css' },
+              item: { selector: '.reply', type: 'css' },
+              fields: config.fields,
+              expandBtn: { selector: '  ', type: 'css' },
+            },
+          })
+        }
+      >
+        editor-replies
       </button>
       <button onClick={onSave}>editor-save</button>
       <button onClick={onCancel}>editor-cancel</button>
@@ -139,6 +174,11 @@ describe('ConfigSettings', () => {
     expect(screen.getByText('editor:new-site.com')).toBeTruthy();
 
     fireEvent.click(screen.getByText('editor-save'));
+    expect(onSettingsChange).not.toHaveBeenCalled();
+    expect(screen.getByText('editor:new-site.com')).toBeTruthy();
+    expect(showToast).toHaveBeenCalledWith('options.crawlingConfigs.invalidDraft', 'error');
+    fireEvent.click(screen.getByText('editor-fill-required'));
+    fireEvent.click(screen.getByText('editor-save'));
     expect(onSettingsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         crawlingConfigs: expect.arrayContaining([
@@ -161,6 +201,34 @@ describe('ConfigSettings', () => {
       destructive: true,
     });
     return waitFor(() => expect(onSettingsChange).toHaveBeenCalledWith({ crawlingConfigs: [] }));
+  });
+
+  it('keeps invalid edited rules local and accepts replies with no expansion button', () => {
+    const onSettingsChange = vi.fn();
+    render(
+      <ConfigSettings
+        settings={createSettings([createConfig()])}
+        onSettingsChange={onSettingsChange}
+        showToast={showToast}
+        confirm={vi.fn(async () => true)}
+      />,
+    );
+    fireEvent.click(screen.getByText('options.crawlingConfigs.edit'));
+    fireEvent.click(screen.getByText('editor-invalid'));
+    fireEvent.click(screen.getByText('editor-save'));
+    expect(screen.getByText('editor:example.com')).toBeTruthy();
+    expect(onSettingsChange).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith('options.crawlingConfigs.invalidDraft', 'error');
+    fireEvent.click(screen.getByText('editor-fill-required'));
+    fireEvent.click(screen.getByText('editor-replies'));
+    fireEvent.click(screen.getByText('editor-save'));
+    const saved = onSettingsChange.mock.calls[0][0].crawlingConfigs[0] as CrawlingConfig;
+    expect(saved.replies).toMatchObject({
+      container: { selector: '.replies' },
+      item: { selector: '.reply' },
+    });
+    expect(saved.replies?.expandBtn).toBeUndefined();
+    expect(screen.queryByText('editor:example.com')).toBeNull();
   });
 
   it('updates lastUpdated only when config content changes on manual save', () => {

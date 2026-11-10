@@ -16,6 +16,10 @@ const Options: React.FC = () => {
   const {
     settings,
     saving,
+    loading,
+    loadError,
+    hasExternalConflict,
+    retryLoad,
     handleSettingsChange,
     handleExport,
     handleImport,
@@ -28,12 +32,29 @@ const Options: React.FC = () => {
 
   if (!settings) {
     return (
-      <div
-        className="container mx-auto p-8"
-        style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
-      >
-        {t('common.loading')}
-      </div>
+      <>
+        <ToastContainer />
+        <div
+          className="container mx-auto p-8"
+          style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+        >
+          {loadError ? (
+            <div role="alert">
+              <p className="mb-4">{loadError}</p>
+              <button
+                type="button"
+                className="px-4 py-2 rounded-lg theme-button-secondary"
+                disabled={loading}
+                onClick={() => void retryLoad()}
+              >
+                {t('options.retryLoadSettings')}
+              </button>
+            </div>
+          ) : (
+            t('common.loading')
+          )}
+        </div>
+      </>
     );
   }
 
@@ -73,6 +94,12 @@ const Options: React.FC = () => {
             </button>
           ))}
         </div>
+
+        {hasExternalConflict && (
+          <div role="alert" className="mb-4 p-4 rounded-lg theme-card">
+            {t('options.settingsConflict')}
+          </div>
+        )}
 
         <div className="animate-fade-in">
           {activeTab === 'extension' && (

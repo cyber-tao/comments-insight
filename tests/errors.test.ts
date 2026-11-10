@@ -6,6 +6,47 @@ import {
   createNetworkError,
   getUserFriendlyMessage,
 } from '../src/utils/errors';
+import {
+  fromExtensionErrorPayload,
+  isExtensionErrorPayload,
+  toExtensionErrorPayload,
+} from '../src/utils/error-types';
+
+describe('extension error transport', () => {
+  it('round-trips conflict translation metadata without exposing arbitrary details', () => {
+    const error = new ExtensionError(ErrorCode.VALIDATION_ERROR, 'Settings changed', {
+      messageKey: 'options.settingsConflict',
+      apiKey: 'synthetic-private-value',
+      diagnostic: { stack: 'source-only diagnostic' },
+    });
+    const payload = toExtensionErrorPayload(error);
+    expect(payload).toEqual({
+      code: ErrorCode.VALIDATION_ERROR,
+      message: 'Settings changed',
+      retryable: false,
+      messageKey: 'options.settingsConflict',
+    });
+    const received = fromExtensionErrorPayload(JSON.parse(JSON.stringify(payload)));
+    expect(received).toBeInstanceOf(ExtensionError);
+    expect((received as ExtensionError).details).toEqual({
+      messageKey: 'options.settingsConflict',
+    });
+    expect(JSON.stringify(payload)).not.toContain('synthetic-private-value');
+    expect(JSON.stringify(payload)).not.toContain('source-only diagnostic');
+  });
+
+  it('accepts legacy error envelopes and rejects malformed translation metadata', () => {
+    const payload = { code: ErrorCode.API_ERROR, message: 'Legacy error', retryable: true };
+    expect(isExtensionErrorPayload(payload)).toBe(true);
+    expect(fromExtensionErrorPayload(payload)).toMatchObject({
+      code: ErrorCode.API_ERROR,
+      message: 'Legacy error',
+      retryable: true,
+      details: undefined,
+    });
+    expect(isExtensionErrorPayload({ ...payload, messageKey: 123 })).toBe(false);
+  });
+});
 
 describe('getUserFriendlyMessage', () => {
   it('returns predefined message for MISSING_API_KEY', () => {
