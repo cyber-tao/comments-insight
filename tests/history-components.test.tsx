@@ -364,6 +364,61 @@ describe('HistoryDetailPanel', () => {
     expect(screen.getByText(/formatted-date/)).toBeTruthy();
   });
 
+  it('renders model image alt text without loading resources or executing raw HTML', () => {
+    const selectedItem = createHistoryItem({
+      analysis: {
+        markdown: [
+          '# Privacy report',
+          '![Remote chart](https://audit.invalid/pixel?data=SYNTHETIC)',
+          '![Local chart](data:image/png;base64,AA==)',
+          '[Explicit link](https://audit.invalid/manual)',
+          '[Unsafe link](javascript:alert%281%29)',
+          '<img id="raw-image" src="https://audit.invalid/raw" onerror="alert(1)">',
+          '<script id="raw-script">alert(1)</script>',
+        ].join('\n\n'),
+        tokensUsed: 1,
+        generatedAt: 1700000000000,
+      },
+    });
+    const { container } = render(
+      <HistoryDetailPanel
+        selectedItem={selectedItem}
+        selectedItemError={null}
+        selectedItemLoading={false}
+        viewMode="analysis"
+        exportPostContentInMarkdown={false}
+        commentSearchTerm=""
+        sortBy="likes"
+        commentsPerPage={PAGINATION.DEFAULT_PER_PAGE}
+        currentPage={1}
+        totalComments={selectedItem.comments.length}
+        totalPages={1}
+        paginatedComments={selectedItem.comments}
+        isReanalyzing={false}
+        reanalyzeError={null}
+        reanalyzeProgress={null}
+        reanalyzeTaskId={null}
+        reanalyzingHistoryId={null}
+        onViewModeChange={vi.fn()}
+        onReanalyze={vi.fn()}
+        onCommentSearchTermChange={vi.fn()}
+        onSortByChange={vi.fn()}
+        onCommentsPerPageChange={vi.fn()}
+        onCurrentPageChange={vi.fn()}
+        formatDate={() => 'formatted-date'}
+      />,
+    );
+
+    expect(screen.getByText('Privacy report')).toBeTruthy();
+    expect(screen.getByText('Remote chart')).toBeTruthy();
+    expect(screen.getByText('Local chart')).toBeTruthy();
+    expect(container.querySelector('img, script, #raw-image, #raw-script')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Explicit link' }).getAttribute('href')).toBe(
+      'https://audit.invalid/manual',
+    );
+    expect(screen.getByText('Unsafe link').getAttribute('href') ?? '').not.toMatch(/^javascript:/i);
+  });
+
   it('treats blank analysis markdown as no analysis result', () => {
     const selectedItem = createHistoryItem({
       analysis: {

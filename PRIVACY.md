@@ -1,6 +1,6 @@
 # Comments Insight Privacy Policy
 
-Last updated: August 31, 2026
+Last updated: November 10, 2026
 
 Comments Insight is a browser extension that extracts comments from webpages and, when requested by the user, sends selected page data to an AI API endpoint configured by the user. This policy describes the data handled by the extension and where it goes.
 
@@ -23,7 +23,9 @@ The extension does not send browsing history to the developer or build a develop
 
 The configured API URL, model name, API key, timeout, token limits, and prompt templates are stored in `chrome.storage.local`. The API key is encrypted locally, but the key material is stored in the same extension storage. This protects against accidental plaintext exposure; it is not a security boundary against malware, a compromised browser profile, or another actor with local access.
 
-The API key is sent only to the user-configured AI endpoint when the extension lists models, tests the connection, or invokes an AI feature. Settings exports omit the API key. If imported settings change the API endpoint without supplying a new key, the extension clears the existing key to avoid sending a credential to a different provider.
+The API key is sent only to the user-configured AI endpoint when the extension lists models, tests the connection, or invokes an AI feature. Settings exports omit the API key. Changing the endpoint in Options or importing a different endpoint without supplying a new key clears the existing key. Endpoint-bound edits from a stale settings page are rejected rather than attaching an old provider's credential or model to the new endpoint.
+
+Saving removal of a key also invalidates in-memory connection verification, so a late result from an earlier connection test cannot restore that key for a new operation. This does not automatically cancel a task that has already started or recall requests already sent to a provider.
 
 ### Locally stored results
 
@@ -52,6 +54,12 @@ Remote AI endpoints must use HTTPS. Plain HTTP is accepted only for loopback dev
 ### Crawling-rule updates
 
 When the user explicitly synchronizes default crawling rules, the extension fetches a public JSON file from GitHub. GitHub receives ordinary request metadata such as the IP address and user agent; the request does not include the configured AI key, extracted comments, or stored reports.
+
+### Report display and exports
+
+The extension displays model-generated Markdown images as alternative text instead of loading them. HTML visual reports run in a network-blocked sandbox. Ordinary text links can still take the user to another site when explicitly clicked; that site's own policy applies.
+
+Markdown exports preserve the report as text and may contain URLs or raw HTML from the model. The extension does not control how an external Markdown viewer handles those contents. Review an exported report before opening it in a viewer that permits external resources or active HTML. HTML exports are separately sanitized and include a restrictive Content Security Policy.
 
 ## Sharing and sale
 

@@ -417,7 +417,10 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                   className="prose prose-sm md:prose-base dark:prose-invert max-w-none"
                   style={{ color: 'var(--text-secondary)' }}
                 >
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{ img: ({ alt }) => (alt ? <span>{alt}</span> : null) }}
+                  >
                     {selectedItem.analysis?.markdown ?? ''}
                   </ReactMarkdown>
                 </div>
