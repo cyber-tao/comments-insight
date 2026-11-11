@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { TIMING } from '@/config/constants';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
@@ -17,6 +18,7 @@ const Toast: React.FC<ToastProps> = ({
   duration = TIMING.TOAST_DEFAULT_DURATION_MS,
   onClose,
 }) => {
+  const { t } = useTranslation();
   useEffect(() => {
     const timer = setTimeout(() => {
       onClose();
@@ -72,7 +74,7 @@ const Toast: React.FC<ToastProps> = ({
       <button
         onClick={onClose}
         className="text-white hover:opacity-80 font-bold text-lg"
-        aria-label="Close"
+        aria-label={t('common.close')}
       >
         ×
       </button>

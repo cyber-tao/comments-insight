@@ -1,46 +1,53 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+/** @vitest-environment jsdom */
 
-// Mock i18next
-vi.mock('i18next', () => ({
-  default: {
-    use: vi.fn().mockReturnThis(),
-    init: vi.fn(),
-    t: vi.fn((key) => key),
-  },
-}));
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LANGUAGES, resolveLocale } from '../src/config/constants/ui';
 
-// Mock react-i18next
-vi.mock('react-i18next', () => ({
-  initReactI18next: {},
-}));
-
-describe('i18n Configuration', () => {
-  // We need to reset modules to re-evaluate the i18n file logic
+describe('i18n configuration', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.stubGlobal('navigator', { language: 'en-US' });
   });
 
-  it('should initialize with default English language', async () => {
-    const i18n = (await import('../src/utils/i18n')).default;
-    expect(i18n.init).toHaveBeenCalledWith(
-      expect.objectContaining({
-        lng: 'en-US',
-        fallbackLng: 'en-US',
-      }),
-    );
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
-  it('should detect Chinese language', async () => {
-    vi.stubGlobal('navigator', { language: 'zh-CN' });
-    const i18n = (await import('../src/utils/i18n')).default;
+  it.each([
+    ['en-GB', 'en-US'],
+    ['zh-SG', 'zh-CN'],
+    ['zh-Hans-TW', 'zh-CN'],
+    ['zh-HK', 'zh-TW'],
+    ['zh_Hant_MO', 'zh-TW'],
+    ['ko', 'ko-KR'],
+    ['pt', 'pt-PT'],
+    ['fr-CA', 'fr-FR'],
+    ['pt-PT', 'pt-PT'],
+    ['unavailable-locale', 'en-US'],
+  ])('resolves %s to %s', (input, expected) => {
+    expect(resolveLocale(input)).toBe(expected);
+  });
 
-    // Since module is cached, we might need to verify the logic function directly if exposed,
-    // or rely on resetModules which re-imports.
-    expect(i18n.init).toHaveBeenCalledWith(
-      expect.objectContaining({
-        lng: 'zh-CN',
-      }),
-    );
+  it('loads the complete catalog for each supported locale', async () => {
+    const { default: i18n, changeLanguage } = await import('../src/utils/i18n');
+    for (const { code } of LANGUAGES.SUPPORTED) {
+      await changeLanguage(code);
+      expect(i18n.resolvedLanguage).toBe(code);
+      expect(i18n.hasResourceBundle(code, 'translation')).toBe(true);
+      expect(document.documentElement.lang).toBe(code);
+    }
+  });
+
+  it('localizes the document on browser-language startup and settings change', async () => {
+    vi.stubGlobal('navigator', { language: 'zh-Hant-HK' });
+    window.history.replaceState(null, '', '/src/options/index.html');
+    const { default: i18n, changeLanguage } = await import('../src/utils/i18n');
+    expect(i18n.resolvedLanguage).toBe('zh-TW');
+    expect(document.documentElement.lang).toBe('zh-TW');
+    expect(document.title).toContain('設定');
+
+    await changeLanguage('pt_PT');
+    expect(document.documentElement.lang).toBe('pt-PT');
+    expect(document.title).toContain('Definições');
   });
 });

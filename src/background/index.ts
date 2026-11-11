@@ -29,11 +29,11 @@ chrome.storage.local
 
 const initPromise = (async () => {
   await new DataMigrator().migrate();
-  await getTaskManager().initialize();
   // Apply the user's language preference before any background-originated
   // strings (notifications, persisted task errors) are produced.
   const settings = await getSettingsStore().getSettings();
   await changeLanguage(settings.language);
+  await getTaskManager().initialize();
   Logger.info('[Background] Migration and TaskManager initialized');
 })();
 void initPromise.catch((error) => {

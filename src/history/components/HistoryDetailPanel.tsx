@@ -234,7 +234,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
 
         <div className="flex-1 w-full h-full overflow-hidden">
           <DynamicReportViewer
-            title={selectedItem.title || 'Dynamic Analysis Report'}
+            title={selectedItem.title}
             html={selectedItem.analysis?.dynamicHtml || ''}
           />
         </div>
@@ -509,7 +509,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                 }}
               >
                 <DynamicReportViewer
-                  title={selectedItem.title || 'Dynamic Analysis Report'}
+                  title={selectedItem.title}
                   html={selectedItem.analysis?.dynamicHtml || ''}
                   style={{ minHeight: '600px' }}
                 />

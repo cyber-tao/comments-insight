@@ -64,7 +64,8 @@ vi.mock('../src/utils/i18n', () => ({
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     // Keys are already covered by scripts/check-i18n.mjs; tests assert on keys.
-    t: (key: string) => key,
+    t: (key: string, params?: { count?: number }) =>
+      params?.count === undefined ? key : `${key} ${params.count}`,
   }),
 }));
 
@@ -181,8 +182,8 @@ describe('Logs Page', () => {
     fireEvent.click(screen.getByText('logs.filterSystem (1)'));
     await waitFor(() => {
       expect(screen.getAllByText('system error message').length).toBeGreaterThan(0);
-      expect(screen.getByText('Total: 1')).toBeTruthy();
-      expect(screen.getByText('Errors: 1')).toBeTruthy();
+      expect(screen.getByText('logs.totalCount 1')).toBeTruthy();
+      expect(screen.getByText('logs.errorCount 1')).toBeTruthy();
     });
   });
 
@@ -292,10 +293,10 @@ describe('Logs Page', () => {
       render(<Logs />);
       await loadedLogs();
       if (kind === 'system') fireEvent.click(screen.getByText('logs.filterSystem (1)'));
-      fireEvent.click(screen.getByText(kind === 'ai' ? '📊 AI Analysis' : 'system error message'));
-      // jsdom has no measured viewport, so virtua rows remain CSS-hidden.
-      // Query the rendered action text, as the expansion tests do below.
-      fireEvent.click(screen.getByText('🗑️ Delete'));
+      fireEvent.click(
+        screen.getByText(kind === 'ai' ? '📊 logs.aiAnalysis' : 'system error message'),
+      );
+      fireEvent.click(screen.getByRole('button', { name: '🗑️ common.delete' }));
       const key = kind === 'ai' ? 'ai_log_2' : 'log_sys_1';
 
       await waitFor(() => expect(storageRemove).toHaveBeenCalledExactlyOnceWith([key]));
@@ -348,13 +349,13 @@ describe('Logs Page', () => {
       if (kind === 'system') fireEvent.click(screen.getByText('logs.filterSystem (1)'));
       if (operation === 'delete') {
         fireEvent.click(
-          screen.getByText(kind === 'ai' ? '📊 AI Analysis' : 'system error message'),
+          screen.getByText(kind === 'ai' ? '📊 logs.aiAnalysis' : 'system error message'),
         );
       }
       const action =
         operation === 'clear'
           ? screen.getByRole('button', { name: /logs.clearAll/ })
-          : screen.getByText('🗑️ Delete');
+          : screen.getByRole('button', { name: '🗑️ common.delete' });
       await act(async () => {
         fireEvent.click(action);
         await removalStarted.promise;
@@ -512,10 +513,10 @@ describe('Logs Page', () => {
 
     // Expand
     fireEvent.click(screen.getAllByText('system error message')[0]);
-    expect(screen.getByText('📋 Copy Log')).toBeTruthy();
+    expect(screen.getByText('📋 logs.copyLog')).toBeTruthy();
 
     // Collapse
     fireEvent.click(screen.getAllByText('system error message')[0]);
-    expect(screen.queryByText('📋 Copy Log')).toBeNull();
+    expect(screen.queryByText('📋 logs.copyLog')).toBeNull();
   });
 });

@@ -136,11 +136,13 @@ const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
       })
       .optional(),
     error: z.string().optional(),
+    errorKey: nonEmptyString.optional(),
   }),
   CONFIG_GENERATION_COMPLETED: z.object({
     taskId: nonEmptyString,
     success: z.boolean(),
     error: z.string().optional(),
+    errorKey: nonEmptyString.optional(),
   }),
   START_ANALYSIS: z.object({
     comments: z.array(coreCommentSchema).max(UI_LIMITS.MAX_COMMENTS_MAX),

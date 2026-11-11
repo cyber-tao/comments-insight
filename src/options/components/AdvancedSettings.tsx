@@ -8,6 +8,7 @@ import {
   DOM_ANALYSIS_DEFAULTS,
   STORAGE,
   LOG_LEVELS,
+  LOG_LEVEL_LABELS,
 } from '@/config/constants';
 import { Settings, SettingsPatch } from '@/types';
 import { parseFiniteIntegerInput } from '@/utils/number';
@@ -226,10 +227,11 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                 onChange={handleLogLevelChange}
                 className="w-full theme-input"
               >
-                <option value="DEBUG">DEBUG</option>
-                <option value="INFO">INFO</option>
-                <option value="WARN">WARN</option>
-                <option value="ERROR">ERROR</option>
+                {LOG_LEVELS.map((level) => (
+                  <option key={level} value={level}>
+                    {t(LOG_LEVEL_LABELS[level])}
+                  </option>
+                ))}
               </select>
               <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                 {t(

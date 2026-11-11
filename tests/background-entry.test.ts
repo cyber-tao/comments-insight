@@ -267,7 +267,7 @@ describe('background entry wiring', () => {
     });
   });
 
-  it('runs migration before task initialization, then loads settings and changes language', async () => {
+  it('applies the saved language after migration and before task restoration', async () => {
     const migration = createDeferred<void>();
     const taskInitialization = createDeferred<void>();
     const settingsLoad = createDeferred<{ language: string }>();
@@ -292,19 +292,22 @@ describe('background entry wiring', () => {
 
     migration.resolve(undefined);
     await vi.waitFor(() => {
+      expect(backgroundMocks.settingsStore.getSettings).toHaveBeenCalledOnce();
+    });
+    expect(backgroundMocks.taskManager.initialize).not.toHaveBeenCalled();
+    expect(backgroundMocks.changeLanguage).not.toHaveBeenCalled();
+
+    settingsLoad.resolve({ language: 'ja-JP' });
+    await vi.waitFor(() => {
+      expect(backgroundMocks.changeLanguage).toHaveBeenCalledWith('ja-JP');
       expect(backgroundMocks.taskManager.initialize).toHaveBeenCalledOnce();
     });
-    expect(backgroundMocks.settingsStore.getSettings).not.toHaveBeenCalled();
+    expect(backgroundMocks.changeLanguage.mock.invocationCallOrder[0]).toBeLessThan(
+      backgroundMocks.taskManager.initialize.mock.invocationCallOrder[0],
+    );
 
     taskInitialization.resolve(undefined);
     await vi.waitFor(() => {
-      expect(backgroundMocks.settingsStore.getSettings).toHaveBeenCalledOnce();
-    });
-    expect(backgroundMocks.changeLanguage).not.toHaveBeenCalled();
-
-    settingsLoad.resolve({ language: 'zh-CN' });
-    await vi.waitFor(() => {
-      expect(backgroundMocks.changeLanguage).toHaveBeenCalledWith('zh-CN');
       expect(backgroundMocks.loggerInfo).toHaveBeenCalledWith(
         '[Background] Migration and TaskManager initialized',
       );

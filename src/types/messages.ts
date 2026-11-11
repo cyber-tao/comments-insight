@@ -8,6 +8,7 @@ import {
   ProgressStage,
 } from './index';
 import type { LogEntry } from '@/utils/logger';
+import type { ExtensionErrorPayload } from '@/utils/error-types';
 
 export type LogMessage =
   | { type: 'APPEND_SYSTEM_LOG'; payload: { entry: LogEntry } }
@@ -76,6 +77,7 @@ export type ExtractionMessage =
         comments?: Comment[];
         postInfo?: { url?: string; title?: string; videoTime?: string; postContent?: string };
         error?: string;
+        errorKey?: string;
       };
     }
   | {
@@ -84,6 +86,7 @@ export type ExtractionMessage =
         taskId: string;
         success: boolean;
         error?: string;
+        errorKey?: string;
       };
     }
   | {
@@ -170,8 +173,11 @@ export type MessageType = Message['type'];
 export type ContentMessage =
   | { type: 'PING'; payload?: never }
   | { type: 'GET_PLATFORM_INFO'; payload?: never }
-  | { type: 'RUN_EXTRACTION'; payload: { taskId: string; maxComments: number } }
-  | { type: 'RUN_CONFIG_GENERATION'; payload: { taskId: string } }
+  | {
+      type: 'RUN_EXTRACTION';
+      payload: { taskId: string; maxComments: number; expectedUrl?: string };
+    }
+  | { type: 'RUN_CONFIG_GENERATION'; payload: { taskId: string; expectedUrl?: string } }
   | { type: 'CANCEL_EXTRACTION'; payload: { taskId: string } }
   | { type: 'GET_DOM_STRUCTURE'; payload?: never }
   | {
@@ -181,7 +187,7 @@ export type ContentMessage =
 
 export interface ExtractionResponse {
   success: boolean;
-  error?: string;
+  error?: string | ExtensionErrorPayload;
   comments?: Comment[];
   postInfo?: {
     url?: string;
@@ -193,7 +199,7 @@ export interface ExtractionResponse {
 
 export interface ConfigGenerationResponse {
   success: boolean;
-  error?: string;
+  error?: string | ExtensionErrorPayload;
 }
 
 export interface DomStructureResponse {

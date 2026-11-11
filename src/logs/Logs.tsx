@@ -5,7 +5,7 @@ import { useConfirm } from '@/hooks/useConfirm';
 import { Logger, LogLevel } from '@/utils/logger';
 import { changeLanguage } from '@/utils/i18n';
 import { ExtensionAPI } from '@/utils/extension-api';
-import { VList } from 'virtua';
+import { LOG_LEVEL_LABELS, LOG_LEVELS } from '@/config/constants';
 
 import { useLogs } from './hooks/useLogs';
 import { LogsHeader } from './components/LogsHeader';
@@ -143,10 +143,11 @@ export default function Logs() {
               className="select-input"
             >
               <option value="all">{t('logs.levelAll')}</option>
-              <option value="DEBUG">DEBUG</option>
-              <option value="INFO">INFO</option>
-              <option value="WARN">WARN</option>
-              <option value="ERROR">ERROR</option>
+              {LOG_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {t(LOG_LEVEL_LABELS[level])}
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -154,11 +155,11 @@ export default function Logs() {
 
       {activeTab === 'system' && (
         <div className="logs-stats-bar">
-          <span>Total: {systemStats.total}</span>
-          <span>Errors: {systemStats.errors}</span>
-          <span>Debug: {systemStats.debugs}</span>
-          <span>Info: {systemStats.infos}</span>
-          <span>Warn: {systemStats.warns}</span>
+          <span>{t('logs.totalCount', { count: systemStats.total })}</span>
+          <span>{t('logs.errorCount', { count: systemStats.errors })}</span>
+          <span>{t('logs.debugCount', { count: systemStats.debugs })}</span>
+          <span>{t('logs.infoCount', { count: systemStats.infos })}</span>
+          <span>{t('logs.warningCount', { count: systemStats.warns })}</span>
         </div>
       )}
 
@@ -175,20 +176,14 @@ export default function Logs() {
           aiLogs.length === 0 ? (
             <div className="empty-state">{t('logs.empty')}</div>
           ) : (
-            <VList className="virtua-list">
-              {aiLogs.map((log) => (
-                <AiLogItem key={log.key} log={log} onDelete={handleDeleteLog} />
-              ))}
-            </VList>
+            aiLogs.map((log) => <AiLogItem key={log.key} log={log} onDelete={handleDeleteLog} />)
           )
         ) : systemLogs.length === 0 ? (
           <div className="empty-state">{t('logs.empty')}</div>
         ) : (
-          <VList className="virtua-list">
-            {systemLogs.map((log) => (
-              <SystemLogItem key={log.key} log={log} onDelete={handleDeleteLog} />
-            ))}
-          </VList>
+          systemLogs.map((log) => (
+            <SystemLogItem key={log.key} log={log} onDelete={handleDeleteLog} />
+          ))
         )}
       </div>
 

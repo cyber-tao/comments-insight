@@ -11,8 +11,15 @@ export function maskSensitiveValue(value: string): string {
   return `${prefix}${LOG_SANITIZE.MASK_CHAR.repeat(maskLength)}${suffix}`;
 }
 
-export function sanitizeLogText(text: string): string {
-  let result = text;
+export function redactApiKey(text: string, apiKey: string): string {
+  if (!apiKey) return text;
+  const escapedKey = JSON.stringify(apiKey).slice(1, -1);
+  const redacted = text.split(apiKey).join('[redacted]');
+  return escapedKey === apiKey ? redacted : redacted.split(escapedKey).join('[redacted]');
+}
+
+export function sanitizeLogText(text: string, apiKey = ''): string {
+  let result = redactApiKey(text, apiKey);
   for (const pattern of LOG_SANITIZE.API_KEY_PATTERNS) {
     const regex = new RegExp(pattern.source, pattern.flags);
     result = result.replace(regex, (match) => maskSensitiveValue(match));

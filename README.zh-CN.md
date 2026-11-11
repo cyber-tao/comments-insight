@@ -100,7 +100,7 @@
   - 使用 IndexedDB 保存历史记录，并通过元数据分页和搜索提升列表浏览性能。
   - 对 AI/系统日志进行敏感信息清洗，并提供本地调试查看工具。
   - 支持搜索、过滤和排序（时间、点赞数、回复数）。
-- 🌐 **多语言支持**: 现已支持 English, 中文 (简体), 日本語, Français (法语), 及 Español (西班牙语)。
+- 🌐 **多语言支持**: 简体中文、繁体中文、英语、日语、韩语、法语、葡萄牙葡语和西班牙语。
 - 🎨 **主题支持**: 支持亮色、暗色和跟随系统三种主题模式，自动切换。
 - 🛠️ **开发者模式**: 可开启 AI 日志详细视图和选择器测试工具。
 
@@ -144,7 +144,7 @@ src/
   hooks/                 # 共用 React Hooks（useTheme、useToast、useConfirm）
   utils/                 # 共用工具（Logger、Export、validation、tokenizer 等）
   types/                 # TypeScript 类型定义
-  locales/               # i18n 翻译（en-US、zh-CN、ja-JP、fr-FR、es-ES）
+  locales/               # 扩展界面的八套语言资源
   styles/                # 全局 CSS（含 Tailwind）
 vite.config.ts          # 构建配置
 vitest.config.ts        # 测试配置

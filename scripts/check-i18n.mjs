@@ -3,7 +3,8 @@
 // Fails when:
 //  1. A t('key') call or an i18n-key-shaped string literal references a key
 //     that does not exist in src/locales/en-US.json.
-//  2. Any locale file's key set differs from en-US (missing or leftover keys).
+//  2. Locale catalogs disagree on keys or interpolation placeholders.
+//  3. Any supported locale lacks Chrome-compatible listing metadata.
 //
 // Run via `bun run i18n:check`. Keep in sync with the locale file layout in
 // src/locales/.
@@ -16,40 +17,31 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const LOCALE_DIR = join(ROOT, 'src', 'locales');
 const SRC_DIR = join(ROOT, 'src');
 const BASE_LOCALE = 'en-US';
-const LOCALES = ['en-US', 'zh-CN', 'ja-JP', 'fr-FR', 'es-ES'];
 const KEY_LITERALS = /\.(ts|tsx)$/;
-// Top-level namespaces defined in the locale files. Key-shaped literals using
-// these prefixes are treated as i18n keys even when passed indirectly (e.g.
-// constants mapped through stageMessageKey).
-const NAMESPACES = [
-  'common',
-  'popup',
-  'options',
-  'history',
-  'task',
-  'logs',
-  'errors',
-  'notification',
-  'export',
-];
+const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
+const localeConfig = readJson(join(SRC_DIR, 'config', 'locales.json'));
+const baseLocale = readJson(join(LOCALE_DIR, `${BASE_LOCALE}.json`));
+const LOCALES = Object.keys(localeConfig);
+const NAMESPACES = Object.keys(baseLocale);
+const CHROME_LOCALE_DIR = join(ROOT, 'public', '_locales');
 
-function flattenKeys(obj, prefix = '') {
-  const keys = new Set();
+function flattenMessages(obj, prefix = '') {
+  const messages = new Map();
   for (const [key, value] of Object.entries(obj)) {
     const path = prefix ? `${prefix}.${key}` : key;
     if (value && typeof value === 'object' && !Array.isArray(value)) {
-      for (const nested of flattenKeys(value, path)) {
-        keys.add(nested);
+      for (const [nested, message] of flattenMessages(value, path)) {
+        messages.set(nested, message);
       }
     } else {
-      keys.add(path);
+      messages.set(path, value);
     }
   }
-  return keys;
+  return messages;
 }
 
-function loadLocaleKeys(locale) {
-  return flattenKeys(JSON.parse(readFileSync(join(LOCALE_DIR, `${locale}.json`), 'utf8')));
+function interpolationTokens(message) {
+  return Array.from(message.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g), (match) => match[1]).sort();
 }
 
 function walk(dir) {
@@ -67,18 +59,18 @@ function walk(dir) {
 
 // Matches `t('ns.key'`, `i18n.t("ns.key"`, `t(`ns.key`` with single/double
 // quotes or template literals without interpolation.
-const T_CALL_PATTERN = /\bt\(\s*(['"`])((?:[a-zA-Z-]+(?:\.[a-zA-Z0-9-]+)+))\1/g;
+const T_CALL_PATTERN = /\bt\(\s*(['"`])((?:[a-zA-Z-]+(?:\.[a-zA-Z0-9_-]+)+))\1/g;
 // Matches any quoted literal that starts with a known namespace, catching keys
 // referenced indirectly (constants files, key maps).
 const KEY_LITERAL_PATTERN = new RegExp(
-  `(['"\`])((?:${NAMESPACES.join('|')})\\.[a-zA-Z0-9.-]+)\\1`,
+  `(['"\`])((?:${NAMESPACES.join('|')})\\.[a-zA-Z0-9._-]+)\\1`,
   'g',
 );
 
 const errors = [];
 
 // --- Check 1: every referenced key exists in the base locale ---------------
-const baseKeys = loadLocaleKeys(BASE_LOCALE);
+const base = flattenMessages(baseLocale);
 
 for (const filePath of walk(SRC_DIR)) {
   const content = readFileSync(filePath, 'utf8');
@@ -90,7 +82,7 @@ for (const filePath of walk(SRC_DIR)) {
     referenced.add(match[2]);
   }
   for (const key of referenced) {
-    if (!baseKeys.has(key)) {
+    if (!base.has(key)) {
       errors.push(
         `${filePath.replace(ROOT + '\\', '').replaceAll('\\', '/')}: i18n key "${key}" not found in ${BASE_LOCALE}.json`,
       );
@@ -98,18 +90,49 @@ for (const filePath of walk(SRC_DIR)) {
   }
 }
 
-// --- Check 2: all locales share the exact same key set ---------------------
-const base = loadLocaleKeys(BASE_LOCALE);
+// --- Check 2: all locales have complete messages and matching interpolation --
 for (const locale of LOCALES) {
-  if (locale === BASE_LOCALE) continue;
-  const keys = loadLocaleKeys(locale);
-  const missing = [...base].filter((key) => !keys.has(key)).sort();
-  const extra = [...keys].filter((key) => !base.has(key)).sort();
+  const messages = flattenMessages(
+    locale === BASE_LOCALE ? baseLocale : readJson(join(LOCALE_DIR, `${locale}.json`)),
+  );
+  const missing = [...base.keys()].filter((key) => !messages.has(key)).sort();
+  const extra = [...messages.keys()].filter((key) => !base.has(key)).sort();
   for (const key of missing) {
     errors.push(`${locale}.json: missing key "${key}" (present in ${BASE_LOCALE})`);
   }
   for (const key of extra) {
     errors.push(`${locale}.json: leftover key "${key}" (not in ${BASE_LOCALE})`);
+  }
+  for (const [key, message] of messages) {
+    if (typeof message !== 'string' || !message.trim()) {
+      errors.push(`${locale}.json: key "${key}" must be a non-empty string`);
+      continue;
+    }
+    const baseMessage = base.get(key);
+    if (
+      typeof baseMessage === 'string' &&
+      JSON.stringify(interpolationTokens(message)) !==
+        JSON.stringify(interpolationTokens(baseMessage))
+    ) {
+      errors.push(`${locale}.json: key "${key}" has different interpolation placeholders`);
+    }
+  }
+}
+
+// --- Check 3: the same locales have valid names and summaries for Chrome ---
+const manifest = readJson(join(SRC_DIR, 'manifest.json'));
+if (manifest.default_locale !== localeConfig[BASE_LOCALE].chromeLocale) {
+  errors.push('manifest.json: default_locale must match the default app locale');
+}
+const manifestFields = { name: 75, description: 132 };
+for (const { chromeLocale } of Object.values(localeConfig)) {
+  const messages = readJson(join(CHROME_LOCALE_DIR, chromeLocale, 'messages.json'));
+  for (const [field, maxLength] of Object.entries(manifestFields)) {
+    const key = /^__MSG_(\w+)__$/.exec(manifest[field])?.[1];
+    const message = key && messages[key]?.message;
+    if (typeof message !== 'string' || !message.trim() || message.length > maxLength) {
+      errors.push(`_locales/${chromeLocale}: manifest ${field} needs 1–${maxLength} characters`);
+    }
   }
 }
 
@@ -121,4 +144,6 @@ if (errors.length > 0) {
   process.exit(1);
 }
 
-console.log(`i18n check passed: ${LOCALES.length} locales, ${base.size} keys consistent.`);
+console.log(
+  `i18n check passed: ${LOCALES.length} app and Chrome locales, ${base.size} keys consistent.`,
+);

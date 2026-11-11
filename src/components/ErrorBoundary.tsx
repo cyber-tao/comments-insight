@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { Logger } from '@/utils/logger';
+import i18n from '@/utils/i18n';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -46,10 +47,10 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             }}
           >
             <h2 className="text-xl font-bold mb-4" style={{ color: 'var(--accent-danger)' }}>
-              Something went wrong
+              {i18n.t('errors.renderFailed')}
             </h2>
             <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
-              An unexpected error occurred. Please try refreshing the page.
+              {i18n.t('errors.renderRecovery')}
             </p>
             {this.state.error && (
               <pre
@@ -67,7 +68,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
               className="mt-4 px-4 py-2 rounded-lg text-white font-medium transition-all hover:scale-105"
               style={{ background: 'var(--gradient-primary)' }}
             >
-              Refresh Page
+              {i18n.t('common.reloadPage')}
             </button>
           </div>
         </div>

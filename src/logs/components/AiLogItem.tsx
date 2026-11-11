@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AiLogEntry } from '../hooks/useLogs';
 import { Logger } from '@/utils/logger';
 
@@ -8,6 +9,7 @@ interface AiLogItemProps {
 }
 
 export const AiLogItem: React.FC<AiLogItemProps> = ({ log, onDelete }) => {
+  const { t, i18n } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
 
   const copyToClipboard = async (text: string, e: React.MouseEvent) => {
@@ -19,62 +21,60 @@ export const AiLogItem: React.FC<AiLogItemProps> = ({ log, onDelete }) => {
     }
   };
 
-  const formattedTime = new Intl.DateTimeFormat(undefined, {
+  const formattedTime = new Intl.DateTimeFormat(i18n?.resolvedLanguage, {
     dateStyle: 'medium',
     timeStyle: 'medium',
   }).format(log.timestamp);
+  const typeLabel = log.type === 'extraction' ? t('logs.aiExtraction') : t('logs.aiAnalysis');
+  const typeIcon = log.type === 'extraction' ? '📥' : '📊';
+  const promptLabel = t('logs.promptLength', { count: log.prompt?.length || 0 });
+  const responseLabel = t('logs.responseLength', { count: log.response?.length || 0 });
 
   return (
     <div className="log-item-wrapper">
       <button
         className="log-item ai-log w-full text-left border-none bg-transparent"
-        onClick={() => setIsExpanded(!isExpanded)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            setIsExpanded(!isExpanded);
-            e.preventDefault();
-          }
-        }}
+        onClick={() => setIsExpanded((expanded) => !expanded)}
         aria-expanded={isExpanded}
       >
         <div className="log-header">
           <span className="log-type">
-            {log.type === 'extraction' ? '📥 AI Extraction' : '📊 AI Analysis'}
+            {typeIcon} {typeLabel}
           </span>
           <span className="log-time">{formattedTime}</span>
         </div>
         <div className="log-stats">
-          Prompt: {log.prompt?.length || 0} chars | Response: {log.response?.length || 0} chars
+          {promptLabel} · {responseLabel}
         </div>
       </button>
 
       {isExpanded && (
         <div className="log-detail-inline">
           <div className="log-detail">
-            <h2>{log.type === 'extraction' ? '📥 AI Extraction Log' : '📊 AI Analysis Log'}</h2>
+            <h2>{t('logs.detailTitle', { type: typeLabel })}</h2>
             <p>
-              <strong>Time:</strong> {formattedTime}
+              <strong>{t('logs.time')}</strong> {formattedTime}
             </p>
 
             <div className="log-section">
-              <h3>Prompt ({log.prompt?.length || 0} characters)</h3>
-              <div className="log-content">{log.prompt || 'No prompt'}</div>
+              <h3>{promptLabel}</h3>
+              <div className="log-content">{log.prompt || t('logs.noPrompt')}</div>
             </div>
 
             <div className="log-section">
-              <h3>Response ({log.response?.length || 0} characters)</h3>
-              <div className="log-content">{log.response || 'No response'}</div>
+              <h3>{responseLabel}</h3>
+              <div className="log-content">{log.response || t('logs.noResponse')}</div>
             </div>
 
             <div className="log-actions">
               <button className="btn-secondary" onClick={(e) => copyToClipboard(log.prompt, e)}>
-                📋 Copy Prompt
+                📋 {t('logs.copyPrompt')}
               </button>
               <button className="btn-secondary" onClick={(e) => copyToClipboard(log.response, e)}>
-                📋 Copy Response
+                📋 {t('logs.copyResponse')}
               </button>
               <button className="btn-danger" onClick={(e) => onDelete(log.key, e)}>
-                🗑️ Delete
+                🗑️ {t('common.delete')}
               </button>
             </div>
           </div>

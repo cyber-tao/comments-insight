@@ -30,11 +30,17 @@ function isContentMessage(value: unknown): value is ContentMessage {
     case MESSAGES.RUN_EXTRACTION:
       return (
         hasTaskId(value.payload) &&
+        (value.payload.expectedUrl === undefined ||
+          typeof value.payload.expectedUrl === 'string') &&
         typeof value.payload.maxComments === 'number' &&
         Number.isInteger(value.payload.maxComments) &&
         value.payload.maxComments > 0
       );
     case MESSAGES.RUN_CONFIG_GENERATION:
+      return (
+        hasTaskId(value.payload) &&
+        (value.payload.expectedUrl === undefined || typeof value.payload.expectedUrl === 'string')
+      );
     case MESSAGES.CANCEL_EXTRACTION:
       return hasTaskId(value.payload);
     case MESSAGES.TEST_SELECTOR:

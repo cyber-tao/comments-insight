@@ -100,7 +100,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
   - IndexedDB history storage with metadata-only paging and search for fast browsing.
   - Sanitized AI/system logs with local inspection tools for debugging.
   - Searchable history with filtering and sorting (by Time, Likes, Replies).
-- 🌐 **i18n**: Multi-language support: English, Chinese (简体中文), Japanese (日本語), French (Français), and Spanish (Español).
+- 🌐 **i18n**: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, European Portuguese, and Spanish.
 - 🎨 **Theme Support**: Light, Dark, and System modes with automatic theme switching.
 - 🛠️ **Developer Mode**: Toggle advanced features like AI Logs and Selector Testing tools.
 
@@ -144,7 +144,7 @@ src/
   hooks/                 # Shared React hooks (useTheme, useToast, useConfirm)
   utils/                 # Shared utilities (Logger, Export, validation, tokenizer, ...)
   types/                 # TypeScript definitions
-  locales/               # i18n translations (en-US, zh-CN, ja-JP, fr-FR, es-ES)
+  locales/               # Application translations for eight locales
   styles/                # Global CSS with Tailwind
 vite.config.ts          # Build config
 vitest.config.ts        # Test config

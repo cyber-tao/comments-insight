@@ -107,7 +107,7 @@ export class CommentAnalyzer {
       }
 
       const successful = results.filter((item) => item.ok).map((item) => item.result);
-      const merged = PromptBuilder.mergeAnalysisResults(successful);
+      const merged = PromptBuilder.mergeAnalysisResults(successful, resolvedLanguage);
       progressTracker.reportAllComplete();
       return merged;
     }

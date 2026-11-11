@@ -4,10 +4,13 @@ import {
   buildDynamicReportPrompt,
   validatePromptTemplate,
   getAvailablePlaceholders,
+  getAnalysisPromptTemplate,
+  getDynamicReportPromptTemplate,
   DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
   DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
 } from '../src/utils/prompts';
 import { PromptBuilder } from '../src/background/ai/PromptBuilder';
+import { LANGUAGES } from '../src/config/constants/ui';
 
 describe('Prompts Utils', () => {
   describe('buildAnalysisPrompt', () => {
@@ -50,7 +53,15 @@ describe('Prompts Utils', () => {
         ...mockMetadata,
         language: 'zh-CN',
       });
-      expect(result).toContain('write the entire analysis in 中文');
+      expect(result).toContain('请用简体中文撰写整份分析报告');
+    });
+
+    it('does not replace placeholders or interpret dollar sequences in source data', () => {
+      const title = "Title $& $' $`";
+      const comments = 'Literal {title} and {platform}';
+      expect(buildAnalysisPrompt(comments, '{comments_data}\n{title}', { title })).toContain(
+        `${comments}\n${title}`,
+      );
     });
   });
 
@@ -62,7 +73,7 @@ describe('Prompts Utils', () => {
       url: 'https://youtube.com/watch?v=123',
       title: 'Awesome Video',
       totalComments: 50,
-      language: 'zh-CN',
+      language: 'en-US',
     };
 
     it('should replace placeholders in dynamic report prompt', () => {
@@ -78,6 +89,70 @@ describe('Prompts Utils', () => {
       expect(result).toContain('<!DOCTYPE html>');
       expect(result).toContain('Do NOT include <script>');
       expect(result).toContain('Do not create external links');
+    });
+
+    it('fills custom report fields while retaining raw Markdown, comments and post content', () => {
+      const markdown = 'Markdown $& {title}';
+      const topCommentsData = "Comment $' {post_content}";
+      const postContent = 'Original $` {language_name}';
+      const result = buildDynamicReportPrompt(
+        markdown,
+        '{analysis_markdown}\n{post_content}\n{comments_data}\n{language_name}',
+        { language: 'pt-PT', topCommentsData, postContent },
+      );
+      expect(result).toBe(
+        `${markdown}\n${postContent}\n${topCommentsData}\nportuguês europeu (Portugal)`,
+      );
+    });
+
+    it('appends required source data when a custom template omits its placeholders', () => {
+      const result = buildDynamicReportPrompt('Analysis', 'Custom introduction', {
+        topCommentsData: 'Comment',
+      });
+      expect(result).toBe(
+        'Custom introduction\n\n## Analysis Markdown:\nAnalysis\n\n## Top Comments Data:\nComment',
+      );
+    });
+  });
+
+  describe('localized defaults', () => {
+    it.each(LANGUAGES.SUPPORTED)(
+      'keeps prompt tokens and static report constraints for $code',
+      ({ code }) => {
+        const tokens = (template: string) => template.match(/\{[a-z_]+\}/g)?.sort();
+        const analysis = getAnalysisPromptTemplate(DEFAULT_ANALYSIS_PROMPT_TEMPLATE, code);
+        const dynamic = getDynamicReportPromptTemplate(
+          DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
+          code,
+        );
+        expect(getAnalysisPromptTemplate(undefined, code)).toBe(analysis);
+        expect(getDynamicReportPromptTemplate(undefined, code)).toBe(dynamic);
+        expect(validatePromptTemplate(analysis)).toBe(true);
+        expect(tokens(analysis)).toEqual(tokens(DEFAULT_ANALYSIS_PROMPT_TEMPLATE));
+        expect(tokens(dynamic)).toEqual(tokens(DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE));
+        expect(dynamic).toContain('<!DOCTYPE html>');
+        expect(dynamic).toContain('<script>');
+        expect(dynamic).toContain('chrome-extension://');
+        for (const anchor of [
+          '#overview',
+          '#sentiment',
+          '#comments',
+          '#insights',
+          '#recommendations',
+        ]) {
+          expect(dynamic).toContain(anchor);
+        }
+        if (code !== 'en-US') {
+          expect(analysis).not.toBe(DEFAULT_ANALYSIS_PROMPT_TEMPLATE);
+          expect(dynamic).not.toBe(DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE);
+        }
+      },
+    );
+
+    it('keeps edited templates as entered when the language changes', () => {
+      const custom = '  Custom {comments_data}  ';
+      expect(getAnalysisPromptTemplate(custom, 'pt-PT')).toBe(custom);
+      expect(getDynamicReportPromptTemplate(custom, 'zh-TW')).toBe(custom);
     });
   });
 

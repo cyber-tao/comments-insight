@@ -200,6 +200,13 @@ export class TaskManager {
     return this.abortControllers.get(taskId)?.signal;
   }
 
+  async bindSourceDocument(task: Task, documentId: string): Promise<void> {
+    task.sourceDocumentId = documentId;
+    await this.saveState().catch((error) => {
+      Logger.warn('[TaskManager] Failed to persist the source document', { error });
+    });
+  }
+
   abortTask(taskId: string): void {
     const controller = this.abortControllers.get(taskId);
     if (!controller) {
@@ -683,7 +690,16 @@ export class TaskManager {
             return;
           }
           Logger.error(`[TaskManager] Executor failed for task ${nextTaskId}`, { error });
-          this.failTask(nextTaskId, error instanceof Error ? error.message : String(error));
+          const messageKey =
+            error instanceof ExtensionError ? error.details?.messageKey : undefined;
+          this.failTask(
+            nextTaskId,
+            typeof messageKey === 'string' && i18n.exists(messageKey)
+              ? i18n.t(messageKey)
+              : error instanceof Error
+                ? error.message
+                : String(error),
+          );
         }
       })
       .catch((error) => {

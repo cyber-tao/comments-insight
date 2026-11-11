@@ -1,16 +1,22 @@
 import { Logger } from '../../utils/logger';
 import { ExtensionError, ErrorCode, createAIError, createNetworkError } from '../../utils/errors';
 import { LIMITS, LOG_PREFIX, TEXT } from '@/config/constants';
-import { sanitizeLogText } from '@/utils/log-sanitize';
+import { redactApiKey, sanitizeLogText } from '@/utils/log-sanitize';
 import type { SettingsStore } from '../storage/SettingsStore';
 import type { LogStore } from '../storage/LogStore';
 
 export class AIErrorHandler {
-  static classifyHTTPError(status: number, errorText: string, model: string): never {
+  static classifyHTTPError(
+    status: number,
+    errorText: string,
+    model: string,
+    apiKey: string,
+  ): never {
+    const safeText = redactApiKey(errorText, apiKey);
     if (status === 429) {
       throw createAIError(ErrorCode.AI_RATE_LIMIT, 'Rate limit exceeded', {
         status,
-        response: errorText,
+        response: safeText,
       });
     }
     if (status === 400) {
@@ -21,22 +27,23 @@ export class AIErrorHandler {
       ) {
         throw createAIError(
           ErrorCode.INVALID_CONFIG,
-          `Context limit exceeded. Please reduce 'Context Length' in settings or use a larger model. API Error: ${errorText}`,
-          { status, response: errorText },
+          `Context limit exceeded. Please reduce 'Context Length' in settings or use a larger model. API Error: ${safeText}`,
+          { status, response: safeText },
           false,
         );
       }
       throw createAIError(
         ErrorCode.API_ERROR,
-        `API Bad Request (400): ${errorText}`,
-        { status, response: errorText },
+        `API Bad Request (400): ${safeText}`,
+        { status, response: safeText },
         false,
       );
     }
     if (status === 404) {
-      throw createAIError(ErrorCode.AI_MODEL_NOT_FOUND, `Model '${model}' not found`, {
+      const safeModel = redactApiKey(model, apiKey);
+      throw createAIError(ErrorCode.AI_MODEL_NOT_FOUND, `Model '${safeModel}' not found`, {
         status,
-        model,
+        model: safeModel,
       });
     }
     if (status === 401) {
@@ -46,7 +53,7 @@ export class AIErrorHandler {
     }
 
     if (status === 403) {
-      const preview = errorText.substring(0, 200);
+      const preview = safeText.substring(0, 200);
       const isHtmlResponse = this.looksLikeHtmlResponse(errorText);
       const looksLikeAuthFailure = this.looksLikeAuthFailure(errorText);
 
@@ -79,9 +86,9 @@ export class AIErrorHandler {
         false,
       );
     }
-    throw createAIError(ErrorCode.API_ERROR, `API error (${status}): ${errorText}`, {
+    throw createAIError(ErrorCode.API_ERROR, `API error (${status}): ${safeText}`, {
       status,
-      response: errorText,
+      response: safeText,
     });
   }
 
@@ -113,10 +120,11 @@ export class AIErrorHandler {
     logStore: LogStore,
     type: 'extraction' | 'analysis',
     data: { prompt: string; response: string; timestamp: number },
-    settingsStore?: SettingsStore,
+    settingsStore: SettingsStore,
+    apiKey: string,
   ): Promise<void> {
-    const sanitizedPrompt = sanitizeLogText(data.prompt);
-    const sanitizedResponse = sanitizeLogText(data.response);
+    const sanitizedPrompt = sanitizeLogText(data.prompt, apiKey);
+    const sanitizedResponse = sanitizeLogText(data.response, apiKey);
 
     Logger.debug(`[AI_LOG_${type.toUpperCase()}]`, {
       timestamp: data.timestamp,
@@ -129,10 +137,8 @@ export class AIErrorHandler {
     });
 
     try {
-      if (settingsStore) {
-        const settings = await settingsStore.getSettings();
-        if (!settings.developerMode) return;
-      }
+      const settings = await settingsStore.getSettings();
+      if (!settings.developerMode) return;
       // Random suffix: concurrent batches can log within the same millisecond,
       // and identical keys would silently overwrite each other.
       const uniqueSuffix = Math.random().toString(36).substring(2, 7);
@@ -155,6 +161,7 @@ export class AIErrorHandler {
     signal: AbortSignal | undefined,
     effectiveTimeout: number,
     prompt: string,
+    apiKey: string,
   ): never {
     if (error instanceof Error && (error.name === 'AbortError' || error.message === 'Timeout')) {
       if (signal?.aborted) {
@@ -186,27 +193,35 @@ export class AIErrorHandler {
           timestamp: Date.now(),
         },
         settingsStore,
+        apiKey,
       ).catch((e) => Logger.warn('Failed to log to file', { error: e }));
       throw error;
     }
 
+    const safeMessage = redactApiKey(
+      error instanceof Error ? error.message : String(error),
+      apiKey,
+    );
     if (error instanceof TypeError && error.message.includes('fetch')) {
       throw createNetworkError('Network request failed', {
-        originalError: error.message,
+        originalError: safeMessage,
       });
     }
 
-    Logger.error('[AIErrorHandler] AI call failed', { error });
+    const safeError = new Error(safeMessage);
+    if (error instanceof Error) safeError.name = error.name;
+    Logger.error('[AIErrorHandler] AI call failed', { error: safeError });
     this.logToFile(
       logStore,
       this.determineLogType(prompt),
       {
         prompt,
-        response: error instanceof Error ? error.message : String(error),
+        response: safeMessage,
         timestamp: Date.now(),
       },
       settingsStore,
+      apiKey,
     ).catch((e) => Logger.warn('Failed to log to file', { error: e }));
-    throw error;
+    throw safeError;
   }
 }

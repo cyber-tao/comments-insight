@@ -1,3 +1,5 @@
+import locales from '../locales.json';
+
 export const THEME = {
   LIGHT: 'light' as const,
   DARK: 'dark' as const,
@@ -11,20 +13,32 @@ export const THEME = {
   STORAGE_KEY: 'theme' as const,
 };
 
+export type LocaleCode = keyof typeof locales;
+
 export const LANGUAGES = {
   /** Supported languages with display names */
-  SUPPORTED: [
-    { code: 'zh-CN', name: '中文' },
-    { code: 'en-US', name: 'English' },
-    { code: 'ja-JP', name: '日本語' },
-    { code: 'fr-FR', name: 'Français' },
-    { code: 'es-ES', name: 'Español' },
-  ] as const,
+  SUPPORTED: (Object.keys(locales) as LocaleCode[]).map((code) => ({ code, ...locales[code] })),
   /** Default language code */
   DEFAULT: 'en-US' as const,
   /** Fallback language when detection fails */
   FALLBACK: 'en-US' as const,
 };
+
+export function resolveLocale(value?: string): LocaleCode {
+  const tag = value?.trim().toLowerCase().replace(/_/g, '-');
+  const exactMatch = LANGUAGES.SUPPORTED.find(({ code }) => code.toLowerCase() === tag);
+  if (exactMatch) return exactMatch.code;
+
+  const [language, ...parts] = tag?.split('-') ?? [];
+  if (language === 'zh') {
+    if (parts.includes('hans')) return 'zh-CN';
+    return parts.some((part) => ['hant', 'tw', 'hk', 'mo'].includes(part)) ? 'zh-TW' : 'zh-CN';
+  }
+  return (
+    LANGUAGES.SUPPORTED.find(({ code }) => code.split('-')[0] === language)?.code ??
+    LANGUAGES.FALLBACK
+  );
+}
 
 export const UI_LIMITS = {
   /** Max comments input range */

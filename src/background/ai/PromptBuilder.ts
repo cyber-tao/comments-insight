@@ -2,12 +2,18 @@ import { Comment, AnalysisResult } from '../../types';
 import { buildAnalysisPrompt, buildDynamicReportPrompt } from '../../utils/prompts';
 import { Tokenizer } from '../../utils/tokenizer';
 import { DataNormalizer } from './DataNormalizer';
-import { ANALYSIS_FORMAT, LANGUAGES, TIME_NORMALIZATION, TEXT } from '@/config/constants';
+import { ANALYSIS_FORMAT, LANGUAGES, TIME_NORMALIZATION } from '@/config/constants';
+import { resolveLocale } from '@/config/constants/ui';
+import i18n from '@/utils/i18n';
 
 export class PromptBuilder {
-  static mergeAnalysisResults(results: AnalysisResult[]): AnalysisResult {
+  static mergeAnalysisResults(results: AnalysisResult[], language?: string): AnalysisResult {
+    const locale = resolveLocale(language);
     const mergedMarkdown = results
-      .map((r, i) => `## Batch ${i + 1}\n\n${r.markdown}`)
+      .map(
+        (result, index) =>
+          `## ${i18n.t('history.reportBatch', { lng: locale, number: index + 1 })}\n\n${result.markdown}`,
+      )
       .join('\n\n---\n\n');
 
     const totalTokens = results.reduce((sum, r) => sum + r.tokensUsed, 0);
@@ -36,12 +42,7 @@ export class PromptBuilder {
     language: string = LANGUAGES.DEFAULT,
   ): string {
     return buildAnalysisPrompt(commentsData, template, {
-      datetime: metadata?.datetime || new Date().toISOString(),
-      videoTime: metadata?.videoTime || 'N/A',
-      platform: metadata?.platform || 'Unknown Platform',
-      url: metadata?.url || 'N/A',
-      title: metadata?.title || TEXT.UNTITLED,
-      postContent: metadata?.postContent || 'N/A',
+      ...metadata,
       totalComments,
       language,
     });
@@ -56,20 +57,16 @@ export class PromptBuilder {
       title?: string;
       datetime?: string;
       videoTime?: string;
+      postContent?: string;
       topCommentsData?: string;
     },
     totalComments: number = 0,
     language: string = LANGUAGES.DEFAULT,
   ): string {
     return buildDynamicReportPrompt(analysisMarkdown, template, {
-      datetime: metadata?.datetime || new Date().toISOString(),
-      videoTime: metadata?.videoTime || 'N/A',
-      platform: metadata?.platform || 'Unknown Platform',
-      url: metadata?.url || 'N/A',
-      title: metadata?.title || TEXT.UNTITLED,
+      ...metadata,
       totalComments,
       language,
-      topCommentsData: metadata?.topCommentsData,
     });
   }
 

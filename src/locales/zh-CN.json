@@ -15,7 +15,11 @@
     "next": "下一页",
     "noResults": "未找到结果",
     "noData": "暂无数据",
-    "untitled": "未命名"
+    "untitled": "未命名",
+    "close": "关闭",
+    "reloadPage": "重新加载页面",
+    "notAvailable": "暂无",
+    "pageTitle": "{{pageName}} – {{appName}}"
   },
   "popup": {
     "title": "评论洞察",
@@ -98,7 +102,9 @@
     "generatingDynamicReportCompact": "生成网页中",
     "dynamicReportCompleteCompact": "网页已生成",
     "selectorTesterEmptyItem": "（空）",
-    "selectorTesterTruncated": "仅显示前 {{count}} 条"
+    "selectorTesterTruncated": "仅显示前 {{count}} 条",
+    "viewLogs": "查看日志",
+    "viewGitHub": "在 GitHub 上查看项目"
   },
   "options": {
     "title": "设置",
@@ -264,8 +270,17 @@
       "postContentSection": "原帖内容 (可选)",
       "postContentSelector": "内容选择器",
       "postContentHint": "原帖内容或视频介绍的选择器。",
-      "confirmDelete": "确定要删除此配置吗？"
-    }
+      "confirmDelete": "确定要删除此配置吗？",
+      "matched": "已匹配",
+      "notMatched": "未匹配",
+      "selectorExample": ".class 或 #id",
+      "selector": "选择器",
+      "selectorType": "选择器类型",
+      "optionalAttribute": "属性（可选）",
+      "selectForExport": "选择 {{domain}} 以导出"
+    },
+    "placeholder_language_name": "所选报告语言的名称。",
+    "placeholder_top_comments_data": "采集结果中的部分热门评论。"
   },
   "history": {
     "title": "历史记录",
@@ -320,7 +335,12 @@
     "tokensWithCount": "{{count}} tokens",
     "postContent": "原帖内容",
     "reply": "{{count}} 条回复",
-    "replies": "{{count}} 条回复"
+    "replies": "{{count}} 条回复",
+    "deepRepliesHidden": "已隐藏更深层的回复",
+    "searchAria": "搜索历史记录",
+    "reportBatch": "第 {{number}} 批",
+    "reportRenderFailed": "无法显示报告",
+    "reportRenderRecovery": "请重新打开报告。"
   },
   "task": {
     "pending": "等待中",
@@ -347,7 +367,31 @@
     "level": "级别",
     "levelAll": "全部",
     "loading": "正在加载日志...",
-    "logsCleared": "日志已清空"
+    "logsCleared": "日志已清空",
+    "title": "日志",
+    "debug": "调试",
+    "info": "信息",
+    "warning": "警告",
+    "error": "错误",
+    "totalCount": "总计：{{count}}",
+    "errorCount": "错误：{{count}}",
+    "debugCount": "调试：{{count}}",
+    "infoCount": "信息：{{count}}",
+    "warningCount": "警告：{{count}}",
+    "aiExtraction": "AI 提取",
+    "aiAnalysis": "AI 分析",
+    "detailTitle": "日志详情 · {{type}}",
+    "promptLength": "提示词（{{count}} 字符）",
+    "responseLength": "响应（{{count}} 字符）",
+    "time": "时间：",
+    "message": "消息：",
+    "data": "数据",
+    "stackTrace": "堆栈跟踪",
+    "noPrompt": "无提示词",
+    "noResponse": "无响应",
+    "copyPrompt": "复制提示词",
+    "copyResponse": "复制响应",
+    "copyLog": "复制日志"
   },
   "errors": {
     "networkError": "网络连接失败，请检查网络连接后重试。",
@@ -404,7 +448,12 @@
     "configIdRequired": "需要配置 ID。",
     "selectorValidationParamsRequired": "需要配置 ID、选择器键和状态。",
     "settingsDataRequired": "需要设置数据。",
-    "taskIdRequired": "需要任务 ID。"
+    "taskIdRequired": "需要任务 ID。",
+    "renderFailed": "发生错误",
+    "renderRecovery": "请重新加载页面。",
+    "sourcePageChanged": "来源页面已变化。请在目标页面重新打开扩展并重试。",
+    "extractionResultTooLarge": "提取的评论和回复超出结果上限。请减少评论数量后重试。",
+    "aiEndpointRedirect": "AI 端点返回了重定向。请在设置中填写最终的 API 网址。"
   },
   "notification": {
     "extractionCompleted": "\"{{title}}\" 提取完成{{comments}}",

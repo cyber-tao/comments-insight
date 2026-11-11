@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NotificationService } from '../src/background/NotificationService';
+import { LANGUAGES } from '../src/config/constants/ui';
+import i18n, { changeLanguage } from '../src/utils/i18n';
 
 const mockNotificationCreate = vi.fn().mockResolvedValue(undefined);
 const mockNotificationClear = vi.fn().mockResolvedValue(undefined);
@@ -42,6 +44,38 @@ describe('NotificationService', () => {
   });
 
   describe('showTaskCompleted', () => {
+    it.each(LANGUAGES.SUPPORTED.map(({ code }) => code))(
+      'renders an extraction notification in %s',
+      async (locale) => {
+        const previousLanguage = i18n.language;
+        await changeLanguage(locale);
+        try {
+          const title = 'Synthetic discussion';
+          const catalog = i18n.getResourceBundle(locale, 'translation');
+          const comments = catalog.notification.commentsCount.replace('{{count}}', '3');
+          const expected = catalog.notification.extractionCompleted
+            .replace('{{title}}', title)
+            .replace('{{comments}}', comments);
+
+          await notificationService.showTaskCompleted('extract', title, 3);
+
+          expect(mockNotificationCreate).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.objectContaining({
+              title: catalog.common.appName,
+              message: expected,
+              buttons: [
+                { title: catalog.notification.viewResults },
+                { title: catalog.notification.dismiss },
+              ],
+            }),
+          );
+        } finally {
+          await changeLanguage(previousLanguage);
+        }
+      },
+    );
+
     it('should create notification for extraction completion', async () => {
       await notificationService.showTaskCompleted('extract', 'Test Post', 10);
 

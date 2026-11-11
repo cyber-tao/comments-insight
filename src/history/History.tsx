@@ -15,7 +15,7 @@ import { useHistoryReanalyze } from './hooks/useHistoryReanalyze';
 import { useConfirm } from '@/hooks/useConfirm';
 
 const History: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { confirm, ConfirmHost } = useConfirm();
   const [viewMode, setViewMode] = useState<'comments' | 'analysis' | 'dynamic'>('analysis');
   const [sortBy, setSortBy] = useState<'time' | 'likes' | 'replies'>('likes');
@@ -90,7 +90,7 @@ const History: React.FC = () => {
   });
 
   const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleString();
+    return new Date(timestamp).toLocaleString(i18n?.resolvedLanguage);
   };
 
   const sortComments = useCallback(

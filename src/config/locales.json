@@ -1,0 +1,10 @@
+{
+  "zh-CN": { "name": "简体中文", "chromeLocale": "zh_CN" },
+  "zh-TW": { "name": "繁體中文", "chromeLocale": "zh_TW" },
+  "en-US": { "name": "English", "chromeLocale": "en" },
+  "ja-JP": { "name": "日本語", "chromeLocale": "ja" },
+  "ko-KR": { "name": "한국어", "chromeLocale": "ko" },
+  "fr-FR": { "name": "Français", "chromeLocale": "fr" },
+  "pt-PT": { "name": "Português (Portugal)", "chromeLocale": "pt_PT" },
+  "es-ES": { "name": "Español", "chromeLocale": "es" }
+}

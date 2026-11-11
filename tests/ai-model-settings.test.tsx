@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AIModelSettings } from '../src/options/components/AIModelSettings';
 import { DEFAULT_ANALYSIS_PROMPT_TEMPLATE } from '../src/utils/prompts';
 import { AI } from '../src/config/constants';
+import { ErrorCode, ExtensionError } from '../src/utils/error-types';
 import type { Settings } from '../src/types';
 
 const extensionApiMock = vi.hoisted(() => ({
@@ -206,6 +207,22 @@ describe('AIModelSettings', () => {
       expect(toast.error).toHaveBeenCalledWith('options.testFailed: denied');
     });
   });
+
+  it.each(['getAvailableModels', 'testModel'] as const)(
+    'explains how to resolve a redirect during %s',
+    async (operation) => {
+      extensionApiMock[operation].mockRejectedValueOnce(
+        new ExtensionError(ErrorCode.AI_ENDPOINT_REDIRECT, 'Redirect'),
+      );
+      const { toast } = renderComponent();
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: operation === 'getAvailableModels' ? /options.fetchModels/i : /options.testModel/i,
+        }),
+      );
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('errors.aiEndpointRedirect'));
+    },
+  );
 
   it.each(['apiUrl', 'apiKey'] as const)(
     'ignores an old model response after %s changes and a newer request completes',

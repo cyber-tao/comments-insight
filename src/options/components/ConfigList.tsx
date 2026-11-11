@@ -17,7 +17,7 @@ export const ConfigList: React.FC<ConfigListProps> = ({
   onEdit,
   onDelete,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   if (configs.length === 0) {
     return (
@@ -48,6 +48,7 @@ export const ConfigList: React.FC<ConfigListProps> = ({
           <div className="flex items-start gap-3">
             <input
               type="checkbox"
+              aria-label={t('options.crawlingConfigs.selectForExport', { domain: config.domain })}
               className="mt-1"
               checked={!!exportSelection[config.id]}
               onChange={(e) => onSelectionChange(config.id, e.target.checked)}
@@ -58,7 +59,7 @@ export const ConfigList: React.FC<ConfigListProps> = ({
               </h3>
               <div className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
                 {t('options.crawlingConfigs.updated')}:{' '}
-                {new Date(config.lastUpdated).toLocaleDateString()}
+                {new Date(config.lastUpdated).toLocaleDateString(i18n?.resolvedLanguage)}
               </div>
             </div>
           </div>

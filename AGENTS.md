@@ -6,7 +6,7 @@
 
 ## Build, Test, and Development Commands
 
-Use `bun install` to install dependencies and `bun install --frozen-lockfile` in CI or release validation. `bun run dev` starts the Vite + CRXJS development workflow. `bun run build` performs a TypeScript compile and production build. `bun run package` builds and runs `scripts/package.js` to assemble `dist/extension.zip`. Quality checks: `bun run version:check`, `bun run typecheck`, `bun run format:check`, `bun run lint` (ESLint plus `bun run i18n:check`, which verifies every referenced i18n key exists and all five locale files share the same key set), `bun run test`, `bun run test:coverage`, `bun run audit`, and—after building and `bunx puppeteer browsers install chrome`—`bun run test:e2e`. For manual browser verification, load unpacked `dist/` in Chrome 116+ from `chrome://extensions`.
+Use `bun install` to install dependencies and `bun install --frozen-lockfile` in CI or release validation. `bun run dev` starts the Vite + CRXJS development workflow. `bun run build` performs a TypeScript compile and production build. `bun run package` builds and runs `scripts/package.js` to assemble `dist/extension.zip`. Quality checks: `bun run version:check`, `bun run typecheck`, `bun run format:check`, `bun run lint` (ESLint plus `bun run i18n:check` for application translations and Chrome metadata), `bun run test`, `bun run test:coverage`, `bun run audit`, and—after building and `bunx puppeteer browsers install chrome`—`bun run test:e2e`. For manual browser verification, load unpacked `dist/` in Chrome 116+ from `chrome://extensions`.
 
 ## Coding Style & Naming Conventions
 

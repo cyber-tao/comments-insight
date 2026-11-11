@@ -54,6 +54,22 @@ async function collectZippableFiles(directory, rootDirectory = directory) {
 }
 
 const files = await collectZippableFiles(distPath);
+const packageManifest = JSON.parse(new TextDecoder().decode(files['manifest.json']));
+const locales = JSON.parse(
+  await fs.readFile(path.resolve(__dirname, '../src/config/locales.json'), 'utf8'),
+);
+for (const { chromeLocale } of Object.values(locales)) {
+  const entry = `_locales/${chromeLocale}/messages.json`;
+  if (!files[entry]) throw new Error(`Build is missing ${entry}`);
+  const messages = JSON.parse(new TextDecoder().decode(files[entry]));
+  for (const field of ['name', 'description']) {
+    const key = /^__MSG_(\w+)__$/.exec(packageManifest[field])?.[1];
+    if (!key || !messages[key]?.message?.trim()) {
+      throw new Error(`${entry} is missing a localized manifest ${field}`);
+    }
+  }
+}
+
 const archive = zipSync(files, {
   level: zipCompressionLevel,
   mtime: zipModifiedTime,

@@ -15,7 +15,11 @@
     "next": "Suivant",
     "noResults": "Aucun résultat trouvé",
     "noData": "Aucune donnée",
-    "untitled": "Sans titre"
+    "untitled": "Sans titre",
+    "close": "Fermer",
+    "reloadPage": "Recharger la page",
+    "notAvailable": "Non disponible",
+    "pageTitle": "{{pageName}} – {{appName}}"
   },
   "popup": {
     "title": "Comments Insight",
@@ -98,7 +102,9 @@
     "generatingDynamicReportCompact": "Génération",
     "dynamicReportCompleteCompact": "Généré",
     "selectorTesterEmptyItem": "(vide)",
-    "selectorTesterTruncated": "Affichage des {{count}} premiers résultats"
+    "selectorTesterTruncated": "Affichage des {{count}} premiers résultats",
+    "viewLogs": "Afficher les journaux",
+    "viewGitHub": "Voir le projet sur GitHub"
   },
   "options": {
     "title": "Paramètres",
@@ -264,8 +270,17 @@
       "syncDialogDescription": "Cette action récupère les dernières configurations de scan depuis le dépôt officiel et les fusionne avec vos configurations locales. Les configurations existantes seront mises à jour et les nouvelles seront ajoutées.",
       "syncDialogSourceUrl": "URL source",
       "syncDialogConfirm": "Synchroniser maintenant",
-      "syncSuccessWithCount": "Synchronisation réussie ! {{added}} ajoutées, {{updated}} mises à jour."
-    }
+      "syncSuccessWithCount": "Synchronisation réussie ! {{added}} ajoutées, {{updated}} mises à jour.",
+      "matched": "Correspondance trouvée",
+      "notMatched": "Aucune correspondance",
+      "selectorExample": ".class ou #id",
+      "selector": "Sélecteur",
+      "selectorType": "Type de sélecteur",
+      "optionalAttribute": "Attribut (facultatif)",
+      "selectForExport": "Sélectionner {{domain}} pour l’exportation"
+    },
+    "placeholder_language_name": "Nom de la langue sélectionnée pour le rapport.",
+    "placeholder_top_comments_data": "Échantillon des commentaires les plus populaires parmi ceux extraits."
   },
   "history": {
     "title": "Historique",
@@ -320,7 +335,12 @@
     "tokensWithCount": "{{count}} tokens",
     "postContent": "Contenu du post",
     "reply": "{{count}} réponse",
-    "replies": "{{count}} réponses"
+    "replies": "{{count}} réponses",
+    "deepRepliesHidden": "Les réponses imbriquées plus en profondeur sont masquées",
+    "searchAria": "Rechercher dans l’historique",
+    "reportBatch": "Lot {{number}}",
+    "reportRenderFailed": "Impossible d’afficher le rapport",
+    "reportRenderRecovery": "Essayez de rouvrir le rapport."
   },
   "task": {
     "pending": "En attente",
@@ -347,7 +367,31 @@
     "level": "Niveau",
     "levelAll": "Tous",
     "loading": "Chargement des logs...",
-    "logsCleared": "Tous les logs ont été effacés"
+    "logsCleared": "Tous les logs ont été effacés",
+    "title": "Journaux",
+    "debug": "Débogage",
+    "info": "Information",
+    "warning": "Avertissement",
+    "error": "Erreur",
+    "totalCount": "Total : {{count}}",
+    "errorCount": "Erreurs : {{count}}",
+    "debugCount": "Débogage : {{count}}",
+    "infoCount": "Informations : {{count}}",
+    "warningCount": "Avertissements : {{count}}",
+    "aiExtraction": "Extraction par IA",
+    "aiAnalysis": "Analyse par IA",
+    "detailTitle": "Détails du journal · {{type}}",
+    "promptLength": "Invite ({{count}} car.)",
+    "responseLength": "Réponse ({{count}} car.)",
+    "time": "Heure :",
+    "message": "Message :",
+    "data": "Données",
+    "stackTrace": "Trace de la pile",
+    "noPrompt": "Aucune invite",
+    "noResponse": "Aucune réponse",
+    "copyPrompt": "Copier l’invite",
+    "copyResponse": "Copier la réponse",
+    "copyLog": "Copier le journal"
   },
   "errors": {
     "networkError": "La connexion réseau a échoué. Veuillez vérifier votre connexion et réessayer.",
@@ -404,7 +448,12 @@
     "configIdRequired": "L'ID de configuration est requis.",
     "selectorValidationParamsRequired": "L'ID de configuration, la clé du sélecteur et le statut sont requis.",
     "settingsDataRequired": "Les données des paramètres sont requises.",
-    "taskIdRequired": "L'ID de tâche est requis."
+    "taskIdRequired": "L'ID de tâche est requis.",
+    "renderFailed": "Une erreur est survenue",
+    "renderRecovery": "Essayez de recharger la page.",
+    "sourcePageChanged": "La page source a changé. Rouvrez l’extension sur la page souhaitée et réessayez.",
+    "extractionResultTooLarge": "Les commentaires et réponses extraits dépassent la taille maximale du résultat. Réduisez le nombre de commentaires et réessayez.",
+    "aiEndpointRedirect": "Le point de terminaison IA a renvoyé une redirection. Saisissez l’URL finale de l’API dans les paramètres."
   },
   "notification": {
     "extractionCompleted": "Extraction terminée pour \"{{title}}\"{{comments}}",

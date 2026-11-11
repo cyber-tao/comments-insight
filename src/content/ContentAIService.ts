@@ -7,6 +7,7 @@ import {
   PortMessageResponse,
 } from '@/types/handlers';
 import { AI, TEXT, TIMEOUT } from '@/config/constants';
+import { checkSourcePage, isSameSourcePage, sourcePageChangedError } from '@/utils/source-page';
 import {
   ErrorCode,
   ExtensionError,
@@ -34,6 +35,8 @@ export class ContentAIService {
   private reconnectAttempts = 0;
   private pendingRequests = new Map<string, PendingRequest>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+  constructor(private readonly sourceUrl?: string) {}
 
   connect(): void {
     if (this.portState === 'connecting' || this.portState === 'connected') {
@@ -176,6 +179,10 @@ export class ContentAIService {
     if (!this.port || this.portState !== 'connected') {
       return;
     }
+    if (this.sourceUrl && !isSameSourcePage(window.location.href, this.sourceUrl)) {
+      this.rejectAllPending(sourcePageChangedError());
+      return;
+    }
 
     for (const [id, pending] of this.pendingRequests) {
       try {
@@ -236,6 +243,7 @@ export class ContentAIService {
     signal?: AbortSignal,
     timeoutMs: number = AI.DEFAULT_TIMEOUT,
   ): Promise<T> {
+    checkSourcePage(this.sourceUrl);
     if (signal?.aborted) {
       throw this.createCancelledError();
     }

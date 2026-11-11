@@ -5,6 +5,13 @@ export const LOG_PREFIX = {
 
 export const LOG_LEVELS = ['DEBUG', 'INFO', 'WARN', 'ERROR'] as const;
 
+export const LOG_LEVEL_LABELS = {
+  DEBUG: 'logs.debug',
+  INFO: 'logs.info',
+  WARN: 'logs.warning',
+  ERROR: 'logs.error',
+} as const;
+
 export const LOG_DEFAULTS = {
   LOGS_MAX_STORED: 100,
   AI_LOGS_MAX_STORED: 100,

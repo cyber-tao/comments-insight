@@ -1,7 +1,7 @@
 import { AIConfig, AIRequest, AIResponse, AIStreamProgress } from '../types';
 
 import { Logger } from '../utils/logger';
-import { ErrorHandler, createAIError, ErrorCode } from '../utils/errors';
+import { ErrorHandler, createAIError, ErrorCode, ExtensionError } from '../utils/errors';
 import {
   AI as AI_CONST,
   RETRY,
@@ -14,6 +14,7 @@ import type { SettingsStore } from './storage/SettingsStore';
 import type { LogStore } from './storage/LogStore';
 import type { TokenStatsStore } from './storage/TokenStatsStore';
 import { buildAiChatCompletionsUrl, parseAllowedAiApiUrl } from '@/utils/url';
+import { redactApiKey } from '@/utils/log-sanitize';
 
 import { AIErrorHandler } from './ai/AIErrorHandler';
 import { DataNormalizer } from './ai/DataNormalizer';
@@ -31,6 +32,21 @@ interface StreamingAIResult {
   content: string;
   tokensUsed: number;
   finishReason: string;
+}
+
+const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
+
+async function fetchAiEndpoint(url: string, init: RequestInit): Promise<Response> {
+  const response = await fetch(url, { ...init, redirect: 'manual' });
+  if (response.type === 'opaqueredirect' || REDIRECT_STATUS_CODES.has(response.status)) {
+    throw createAIError(
+      ErrorCode.AI_ENDPOINT_REDIRECT,
+      'The AI endpoint redirected the request. Enter its final API URL in Settings.',
+      { messageKey: 'errors.aiEndpointRedirect' },
+      false,
+    );
+  }
+  return response;
 }
 
 export class AIService {
@@ -107,10 +123,7 @@ export class AIService {
       return config;
     }
 
-    Logger.warn('[AIService] Falling back to last verified API key', {
-      model: config.model,
-      apiUrl: currentApiUrl,
-    });
+    Logger.warn('[AIService] Falling back to last verified API key');
 
     return {
       ...config,
@@ -134,7 +147,6 @@ export class AIService {
       throw createAIError(
         ErrorCode.INVALID_API_URL,
         'AI API URL must use HTTPS, except for loopback development endpoints',
-        { apiUrl: config.apiUrl },
       );
     }
     return apiUrl;
@@ -212,9 +224,8 @@ export class AIService {
       let chunk: ChatCompletionData;
       try {
         chunk = JSON.parse(payload) as ChatCompletionData;
-      } catch (parseError) {
+      } catch {
         Logger.warn('[AIService] Skipped malformed SSE frame', {
-          error: parseError instanceof Error ? parseError.message : String(parseError),
           previewLength: payload.length,
         });
         return;
@@ -270,10 +281,8 @@ export class AIService {
     } catch (streamError) {
       try {
         await reader.cancel();
-      } catch (cancelError) {
-        Logger.warn('[AIService] Failed to cancel SSE reader after error', {
-          error: cancelError instanceof Error ? cancelError.message : String(cancelError),
-        });
+      } catch {
+        Logger.warn('[AIService] Failed to cancel SSE reader after error');
       }
       throw streamError;
     } finally {
@@ -292,8 +301,9 @@ export class AIService {
     };
   }
 
-  async callAI(request: AIRequest): Promise<AIResponse> {
-    const { prompt, systemPrompt, config, signal, timeout, onStreamProgress } = request;
+  async callAI(request: AIRequest & { redactResponse?: boolean }): Promise<AIResponse> {
+    const { prompt, systemPrompt, config, signal, timeout, onStreamProgress, redactResponse } =
+      request;
     const effectiveTimeout = timeout || AI_CONST.DEFAULT_TIMEOUT;
 
     if (signal?.aborted) {
@@ -332,31 +342,33 @@ export class AIService {
             retryController.abort(new Error('Timeout'));
           }, effectiveTimeout);
 
+          let activeKey = '';
           try {
             if (retryController.signal.aborted) {
               throw createAIError(ErrorCode.TASK_CANCELLED, 'Request aborted', {});
             }
 
             const resolvedConfig = this.resolveConfigForCall(config);
+            activeKey =
+              typeof resolvedConfig.apiKey === 'string' ? resolvedConfig.apiKey.trim() : '';
             const apiUrl = this.validateAndBuildUrl(resolvedConfig);
-            const resolvedKey =
-              typeof resolvedConfig.apiKey === 'string' ? resolvedConfig.apiKey : '';
-            const hasApiKey = resolvedKey.trim().length > 0;
+            const safeUrl = redactApiKey(apiUrl, activeKey);
+            const safeModel = redactApiKey(resolvedConfig.model, activeKey);
 
             Logger.info('[AIService] Calling AI API', {
-              url: apiUrl,
-              model: resolvedConfig.model,
+              url: safeUrl,
+              model: safeModel,
               promptLength: prompt.length,
               timeout: effectiveTimeout,
-              hasApiKey,
+              hasApiKey: Boolean(activeKey),
             });
 
             const headers: Record<string, string> = {
               'Content-Type': 'application/json',
             };
 
-            if (hasApiKey) {
-              headers.Authorization = `Bearer ${resolvedConfig.apiKey}`;
+            if (activeKey) {
+              headers.Authorization = `Bearer ${activeKey}`;
             }
 
             const requestBody = this.buildChatCompletionRequest(
@@ -365,7 +377,7 @@ export class AIService {
               resolvedConfig,
             );
 
-            const response = await fetch(apiUrl, {
+            const response = await fetchAiEndpoint(apiUrl, {
               method: 'POST',
               headers,
               body: requestBody,
@@ -376,10 +388,15 @@ export class AIService {
               const errorText = await response.text();
               Logger.warn('[AIService] API responded with non-OK status', {
                 status: response.status,
-                model: resolvedConfig.model,
-                url: apiUrl,
+                model: safeModel,
+                url: safeUrl,
               });
-              AIErrorHandler.classifyHTTPError(response.status, errorText, resolvedConfig.model);
+              AIErrorHandler.classifyHTTPError(
+                response.status,
+                errorText,
+                resolvedConfig.model,
+                activeKey,
+              );
             }
 
             resetTimeout();
@@ -387,17 +404,25 @@ export class AIService {
             const streamResult = await this.readAIResponse(
               response,
               resetTimeout,
-              onStreamProgress,
+              onStreamProgress &&
+                ((progress) => {
+                  const finishReason = progress.finishReason;
+                  onStreamProgress({
+                    ...progress,
+                    finishReason: finishReason && redactApiKey(finishReason, activeKey),
+                  });
+                }),
             );
 
             let content = streamResult.content;
             const tokensUsed = streamResult.tokensUsed;
             const finishReason = streamResult.finishReason;
             if (finishReason !== 'stop' && finishReason !== AI_CONST.STREAM.UNKNOWN_FINISH_REASON) {
+              const safeFinishReason = redactApiKey(finishReason, activeKey);
               throw createAIError(
                 ErrorCode.AI_INVALID_RESPONSE,
-                `Model output is incomplete (${finishReason})`,
-                { finishReason },
+                `Model output is incomplete (${safeFinishReason})`,
+                { finishReason: safeFinishReason },
                 false,
               );
             }
@@ -436,9 +461,14 @@ export class AIService {
                 timestamp: Date.now(),
               },
               this.settingsStore,
+              activeKey,
             ).catch((e) => Logger.warn('Failed to log to file', { error: e }));
 
-            return { content, tokensUsed, finishReason };
+            return {
+              content: redactResponse ? redactApiKey(content, activeKey) : content,
+              tokensUsed,
+              finishReason,
+            };
           } catch (error) {
             AIErrorHandler.classifyCallError(
               this.settingsStore,
@@ -447,6 +477,7 @@ export class AIService {
               signal,
               effectiveTimeout,
               prompt,
+              activeKey,
             );
             throw error;
           } finally {
@@ -490,18 +521,21 @@ export class AIService {
     parsedUrl.pathname = `${pathname}${API_CONST.ENDPOINTS.MODELS}`;
     parsedUrl.hash = '';
     const modelsUrl = parsedUrl.toString();
-    Logger.info('[AIService] Fetching available models', { url: modelsUrl });
+    const activeKey = typeof apiKey === 'string' ? apiKey.trim() : '';
+    Logger.info('[AIService] Fetching available models', {
+      url: redactApiKey(modelsUrl, activeKey),
+    });
 
     const headers: Record<string, string> = {};
-    if (typeof apiKey === 'string' && apiKey.trim().length > 0) {
-      headers.Authorization = `Bearer ${apiKey}`;
+    if (activeKey) {
+      headers.Authorization = `Bearer ${activeKey}`;
     }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT.AVAILABLE_MODELS_FETCH_MS);
 
     try {
-      const response = await fetch(modelsUrl, {
+      const response = await fetchAiEndpoint(modelsUrl, {
         method: 'GET',
         headers,
         signal: controller.signal,
@@ -519,13 +553,18 @@ export class AIService {
       Logger.info('[AIService] Available models fetched', { count: models.length });
       return models;
     } catch (error) {
+      if (error instanceof ExtensionError && error.code === ErrorCode.AI_ENDPOINT_REDIRECT) {
+        throw error;
+      }
       if ((error as { name?: string })?.name === 'AbortError') {
         Logger.warn('[AIService] Models fetch aborted by timeout', {
           timeoutMs: TIMEOUT.AVAILABLE_MODELS_FETCH_MS,
         });
         return [];
       }
-      Logger.error('[AIService] Failed to get models', { error });
+      Logger.error('[AIService] Failed to get models', {
+        message: redactApiKey(error instanceof Error ? error.message : String(error), activeKey),
+      });
       return [];
     } finally {
       clearTimeout(timer);

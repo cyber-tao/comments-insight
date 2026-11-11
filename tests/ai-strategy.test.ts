@@ -371,4 +371,28 @@ describe('AIStrategy execution', () => {
     await expect(resultPromise).resolves.toBe(false);
     expect(sendMessageMock).toHaveBeenCalledTimes(1);
   });
+
+  it('does not report rule generation complete when persistence rejects the rule', async () => {
+    vi.useFakeTimers();
+    const progress = vi.fn();
+    vi.spyOn(AIConfigGenerator.prototype, 'generateIntelligentConfig').mockResolvedValue(
+      createConfig(),
+    );
+    sendMessageMock.mockResolvedValueOnce({ settings: {} }).mockResolvedValueOnce({
+      error: {
+        code: ErrorCode.STORAGE_WRITE_ERROR,
+        message: 'Rejected crawling rule',
+        retryable: false,
+      },
+    });
+    const strategy = new AIStrategy(createPageController());
+
+    const rejected = expect(strategy.generateConfig(progress)).rejects.toMatchObject({
+      code: ErrorCode.STORAGE_WRITE_ERROR,
+      message: 'Rejected crawling rule',
+    });
+    await vi.advanceTimersByTimeAsync(TIMING.SCROLL_DELAY_MS);
+    await rejected;
+    expect(progress).not.toHaveBeenCalledWith(100, expect.any(String));
+  });
 });

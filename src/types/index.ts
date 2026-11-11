@@ -70,6 +70,7 @@ export interface Task {
   url: string;
   platform?: string;
   tabId?: number;
+  sourceDocumentId?: string;
   progress: number;
   startTime: number;
   endTime?: number;

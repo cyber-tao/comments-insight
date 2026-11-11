@@ -10,6 +10,7 @@ import {
   DOM_ANALYSIS_DEFAULTS,
 } from '@/config/constants';
 import DEFAULT_CRAWLING_RULES from '@/config/default_rules.json';
+import { resolveLocale } from '@/config/constants/ui';
 import {
   DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
   DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
@@ -236,8 +237,7 @@ export class SettingsStore {
       typeof stored.dynamicReportPromptTemplate === 'string'
         ? stored.dynamicReportPromptTemplate
         : DEFAULT_SETTINGS.dynamicReportPromptTemplate;
-    merged.language =
-      typeof stored.language === 'string' ? stored.language : DEFAULT_SETTINGS.language;
+    merged.language = resolveLocale(stored.language);
     merged.theme =
       stored.theme === 'light' || stored.theme === 'dark' || stored.theme === 'system'
         ? stored.theme
@@ -380,6 +380,7 @@ export class SettingsStore {
         extractorModel?: AIConfig;
         analyzerModel?: AIConfig;
       };
+      updatedSettings.language = resolveLocale(updatedSettings.language);
       updatedSettings.aiModel = {
         ...currentModel,
         ...(sanitizedSettings.aiModel || {}),

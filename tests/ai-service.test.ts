@@ -4,6 +4,9 @@ import { CommentAnalyzer } from '../src/background/ai/CommentAnalyzer';
 import { mockAIConfig, mockComment, mockComments } from './fixtures';
 import { ErrorCode } from '../src/utils/errors';
 import { AI, TEXT } from '../src/config/constants';
+import { Logger } from '../src/utils/logger';
+
+vi.hoisted(() => vi.resetModules());
 
 // Mock chrome API
 vi.stubGlobal('chrome', {
@@ -76,6 +79,78 @@ describe('AIService', () => {
   });
 
   describe('callAI', () => {
+    it.each([{ type: 'opaqueredirect', status: 0 }, { status: 307 }, { status: 308 }])(
+      'rejects provider redirects without retrying (%j)',
+      async (redirectResponse) => {
+        const readBody = vi.fn();
+        mockFetch.mockResolvedValue({ ...redirectResponse, ok: false, text: readBody });
+
+        await expect(
+          aiService.callAI({ prompt: 'Private synthetic comment', config: mockAIConfig() }),
+        ).rejects.toMatchObject({
+          code: ErrorCode.AI_ENDPOINT_REDIRECT,
+          details: { messageKey: 'errors.aiEndpointRedirect' },
+          retryable: false,
+        });
+        expect(mockFetch).toHaveBeenCalledOnce();
+        expect(mockFetch.mock.calls[0][1]).toMatchObject({ redirect: 'manual' });
+        expect(readBody).not.toHaveBeenCalled();
+      },
+    );
+
+    it('redacts the exact request credential from HTTP diagnostics and persisted AI logs', async () => {
+      const apiKey = 'fixture_key.with-special+characters';
+      mockSettingsStore.getSettings.mockResolvedValueOnce({ developerMode: true });
+      mockFetch.mockResolvedValue(new Response(`Provider echoed ${apiKey}`, { status: 400 }));
+
+      await expect(
+        aiService.callAI({ prompt: `Synthetic ${apiKey}`, config: mockAIConfig({ apiKey }) }),
+      ).rejects.toMatchObject({
+        code: ErrorCode.API_ERROR,
+        message: 'API Bad Request (400): Provider echoed [redacted]',
+        details: { response: 'Provider echoed [redacted]' },
+      });
+
+      expect(mockLogStore.saveAiLog).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          prompt: 'Synthetic [redacted]',
+          response: expect.stringContaining('Provider echoed [redacted]'),
+        }),
+      );
+      expect(JSON.stringify(vi.mocked(Logger.warn).mock.calls)).not.toContain(apiKey);
+      expect(JSON.stringify(vi.mocked(Logger.debug).mock.calls)).not.toContain(apiKey);
+    });
+
+    it('redacts the effective cached key from a streamed connection-test preview', async () => {
+      const apiKey = 'cached_test-key.with+$';
+      const config = mockAIConfig({ apiKey });
+      aiService.rememberVerifiedConfig(config);
+      mockSettingsStore.getSettings.mockResolvedValueOnce({ developerMode: true });
+      mockFetch.mockResolvedValue(
+        createStreamingResponse([
+          `data: ${JSON.stringify({ choices: [{ delta: { content: apiKey.slice(0, 10) } }] })}\n\n`,
+          `data: ${JSON.stringify({
+            choices: [{ delta: { content: apiKey.slice(10) }, finish_reason: 'stop' }],
+          })}\n\n`,
+          'data: [DONE]\n\n',
+        ]),
+      );
+
+      const result = await aiService.callAI({
+        prompt: 'Connection test',
+        config: { ...config, apiKey: '' },
+        redactResponse: true,
+      });
+
+      expect(result.content).toBe('[redacted]');
+      expect(mockFetch.mock.calls[0][1].headers.Authorization).toBe(`Bearer ${apiKey}`);
+      expect(mockLogStore.saveAiLog).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ response: '[redacted]' }),
+      );
+    });
+
     it.each([null, 'length', 'content_filter'])(
       'rejects incomplete streams (%s) without retrying',
       async (finishReason) => {
@@ -600,6 +675,32 @@ describe('AIService', () => {
   });
 
   describe('getAvailableModels', () => {
+    it('reports a provider redirect without fetching the redirect target', async () => {
+      mockFetch.mockResolvedValue({ type: 'opaqueredirect', status: 0, ok: false });
+      await expect(
+        aiService.getAvailableModels('https://api.example.com/v1', 'test-key'),
+      ).rejects.toMatchObject({ code: ErrorCode.AI_ENDPOINT_REDIRECT, retryable: false });
+      expect(mockFetch).toHaveBeenCalledExactlyOnceWith(
+        'https://api.example.com/v1/models',
+        expect.objectContaining({ method: 'GET', redirect: 'manual' }),
+      );
+    });
+
+    it('does not log a request credential echoed in a model-list parse failure', async () => {
+      const apiKey = 'fixture_key.short+1';
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockRejectedValue(new SyntaxError(`Invalid JSON: ${apiKey}`)),
+      });
+
+      await expect(
+        aiService.getAvailableModels('https://api.example.com/v1', apiKey),
+      ).resolves.toEqual([]);
+      expect(vi.mocked(Logger.error)).toHaveBeenCalledWith('[AIService] Failed to get models', {
+        message: 'Invalid JSON: [redacted]',
+      });
+    });
+
     it('should fetch models from API', async () => {
       mockFetch.mockResolvedValue({
         ok: true,

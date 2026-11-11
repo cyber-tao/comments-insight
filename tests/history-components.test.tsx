@@ -19,6 +19,7 @@ vi.mock('../src/utils/export', () => exportUtilsMock);
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
+    i18n: { resolvedLanguage: 'zh-CN' },
     t: (key: string, options?: Record<string, unknown> | string) => {
       if (typeof options === 'string') {
         return options;
@@ -657,6 +658,9 @@ describe('HistoryDetailPanel', () => {
       {
         type: 'RENDER_REPORT',
         html: selectedItem.analysis?.dynamicHtml,
+        locale: 'zh-CN',
+        errorTitle: 'history.reportRenderFailed',
+        errorMessage: 'history.reportRenderRecovery',
       },
       '*',
     );

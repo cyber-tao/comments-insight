@@ -151,6 +151,7 @@ const taskSchema = z.object({
   url: nonEmptyStringSchema,
   platform: z.string().optional(),
   tabId: z.number().int().positive().optional(),
+  sourceDocumentId: nonEmptyStringSchema.optional(),
   progress: finiteNumberSchema,
   startTime: finiteNumberSchema,
   endTime: finiteNumberSchema.optional(),

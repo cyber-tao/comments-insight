@@ -1,0 +1,6 @@
+{
+  "extensionName": { "message": "Comments Insight - 评论洞察" },
+  "extensionDescription": {
+    "message": "采集社交媒体帖子的评论，并使用你配置的 AI 模型分析评论。"
+  }
+}

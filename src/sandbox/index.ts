@@ -163,7 +163,7 @@ function setupLinkInterceptors(): void {
   );
 }
 
-function showRenderError(error: unknown): void {
+function showRenderError(errorTitle: string, errorMessage: string): void {
   const reportRoot = document.getElementById('report-root');
   if (!reportRoot) return;
 
@@ -171,16 +171,16 @@ function showRenderError(error: unknown): void {
   container.style.cssText = 'padding: 2rem; color: red; text-align: center;';
 
   const heading = document.createElement('h3');
-  heading.textContent = 'Render Error';
+  heading.textContent = errorTitle;
 
   const message = document.createElement('p');
-  message.textContent = error instanceof Error ? error.message : 'Unknown error';
+  message.textContent = errorMessage;
 
   container.append(heading, message);
   reportRoot.replaceChildren(container);
 }
 
-function renderReport(rawHtml: string): void {
+function renderReport(rawHtml: string, errorTitle: string, errorMessage: string): void {
   if (!rawHtml || typeof rawHtml !== 'string') return;
 
   cleanPreviousReport();
@@ -207,7 +207,7 @@ function renderReport(rawHtml: string): void {
     }
   } catch (error) {
     console.error('[Sandbox] Failed to render report:', error);
-    showRenderError(error);
+    showRenderError(errorTitle, errorMessage);
   }
 }
 
@@ -221,7 +221,13 @@ window.addEventListener('message', (event: MessageEvent) => {
     event.data?.type === 'RENDER_REPORT' &&
     typeof event.data.html === 'string'
   ) {
-    renderReport(event.data.html);
+    const { html, locale, errorTitle, errorMessage } = event.data;
+    if (typeof locale === 'string') document.documentElement.lang = locale;
+    renderReport(
+      html,
+      typeof errorTitle === 'string' ? errorTitle : 'Report could not be displayed',
+      typeof errorMessage === 'string' ? errorMessage : 'Try reopening the report.',
+    );
   }
 });
 

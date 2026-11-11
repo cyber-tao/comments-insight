@@ -15,7 +15,11 @@
     "next": "Next",
     "noResults": "No results found",
     "noData": "No data",
-    "untitled": "Untitled"
+    "untitled": "Untitled",
+    "close": "Close",
+    "reloadPage": "Reload page",
+    "notAvailable": "Not available",
+    "pageTitle": "{{pageName}} – {{appName}}"
   },
   "popup": {
     "title": "Comments Insight",
@@ -98,7 +102,9 @@
     "generatingDynamicReportCompact": "Generating page",
     "dynamicReportCompleteCompact": "Page generated",
     "selectorTesterEmptyItem": "(empty)",
-    "selectorTesterTruncated": "Showing first {{count}} results"
+    "selectorTesterTruncated": "Showing first {{count}} results",
+    "viewLogs": "View logs",
+    "viewGitHub": "View project on GitHub"
   },
   "options": {
     "title": "Settings",
@@ -264,8 +270,17 @@
       "postContentSection": "Post Content (Optional)",
       "postContentSelector": "Content Selector",
       "postContentHint": "Selector for the original post content or video description.",
-      "confirmDelete": "Are you sure you want to delete this configuration?"
-    }
+      "confirmDelete": "Are you sure you want to delete this configuration?",
+      "matched": "Matched",
+      "notMatched": "No match",
+      "selectorExample": ".class or #id",
+      "selector": "Selector",
+      "selectorType": "Selector type",
+      "optionalAttribute": "Attribute (optional)",
+      "selectForExport": "Select {{domain}} for export"
+    },
+    "placeholder_language_name": "Name of the selected report language.",
+    "placeholder_top_comments_data": "Sample of top comments from the extracted discussion."
   },
   "history": {
     "title": "History",
@@ -320,7 +335,12 @@
     "tokensWithCount": "{{count}} tokens",
     "postContent": "Post Content",
     "reply": "{{count}} reply",
-    "replies": "{{count}} replies"
+    "replies": "{{count}} replies",
+    "deepRepliesHidden": "Deeper replies are hidden",
+    "searchAria": "Search history records",
+    "reportBatch": "Batch {{number}}",
+    "reportRenderFailed": "Report could not be displayed",
+    "reportRenderRecovery": "Try reopening the report."
   },
   "task": {
     "pending": "Pending",
@@ -347,7 +367,31 @@
     "level": "Level",
     "levelAll": "All",
     "loading": "Loading logs...",
-    "logsCleared": "All logs cleared"
+    "logsCleared": "All logs cleared",
+    "title": "Logs",
+    "debug": "Debug",
+    "info": "Info",
+    "warning": "Warning",
+    "error": "Error",
+    "totalCount": "Total: {{count}}",
+    "errorCount": "Errors: {{count}}",
+    "debugCount": "Debug: {{count}}",
+    "infoCount": "Info: {{count}}",
+    "warningCount": "Warnings: {{count}}",
+    "aiExtraction": "AI Extraction",
+    "aiAnalysis": "AI Analysis",
+    "detailTitle": "Log details · {{type}}",
+    "promptLength": "Prompt ({{count}} chars)",
+    "responseLength": "Response ({{count}} chars)",
+    "time": "Time:",
+    "message": "Message:",
+    "data": "Data",
+    "stackTrace": "Stack trace",
+    "noPrompt": "No prompt",
+    "noResponse": "No response",
+    "copyPrompt": "Copy Prompt",
+    "copyResponse": "Copy Response",
+    "copyLog": "Copy Log"
   },
   "errors": {
     "networkError": "Network connection failed. Please check your internet connection and try again.",
@@ -404,7 +448,12 @@
     "configIdRequired": "Config ID is required.",
     "selectorValidationParamsRequired": "Config ID, selector key, and status are required.",
     "settingsDataRequired": "Settings data is required.",
-    "taskIdRequired": "Task ID is required."
+    "taskIdRequired": "Task ID is required.",
+    "renderFailed": "Something went wrong",
+    "renderRecovery": "Try reloading the page.",
+    "sourcePageChanged": "The source page changed. Reopen the extension on the intended page and try again.",
+    "extractionResultTooLarge": "The extracted comments and replies exceed the result limit. Reduce the number of comments and try again.",
+    "aiEndpointRedirect": "The AI endpoint returned a redirect. Enter the final API URL in Settings."
   },
   "notification": {
     "extractionCompleted": "Extraction completed for \"{{title}}\"{{comments}}",

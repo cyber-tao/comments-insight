@@ -12,6 +12,8 @@
 
 .logs-header-section {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   justify-content: space-between;
   align-items: flex-end;
   margin-bottom: 20px;
@@ -22,10 +24,12 @@
 .logs-header-container {
   display: flex;
   align-items: center;
+  min-width: 0;
 }
 
 .logs-controls {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
 }
@@ -33,6 +37,8 @@
 .logs-search {
   display: flex;
   align-items: center;
+  flex: 1 1 15rem;
+  min-width: 0;
 }
 
 .search-input {
@@ -41,7 +47,8 @@
   background: var(--bg-card);
   color: var(--text-primary);
   border: 1px solid var(--border-primary);
-  min-width: 280px;
+  min-width: 0;
+  width: 100%;
   font-size: 14px;
   transition: border-color 0.2s;
 }
@@ -54,6 +61,7 @@
 
 .logs-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -67,7 +75,6 @@
   font-weight: 600;
   font-size: 16px;
   transition: all 0.2s ease;
-  margin-bottom: -13px; /* Align with border-bottom */
 }
 
 .tab-btn:hover {
@@ -110,6 +117,7 @@
 
 .logs-stats-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 16px;
   padding: 10px 16px;
   background: var(--bg-card);
@@ -125,15 +133,9 @@
   background: var(--bg-card);
   border-radius: 8px;
   border: 1px solid var(--border-primary);
-  overflow: hidden;
+  min-height: 0;
+  overflow-y: auto;
   flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.virtua-list {
-  flex: 1;
-  height: 100% !important;
 }
 
 .log-item-wrapper {
@@ -161,6 +163,8 @@
 
 .log-header {
   display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
@@ -249,6 +253,7 @@
 
 .log-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 20px;
 }

@@ -8,7 +8,7 @@ Suggested statement:
 
 > Comments Insight lets a user extract comments from the current webpage, analyze the extracted discussion with a user-configured AI service, and save or export the resulting report.
 
-The store description should prominently state that AI features send relevant page/comment data and the user's API credential directly to the AI endpoint selected by the user.
+The [localized store descriptions](chrome-web-store-listing.md) explain that AI features send relevant page or comment data and the user's API credential directly to the selected AI endpoint.
 
 ## Privacy policy
 

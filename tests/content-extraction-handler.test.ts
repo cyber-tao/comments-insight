@@ -1,11 +1,14 @@
+// @vitest-environment jsdom
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { handleStartExtraction } from '../src/content/handlers/extraction';
 import { handleStartConfigGeneration } from '../src/content/handlers/config-generation';
 import { resetExtractionState } from '../src/content/extractionState';
 import { MESSAGES } from '../src/config/constants';
+import { VALIDATION_BUDGET } from '../src/utils/validation-budget';
 import type { Comment } from '../src/types';
 
-const sendMessageMock = vi.fn().mockResolvedValue(undefined);
+const sendMessageMock = vi.fn().mockResolvedValue({ success: true });
 const { generateConfigMock, cleanupMock } = vi.hoisted(() => ({
   generateConfigMock: vi.fn(),
   cleanupMock: vi.fn(),
@@ -89,6 +92,24 @@ describe('content extraction handler', () => {
     expect(onComplete).toHaveBeenCalledWith({ success: true, comments: expect.any(Array) });
   });
 
+  it('rejects a stale source URL before extracting or generating a rule', async () => {
+    const expectedUrl = `${window.location.origin}/other#route`;
+    const acknowledge = vi.fn();
+    await handleStartExtraction(
+      { taskId: 'stale-extract', maxComments: 1, expectedUrl },
+      acknowledge,
+    );
+    await handleStartConfigGeneration({ taskId: 'stale-config', expectedUrl }, acknowledge);
+
+    expect(acknowledge).toHaveBeenCalledTimes(2);
+    expect(acknowledge).toHaveBeenCalledWith({
+      success: false,
+      error: expect.objectContaining({ messageKey: 'errors.sourcePageChanged' }),
+    });
+    expect(getTools).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
   it('reports failure and resolves onComplete when extraction throws', async () => {
     const onComplete = vi.fn();
     setExtractor(async () => {
@@ -102,6 +123,44 @@ describe('content extraction handler', () => {
       payload: { taskId: 'task-fail', success: false, error: 'boom' },
     });
     expect(onComplete).toHaveBeenCalledWith({ success: false, error: 'boom' });
+  });
+
+  it('sends only a compact failure when extracted replies exceed the message budget', async () => {
+    const oversized = {
+      ...makeComment('root'),
+      replies: Array.from({ length: VALIDATION_BUDGET.maxArrayLength + 1 }, () =>
+        makeComment('reply'),
+      ),
+    };
+    setExtractor(async () => [oversized]);
+    const onComplete = vi.fn();
+    await handleStartExtraction({ taskId: 'too-large', maxComments: 1 }, vi.fn(), onComplete);
+
+    expect(sendMessageMock).toHaveBeenCalledExactlyOnceWith({
+      type: MESSAGES.EXTRACTION_COMPLETED,
+      payload: {
+        taskId: 'too-large',
+        success: false,
+        error: expect.stringContaining('Reduce the number of comments'),
+        errorKey: 'errors.extractionResultTooLarge',
+      },
+    });
+    expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({ success: false }));
+  });
+
+  it('forwards a rejected extraction completion as a compact failure', async () => {
+    sendMessageMock.mockResolvedValueOnce({
+      error: { code: 'VALIDATION_ERROR', message: 'Rejected result', retryable: false },
+    });
+    setExtractor(async () => [makeComment('c1')]);
+    const onComplete = vi.fn();
+    await handleStartExtraction({ taskId: 'rejected', maxComments: 1 }, vi.fn(), onComplete);
+
+    expect(sendMessageMock).toHaveBeenLastCalledWith({
+      type: MESSAGES.EXTRACTION_COMPLETED,
+      payload: { taskId: 'rejected', success: false, error: 'Rejected result' },
+    });
+    expect(onComplete).toHaveBeenCalledWith({ success: false, error: 'Rejected result' });
   });
 
   it('resolves onComplete with cancelled when the task is superseded mid-flight', async () => {

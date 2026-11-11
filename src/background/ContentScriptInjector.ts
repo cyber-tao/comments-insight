@@ -4,8 +4,13 @@ import { Logger } from '@/utils/logger';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function ping(tabId: number): Promise<void> {
-  await chrome.tabs.sendMessage(tabId, { type: MESSAGES.PING });
+async function ping(tabId: number, documentId?: string): Promise<void> {
+  const message = { type: MESSAGES.PING };
+  if (documentId) {
+    await chrome.tabs.sendMessage(tabId, message, { documentId });
+  } else {
+    await chrome.tabs.sendMessage(tabId, message);
+  }
 }
 
 /**
@@ -44,9 +49,12 @@ async function isTabRestricted(tabId: number): Promise<boolean> {
   }
 }
 
-export async function ensureContentScriptInjected(tabId: number): Promise<void> {
+export async function ensureContentScriptInjected(
+  tabId: number,
+  documentId?: string,
+): Promise<void> {
   try {
-    await ping(tabId);
+    await ping(tabId, documentId);
     return;
   } catch {
     // Not injected yet
@@ -76,7 +84,7 @@ export async function ensureContentScriptInjected(tabId: number): Promise<void> 
 
   try {
     await chrome.scripting.executeScript({
-      target: { tabId },
+      target: documentId ? { tabId, documentIds: [documentId] } : { tabId },
       files: [contentScript],
     });
   } catch (error) {
@@ -85,7 +93,7 @@ export async function ensureContentScriptInjected(tabId: number): Promise<void> 
 
   for (let i = 0; i < INJECTION.PING_RETRY_ATTEMPTS; i++) {
     try {
-      await ping(tabId);
+      await ping(tabId, documentId);
       return;
     } catch {
       await sleep(INJECTION.PING_RETRY_DELAY_MS);

@@ -49,7 +49,7 @@ Depending on the feature, requests to the configured AI provider may contain:
 - analysis text and a report prompt for visual report generation;
 - custom prompt templates configured by the user.
 
-Remote AI endpoints must use HTTPS. Plain HTTP is accepted only for loopback development endpoints such as `localhost` or `127.0.0.1`. The provider may process or retain requests under its own terms. Users should not configure a provider they do not trust or submit content they are not authorized to process.
+Remote AI endpoints must use HTTPS. Plain HTTP is accepted only for loopback development endpoints such as `localhost` or `127.0.0.1`. Enter the final API URL for the provider. The extension rejects redirects before sending a follow-up request. The provider may process or retain requests under its own terms. Users should not configure a provider they do not trust or submit content they are not authorized to process.
 
 ### Crawling-rule updates
 

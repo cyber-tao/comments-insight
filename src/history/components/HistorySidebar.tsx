@@ -110,7 +110,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
             onKeyPress={(e) => e.key === 'Enter' && onSearch()}
             placeholder={t('history.searchPlaceholder')}
             className="flex-1 theme-input"
-            aria-label="Search history records"
+            aria-label={t('history.searchAria')}
           />
           <button
             onClick={onSearch}

@@ -333,6 +333,7 @@ const ERROR_CODE_TO_I18N_KEY: Record<ErrorCode, string> = {
   [ErrorCode.AI_INVALID_RESPONSE]: 'errors.aiInvalidResponse',
   [ErrorCode.AI_QUOTA_EXCEEDED]: 'errors.aiQuotaExceeded',
   [ErrorCode.AI_MODEL_NOT_FOUND]: 'errors.aiModelNotFound',
+  [ErrorCode.AI_ENDPOINT_REDIRECT]: 'errors.aiEndpointRedirect',
   [ErrorCode.PLATFORM_NOT_SUPPORTED]: 'errors.platformNotSupported',
   [ErrorCode.EXTRACTION_FAILED]: 'errors.extractionFailed',
   [ErrorCode.NO_COMMENTS_FOUND]: 'errors.noCommentsFound',

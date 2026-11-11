@@ -1,0 +1,6 @@
+{
+  "extensionName": { "message": "Comments Insight" },
+  "extensionDescription": {
+    "message": "Collect comments from social media posts and use your configured AI model to analyze them."
+  }
+}

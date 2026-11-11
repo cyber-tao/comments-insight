@@ -15,7 +15,11 @@
     "next": "次へ",
     "noResults": "結果が見つかりません",
     "noData": "データなし",
-    "untitled": "無題"
+    "untitled": "無題",
+    "close": "閉じる",
+    "reloadPage": "ページを再読み込み",
+    "notAvailable": "情報なし",
+    "pageTitle": "{{pageName}} – {{appName}}"
   },
   "popup": {
     "title": "Comments Insight",
@@ -98,7 +102,9 @@
     "generatingDynamicReportCompact": "ページ生成中",
     "dynamicReportCompleteCompact": "ページ生成済み",
     "selectorTesterEmptyItem": "（空）",
-    "selectorTesterTruncated": "先頭 {{count}} 件を表示"
+    "selectorTesterTruncated": "先頭 {{count}} 件を表示",
+    "viewLogs": "ログを表示",
+    "viewGitHub": "GitHub でプロジェクトを表示"
   },
   "options": {
     "title": "設定",
@@ -264,8 +270,17 @@
       "syncDialogDescription": "公式リポジトリから最新のクロール設定を取得し、ローカル設定とマージします。既存の設定は更新され、新しい設定は追加されます。",
       "syncDialogSourceUrl": "ソースURL",
       "syncDialogConfirm": "同期する",
-      "syncSuccessWithCount": "同期成功！{{added}}件追加、{{updated}}件更新しました。"
-    }
+      "syncSuccessWithCount": "同期成功！{{added}}件追加、{{updated}}件更新しました。",
+      "matched": "一致",
+      "notMatched": "一致なし",
+      "selectorExample": ".class または #id",
+      "selector": "セレクター",
+      "selectorType": "セレクターの種類",
+      "optionalAttribute": "属性（任意）",
+      "selectForExport": "{{domain}} をエクスポート対象に選択"
+    },
+    "placeholder_language_name": "選択したレポート言語の名前です。",
+    "placeholder_top_comments_data": "取得したコメントのうち、上位のコメントのサンプルです。"
   },
   "history": {
     "title": "履歴",
@@ -320,7 +335,12 @@
     "tokensWithCount": "{{count}} トークン",
     "postContent": "投稿内容",
     "reply": "{{count}} 件の返信",
-    "replies": "{{count}} 件の返信"
+    "replies": "{{count}} 件の返信",
+    "deepRepliesHidden": "これより深い階層の返信は非表示です",
+    "searchAria": "履歴を検索",
+    "reportBatch": "バッチ {{number}}",
+    "reportRenderFailed": "レポートを表示できませんでした",
+    "reportRenderRecovery": "レポートを開き直してください。"
   },
   "task": {
     "pending": "保留中",
@@ -347,7 +367,31 @@
     "level": "レベル",
     "levelAll": "すべて",
     "loading": "ログを読み込み中...",
-    "logsCleared": "すべてのログがクリアされました"
+    "logsCleared": "すべてのログがクリアされました",
+    "title": "ログ",
+    "debug": "デバッグ",
+    "info": "情報",
+    "warning": "警告",
+    "error": "エラー",
+    "totalCount": "合計：{{count}}",
+    "errorCount": "エラー：{{count}}",
+    "debugCount": "デバッグ：{{count}}",
+    "infoCount": "情報：{{count}}",
+    "warningCount": "警告：{{count}}",
+    "aiExtraction": "AI 抽出",
+    "aiAnalysis": "AI 分析",
+    "detailTitle": "ログの詳細 · {{type}}",
+    "promptLength": "プロンプト（{{count}} 文字）",
+    "responseLength": "応答（{{count}} 文字）",
+    "time": "時刻：",
+    "message": "メッセージ：",
+    "data": "データ",
+    "stackTrace": "スタックトレース",
+    "noPrompt": "プロンプトなし",
+    "noResponse": "応答なし",
+    "copyPrompt": "プロンプトをコピー",
+    "copyResponse": "応答をコピー",
+    "copyLog": "ログをコピー"
   },
   "errors": {
     "networkError": "ネットワーク接続に失敗しました。接続を確認して再試行してください。",
@@ -404,7 +448,12 @@
     "configIdRequired": "設定IDが必要です。",
     "selectorValidationParamsRequired": "設定ID、セレクターキー、およびステータスが必要です。",
     "settingsDataRequired": "設定データが必要です。",
-    "taskIdRequired": "タスクIDが必要です。"
+    "taskIdRequired": "タスクIDが必要です。",
+    "renderFailed": "問題が発生しました",
+    "renderRecovery": "ページを再読み込みしてください。",
+    "sourcePageChanged": "元のページが変わりました。対象のページで拡張機能を開き直して、もう一度お試しください。",
+    "extractionResultTooLarge": "抽出したコメントと返信が結果の上限を超えています。コメント数を減らして、もう一度お試しください。",
+    "aiEndpointRedirect": "AI エンドポイントがリダイレクトを返しました。設定に最終的な API URL を入力してください。"
   },
   "notification": {
     "extractionCompleted": "\"{{title}}\" の抽出が完了しました{{comments}}",

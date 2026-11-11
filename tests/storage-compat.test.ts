@@ -610,7 +610,7 @@ describe('SettingsStore crawling config persistence', () => {
   });
 
   it('does not cache a stale read that finishes after a save', async () => {
-    useInMemorySettingsStorage({ language: 'old-language' });
+    useInMemorySettingsStorage({ language: 'en-US' });
     let resolveDecrypt!: (value: string) => void;
     let markDecryptStarted!: () => void;
     const decryptStarted = new Promise<void>((resolve) => {
@@ -630,15 +630,15 @@ describe('SettingsStore crawling config persistence', () => {
 
     const staleRead = store.getSettings();
     await decryptStarted;
-    await store.saveSettings({ language: 'new-language' });
+    await store.saveSettings({ language: 'ko-KR' });
     resolveDecrypt('');
 
-    expect((await staleRead).language).toBe('old-language');
-    expect((await store.getSettings()).language).toBe('new-language');
+    expect((await staleRead).language).toBe('en-US');
+    expect((await store.getSettings()).language).toBe('ko-KR');
   });
 
   it('does not cache a stale read that finishes after a storage change event', async () => {
-    const storage = useInMemorySettingsStorage({ language: 'old-language' });
+    const storage = useInMemorySettingsStorage({ language: 'en-US' });
     let resolveDecrypt!: (value: string) => void;
     let markDecryptStarted!: () => void;
     const decryptStarted = new Promise<void>((resolve) => {
@@ -658,20 +658,45 @@ describe('SettingsStore crawling config persistence', () => {
 
     const staleRead = store.getSettings();
     await decryptStarted;
-    storage.write({ language: 'external-language' });
+    storage.write({ language: 'pt-PT' });
     storageChangeListeners[0](
       {
         [STORAGE.SETTINGS_KEY]: {
-          oldValue: { language: 'old-language' },
-          newValue: { language: 'external-language' },
+          oldValue: { language: 'en-US' },
+          newValue: { language: 'pt-PT' },
         },
       },
       'local',
     );
     resolveDecrypt('');
 
-    expect((await staleRead).language).toBe('old-language');
-    expect((await store.getSettings()).language).toBe('external-language');
+    expect((await staleRead).language).toBe('en-US');
+    expect((await store.getSettings()).language).toBe('pt-PT');
+  });
+});
+
+describe('SettingsStore language compatibility', () => {
+  it('normalizes existing and imported locale codes while preserving custom templates', async () => {
+    const template = '  Custom {comments_data}  ';
+    const storage = useInMemorySettingsStorage({
+      language: 'zh_Hant_HK',
+      analyzerPromptTemplate: template,
+    });
+    const store = new SettingsStore(createEncryptionServiceMock());
+    expect(await store.getSettings()).toMatchObject({
+      language: 'zh-TW',
+      analyzerPromptTemplate: template,
+    });
+    await store.importSettings(JSON.stringify({ language: 'pt_PT' }));
+    expect(storage.read()).toMatchObject({
+      language: 'pt-PT',
+      analyzerPromptTemplate: template,
+    });
+    await store.saveSettings({ language: 'unavailable-locale' });
+    expect(storage.read()).toMatchObject({
+      language: 'en-US',
+      analyzerPromptTemplate: template,
+    });
   });
 });
 

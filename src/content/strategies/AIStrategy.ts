@@ -5,6 +5,8 @@ import { DOMSimplifier } from '../DOMSimplifier';
 import { Chunker } from '../utils/Chunker';
 import { Logger } from '../../utils/logger';
 import { ErrorCode, ExtensionError } from '@/utils/error-types';
+import { requireMessageSuccess } from '@/utils/message-response';
+import { checkSourcePage } from '@/utils/source-page';
 import {
   EXTRACTION_PROGRESS,
   CONFIG_GENERATION_PROGRESS,
@@ -29,9 +31,10 @@ export class AIStrategy implements ExtractionStrategy {
   private aiService: ContentAIService;
   private configGenerator: AIConfigGenerator;
   private simplifier = new DOMSimplifier();
+  private readonly sourceUrl = window.location.href;
 
   constructor(private pageController: PageController) {
-    this.aiService = new ContentAIService();
+    this.aiService = new ContentAIService(this.sourceUrl);
     this.configGenerator = new AIConfigGenerator(this.aiService);
   }
 
@@ -333,7 +336,7 @@ export class AIStrategy implements ExtractionStrategy {
         aiTimeout,
       );
       if (config) {
-        await this.saveGeneratedConfig(hostname, config);
+        await this.saveGeneratedConfig(hostname, config, signal);
       }
     } catch (err) {
       Logger.warn('[AIStrategy] Post-extraction config generation failed', { error: err });
@@ -379,6 +382,7 @@ export class AIStrategy implements ExtractionStrategy {
   private async saveGeneratedConfig(
     hostname: string,
     config: CrawlingConfig,
+    signal?: AbortSignal,
     onProgress?: ProgressCallback | ConfigGenerationCallback,
   ) {
     onProgress?.(CONFIG_GENERATION_PROGRESS.SAVING, 'Saving verified configuration...');
@@ -387,10 +391,21 @@ export class AIStrategy implements ExtractionStrategy {
     config.id = normalizedDomain + '_' + Date.now();
     config.lastUpdated = Date.now();
 
-    await sendMessage({
+    checkAborted(signal);
+    checkSourcePage(this.sourceUrl);
+    const response = await sendMessage({
       type: MESSAGES.SAVE_CRAWLING_CONFIG,
       payload: { config },
     });
+    requireMessageSuccess(
+      response,
+      new ExtensionError(
+        ErrorCode.STORAGE_WRITE_ERROR,
+        'Failed to save crawling config',
+        { messageKey: 'errors.storageWriteError' },
+        false,
+      ),
+    );
     Logger.info('[AIStrategy] Successfully generated, verified, and saved crawling config!', {
       config,
     });
@@ -444,7 +459,7 @@ export class AIStrategy implements ExtractionStrategy {
       aiTimeout,
     );
     if (config) {
-      await this.saveGeneratedConfig(hostname, config, onProgress);
+      await this.saveGeneratedConfig(hostname, config, signal, onProgress);
       onProgress?.(100, 'Configuration Generation Complete!');
       return true;
     }

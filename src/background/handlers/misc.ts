@@ -56,6 +56,9 @@ export async function handleGetAvailableModels(
     const models = await context.aiService.getAvailableModels(apiUrl, apiKey || '');
     return { models };
   } catch (error) {
+    if (error instanceof ExtensionError && error.code === ErrorCode.AI_ENDPOINT_REDIRECT) {
+      throw error;
+    }
     Logger.error('[MiscHandler] Failed to get models', { error });
     return { models: [], error: error instanceof Error ? error.message : 'Unknown error' };
   }
@@ -80,6 +83,7 @@ export async function handleTestModel(
       prompt: 'Hello! Please respond with "OK" if you can read this message.',
       config: config,
       timeout: settings.aiTimeout,
+      redactResponse: true,
     });
 
     if (response && response.content) {
@@ -94,6 +98,9 @@ export async function handleTestModel(
       throw new ExtensionError(ErrorCode.AI_INVALID_RESPONSE, 'No response from model');
     }
   } catch (error) {
+    if (error instanceof ExtensionError && error.code === ErrorCode.AI_ENDPOINT_REDIRECT) {
+      throw error;
+    }
     Logger.error('[MiscHandler] Model test failed', { error });
     return {
       success: false,

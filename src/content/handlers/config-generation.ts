@@ -5,16 +5,21 @@ import { PageController } from '../PageController';
 import { AIStrategy } from '../strategies/AIStrategy';
 import { ConfigGenerationResponse } from '@/types/messages';
 import { getTools } from './tools';
-import { sendCancelledCompletion } from './extraction';
-import { ErrorCode, ExtensionError } from '@/utils/error-types';
+import { sendCancelledCompletion, sendTaskFailure } from './extraction';
+import { ErrorCode, ExtensionError, toExtensionErrorPayload } from '@/utils/error-types';
+import { checkSourcePage, isSameSourcePage, sourcePageChangedError } from '@/utils/source-page';
+import { requireMessageSuccess } from '@/utils/message-response';
 
 export async function handleStartConfigGeneration(
-  data: { taskId: string },
+  data: { taskId: string; expectedUrl?: string },
   sendResponse: (response: ConfigGenerationResponse) => void,
 ): Promise<void> {
+  const { taskId, expectedUrl } = data;
+  if (expectedUrl && !isSameSourcePage(window.location.href, expectedUrl)) {
+    sendResponse({ success: false, error: toExtensionErrorPayload(sourcePageChangedError()) });
+    return;
+  }
   sendResponse({ success: true });
-
-  const { taskId } = data;
   Logger.info('[Content] Starting config generation', { taskId });
 
   const { controller, supersededTask } = globalExtractionState.beginTask(taskId, 'config');
@@ -36,10 +41,15 @@ export async function handleStartConfigGeneration(
         if (!globalExtractionState.isCurrentTask(taskId, controller)) {
           return;
         }
-        chrome.runtime.sendMessage({
-          type: MESSAGES.EXTRACTION_PROGRESS,
-          payload: { taskId, progress, message },
-        });
+        checkSourcePage(expectedUrl);
+        void chrome.runtime
+          .sendMessage({
+            type: MESSAGES.EXTRACTION_PROGRESS,
+            payload: { taskId, progress, message },
+          })
+          .catch((error) =>
+            Logger.debug('[Content] Failed to send config generation progress', { error }),
+          );
       }, controller.signal);
       if (!generated) {
         throw new ExtensionError(
@@ -53,10 +63,20 @@ export async function handleStartConfigGeneration(
         return;
       }
 
-      await chrome.runtime.sendMessage({
+      checkSourcePage(expectedUrl);
+      const response: unknown = await chrome.runtime.sendMessage({
         type: MESSAGES.CONFIG_GENERATION_COMPLETED,
         payload: { taskId, success: true },
       });
+      requireMessageSuccess(
+        response,
+        new ExtensionError(
+          ErrorCode.EXTRACTION_FAILED,
+          'Config generation completion was rejected',
+          {},
+          false,
+        ),
+      );
 
       Logger.info('[Content] Config generation complete');
     } finally {
@@ -69,14 +89,7 @@ export async function handleStartConfigGeneration(
     }
 
     Logger.error('[Content] Config generation failed', { error });
-    await chrome.runtime.sendMessage({
-      type: MESSAGES.CONFIG_GENERATION_COMPLETED,
-      payload: {
-        taskId,
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      },
-    });
+    await sendTaskFailure(taskId, 'config', error);
   } finally {
     globalExtractionState.finishTask(taskId, controller);
   }

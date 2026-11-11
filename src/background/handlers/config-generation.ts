@@ -4,14 +4,10 @@ import { Logger } from '@/utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
 import { MESSAGES, TEXT, TIMEOUT } from '@/config/constants';
 import { getDomain } from '@/utils/url';
-import { ensureContentScriptInjected } from '../ContentScriptInjector';
+import i18n from '@/utils/i18n';
 import { resolveTabId } from '@/utils/chrome-message';
 import { cleanAndParseJsonObject } from '@/utils/json-parser';
-import {
-  isExpectedAsyncAckError,
-  resolveRunningCompletionTask,
-  waitForTaskCompletion,
-} from './utils/task-completion';
+import { resolveRunningCompletionTask, runSourceTask } from './utils/task-completion';
 
 interface StartConfigGenerationResponse {
   taskId: string;
@@ -43,36 +39,23 @@ export async function handleStartConfigGeneration(
   const taskId = context.taskManager.createTask('config', url, domain, 0, tabId);
 
   context.taskManager.setExecutor(taskId, async (task: Task, signal: AbortSignal) => {
-    if (!task.tabId) {
-      throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
-    }
-
-    await ensureContentScriptInjected(task.tabId);
-
-    try {
-      await chrome.tabs.sendMessage(task.tabId, {
-        type: MESSAGES.RUN_CONFIG_GENERATION,
-        payload: { taskId: task.id },
-      });
-    } catch (error) {
-      if (!isExpectedAsyncAckError(error)) {
-        throw error;
-      }
-      Logger.debug('[ConfigGenerationHandler] Message ack timeout ignored, waiting for completion');
-    }
-
-    return waitForTaskCompletion({
-      taskId,
+    return runSourceTask(
+      task,
       signal,
       context,
-      tabId: task.tabId!,
-      timeoutMs: TIMEOUT.CONFIG_TASK_COMPLETION_MS,
-      timeoutMessage: TEXT.CONFIG_TASK_TIMEOUT,
-      tabClosedMessage: TEXT.TASK_SOURCE_TAB_CLOSED,
-      cancelWarnLabel: '[ConfigGenerationHandler] Failed to send config cancel to content script',
-      timeoutWarnLabel:
-        '[ConfigGenerationHandler] Failed to send config timeout cancel to content script',
-    });
+      {
+        type: MESSAGES.RUN_CONFIG_GENERATION,
+        payload: { taskId: task.id, expectedUrl: task.url },
+      },
+      {
+        timeoutMs: TIMEOUT.CONFIG_TASK_COMPLETION_MS,
+        timeoutMessage: TEXT.CONFIG_TASK_TIMEOUT,
+        tabClosedMessage: TEXT.TASK_SOURCE_TAB_CLOSED,
+        cancelWarnLabel: '[ConfigGenerationHandler] Failed to send config cancel to content script',
+        timeoutWarnLabel:
+          '[ConfigGenerationHandler] Failed to send config timeout cancel to content script',
+      },
+    );
   });
 
   return { taskId };
@@ -87,7 +70,7 @@ export async function handleConfigGenerationCompleted(
     Logger.warn('[ConfigGenerationHandler] Invalid config completion payload', { payload });
     return { success: false };
   }
-  const { taskId, success, error } = payload;
+  const { taskId, success, error, errorKey } = payload;
   const task = resolveRunningCompletionTask(taskId, context, 'config');
 
   if (!task) {
@@ -97,7 +80,10 @@ export async function handleConfigGenerationCompleted(
   if (success) {
     context.taskManager.completeTask(taskId, { tokensUsed: 0, commentsCount: 0 });
   } else {
-    context.taskManager.failTask(taskId, error || 'Config generation failed');
+    context.taskManager.failTask(
+      taskId,
+      errorKey && i18n.exists(errorKey) ? i18n.t(errorKey) : error || 'Config generation failed',
+    );
   }
 
   return { success: true };

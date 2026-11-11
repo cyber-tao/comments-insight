@@ -3,6 +3,8 @@
  */
 
 import { TEMPLATE, LANGUAGES, ANALYSIS_FORMAT } from '@/config/constants';
+import { resolveLocale } from '@/config/constants/ui';
+import { LOCALIZED_PROMPTS } from './localized-prompts';
 
 /**
  * Default analysis prompt template
@@ -103,42 +105,16 @@ When referencing a single comment or reply, append the original text after the s
  */
 export function buildAnalysisPrompt(
   commentsData: string,
-  template: string = DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
-  metadata?: {
-    datetime?: string;
-    videoTime?: string;
-    platform?: string;
-    url?: string;
-    title?: string;
-    postContent?: string;
-    totalComments?: number;
-    language?: string;
-  },
+  template?: string,
+  metadata?: PromptMetadata,
 ): string {
-  const langCode = metadata?.language || LANGUAGES.DEFAULT;
-  const langConfig = LANGUAGES.SUPPORTED.find((l) => l.code === langCode);
-  const langName = langConfig?.name || langCode;
-  const languageInstruction = `\n\n## Language Requirement:\nYou MUST write the entire analysis in ${langName}.`;
-  const analysisDateTime = metadata?.datetime || new Date().toISOString();
-  const promptTemplate = template.includes(TEMPLATE.COMMENTS_DATA_PLACEHOLDER)
-    ? template
-    : template + TEMPLATE.COMMENTS_DATA_FALLBACK_SECTION;
+  const language = getPromptLocale(metadata?.language);
+  const selectedTemplate = getAnalysisPromptTemplate(template, metadata?.language);
+  const promptTemplate = selectedTemplate.includes(TEMPLATE.COMMENTS_DATA_PLACEHOLDER)
+    ? selectedTemplate
+    : `${selectedTemplate}\n\n## ${language.commentsHeading}:\n${TEMPLATE.COMMENTS_DATA_PLACEHOLDER}`;
 
-  const prompt =
-    promptTemplate
-      .split(TEMPLATE.COMMENTS_DATA_PLACEHOLDER)
-      .join(commentsData)
-      .replace(/{date_time}/g, analysisDateTime)
-      .replace(/{datetime}/g, analysisDateTime)
-      .replace(/{post_time}/g, metadata?.videoTime || 'N/A')
-      .replace(/{video_time}/g, metadata?.videoTime || 'N/A')
-      .replace(/{platform}/g, metadata?.platform || 'Unknown Platform')
-      .replace(/{url}/g, metadata?.url || 'N/A')
-      .replace(/{title}/g, metadata?.title || ANALYSIS_FORMAT.UNKNOWN_TITLE)
-      .replace(/{post_content}/g, metadata?.postContent || 'N/A')
-      .replace(/{total_comments}/g, String(metadata?.totalComments || 0)) + languageInstruction;
-
-  return prompt;
+  return `${fillPrompt(promptTemplate, { ...promptFields(metadata), comments_data: commentsData })}\n\n${language.analysisLanguage}`;
 }
 
 /**
@@ -198,47 +174,98 @@ Output ONLY the raw standalone HTML code. Do NOT include markdown code blocks, d
  */
 export function buildDynamicReportPrompt(
   analysisMarkdown: string,
-  template: string = DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
-  metadata?: {
-    datetime?: string;
-    videoTime?: string;
-    platform?: string;
-    url?: string;
-    title?: string;
-    totalComments?: number;
-    language?: string;
-    topCommentsData?: string;
-  },
+  template?: string,
+  metadata?: PromptMetadata & { topCommentsData?: string },
 ): string {
-  const langCode = metadata?.language || LANGUAGES.DEFAULT;
-  const langConfig = LANGUAGES.SUPPORTED.find((l) => l.code === langCode);
-  const langName = langConfig?.name || langCode;
-  const analysisDateTime = metadata?.datetime || new Date().toISOString();
-  const topComments = metadata?.topCommentsData || 'N/A';
+  const language = getPromptLocale(metadata?.language);
+  const selectedTemplate = getDynamicReportPromptTemplate(template, metadata?.language);
+  const topComments = metadata?.topCommentsData || language.notAvailable;
+  let prompt = fillPrompt(selectedTemplate, {
+    ...promptFields(metadata),
+    analysis_markdown: analysisMarkdown,
+    language_name: language.language,
+    top_comments_data: topComments,
+    comments_data: topComments,
+  });
 
-  let prompt = template
-    .replace(/{analysis_markdown}/g, analysisMarkdown)
-    .replace(/{date_time}/g, analysisDateTime)
-    .replace(/{datetime}/g, analysisDateTime)
-    .replace(/{post_time}/g, metadata?.videoTime || 'N/A')
-    .replace(/{video_time}/g, metadata?.videoTime || 'N/A')
-    .replace(/{platform}/g, metadata?.platform || 'Unknown Platform')
-    .replace(/{url}/g, metadata?.url || 'N/A')
-    .replace(/{title}/g, metadata?.title || ANALYSIS_FORMAT.UNKNOWN_TITLE)
-    .replace(/{total_comments}/g, String(metadata?.totalComments || 0))
-    .replace(/{language_name}/g, langName)
-    .replace(/{top_comments_data}/g, topComments)
-    .replace(/{comments_data}/g, topComments);
-
-  if (!prompt.includes(analysisMarkdown)) {
-    prompt += `\n\n## Analysis Markdown:\n${analysisMarkdown}`;
+  if (analysisMarkdown && !selectedTemplate.includes('{analysis_markdown}')) {
+    prompt += `\n\n## ${language.analysisHeading}:\n${analysisMarkdown}`;
   }
 
-  if (topComments !== 'N/A' && !prompt.includes(topComments)) {
-    prompt += `\n\n## Top Comments Data:\n${topComments}`;
+  if (
+    metadata?.topCommentsData &&
+    !selectedTemplate.includes('{top_comments_data}') &&
+    !selectedTemplate.includes(TEMPLATE.COMMENTS_DATA_PLACEHOLDER)
+  ) {
+    prompt += `\n\n## ${language.topCommentsHeading}:\n${topComments}`;
   }
 
   return prompt;
+}
+
+interface PromptMetadata {
+  datetime?: string;
+  videoTime?: string;
+  platform?: string;
+  url?: string;
+  title?: string;
+  postContent?: string;
+  totalComments?: number;
+  language?: string;
+}
+
+const ENGLISH_PROMPTS = {
+  analysis: DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
+  dynamic: DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
+  language: 'English',
+  analysisLanguage: '## Language Requirement:\nYou MUST write the entire analysis in English.',
+  analysisHeading: 'Analysis Markdown',
+  commentsHeading: 'Comments Data (Dense Format)',
+  topCommentsHeading: 'Top Comments Data',
+  untitled: ANALYSIS_FORMAT.UNKNOWN_TITLE,
+  unknownPlatform: ANALYSIS_FORMAT.UNKNOWN_PLATFORM,
+  notAvailable: 'N/A',
+};
+
+function getPromptLocale(language?: string) {
+  const locale = resolveLocale(language);
+  return locale === LANGUAGES.DEFAULT ? ENGLISH_PROMPTS : LOCALIZED_PROMPTS[locale];
+}
+
+// The original English values also identify defaults in existing settings and exports.
+export function getAnalysisPromptTemplate(template?: string, language?: string): string {
+  return template === undefined || template === DEFAULT_ANALYSIS_PROMPT_TEMPLATE
+    ? getPromptLocale(language).analysis
+    : template;
+}
+
+export function getDynamicReportPromptTemplate(template?: string, language?: string): string {
+  return template === undefined || template === DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE
+    ? getPromptLocale(language).dynamic
+    : template;
+}
+
+function promptFields(metadata?: PromptMetadata): Record<string, string> {
+  const language = getPromptLocale(metadata?.language);
+  const dateTime = metadata?.datetime || new Date().toISOString();
+  const postTime = metadata?.videoTime || language.notAvailable;
+  return {
+    date_time: dateTime,
+    datetime: dateTime,
+    post_time: postTime,
+    video_time: postTime,
+    platform: metadata?.platform || language.unknownPlatform,
+    url: metadata?.url || language.notAvailable,
+    title: metadata?.title || language.untitled,
+    post_content: metadata?.postContent || language.notAvailable,
+    total_comments: String(metadata?.totalComments ?? 0),
+  };
+}
+
+function fillPrompt(template: string, fields: Record<string, string>): string {
+  return template.replace(/\{([a-z_]+)\}/g, (token, key: string) =>
+    Object.prototype.hasOwnProperty.call(fields, key) ? fields[key] : token,
+  );
 }
 
 /**

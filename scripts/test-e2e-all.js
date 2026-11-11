@@ -17,6 +17,86 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function launchTestBrowser(executablePath, profileDir) {
+  return puppeteer.launch({
+    headless: process.env.COMMENTS_INSIGHT_E2E_HEADLESS === '1',
+    executablePath,
+    ignoreDefaultArgs: [
+      '--disable-extensions',
+      '--disable-component-extensions-with-background-pages',
+      '--enable-automation',
+    ],
+    args: [
+      `--user-data-dir=${profileDir}`,
+      `--load-extension=${extensionPath}`,
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-gpu',
+    ],
+    defaultViewport: { width: 1280, height: 800 },
+  });
+}
+
+function listenLocally(server) {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${server.address().port}`));
+  });
+}
+
+async function verifyAiRequestPrivacy(page) {
+  const received = [];
+  const sink = http.createServer((request, response) => {
+    received.push(request.url);
+    response.writeHead(200).end('{}');
+  });
+  const sinkUrl = await listenLocally(sink);
+  const source = http.createServer((request, response) => {
+    request.resume();
+    if (request.url.startsWith('/echo/')) {
+      response.writeHead(400).end(`Invalid credential ${request.headers.authorization?.slice(7)}`);
+      return;
+    }
+    response.writeHead(request.url.startsWith('/redirect-307/') ? 307 : 308, {
+      Location: `${sinkUrl}/unexpected`,
+    });
+    response.end();
+  });
+
+  try {
+    const origin = await listenLocally(source);
+    const credential = 'ci!synthetic_echo_13';
+    for (const status of [307, 308]) {
+      const result = await page.evaluate(
+        (config) => chrome.runtime.sendMessage({ type: 'TEST_MODEL', payload: { config } }),
+        { apiUrl: `${origin}/redirect-${status}`, apiKey: credential, model: 'mock' },
+      );
+      assert(result?.error?.code === 'AI_ENDPOINT_REDIRECT', `HTTP ${status} was not rejected`);
+    }
+    const models = await page.evaluate(
+      (payload) => chrome.runtime.sendMessage({ type: 'GET_AVAILABLE_MODELS', payload }),
+      { apiUrl: `${origin}/redirect-308`, apiKey: credential },
+    );
+    assert(models?.error?.code === 'AI_ENDPOINT_REDIRECT', 'Model list followed a redirect');
+    assert(received.length === 0, 'The second origin received an AI request');
+
+    const echoed = await page.evaluate(
+      (config) => chrome.runtime.sendMessage({ type: 'TEST_MODEL', payload: { config } }),
+      { apiUrl: `${origin}/echo`, apiKey: credential, model: 'mock' },
+    );
+    assert(echoed?.success === false, 'The credential echo fixture did not return a failed test');
+    assert(!JSON.stringify(echoed).includes(credential), 'Credential reached the test response');
+    const logs = await page.evaluate(async () => {
+      const stored = await chrome.storage.local.get(null);
+      return Object.entries(stored).filter(([key]) => /^(ai_log_|log_)/.test(key));
+    });
+    assert(!JSON.stringify(logs).includes(credential), 'Credential reached persisted logs');
+  } finally {
+    source.close();
+    sink.close();
+  }
+}
+
 let passedCount = 0;
 let failedCount = 0;
 const testResults = [];
@@ -165,23 +245,7 @@ async function runAllAutomatedTests() {
 
   let browser;
   try {
-    browser = await puppeteer.launch({
-      headless: false,
-      executablePath,
-      ignoreDefaultArgs: [
-        '--disable-extensions',
-        '--disable-component-extensions-with-background-pages',
-        '--enable-automation',
-      ],
-      args: [
-        `--user-data-dir=${tempProfileDir}`,
-        `--load-extension=${extensionPath}`,
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-gpu',
-      ],
-      defaultViewport: { width: 1280, height: 800 },
-    });
+    browser = await launchTestBrowser(executablePath, tempProfileDir);
 
     // ----------------------------------------------------
     // Suite 1: Service Worker & Extension Target Discovery
@@ -275,11 +339,7 @@ async function runAllAutomatedTests() {
     recordPass('Storage', 'Verified persistent settings roundtrip in browser storage');
 
     // Verify Tab navigation (AI Settings, Crawling Rules, General)
-    const optionsHtml = await optionsPage.content();
-    assert(
-      optionsHtml.includes('Comments Insight') || optionsHtml.includes('options'),
-      'Options page title/content missing',
-    );
+    await optionsPage.waitForSelector('#root h1', { visible: true });
     recordPass('OptionsPage', 'Verified Options page rendered root UI components');
 
     // Test clicking navigation buttons/tabs if present
@@ -468,6 +528,21 @@ async function runAllAutomatedTests() {
 
     const logsErrors = [];
     logsPage.on('pageerror', (err) => logsErrors.push(err.message));
+    await logsPage.evaluateOnNewDocument(() => {
+      globalThis.resizeObserverErrors = [];
+      window.addEventListener('error', (event) => {
+        if (event.isTrusted && event.message.includes('ResizeObserver loop')) {
+          globalThis.resizeObserverErrors.push(event.message);
+        }
+      });
+      Object.defineProperty(navigator, 'clipboard', {
+        value: {
+          async writeText(text) {
+            globalThis.copiedLogText = text;
+          },
+        },
+      });
+    });
 
     await logsPage.goto(logsUrl, { waitUntil: 'domcontentloaded' });
     await delay(1000);
@@ -542,6 +617,56 @@ async function runAllAutomatedTests() {
       'Cleared indexed and orphaned logs without deleting user settings or usage',
     );
 
+    await logsPage.evaluate(async () => {
+      const timestamp = Date.now();
+      const keys = Array.from({ length: 100 }, (_, index) => `ai_log_layout_${index}`);
+      const rows = Object.fromEntries(
+        keys.map((key, index) => [
+          key,
+          {
+            type: 'analysis',
+            timestamp: timestamp - index,
+            prompt: index === 0 ? 'Long sample prompt\n'.repeat(450) : `Sample ${index}`,
+            response: index === 0 ? 'Long sample response\n'.repeat(450) : 'Sample response',
+          },
+        ]),
+      );
+      await chrome.storage.local.set({ ...rows, ai_log_index: keys });
+    });
+    await logsPage.setViewport({ width: 630, height: 700 });
+    await logsPage.reload({ waitUntil: 'domcontentloaded' });
+    await logsPage.waitForFunction(() => document.querySelectorAll('.ai-log').length === 100);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await logsPage.click('.ai-log');
+      await logsPage.waitForSelector('.log-detail-inline');
+      if (attempt === 0) {
+        await logsPage.click('.log-actions .btn-secondary');
+        const copied = await logsPage.evaluate(() => globalThis.copiedLogText);
+        assert(copied?.startsWith('Long sample prompt'), 'Log copy did not preserve the prompt');
+      }
+      await logsPage.click('.ai-log');
+      await logsPage.waitForSelector('.log-detail-inline', { hidden: true });
+      await logsPage.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
+    }
+    const logLayout = await logsPage.evaluate(() => {
+      const list = document.querySelector('.log-list');
+      list.scrollTop = list.scrollHeight;
+      return {
+        canScroll: list.scrollTop > 0,
+        horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth,
+        resizeObserverErrors: globalThis.resizeObserverErrors,
+      };
+    });
+    assert(logLayout.canScroll, 'The 100-row log list could not scroll');
+    assert(!logLayout.horizontalOverflow, 'The narrow Logs page had horizontal overflow');
+    assert(!logLayout.resizeObserverErrors.length, 'Collapsing a log triggered ResizeObserver');
+    await logsPage.type('input[type="search"], .search-input', 'Long sample prompt');
+    await logsPage.waitForFunction(() => document.querySelectorAll('.ai-log').length === 1);
+    recordPass(
+      'LogsPage',
+      'Expanded, copied, collapsed, scrolled and filtered 100 logs without a resize error',
+    );
+
     await logsPage.close();
 
     // ----------------------------------------------------
@@ -560,11 +685,7 @@ async function runAllAutomatedTests() {
     assert(popupErrors.length === 0, `Popup page had JS errors: ${popupErrors.join(', ')}`);
     recordPass('PopupPage', 'Loaded Popup page without errors');
 
-    const popupContent = await popupPage.content();
-    assert(
-      popupContent.includes('Comments Insight') || popupContent.includes('popup'),
-      'Popup page missing header or title',
-    );
+    await popupPage.waitForSelector('#root h1', { visible: true });
     recordPass('PopupPage', 'Verified Popup page components');
 
     await popupPage.close();
@@ -673,8 +794,48 @@ async function runAllAutomatedTests() {
     );
     recordPass('HistoryStore', 'Verified completed extraction was persisted and readable by URL');
 
+    await verifyAiRequestPrivacy(controlPage);
+    recordPass('AI Privacy', 'Rejected 307/308 in Chrome and redacted a gateway credential echo');
+
     await controlPage.close();
     await contentPage.close();
+
+    const localeDefinitions = JSON.parse(
+      fs.readFileSync(path.resolve(scriptDir, '../src/config/locales.json'), 'utf8'),
+    );
+    let settingsPage = await browser.newPage();
+    await settingsPage.goto(optionsUrl, { waitUntil: 'domcontentloaded' });
+    for (const locale of Object.keys(localeDefinitions)) {
+      const saved = await sendExtensionMessage(settingsPage, {
+        type: 'SAVE_SETTINGS',
+        payload: { settings: { language: locale } },
+      });
+      assert(saved?.success, `Could not save locale ${locale}`);
+      await browser.close();
+      browser = await launchTestBrowser(executablePath, tempProfileDir);
+      settingsPage = await browser.newPage();
+      await settingsPage.goto(optionsUrl, { waitUntil: 'domcontentloaded' });
+      const settingsResponse = await sendExtensionMessage(settingsPage, { type: 'GET_SETTINGS' });
+      assert(settingsResponse?.settings?.language === locale, `Cold startup failed in ${locale}`);
+      const catalog = JSON.parse(
+        fs.readFileSync(path.resolve(scriptDir, `../src/locales/${locale}.json`), 'utf8'),
+      );
+      const title = catalog.common.pageTitle
+        .replace('{{pageName}}', catalog.options.title)
+        .replace('{{appName}}', catalog.common.appName);
+      await settingsPage.waitForFunction(
+        (language, expectedTitle) =>
+          document.documentElement.lang === language && document.title === expectedTitle,
+        { timeout: 5000 },
+        locale,
+        title,
+      );
+      recordPass(
+        'Localization',
+        `Restored settings and displayed localized page title in ${locale}`,
+      );
+    }
+    await settingsPage.close();
   } catch (err) {
     console.error('\n❌ Fatal Test Runner Error:', err);
     recordFail('Runner', 'Execution halted prematurely', err);

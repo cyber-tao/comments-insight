@@ -9,6 +9,12 @@ import {
 import { useTranslation } from 'react-i18next';
 
 const STANDARD_FIELDS = ['username', 'content', 'timestamp', 'likes'] as const;
+const FIELD_LABELS = {
+  username: 'export.username',
+  content: 'export.content',
+  timestamp: 'export.timestamp',
+  likes: 'export.likes',
+} as const;
 
 const normalizeFields = (fields: FieldSelector[]): FieldSelector[] => {
   const existingNames = new Set(fields.map((f) => f.name));
@@ -40,16 +46,23 @@ interface Props {
 const ValidationIndicator: React.FC<{
   status?: FieldValidationStatus;
 }> = ({ status }) => {
+  const { t } = useTranslation();
   if (!status) return null;
   if (status === 'success') {
     return (
-      <span className="text-green-500 text-sm font-bold" title="Matched">
+      <span
+        className="text-green-500 text-sm font-bold"
+        title={t('options.crawlingConfigs.matched')}
+      >
         &#10003;
       </span>
     );
   }
   return (
-    <span className="text-red-500 text-sm font-bold" title="Not matched">
+    <span
+      className="text-red-500 text-sm font-bold"
+      title={t('options.crawlingConfigs.notMatched')}
+    >
       &#10007;
     </span>
   );
@@ -61,40 +74,46 @@ const SelectorInput: React.FC<{
   onChange: (rule: SelectorRule) => void;
   className?: string;
   validationStatus?: FieldValidationStatus;
-}> = ({ label, rule, onChange, className, validationStatus }) => (
-  <div className={`flex flex-col gap-1 ${className}`}>
-    <label
-      className="text-sm font-medium flex items-center gap-1.5"
-      style={{ color: 'var(--text-secondary)' }}
-    >
-      {label}
-      <ValidationIndicator status={validationStatus} />
-    </label>
-    <div className="flex gap-2">
-      <input
-        type="text"
-        value={rule.selector}
-        onChange={(e) => onChange({ ...rule, selector: e.target.value })}
-        className="flex-1 p-2 border rounded text-sm font-mono theme-input"
-        placeholder=".class or #id"
-      />
-      <select
-        value={rule.type}
-        onChange={(e) => onChange({ ...rule, type: e.target.value as 'css' | 'xpath' })}
-        className="p-2 border rounded text-sm theme-input"
+}> = ({ label, rule, onChange, className, validationStatus }) => {
+  const { t } = useTranslation();
+  return (
+    <div className={`flex flex-col gap-1 ${className}`}>
+      <label
+        className="text-sm font-medium flex items-center gap-1.5"
+        style={{ color: 'var(--text-secondary)' }}
       >
-        <option value="css">CSS</option>
-        <option value="xpath">XPath</option>
-      </select>
+        {label}
+        <ValidationIndicator status={validationStatus} />
+      </label>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={rule.selector}
+          onChange={(e) => onChange({ ...rule, selector: e.target.value })}
+          className="flex-1 p-2 border rounded text-sm font-mono theme-input"
+          placeholder={t('options.crawlingConfigs.selectorExample')}
+          aria-label={label || t('options.crawlingConfigs.selector')}
+        />
+        <select
+          value={rule.type}
+          aria-label={t('options.crawlingConfigs.selectorType')}
+          onChange={(e) => onChange({ ...rule, type: e.target.value as 'css' | 'xpath' })}
+          className="p-2 border rounded text-sm theme-input"
+        >
+          <option value="css">CSS</option>
+          <option value="xpath">XPath</option>
+        </select>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const FieldEditor: React.FC<{
   fields: FieldSelector[];
   onChange: (fields: FieldSelector[]) => void;
   fieldValidation?: Record<string, FieldValidationStatus>;
 }> = ({ fields, onChange, fieldValidation }) => {
+  const { t } = useTranslation();
   const updateField = (index: number, updates: Partial<FieldSelector>) => {
     const newFields = [...fields];
     newFields[index] = { ...newFields[index], ...updates };
@@ -114,7 +133,9 @@ const FieldEditor: React.FC<{
               className="text-xs font-semibold uppercase"
               style={{ color: 'var(--text-muted)' }}
             >
-              {field.name}
+              {Object.prototype.hasOwnProperty.call(FIELD_LABELS, field.name)
+                ? t(FIELD_LABELS[field.name as keyof typeof FIELD_LABELS])
+                : field.name}
             </span>
             <ValidationIndicator status={fieldValidation?.[field.name]} />
           </div>
@@ -127,7 +148,8 @@ const FieldEditor: React.FC<{
               value={field.attribute || ''}
               onChange={(e) => updateField(idx, { attribute: e.target.value })}
               className="w-full p-2 border rounded text-sm font-mono mt-0.5 theme-input"
-              placeholder="Attribute (opt)"
+              placeholder={t('options.crawlingConfigs.optionalAttribute')}
+              aria-label={t('options.crawlingConfigs.optionalAttribute')}
             />
           </div>
         </div>

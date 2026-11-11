@@ -15,7 +15,6 @@ export const TEMPLATE = {
   MIN_LENGTH: 50,
   MAX_LENGTH: 10000,
   COMMENTS_DATA_PLACEHOLDER: '{comments_data}',
-  COMMENTS_DATA_FALLBACK_SECTION: '\n\n## Comments Data (Dense Format):\n{comments_data}',
 };
 
 export const REGEX = {

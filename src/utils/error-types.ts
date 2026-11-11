@@ -32,6 +32,7 @@ export enum ErrorCode {
   AI_QUOTA_EXCEEDED = 'AI_QUOTA_EXCEEDED',
   /** Specified AI model not found */
   AI_MODEL_NOT_FOUND = 'AI_MODEL_NOT_FOUND',
+  AI_ENDPOINT_REDIRECT = 'AI_ENDPOINT_REDIRECT',
 
   // Extraction errors
   /** Platform/website not supported */

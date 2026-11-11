@@ -28,7 +28,7 @@ export const CommentTree: React.FC<CommentTreeProps> = ({ comments, depth = 0 })
 
   if (depth >= HISTORY_UI.MAX_COMMENT_DEPTH) {
     return (
-      <div className="ml-4 pl-4 text-xs text-gray-400 italic">Deeply nested replies hidden</div>
+      <div className="ml-4 pl-4 text-xs text-gray-400 italic">{t('history.deepRepliesHidden')}</div>
     );
   }
 

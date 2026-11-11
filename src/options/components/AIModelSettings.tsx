@@ -5,9 +5,12 @@ import { AI, API, UI_LIMITS } from '@/config/constants';
 import {
   DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
   DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
+  getAnalysisPromptTemplate,
+  getDynamicReportPromptTemplate,
 } from '@/utils/prompts';
 import { Settings, SettingsPatch } from '@/types';
 import { ExtensionAPI } from '@/utils/extension-api';
+import { ErrorCode, ExtensionError } from '@/utils/error-types';
 import { parseFiniteIntegerInput, parseFiniteNumberInput } from '@/utils/number';
 import { normalizeAiApiUrl } from '@/utils/url';
 import { SearchableModelSelect } from './SearchableModelSelect';
@@ -107,10 +110,14 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
         setAvailableModels([]);
         toast.info(t('options.noModelsFound'));
       }
-    } catch (_error) {
+    } catch (error) {
       if (!isCurrent()) return;
       setAvailableModels([]);
-      toast.error(t('options.fetchModelsFailed'));
+      toast.error(
+        error instanceof ExtensionError && error.code === ErrorCode.AI_ENDPOINT_REDIRECT
+          ? t('errors.aiEndpointRedirect')
+          : t('options.fetchModelsFailed'),
+      );
     } finally {
       if (isCurrent()) setLoadingModels(false);
     }
@@ -147,7 +154,11 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
     } catch (error) {
       if (!isCurrent()) return;
       toast.error(
-        t('options.testFailed') + ': ' + (error instanceof Error ? error.message : 'Unknown error'),
+        error instanceof ExtensionError && error.code === ErrorCode.AI_ENDPOINT_REDIRECT
+          ? t('errors.aiEndpointRedirect')
+          : t('options.testFailed') +
+              ': ' +
+              (error instanceof Error ? error.message : 'Unknown error'),
       );
     } finally {
       if (requestId === testRequestRef.current) setTestingModel(false);
@@ -394,7 +405,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             </button>
           </div>
           <textarea
-            value={settings.analyzerPromptTemplate}
+            value={getAnalysisPromptTemplate(settings.analyzerPromptTemplate, settings.language)}
             onChange={(e) => onSettingsChange({ analyzerPromptTemplate: e.target.value })}
             className="w-full theme-input font-mono text-sm"
             rows={UI_LIMITS.PROMPT_TEXTAREA_ROWS}
@@ -423,18 +434,30 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                     code="{comments_data}"
                     required
                     t={t}
-                    descKey="placeholder_comments_data"
+                    descKey="options.placeholder_comments_data"
                   />
-                  <PlaceholderItem code="{date_time}" t={t} descKey="placeholder_date_time" />
-                  <PlaceholderItem code="{post_time}" t={t} descKey="placeholder_post_time" />
-                  <PlaceholderItem code="{post_content}" t={t} descKey="placeholder_post_content" />
-                  <PlaceholderItem code="{platform}" t={t} descKey="placeholder_platform" />
-                  <PlaceholderItem code="{url}" t={t} descKey="placeholder_url" />
-                  <PlaceholderItem code="{title}" t={t} descKey="placeholder_title" />
+                  <PlaceholderItem
+                    code="{date_time}"
+                    t={t}
+                    descKey="options.placeholder_date_time"
+                  />
+                  <PlaceholderItem
+                    code="{post_time}"
+                    t={t}
+                    descKey="options.placeholder_post_time"
+                  />
+                  <PlaceholderItem
+                    code="{post_content}"
+                    t={t}
+                    descKey="options.placeholder_post_content"
+                  />
+                  <PlaceholderItem code="{platform}" t={t} descKey="options.placeholder_platform" />
+                  <PlaceholderItem code="{url}" t={t} descKey="options.placeholder_url" />
+                  <PlaceholderItem code="{title}" t={t} descKey="options.placeholder_title" />
                   <PlaceholderItem
                     code="{total_comments}"
                     t={t}
-                    descKey="placeholder_total_comments"
+                    descKey="options.placeholder_total_comments"
                   />
                 </div>
               </div>
@@ -492,9 +515,10 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 </button>
               </div>
               <textarea
-                value={
-                  settings.dynamicReportPromptTemplate || DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE
-                }
+                value={getDynamicReportPromptTemplate(
+                  settings.dynamicReportPromptTemplate,
+                  settings.language,
+                )}
                 onChange={(e) =>
                   onSettingsChange({
                     dynamicReportPromptTemplate: e.target.value,
@@ -527,22 +551,44 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                         code="{analysis_markdown}"
                         required
                         t={t}
-                        descKey="placeholder_analysis_markdown"
+                        descKey="options.placeholder_analysis_markdown"
                       />
-                      <PlaceholderItem code="{date_time}" t={t} descKey="placeholder_date_time" />
-                      <PlaceholderItem code="{post_time}" t={t} descKey="placeholder_post_time" />
+                      <PlaceholderItem
+                        code="{date_time}"
+                        t={t}
+                        descKey="options.placeholder_date_time"
+                      />
+                      <PlaceholderItem
+                        code="{post_time}"
+                        t={t}
+                        descKey="options.placeholder_post_time"
+                      />
                       <PlaceholderItem
                         code="{post_content}"
                         t={t}
-                        descKey="placeholder_post_content"
+                        descKey="options.placeholder_post_content"
                       />
-                      <PlaceholderItem code="{platform}" t={t} descKey="placeholder_platform" />
-                      <PlaceholderItem code="{url}" t={t} descKey="placeholder_url" />
-                      <PlaceholderItem code="{title}" t={t} descKey="placeholder_title" />
+                      <PlaceholderItem
+                        code="{platform}"
+                        t={t}
+                        descKey="options.placeholder_platform"
+                      />
+                      <PlaceholderItem code="{url}" t={t} descKey="options.placeholder_url" />
+                      <PlaceholderItem code="{title}" t={t} descKey="options.placeholder_title" />
                       <PlaceholderItem
                         code="{total_comments}"
                         t={t}
-                        descKey="placeholder_total_comments"
+                        descKey="options.placeholder_total_comments"
+                      />
+                      <PlaceholderItem
+                        code="{language_name}"
+                        t={t}
+                        descKey="options.placeholder_language_name"
+                      />
+                      <PlaceholderItem
+                        code="{top_comments_data}"
+                        t={t}
+                        descKey="options.placeholder_top_comments_data"
                       />
                     </div>
                   </div>
@@ -580,7 +626,7 @@ const PlaceholderItem: React.FC<PlaceholderItemProps> = ({ code, required, t, de
       </span>
     )}
     <p className="text-sm mt-1" style={{ color: 'var(--text-tertiary)' }}>
-      {t(`options.${descKey}`)}
+      {t(descKey)}
     </p>
   </div>
 );

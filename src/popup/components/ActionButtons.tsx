@@ -172,7 +172,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
             <button
               onClick={() => onCancel(currentTask.id)}
               className="px-3 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-md flex items-center justify-center"
-              aria-label="Cancel task"
+              aria-label={t('task.cancel')}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -251,7 +251,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
           <button
             onClick={() => onCancel(currentTask.id)}
             className="px-3 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors shadow-md flex items-center justify-center"
-            aria-label="Cancel task"
+            aria-label={t('task.cancel')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path

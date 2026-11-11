@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface DynamicReportViewerProps {
   html: string;
@@ -14,23 +15,21 @@ export const DynamicReportViewer: React.FC<DynamicReportViewerProps> = ({
   className,
   style,
 }) => {
+  const { t, i18n } = useTranslation();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const locale = i18n?.resolvedLanguage;
+  const errorTitle = t('history.reportRenderFailed');
+  const errorMessage = t('history.reportRenderRecovery');
+  const postHtml = useCallback(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'RENDER_REPORT', html, locale, errorTitle, errorMessage },
+      '*',
+    );
+  }, [html, locale, errorTitle, errorMessage]);
 
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe) return;
-
-    const postHtml = () => {
-      if (iframe.contentWindow) {
-        iframe.contentWindow.postMessage(
-          {
-            type: 'RENDER_REPORT',
-            html,
-          },
-          '*',
-        );
-      }
-    };
 
     const handleMessage = (event: MessageEvent) => {
       if (event.source === iframe.contentWindow && event.data?.type === 'SANDBOX_READY') {
@@ -44,7 +43,7 @@ export const DynamicReportViewer: React.FC<DynamicReportViewerProps> = ({
     return () => {
       window.removeEventListener('message', handleMessage);
     };
-  }, [html]);
+  }, [postHtml]);
 
   const sandboxUrl =
     typeof chrome !== 'undefined' && chrome.runtime?.getURL
@@ -54,20 +53,10 @@ export const DynamicReportViewer: React.FC<DynamicReportViewerProps> = ({
   return (
     <iframe
       ref={iframeRef}
-      title={title || 'Dynamic Analysis Report'}
+      title={title || t('history.dynamicReport')}
       src={sandboxUrl}
       sandbox="allow-scripts"
-      onLoad={() => {
-        if (iframeRef.current?.contentWindow) {
-          iframeRef.current.contentWindow.postMessage(
-            {
-              type: 'RENDER_REPORT',
-              html,
-            },
-            '*',
-          );
-        }
-      }}
+      onLoad={postHtml}
       className={className || 'w-full h-full border-none'}
       style={style}
     />

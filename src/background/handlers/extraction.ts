@@ -2,6 +2,8 @@ import { Message, Task } from '@/types';
 import { HandlerContext } from './types';
 import { Logger } from '@/utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
+import i18n from '@/utils/i18n';
+import { isSameSourcePage } from '@/utils/source-page';
 import {
   MESSAGES,
   EXTRACTION_DEFAULTS,
@@ -12,13 +14,8 @@ import {
 } from '@/config/constants';
 import { getDomain } from '@/utils/url';
 import { generateUniqueId } from '@/utils/id-generator';
-import { ensureContentScriptInjected } from '../ContentScriptInjector';
 import { resolveTabId } from '@/utils/chrome-message';
-import {
-  isExpectedAsyncAckError,
-  resolveRunningCompletionTask,
-  waitForTaskCompletion,
-} from './utils/task-completion';
+import { isTaskSource, resolveRunningCompletionTask, runSourceTask } from './utils/task-completion';
 
 interface StartExtractionResponse {
   taskId: string;
@@ -62,37 +59,22 @@ export async function handleStartExtraction(
   const taskId = context.taskManager.createTask('extract', url, domain, finalMaxComments, tabId);
 
   context.taskManager.setExecutor(taskId, async (task: Task, signal: AbortSignal) => {
-    if (!task.tabId) {
-      throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
-    }
-
-    await ensureContentScriptInjected(task.tabId);
-
-    // Send start message to content script (fire and forget from executor perspective).
-    // The content script acks immediately then reports completion later.
-    try {
-      await chrome.tabs.sendMessage(task.tabId, {
-        type: MESSAGES.RUN_EXTRACTION,
-        payload: { taskId: task.id, maxComments: finalMaxComments },
-      });
-    } catch (error) {
-      if (!isExpectedAsyncAckError(error)) {
-        throw error;
-      }
-      Logger.debug('[ExtractionHandler] Message ack timeout ignored, waiting for completion');
-    }
-
-    return waitForTaskCompletion({
-      taskId,
+    return runSourceTask(
+      task,
       signal,
       context,
-      tabId: task.tabId!,
-      timeoutMs: TIMEOUT.EXTRACTION_TASK_COMPLETION_MS,
-      timeoutMessage: TEXT.EXTRACTION_TASK_TIMEOUT,
-      tabClosedMessage: TEXT.TASK_SOURCE_TAB_CLOSED,
-      cancelWarnLabel: '[ExtractionHandler] Failed to send cancel to content script',
-      timeoutWarnLabel: '[ExtractionHandler] Failed to send timeout cancel to content script',
-    });
+      {
+        type: MESSAGES.RUN_EXTRACTION,
+        payload: { taskId: task.id, maxComments: finalMaxComments, expectedUrl: task.url },
+      },
+      {
+        timeoutMs: TIMEOUT.EXTRACTION_TASK_COMPLETION_MS,
+        timeoutMessage: TEXT.EXTRACTION_TASK_TIMEOUT,
+        tabClosedMessage: TEXT.TASK_SOURCE_TAB_CLOSED,
+        cancelWarnLabel: '[ExtractionHandler] Failed to send cancel to content script',
+        timeoutWarnLabel: '[ExtractionHandler] Failed to send timeout cancel to content script',
+      },
+    );
   });
 
   return { taskId };
@@ -109,10 +91,13 @@ export async function handleExtractionCompleted(
     });
     return { success: false };
   }
-  const { taskId, success, comments, postInfo, error } = payload;
+  const { taskId, success, comments, postInfo, error, errorKey } = payload;
   const task = resolveRunningCompletionTask(taskId, context, 'extraction');
 
-  if (!task) {
+  if (
+    !task ||
+    (task.tabId !== undefined && postInfo?.url && !isSameSourcePage(postInfo.url, task.url))
+  ) {
     return { success: false };
   }
   const taskSignal = context.taskManager.getAbortSignal?.(taskId);
@@ -212,7 +197,10 @@ export async function handleExtractionCompleted(
       title: postInfo?.title || postInfo?.url,
     });
   } else {
-    context.taskManager.failTask(taskId, error || 'Extraction failed');
+    context.taskManager.failTask(
+      taskId,
+      errorKey && i18n.exists(errorKey) ? i18n.t(errorKey) : error || 'Extraction failed',
+    );
   }
 
   return { success: true };
@@ -232,6 +220,10 @@ export async function handleExtractionProgress(
   } = message.payload || {};
 
   if (taskId) {
+    const task = context.taskManager.getTask(taskId);
+    if (!task || task.status !== 'running' || !isTaskSource(task, context.sender)) {
+      return { success: false };
+    }
     if (stage && current !== undefined && total !== undefined) {
       context.taskManager.updateDetailedProgress(taskId, {
         stage,

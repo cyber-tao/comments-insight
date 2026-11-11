@@ -18,6 +18,11 @@ import type { Comment, Task } from '../../src/types';
 type TabRemoveInfo = { windowId: number; isWindowClosing: boolean };
 
 const tabRemovedListeners = new Set<(tabId: number, removeInfo: TabRemoveInfo) => void>();
+const tabUpdatedListeners = new Set<(tabId: number, change: chrome.tabs.OnUpdatedInfo) => void>();
+const sourceUrl = 'https://example.com/';
+const sourceDocumentId = 'source-document';
+const mockGetTab = vi.fn();
+const mockExecuteScript = vi.fn();
 const mockStorageGet = vi.fn().mockResolvedValue({});
 const mockStorageSet = vi.fn().mockResolvedValue(undefined);
 
@@ -47,12 +52,18 @@ vi.mock('../../src/utils/logger', () => ({
 vi.stubGlobal('chrome', {
   tabs: {
     query: vi.fn().mockResolvedValue([{ id: 1 }]),
+    get: mockGetTab,
     sendMessage: vi.fn().mockResolvedValue({ success: true, comments: [] }),
     onRemoved: {
       addListener: vi.fn((listener) => tabRemovedListeners.add(listener)),
       removeListener: vi.fn((listener) => tabRemovedListeners.delete(listener)),
     },
+    onUpdated: {
+      addListener: vi.fn((listener) => tabUpdatedListeners.add(listener)),
+      removeListener: vi.fn((listener) => tabUpdatedListeners.delete(listener)),
+    },
   },
+  scripting: { executeScript: mockExecuteScript },
   runtime: {
     sendMessage: vi.fn().mockResolvedValue(undefined),
   },
@@ -75,7 +86,9 @@ function createMockContext(overrides: Partial<HandlerContext> = {}): HandlerCont
       updateDetailedProgress: vi.fn(),
       completeTask: vi.fn(),
       failTask: vi.fn(),
-      getTask: vi.fn().mockReturnValue({ maxComments: 100 }),
+      getTask: vi.fn().mockReturnValue({ type: 'extract', status: 'running', maxComments: 100 }),
+      bindSourceDocument: vi.fn().mockResolvedValue(undefined),
+      abortTask: vi.fn(),
       getAbortSignal: vi.fn().mockReturnValue(undefined),
       recoverInterruptedTask: vi.fn().mockReturnValue(undefined),
       getAllTasks: vi.fn().mockReturnValue([]),
@@ -109,7 +122,7 @@ function createMockContext(overrides: Partial<HandlerContext> = {}): HandlerCont
   } as unknown as HandlerContext;
 }
 
-async function createRestartedContext(): Promise<HandlerContext> {
+async function createRestartedContext(documentId?: string): Promise<HandlerContext> {
   const now = Date.now();
   const persistedTask: Task = {
     id: 'task_restored',
@@ -118,6 +131,7 @@ async function createRestartedContext(): Promise<HandlerContext> {
     url: 'https://example.com/restored',
     platform: 'example.com',
     tabId: 1,
+    sourceDocumentId: documentId,
     progress: 80,
     startTime: now - 1000,
     tokensUsed: 0,
@@ -137,7 +151,10 @@ async function createRestartedContext(): Promise<HandlerContext> {
   const taskManager = new TaskManager(notifications, { enablePersistence: true });
   await taskManager.initialize();
   expect(taskManager.getTask(persistedTask.id)?.interruptedByRestart).toBe(true);
-  return createMockContext({ taskManager });
+  return createMockContext({
+    taskManager,
+    sender: { tab: { id: 1 } as chrome.tabs.Tab, frameId: 0, url: persistedTask.url, documentId },
+  });
 }
 
 const restoredComments: Comment[] = [
@@ -189,6 +206,9 @@ describe('extraction handlers', () => {
     mockStorageGet.mockResolvedValue({});
     mockStorageSet.mockResolvedValue(undefined);
     tabRemovedListeners.clear();
+    tabUpdatedListeners.clear();
+    mockGetTab.mockResolvedValue({ id: 1, url: sourceUrl });
+    mockExecuteScript.mockResolvedValue([{ result: sourceUrl, documentId: sourceDocumentId }]);
   });
 
   afterEach(() => {
@@ -263,20 +283,24 @@ describe('extraction handlers', () => {
         mock: { calls: unknown[][] };
       };
       const executor = setExecutorMock.mock.calls[0][1] as (
-        task: { id: string; tabId?: number },
+        task: { id: string; tabId?: number; url: string },
         signal: AbortSignal,
       ) => Promise<unknown>;
 
       const controller = new AbortController();
-      const running = executor({ id: 'task_123', tabId: 1 }, controller.signal);
+      const running = executor({ id: 'task_123', tabId: 1, url: sourceUrl }, controller.signal);
       const rejection = expect(running).rejects.toMatchObject({
         code: ErrorCode.TIMEOUT_ERROR,
       });
-      await flushMicrotasks();
-      expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(1, {
-        type: 'RUN_EXTRACTION',
-        payload: { taskId: 'task_123', maxComments: 50 },
-      });
+      await flushMicrotasks(16);
+      expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
+        1,
+        {
+          type: 'RUN_EXTRACTION',
+          payload: { taskId: 'task_123', maxComments: 50, expectedUrl: sourceUrl },
+        },
+        { documentId: sourceDocumentId },
+      );
 
       await vi.advanceTimersByTimeAsync(TIMEOUT.EXTRACTION_TASK_COMPLETION_MS + 1);
       await rejection;
@@ -295,13 +319,13 @@ describe('extraction handlers', () => {
         mock: { calls: unknown[][] };
       };
       const executor = setExecutorMock.mock.calls[0][1] as (
-        task: { id: string; tabId?: number },
+        task: { id: string; tabId?: number; url: string },
         signal: AbortSignal,
       ) => Promise<unknown>;
 
       const controller = new AbortController();
-      const running = executor({ id: 'task_123', tabId: 1 }, controller.signal);
-      await flushMicrotasks();
+      const running = executor({ id: 'task_123', tabId: 1, url: sourceUrl }, controller.signal);
+      await flushMicrotasks(16);
       expect(tabRemovedListeners.size).toBe(1);
 
       for (const listener of tabRemovedListeners) {
@@ -313,6 +337,56 @@ describe('extraction handlers', () => {
         message: TEXT.TASK_SOURCE_TAB_CLOSED,
       });
     });
+
+    it.each(['extract', 'config'] as const)(
+      'rejects a queued %s task if the source tab has navigated before dispatch',
+      async (type) => {
+        const context = createMockContext();
+        const payload = { url: sourceUrl, tabId: 1 };
+        if (type === 'extract') {
+          await handleStartExtraction({ type: 'START_EXTRACTION', payload }, context);
+        } else {
+          await handleStartConfigGeneration({ type: 'START_CONFIG_GENERATION', payload }, context);
+        }
+        mockGetTab.mockResolvedValueOnce({ id: 1, url: `${sourceUrl}different-route` });
+        const executor = vi.mocked(context.taskManager.setExecutor).mock.calls[0][1];
+        const task = { id: 'task_123', tabId: 1, url: sourceUrl } as Task;
+
+        await expect(executor(task, new AbortController().signal)).rejects.toMatchObject({
+          details: { messageKey: 'errors.sourcePageChanged' },
+        });
+        expect(mockExecuteScript).not.toHaveBeenCalled();
+        expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([{ url: `${sourceUrl}#other` }, { status: 'loading' }] as chrome.tabs.OnUpdatedInfo[])(
+      'fails the running source task when Chrome signals %j',
+      async (change) => {
+        const context = createMockContext();
+        await handleStartExtraction(
+          { type: 'START_EXTRACTION', payload: { url: sourceUrl } },
+          context,
+        );
+        const executor = vi.mocked(context.taskManager.setExecutor).mock.calls[0][1];
+        const task = { id: 'task_123', tabId: 1, url: sourceUrl } as Task;
+        const running = executor(task, new AbortController().signal);
+        const rejected = expect(running).rejects.toMatchObject({
+          details: { messageKey: 'errors.sourcePageChanged' },
+        });
+        await flushMicrotasks(16);
+        expect(tabUpdatedListeners.size).toBe(1);
+        for (const listener of tabUpdatedListeners) listener(1, change);
+        await rejected;
+        expect(context.taskManager.abortTask).toHaveBeenCalledWith('task_123');
+        expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
+          1,
+          { type: 'CANCEL_EXTRACTION', payload: { taskId: 'task_123' } },
+          { documentId: sourceDocumentId },
+        );
+        expect(tabUpdatedListeners.size).toBe(0);
+      },
+    );
   });
 
   describe('handleStartConfigGeneration', () => {
@@ -337,20 +411,24 @@ describe('extraction handlers', () => {
         mock: { calls: unknown[][] };
       };
       const executor = setExecutorMock.mock.calls[0][1] as (
-        task: { id: string; tabId?: number },
+        task: { id: string; tabId?: number; url: string },
         signal: AbortSignal,
       ) => Promise<unknown>;
 
       const controller = new AbortController();
-      const running = executor({ id: 'task_123', tabId: 1 }, controller.signal);
+      const running = executor({ id: 'task_123', tabId: 1, url: sourceUrl }, controller.signal);
       const rejection = expect(running).rejects.toMatchObject({
         code: ErrorCode.TIMEOUT_ERROR,
       });
-      await flushMicrotasks();
-      expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(1, {
-        type: 'RUN_CONFIG_GENERATION',
-        payload: { taskId: 'task_123' },
-      });
+      await flushMicrotasks(16);
+      expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(
+        1,
+        {
+          type: 'RUN_CONFIG_GENERATION',
+          payload: { taskId: 'task_123', expectedUrl: sourceUrl },
+        },
+        { documentId: sourceDocumentId },
+      );
 
       await vi.advanceTimersByTimeAsync(TIMEOUT.CONFIG_TASK_COMPLETION_MS + 1);
       await rejection;
@@ -379,7 +457,7 @@ describe('extraction handlers', () => {
       const context = createMockContext({
         taskManager: {
           ...createMockContext().taskManager,
-          getTask: vi.fn().mockReturnValue({ maxComments: 50 }),
+          getTask: vi.fn().mockReturnValue({ status: 'running', maxComments: 50 }),
           updateProgress: vi.fn(),
           updateTaskProgress: vi.fn(),
         },
@@ -527,6 +605,20 @@ describe('extraction handlers', () => {
   });
 
   describe('completion payload validation', () => {
+    it('rejects a stale document completion after restart and still accepts the source', async () => {
+      const context = await createRestartedContext(sourceDocumentId);
+      const wrongDocument = { ...context, sender: { ...context.sender, documentId: 'wrong' } };
+
+      await expect(handleExtractionCompleted(restoredCompletion, wrongDocument)).resolves.toEqual({
+        success: false,
+      });
+      expect(context.historyStore.createHistory).not.toHaveBeenCalled();
+      await expect(handleExtractionCompleted(restoredCompletion, context)).resolves.toEqual({
+        success: true,
+      });
+      expect(context.historyStore.createHistory).toHaveBeenCalledOnce();
+    });
+
     it('should persist successful extraction even when no comments are found', async () => {
       const context = createMockContext({
         taskManager: {
@@ -708,6 +800,7 @@ describe('extraction handlers', () => {
       const context = createMockContext({
         taskManager: {
           ...createMockContext().taskManager,
+          getTask: vi.fn().mockReturnValue({ type: 'extract', status: 'failed' }),
           recoverInterruptedTask: vi.fn().mockReturnValue({
             id: 'task_123',
             type: 'extract',
@@ -844,10 +937,7 @@ describe('extraction handlers', () => {
       const result = await handleExtractionCompleted(message, context);
 
       expect(result).toEqual({ success: false });
-      expect(context.taskManager.recoverInterruptedTask).toHaveBeenCalledWith(
-        'task_123',
-        expect.objectContaining({ senderTabId: 1, taskType: 'extract' }),
-      );
+      expect(context.taskManager.recoverInterruptedTask).not.toHaveBeenCalled();
       expect(context.taskManager.completeTask).not.toHaveBeenCalled();
     });
 
@@ -855,6 +945,7 @@ describe('extraction handlers', () => {
       const context = createMockContext({
         taskManager: {
           ...createMockContext().taskManager,
+          getTask: vi.fn().mockReturnValue({ type: 'config', status: 'failed' }),
           recoverInterruptedTask: vi.fn().mockReturnValue({
             id: 'task_123',
             type: 'config',

@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { LOG_LEVEL_LABELS } from '@/config/constants';
 import { SystemLogEntry } from '../hooks/useLogs';
 import { Logger } from '@/utils/logger';
 
@@ -8,6 +10,7 @@ interface SystemLogItemProps {
 }
 
 export const SystemLogItem: React.FC<SystemLogItemProps> = ({ log, onDelete }) => {
+  const { t, i18n } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(false);
 
   const copyToClipboard = async (text: string, e: React.MouseEvent) => {
@@ -19,7 +22,7 @@ export const SystemLogItem: React.FC<SystemLogItemProps> = ({ log, onDelete }) =
     }
   };
 
-  const formattedTime = new Intl.DateTimeFormat(undefined, {
+  const formattedTime = new Intl.DateTimeFormat(i18n?.resolvedLanguage, {
     dateStyle: 'medium',
     timeStyle: 'medium',
   }).format(log.timestamp);
@@ -33,23 +36,18 @@ export const SystemLogItem: React.FC<SystemLogItemProps> = ({ log, onDelete }) =
     }[log.level] || 'ℹ️';
 
   const levelClass = log.level.toLowerCase();
+  const levelLabel = t(LOG_LEVEL_LABELS[log.level]);
 
   return (
     <div className="log-item-wrapper">
       <button
         className={`log-item system-log ${levelClass} w-full text-left border-none bg-transparent`}
-        onClick={() => setIsExpanded(!isExpanded)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            setIsExpanded(!isExpanded);
-            e.preventDefault();
-          }
-        }}
+        onClick={() => setIsExpanded((expanded) => !expanded)}
         aria-expanded={isExpanded}
       >
         <div className="log-header">
           <span className="log-type">
-            {levelIcon} {log.level}
+            {levelIcon} {levelLabel}
           </span>
           <span className="log-time">{formattedTime}</span>
         </div>
@@ -59,19 +57,17 @@ export const SystemLogItem: React.FC<SystemLogItemProps> = ({ log, onDelete }) =
       {isExpanded && (
         <div className="log-detail-inline">
           <div className="log-detail">
-            <h2>
-              {levelIcon} {log.level} Log
-            </h2>
+            <h2>{t('logs.detailTitle', { type: levelLabel })}</h2>
             <p>
-              <strong>Time:</strong> {formattedTime}
+              <strong>{t('logs.time')}</strong> {formattedTime}
             </p>
             <p>
-              <strong>Message:</strong> {log.message}
+              <strong>{t('logs.message')}</strong> {log.message}
             </p>
 
             {log.data && (
               <div className="log-section">
-                <h3>Data</h3>
+                <h3>{t('logs.data')}</h3>
                 <div className="log-content">
                   <pre>{JSON.stringify(log.data, null, 2)}</pre>
                 </div>
@@ -80,7 +76,7 @@ export const SystemLogItem: React.FC<SystemLogItemProps> = ({ log, onDelete }) =
 
             {log.stack && (
               <div className="log-section">
-                <h3>Stack Trace</h3>
+                <h3>{t('logs.stackTrace')}</h3>
                 <div className="log-content">
                   <pre>{log.stack}</pre>
                 </div>
@@ -107,10 +103,10 @@ export const SystemLogItem: React.FC<SystemLogItemProps> = ({ log, onDelete }) =
                   )
                 }
               >
-                📋 Copy Log
+                📋 {t('logs.copyLog')}
               </button>
               <button className="btn-danger" onClick={(e) => onDelete(log.key, e)}>
-                🗑️ Delete
+                🗑️ {t('common.delete')}
               </button>
             </div>
           </div>
