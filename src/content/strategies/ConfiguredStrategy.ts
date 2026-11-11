@@ -13,6 +13,7 @@ import { ErrorCode, ExtensionError } from '@/utils/error-types';
 import {
   EXTRACTION_PROGRESS,
   MESSAGES,
+  TIMEOUT,
   TIMING,
   DOM,
   LIKES,
@@ -23,6 +24,8 @@ import { sendMessage } from '@/utils/chrome-message';
 import { findElementByRule, findElementsByRule, readField } from '../utils/selector-rule';
 import { generateCommentHash } from '@/utils/comment-hash';
 import { checkAborted, abortableDelay } from '../utils/abort';
+
+const YOUTUBE_COMMENTS_SECTION = 'ytd-comments#comments';
 
 export class ConfiguredStrategy implements ExtractionStrategy {
   private validationRecorded = false;
@@ -54,18 +57,12 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       maxComments,
     );
 
-    let container = findElementByRule(document, this.config.container);
-
+    let container = await this.findCommentContainer(signal);
     if (!container) {
-      // Try waiting
-      await abortableDelay(TIMING.SHORT_WAIT_MS, signal);
-      container = findElementByRule(document, this.config.container);
-      if (!container) {
-        throw new ExtensionError(
-          ErrorCode.DOM_ANALYSIS_FAILED,
-          `Comment container not found: ${this.config.container.selector}`,
-        );
-      }
+      throw new ExtensionError(
+        ErrorCode.DOM_ANALYSIS_FAILED,
+        `Comment container not found: ${this.config.container.selector}`,
+      );
     }
 
     const allComments: Comment[] = [];
@@ -161,21 +158,43 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         maxComments,
       );
 
-      const { contentChanged } = await this.pageController.scrollContainer(container, signal);
+      await this.pageController.scrollContainer(container, signal);
 
       // Re-query container in case of re-render
       const newContainer = findElementByRule(document, this.config.container);
       if (newContainer) {
         container = newContainer;
       }
-
-      // If content changed, reset noNewCommentsCount as new items may appear
-      if (contentChanged) {
-        noNewCommentsCount = Math.max(0, noNewCommentsCount - 1);
-      }
     }
 
     return allComments.slice(0, maxComments);
+  }
+
+  private async findCommentContainer(signal?: AbortSignal): Promise<Element | null> {
+    let container = findElementByRule(document, this.config.container);
+    if (this.config.domain !== 'youtube.com') {
+      if (container) return container;
+      await abortableDelay(TIMING.SHORT_WAIT_MS, signal);
+      return findElementByRule(document, this.config.container);
+    }
+
+    // YouTube loads the first comment batch when its outer section reaches the viewport.
+    const deadline = Date.now() + TIMEOUT.COMMENTS_SECTION_MS;
+    let scrolledSection: Element | null = null;
+    while (true) {
+      checkAborted(signal);
+      if (container && findElementByRule(container, this.config.item)) return container;
+
+      const section = document.querySelector(YOUTUBE_COMMENTS_SECTION);
+      if (section && section !== scrolledSection) {
+        section.scrollIntoView?.({ behavior: 'instant', block: 'center' });
+        scrolledSection = section;
+      }
+      if (Date.now() >= deadline) return container;
+
+      await abortableDelay(TIMING.SHORT_WAIT_MS, signal);
+      container = findElementByRule(document, this.config.container);
+    }
   }
 
   private composedParent(element: Element): Element | null {
@@ -386,16 +405,13 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         this.collectReplyItems(element, replyConfig),
       );
       const expandBtn = findElementsByRule(element, replyConfig.expandBtn).find(
-        (button) => this.nearestParentItem(button, boundaries) === element,
+        (button): button is HTMLElement =>
+          button instanceof HTMLElement &&
+          this.nearestParentItem(button, boundaries) === element &&
+          this.canExpandReplies(button),
       );
       if (expandBtn) {
-        await this.clickExpandButton(
-          element,
-          expandBtn as HTMLElement,
-          replyConfig,
-          signal,
-          depth > 0,
-        );
+        await this.clickExpandButton(element, expandBtn, replyConfig, signal, depth > 0);
       }
     }
 
@@ -422,6 +438,15 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     return replies;
   }
 
+  private canExpandReplies(button: HTMLElement): boolean {
+    return (
+      button.isConnected &&
+      !button.matches(':disabled, [aria-disabled="true"]') &&
+      !button.closest('[hidden]') &&
+      button.checkVisibility?.({ checkVisibilityCSS: true }) !== false
+    );
+  }
+
   private async clickExpandButton(
     element: HTMLElement,
     expandBtn: HTMLElement,
@@ -441,6 +466,8 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
     expandBtn.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
     await abortableDelay(TIMING.SCROLL_INTO_VIEW_WAIT_MS, signal);
+
+    if (!this.canExpandReplies(expandBtn)) return;
 
     try {
       expandBtn.click();

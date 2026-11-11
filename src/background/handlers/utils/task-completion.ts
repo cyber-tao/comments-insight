@@ -68,12 +68,14 @@ export function isTaskSource(
   sender: chrome.runtime.MessageSender | undefined,
 ): boolean {
   if (task.tabId === undefined) return true;
+  // Chrome keeps sender.url at the original document URL after history.pushState.
+  const currentUrl = task.sourceDocumentId ? (sender?.tab?.url ?? sender?.url) : sender?.url;
   return (
     sender?.tab?.id === task.tabId &&
     (sender.frameId === undefined || sender.frameId === 0) &&
     (sender.documentLifecycle === undefined || sender.documentLifecycle === 'active') &&
     (!task.sourceDocumentId || sender.documentId === task.sourceDocumentId) &&
-    isSameSourcePage(sender.url, task.url)
+    isSameSourcePage(currentUrl, task.url)
   );
 }
 

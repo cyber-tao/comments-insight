@@ -442,7 +442,7 @@ export class TaskManager {
     task.error = error;
     task.endTime = Date.now();
 
-    Logger.error(`[TaskManager] Task failed: ${taskId}`, { error });
+    Logger.error(`[TaskManager] Task failed: ${taskId}: ${error}`);
 
     this.notificationService.showTaskFailed(task.type, error);
 
@@ -689,7 +689,7 @@ export class TaskManager {
           if (!latest || latest.status !== 'running') {
             return;
           }
-          Logger.error(`[TaskManager] Executor failed for task ${nextTaskId}`, { error });
+          Logger.debug(`[TaskManager] Executor failed for task ${nextTaskId}`, { error });
           const messageKey =
             error instanceof ExtensionError ? error.details?.messageKey : undefined;
           this.failTask(
@@ -703,8 +703,9 @@ export class TaskManager {
         }
       })
       .catch((error) => {
-        Logger.error(`[TaskManager] Failed to start task ${nextTaskId}`, { error });
-        this.failTask(nextTaskId, error instanceof Error ? error.message : String(error));
+        const message = error instanceof Error ? error.message : String(error);
+        Logger.error(`[TaskManager] Failed to start task ${nextTaskId}: ${message}`);
+        this.failTask(nextTaskId, message);
       })
       .finally(() => {
         this.executors.delete(nextTaskId);

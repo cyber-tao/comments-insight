@@ -605,6 +605,31 @@ describe('extraction handlers', () => {
   });
 
   describe('completion payload validation', () => {
+    it('uses the current tab URL for a bound document after same-document navigation', async () => {
+      const context = await createRestartedContext(sourceDocumentId);
+      const task = context.taskManager.getTask('task_restored')!;
+      const sender = {
+        ...context.sender,
+        url: 'https://example.com/previous',
+        tab: { id: task.tabId, url: task.url } as chrome.tabs.Tab,
+      };
+      const navigatedAway = {
+        ...context,
+        sender: { ...sender, tab: { ...sender.tab, url: sender.url }, url: task.url },
+      };
+
+      await expect(handleExtractionCompleted(restoredCompletion, navigatedAway)).resolves.toEqual({
+        success: false,
+      });
+      expect(context.historyStore.createHistory).not.toHaveBeenCalled();
+      await expect(
+        handleExtractionCompleted(restoredCompletion, { ...context, sender }),
+      ).resolves.toEqual({
+        success: true,
+      });
+      expect(context.historyStore.createHistory).toHaveBeenCalledOnce();
+    });
+
     it('rejects a stale document completion after restart and still accepts the source', async () => {
       const context = await createRestartedContext(sourceDocumentId);
       const wrongDocument = { ...context, sender: { ...context.sender, documentId: 'wrong' } };

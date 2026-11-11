@@ -5,7 +5,7 @@ import { PageController } from '@/content/PageController';
 import { setExtractionActive, resetExtractionState } from '@/content/extractionState';
 import type { Comment, CrawlingConfig, SelectorRule } from '@/types';
 import { CommentExtractor } from '@/content/CommentExtractor';
-import { DOM, EXTRACTION, MESSAGES } from '@/config/constants';
+import { DOM, EXTRACTION, MESSAGES, TIMEOUT, TIMING } from '@/config/constants';
 import defaultRules from '@/config/default_rules.json';
 import { findElementsByRule, readField } from '@/content/utils/selector-rule';
 
@@ -475,6 +475,92 @@ describe('ConfiguredStrategy', () => {
     expect(item.scrollIntoView).toHaveBeenCalledOnce();
     expect(click).toHaveBeenCalledOnce();
     expect(commentTree(comments)).toEqual([['User', [['Loaded child', []]]]]);
+  });
+
+  it('skips a hidden YouTube reply toggle while still waiting for newly requested replies', async () => {
+    const reply =
+      '<ytd-comment-view-model><a id="author-text"><span>Reply user</span></a><div id="content-text">Reply</div></ytd-comment-view-model>';
+    document.body.innerHTML = `
+      <ytd-comments id="comments"><ytd-item-section-renderer id="sections">
+        <ytd-comment-thread-renderer>
+          <a id="author-text"><span>First</span></a><div id="content-text">First comment</div>
+          <ytd-comment-replies-renderer id="replies">
+            <div id="more-replies" hidden><button>Show replies</button></div>
+            ${reply}
+          </ytd-comment-replies-renderer>
+        </ytd-comment-thread-renderer>
+        <ytd-comment-thread-renderer>
+          <a id="author-text"><span>Second</span></a><div id="content-text">Second comment</div>
+          <ytd-comment-replies-renderer id="replies">
+            <div id="more-replies"><button>Show replies</button></div>
+          </ytd-comment-replies-renderer>
+        </ytd-comment-thread-renderer>
+      </ytd-item-section-renderer></ytd-comments>
+    `;
+    const [hiddenToggle, activeToggle] = document.querySelectorAll<HTMLButtonElement>('button');
+    const hiddenClick = vi.spyOn(hiddenToggle, 'click');
+    const activeClick = vi.spyOn(activeToggle, 'click');
+    activeToggle.addEventListener('click', () => {
+      setTimeout(() => {
+        activeToggle.closest('#replies')!.insertAdjacentHTML('beforeend', reply);
+      }, TIMING.REPLY_POLL_INTERVAL_MS * 3);
+    });
+
+    const config = defaultRules.find((rule) => rule.domain === 'youtube.com') as CrawlingConfig;
+    const startedAt = Date.now();
+    const result = new ConfiguredStrategy(mockPageController, config)
+      .execute(2, 'youtube.com')
+      .then((comments) => ({ comments, elapsed: Date.now() - startedAt }));
+    await vi.runAllTimersAsync();
+    const { comments, elapsed } = await result;
+
+    expect(hiddenClick).not.toHaveBeenCalled();
+    expect(activeClick).toHaveBeenCalledOnce();
+    expect(elapsed).toBeLessThan(TIMING.REPLY_POLL_TIMEOUT_MS);
+    expect(commentTree(comments)).toEqual([
+      ['First', [['Reply user', []]]],
+      ['Second', [['Reply user', []]]],
+    ]);
+  });
+
+  it('scrolls a lazy YouTube section into view and waits for its first comment', async () => {
+    const section = document.createElement('ytd-comments');
+    section.id = 'comments';
+    section.innerHTML = '<ytd-item-section-renderer id="sections"></ytd-item-section-renderer>';
+    section.scrollIntoView = vi.fn(() => {
+      setTimeout(() => {
+        section.querySelector('#sections')!.innerHTML = `
+          <ytd-comment-thread-renderer>
+            <a id="author-text"><span>Author</span></a><div id="content-text">Lazy comment</div>
+          </ytd-comment-thread-renderer>
+        `;
+      }, TIMEOUT.COMMENTS_SECTION_MS / 2);
+    });
+    setTimeout(() => document.body.append(section), TIMING.SHORT_WAIT_MS * 2);
+
+    const config = defaultRules.find((rule) => rule.domain === 'youtube.com') as CrawlingConfig;
+    const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config));
+
+    expect(section.scrollIntoView).toHaveBeenCalledOnce();
+    expect(comments.map((comment) => comment.content)).toEqual(['Lazy comment']);
+    expect(mockPageController.scrollContainer).not.toHaveBeenCalled();
+  });
+
+  it('stops after repeated scrolls with no new comments despite unrelated layout changes', async () => {
+    document.body.innerHTML =
+      '<section id="comments-root"><article class="comment-item"><b class="user">User</b><p class="text">Content</p></article></section>';
+    const scroll = vi.mocked(mockPageController.scrollContainer);
+    for (let round = 0; round < DOM.NO_NEW_COMMENTS_THRESHOLD * 2; round++) {
+      scroll.mockResolvedValueOnce({ contentChanged: true });
+    }
+
+    const comments = await executeStrategy(
+      new ConfiguredStrategy(mockPageController, createConfig()),
+      2,
+    );
+
+    expect(comments.map((comment) => comment.content)).toEqual(['Content']);
+    expect(scroll).toHaveBeenCalledTimes(DOM.NO_NEW_COMMENTS_THRESHOLD + 1);
   });
 
   it('refreshes and deduplicates a previously extracted parent when its reply fields change', async () => {

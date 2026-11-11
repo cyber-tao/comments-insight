@@ -748,19 +748,32 @@ async function runAllAutomatedTests() {
     const contentPage = await browser.newPage();
     const controlPage = await browser.newPage();
 
-    console.log(`  Navigating to mock test page: ${mockPageUrl}`);
-    await contentPage.goto(mockPageUrl, { waitUntil: 'domcontentloaded' });
+    const initialPageUrl = `${mockPageUrl}?before-navigation`;
+    console.log(`  Navigating to mock test page: ${initialPageUrl}`);
+    await contentPage.goto(initialPageUrl, { waitUntil: 'domcontentloaded' });
     await controlPage.goto(`chrome-extension://${extensionId}/src/options/index.html`, {
       waitUntil: 'domcontentloaded',
     });
-    await delay(2000);
     await contentPage.bringToFront();
 
     const tabId = await controlPage.evaluate(async (targetUrl) => {
       const tabs = await chrome.tabs.query({});
       return tabs.find((tab) => tab.url === targetUrl)?.id;
-    }, mockPageUrl);
+    }, initialPageUrl);
     assert(typeof tabId === 'number', 'Failed to resolve mock content tab id');
+    await controlPage.waitForFunction(
+      async (sourceTabId) => {
+        try {
+          const response = await chrome.tabs.sendMessage(sourceTabId, { type: 'PING' });
+          return response?.status === 'ok';
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 5000 },
+      tabId,
+    );
+    await contentPage.evaluate((url) => history.pushState(null, '', url), mockPageUrl);
 
     const startResponse = await sendExtensionMessage(controlPage, {
       type: 'START_EXTRACTION',
@@ -790,7 +803,7 @@ async function runAllAutomatedTests() {
     recordPass('TaskManager', `Completed background extraction task ${startResponse.taskId}`);
     recordPass(
       'ContentScript',
-      `Extracted ${historyItem.comments.length} comments through the real message flow`,
+      `Extracted ${historyItem.comments.length} comments after same-document navigation`,
     );
     recordPass('HistoryStore', 'Verified completed extraction was persisted and readable by URL');
 

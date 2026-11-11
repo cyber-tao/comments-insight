@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TaskManager } from '../src/background/TaskManager';
 import { AI, STORAGE, TASK } from '../src/config/constants';
+import { ErrorCode, ExtensionError } from '../src/utils/error-types';
 
 const mockSendMessage = vi.fn().mockResolvedValue(undefined);
 const mockStorageGet = vi.fn().mockResolvedValue({});
@@ -610,6 +611,25 @@ describe('TaskManager', () => {
   });
 
   describe('setExecutor', () => {
+    it('logs the extraction timeout in the task failure line', async ({ onTestFinished }) => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      onTestFinished(() => {
+        consoleError.mockRestore();
+      });
+      const taskId = taskManager.createTask('extract', 'https://example.com', 'Generic');
+      const message = 'Extraction timed out waiting for completion signal';
+      taskManager.setExecutor(
+        taskId,
+        vi.fn().mockRejectedValue(new ExtensionError(ErrorCode.TIMEOUT_ERROR, message)),
+      );
+
+      await vi.waitFor(() => expect(taskManager.getTask(taskId)?.status).toBe('failed'));
+      expect(consoleError).toHaveBeenCalledExactlyOnceWith(
+        expect.stringContaining(`[TaskManager] Task failed: ${taskId}: ${message}`),
+        '',
+      );
+    });
+
     it('does not run an executor cancelled while its running state is being saved', async () => {
       let releaseSave!: () => void;
       const saved = new Promise<void>((resolve) => {
