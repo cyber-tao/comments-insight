@@ -1,6 +1,5 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
-import { VList } from 'virtua';
 import { type HistoryListEntry } from '../hooks/useHistoryData';
 
 interface HistorySidebarProps {
@@ -143,7 +142,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
             <p>{t('history.noHistory')}</p>
           </div>
         ) : (
-          <VList className="virtua-list">{history.map((item) => renderItem(item))}</VList>
+          history.map(renderItem)
         )}
       </div>
 

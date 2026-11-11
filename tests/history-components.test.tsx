@@ -112,13 +112,15 @@ describe('HistorySidebar', () => {
     const onClearAll = vi.fn();
     const onHistoryPageChange = vi.fn();
     const listContainerRef = React.createRef<HTMLDivElement>();
-    const firstEntry = createSidebarEntry('1');
+    const entries = Array.from({ length: PAGINATION.DEFAULT_PER_PAGE }, (_, index) =>
+      createSidebarEntry(String(index + 1)),
+    );
 
     render(
       <HistorySidebar
-        history={[firstEntry, createSidebarEntry('2')]}
+        history={entries}
         historyPage={2}
-        historyTotal={8}
+        historyTotal={47}
         historyTotalPages={3}
         loading={false}
         searchQuery="initial"
@@ -133,6 +135,8 @@ describe('HistorySidebar', () => {
         formatDate={() => 'formatted-date'}
       />,
     );
+
+    expect(listContainerRef.current?.querySelectorAll('h3')).toHaveLength(entries.length);
 
     fireEvent.change(screen.getByPlaceholderText('history.searchPlaceholder'), {
       target: { value: 'updated' },
@@ -152,7 +156,7 @@ describe('HistorySidebar', () => {
     expect(onClearAll).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByText('Entry 1'));
-    expect(onSelectHistoryItem).toHaveBeenCalledWith(firstEntry);
+    expect(onSelectHistoryItem).toHaveBeenCalledWith(entries[0]);
 
     fireEvent.click(screen.getAllByText('🗑️')[0]);
     expect(onDeleteHistoryItem).toHaveBeenCalledWith('1');
@@ -165,7 +169,7 @@ describe('HistorySidebar', () => {
     const nextUpdater = onHistoryPageChange.mock.calls[1][0] as (current: number) => number;
     expect(nextUpdater(2)).toBe(3);
 
-    expect(screen.getByText('count:8')).toBeTruthy();
+    expect(screen.getByText('count:47')).toBeTruthy();
     expect(screen.getAllByText('2 / 3')).toHaveLength(2);
   });
 

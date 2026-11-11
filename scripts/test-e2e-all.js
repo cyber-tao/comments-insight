@@ -4,6 +4,7 @@ import http from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import puppeteer from 'puppeteer';
+import ts from 'typescript';
 import { requireChromeExecutablePath } from './browser-locator.js';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -107,6 +108,35 @@ function assert(condition, message) {
   }
 }
 
+function containsDynamicImport(node) {
+  return (
+    (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) ||
+    ts.forEachChild(node, containsDynamicImport)
+  );
+}
+
+function verifyContentScriptBundle() {
+  const manifest = JSON.parse(fs.readFileSync(path.join(extensionPath, 'manifest.json'), 'utf8'));
+  const scripts = manifest.content_scripts?.flatMap((entry) => entry.js ?? []) ?? [];
+  assert(scripts.length === 1, 'The built manifest must inject one self-contained content script');
+
+  const [script] = scripts;
+  const publicResources =
+    manifest.web_accessible_resources?.flatMap((entry) => entry.resources) ?? [];
+  const scriptIsPublic = publicResources.some((resource) => {
+    const pattern = resource.replace(/^\/+/, '').replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`^${pattern.replaceAll('*', '.*')}$`).test(script);
+  });
+  assert(!scriptIsPublic, `The manifest exposes the content script ${script} to web pages`);
+
+  const code = fs.readFileSync(path.join(extensionPath, script), 'utf8');
+  const source = ts.createSourceFile(script, code, ts.ScriptTarget.Latest, false, ts.ScriptKind.JS);
+  assert(
+    !ts.isExternalModule(source) && !containsDynamicImport(source),
+    `The manifest content script ${script} loads modules instead of being self-contained`,
+  );
+}
+
 function recordPass(suite, name) {
   passedCount++;
   testResults.push({ suite, name, status: 'PASS' });
@@ -168,12 +198,13 @@ async function waitForTask(page, taskId) {
 
 // Start a lightweight local HTTP server with a mock comments page
 function startMockHttpServer() {
+  const nonce = 'Y29tbWVudHMtaW5zaWdodC1lMmU=';
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <title>Mock Video Page - Automated Test</title>
-  <style>
+  <style nonce="${nonce}">
     .comment-item { display: block; padding: 8px; margin: 4px 0; border: 1px solid #ccc; }
     .author { font-weight: bold; color: blue; }
     .content { margin: 4px 0; }
@@ -218,7 +249,7 @@ function startMockHttpServer() {
       <span class="likes">8</span>
     </ytd-comment-thread-renderer>
   </div>
-  <script>
+  <script nonce="${nonce}">
     const replies = document.querySelector('#c1 #replies');
     const legacyButton = replies.querySelector('#more-replies button');
     legacyButton.addEventListener('click', () => { legacyButton.dataset.clicked = 'true'; });
@@ -237,7 +268,10 @@ function startMockHttpServer() {
 
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'`,
+      });
       res.end(html);
     });
     server.listen(0, '127.0.0.1', () => {
@@ -270,6 +304,8 @@ async function runAllAutomatedTests() {
 
   let browser;
   try {
+    verifyContentScriptBundle();
+    recordPass('ContentScriptBundle', 'Verified the manifest injects a standalone script');
     browser = await launchTestBrowser(executablePath, tempProfileDir);
 
     // ----------------------------------------------------
@@ -390,6 +426,14 @@ async function runAllAutomatedTests() {
     const historyErrors = [];
     const reportNetworkRequests = [];
     historyPage.on('pageerror', (err) => historyErrors.push(err.message));
+    await historyPage.evaluateOnNewDocument(() => {
+      globalThis.resizeObserverErrors = [];
+      window.addEventListener('error', (event) => {
+        if (event.isTrusted && event.message.includes('ResizeObserver loop')) {
+          globalThis.resizeObserverErrors.push(event.message);
+        }
+      });
+    });
     await historyPage.setRequestInterception(true);
     historyPage.on('request', (request) => {
       if (/^https?:/i.test(request.url())) {
@@ -469,6 +513,20 @@ async function runAllAutomatedTests() {
             analyzedAt: item.analyzedAt,
             hasAnalysis: Boolean(item.analysis),
           });
+          const historyPageSize = 20;
+          for (let index = 1; index < historyPageSize; index += 1) {
+            const fixture = {
+              id: `${item.id}_${index}`,
+              url: `https://fixture.invalid/history/${index}`,
+              title: `History resize fixture ${index}`,
+              platform:
+                index % 2 ? 'Fixture platform with a deliberately wrapping label' : 'YouTube',
+              extractedAt: item.extractedAt - index,
+              commentsCount: 0,
+            };
+            tx.objectStore('history').put({ ...fixture, comments: [] });
+            tx.objectStore('historyMetadata').put({ ...fixture, hasAnalysis: false });
+          }
           tx.oncomplete = () => resolve(true);
           tx.onerror = (err) => reject(err);
         };
@@ -478,7 +536,49 @@ async function runAllAutomatedTests() {
 
     recordPass(
       'HistoryPage',
-      'Inserted mock history record into CommentsInsightDatabase IndexedDB',
+      'Inserted a page of mock history records into CommentsInsightDatabase IndexedDB',
+    );
+
+    await historyPage.reload({ waitUntil: 'domcontentloaded' });
+    await historyPage.waitForFunction(
+      (title) => document.querySelector('h3')?.textContent === title,
+      {},
+      mockHistoryItem.title,
+    );
+    const initialViewport = historyPage.viewport();
+    const historyViewports = [
+      [1280, 800],
+      [640, 480],
+      [386, 740],
+      [1000, 260],
+      [800, 560],
+      [1920, 1080],
+    ];
+    for (const [width, height] of historyViewports) {
+      await historyPage.setViewport({ width, height });
+      const scrolled = await historyPage.evaluate(async () => {
+        const nextFrame = () => new Promise(requestAnimationFrame);
+        await nextFrame();
+        let scroller = document.querySelector('h3')?.parentElement;
+        while (scroller && getComputedStyle(scroller).overflowY !== 'auto') {
+          scroller = scroller.parentElement;
+        }
+        if (!scroller) return false;
+        scroller.scrollTop = scroller.scrollHeight;
+        await nextFrame();
+        const moved = scroller.scrollTop > 0;
+        scroller.scrollTop = 0;
+        await nextFrame();
+        return moved;
+      });
+      assert(scrolled, `History sidebar did not scroll at ${width}×${height}`);
+    }
+    await historyPage.setViewport(initialViewport);
+    const historyResizeErrors = await historyPage.evaluate(() => globalThis.resizeObserverErrors);
+    assert(historyResizeErrors.length === 0, historyResizeErrors.join(', '));
+    recordPass(
+      'HistoryPage',
+      'Scrolled a full page of history while resizing without observer errors',
     );
 
     // Select the persisted report, not just its list entry, so the Markdown
@@ -778,6 +878,8 @@ async function runAllAutomatedTests() {
     console.log('\n🕷️ [Suite 8] Background Task, Content Script & History Flow');
     const contentPage = await browser.newPage();
     const controlPage = await browser.newPage();
+    const contentErrors = [];
+    contentPage.on('pageerror', (error) => contentErrors.push(error.message));
 
     const initialPageUrl = `${mockPageUrl}?before-navigation`;
     console.log(`  Navigating to mock test page: ${initialPageUrl}`);
@@ -844,10 +946,11 @@ async function runAllAutomatedTests() {
       button.hasAttribute('data-clicked'),
     );
     assert(!legacyButtonClicked, 'Extraction clicked the hidden legacy reply control');
+    assert(contentErrors.length === 0, `Content page had JS errors: ${contentErrors.join(', ')}`);
     recordPass('TaskManager', `Completed background extraction task ${startResponse.taskId}`);
     recordPass(
       'ContentScript',
-      `Extracted ${historyItem.comments.length} comments after same-document navigation`,
+      `Extracted ${historyItem.comments.length} comments on a strict-CSP page after same-document navigation`,
     );
     recordPass('ContentScript', 'Expanded and persisted a reply using the bundled YouTube rules');
     recordPass('HistoryStore', 'Verified completed extraction was persisted and readable by URL');

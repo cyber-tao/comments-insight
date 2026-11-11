@@ -2,18 +2,6 @@ import 'fake-indexeddb/auto';
 import { beforeEach } from 'vitest';
 import { container } from '../src/background/ServiceContainer';
 
-// Mock ResizeObserver for virtua in jsdom
-class ResizeObserverMock {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-global.ResizeObserver = ResizeObserverMock;
-if (typeof window !== 'undefined') {
-  window.ResizeObserver = ResizeObserverMock;
-}
-globalThis.ResizeObserver = ResizeObserverMock;
-
 // Fail fast on unhandled rejections so tests don't silently pass with hidden async errors.
 process.on('unhandledRejection', (reason) => {
   if (reason instanceof Error) {
