@@ -1,12 +1,12 @@
 <div align="center">
-  <img src="images/banners/banner-1400x560.jpg" alt="Comments Insight Banner" width="100%" />
+  <img src="images/banners/banner-1400x560.jpg" alt="评论洞察，从评论和回复生成可导出的分析报告" width="100%" />
 </div>
 
 <div align="center">
 
 # 评论洞察 (Comments Insight)
 
-提取网页中的评论和回复，再用你配置的 AI 服务进行分析。
+从受支持的网页中提取评论和回复，用你配置的 AI 服务找出常见话题和情绪倾向，并生成可导出的 HTML 报告。
 
 [English](README.md) · **简体中文** · [隐私政策](PRIVACY.zh-CN.md)
 
@@ -43,37 +43,44 @@
 
 - 基于 Manifest V3 的 Chrome 扩展，包含 Popup、选项页、历史记录和日志视图。
 - 使用 Vite、React、TypeScript 和 `@crxjs/vite-plugin` 构建。
-- 结合选择器配置与 AI 发现技术，稳健地提取评论（包括嵌套回复），展示流式 AI 分析进度，并生成包含表格和结构化数据的 Markdown 洞察报告。
+- 结合站点规则与 AI 辅助选择器配置提取评论和嵌套回复，展示实时分析进度，并生成 Markdown 分析和可视化 HTML 报告。
 - 使用 Dexie 驱动的 IndexedDB 保存历史记录，支持轻量元数据分页与搜索，并在本地保存任务和日志。
 
 ## 📸 演示截图
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="images/screenshots/popup.jpg" alt="扩展程序弹窗" />
-      <p align="center"><em>扩展程序弹窗</em></p>
-    </td>
-    <td width="50%">
-      <img src="images/screenshots/analysis.jpg" alt="AI 分析报告" />
-      <p align="center"><em>AI 分析报告</em></p>
-    </td>
-  </tr>
-</table>
+<a href="images/screenshots/zh-CN/00-cover.jpg">
+  <img src="images/screenshots/zh-CN/00-cover.jpg" alt="评论洞察商店封面，展示网页报告中的热门话题、情感分布和 HTML 导出按钮" width="100%" />
+</a>
+
+下方演示使用 YOUCAR 仰望 U9 Xtreme 极速测试视频下的部分评论，评论已匿名转述。分析和看板依据原始导出的 AI 报告整理。 [原视频](https://www.youtube.com/watch?v=uxdE0I-VaFc)
 
 <table>
   <tr>
-    <td width="33.3%">
-      <img src="images/screenshots/options-1.jpg" alt="设置选项" />
-      <p align="center"><em>设置选项</em></p>
+    <td width="50%">
+      <a href="images/screenshots/zh-CN/01-popup.jpg">
+        <img src="images/screenshots/zh-CN/01-popup.jpg" alt="视频页面旁的扩展弹窗，显示评论数、分析状态和查看按钮" />
+      </a>
+      <p align="center"><em>提取评论与回复</em></p>
     </td>
-    <td width="33.3%">
-      <img src="images/screenshots/options-2.jpg" alt="爬虫配置" />
-      <p align="center"><em>爬虫配置</em></p>
+    <td width="50%">
+      <a href="images/screenshots/zh-CN/02-analysis.jpg">
+        <img src="images/screenshots/zh-CN/02-analysis.jpg" alt="分析页显示讨论摘要、热门话题和情感分布表" />
+      </a>
+      <p align="center"><em>查看 AI 分析并导出 Markdown</em></p>
     </td>
-    <td width="33.3%">
-      <img src="images/screenshots/options-3.jpg" alt="AI 配置" />
-      <p align="center"><em>AI 配置</em></p>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="images/screenshots/zh-CN/03-dashboard.jpg">
+        <img src="images/screenshots/zh-CN/03-dashboard.jpg" alt="网页报告展示讨论中的速度争议和情感分布图" />
+      </a>
+      <p align="center"><em>生成网页报告并导出 HTML</em></p>
+    </td>
+    <td width="50%">
+      <a href="images/screenshots/zh-CN/04-comments.jpg">
+        <img src="images/screenshots/zh-CN/04-comments.jpg" alt="评论页显示匿名评论和展开的回复，以及搜索、排序和 CSV 导出按钮" />
+      </a>
+      <p align="center"><em>浏览回复并导出 CSV</em></p>
     </td>
   </tr>
 </table>

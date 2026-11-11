@@ -1,12 +1,12 @@
 <div align="center">
-  <img src="images/banners/banner-1400x560.jpg" alt="Comments Insight Banner" width="100%" />
+  <img src="images/banners/banner-1400x560.jpg" alt="Comments Insight turns comments into reports" width="100%" />
 </div>
 
 <div align="center">
 
 # Comments Insight
 
-Extract comments and replies from webpages, then analyze them with the AI service you configure.
+Extract comments and replies from supported webpages. Use your configured AI service to identify recurring topics and sentiment, then export a visual report as HTML.
 
 **English** · [简体中文](README.zh-CN.md) · [Privacy Policy](PRIVACY.md)
 
@@ -43,37 +43,44 @@ The instructions below cover **v0.10.0**. The Chrome Web Store listing shows the
 
 - Manifest V3 Chrome extension with multi-page UI: Popup, Options, History, Logs.
 - Built with Vite, React, TypeScript, and `@crxjs/vite-plugin`.
-- Combines selectors and AI to robustly extract comments (including nested replies), stream AI analysis progress, and produce comprehensive Markdown reports with tables and structured data.
+- Collects comments and nested replies using site rules with AI-assisted selector setup, streams analysis progress, and produces Markdown analyses and visual HTML reports.
 - Persists history in Dexie-backed IndexedDB with lightweight metadata paging and search, plus local task/log storage.
 
 ## 📸 Screenshots
 
-<table>
-  <tr>
-    <td width="50%">
-      <img src="images/screenshots/popup.jpg" alt="Extension Popup" />
-      <p align="center"><em>Extension Popup</em></p>
-    </td>
-    <td width="50%">
-      <img src="images/screenshots/analysis.jpg" alt="AI Analysis Report" />
-      <p align="center"><em>AI Analysis Report</em></p>
-    </td>
-  </tr>
-</table>
+<a href="images/screenshots/en-US/00-cover.jpg">
+  <img src="images/screenshots/en-US/00-cover.jpg" alt="Comments Insight generates a visual web report with discussion themes, sentiment, and HTML export" width="100%" />
+</a>
+
+The walkthrough below uses anonymized paraphrases of selected comments on YOUCAR’s Yangwang U9 Xtreme speed-test video. The reports show AI analysis adapted from the original exports. [Source video](https://www.youtube.com/watch?v=uxdE0I-VaFc)
 
 <table>
   <tr>
-    <td width="33.3%">
-      <img src="images/screenshots/options-1.jpg" alt="Options Settings" />
-      <p align="center"><em>Options Settings</em></p>
+    <td width="50%">
+      <a href="images/screenshots/en-US/01-popup.jpg">
+        <img src="images/screenshots/en-US/01-popup.jpg" alt="Extension popup showing the current page and comment analysis actions" />
+      </a>
+      <p align="center"><em>Collect comments and replies</em></p>
     </td>
-    <td width="33.3%">
-      <img src="images/screenshots/options-2.jpg" alt="Scraper Configuration" />
-      <p align="center"><em>Scraper Configuration</em></p>
+    <td width="50%">
+      <a href="images/screenshots/en-US/02-analysis.jpg">
+        <img src="images/screenshots/en-US/02-analysis.jpg" alt="AI analysis with a summary, discussion themes, and sentiment estimates" />
+      </a>
+      <p align="center"><em>Review the AI analysis and export Markdown</em></p>
     </td>
-    <td width="33.3%">
-      <img src="images/screenshots/options-3.jpg" alt="AI Configuration" />
-      <p align="center"><em>AI Configuration</em></p>
+  </tr>
+  <tr>
+    <td width="50%">
+      <a href="images/screenshots/en-US/03-dashboard.jpg">
+        <img src="images/screenshots/en-US/03-dashboard.jpg" alt="Visual report showing a sentiment chart and the HTML export button" />
+      </a>
+      <p align="center"><em>Generate a web report and export HTML</em></p>
+    </td>
+    <td width="50%">
+      <a href="images/screenshots/en-US/04-comments.jpg">
+        <img src="images/screenshots/en-US/04-comments.jpg" alt="Searchable comments with an expanded reply and the CSV export button" />
+      </a>
+      <p align="center"><em>Browse replies and export comments as CSV</em></p>
     </td>
   </tr>
 </table>
