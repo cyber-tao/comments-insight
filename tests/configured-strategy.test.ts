@@ -477,10 +477,12 @@ describe('ConfiguredStrategy', () => {
     expect(commentTree(comments)).toEqual([['User', [['Loaded child', []]]]]);
   });
 
-  it('skips a hidden YouTube reply toggle while still waiting for newly requested replies', async () => {
-    const reply =
-      '<ytd-comment-view-model><a id="author-text"><span>Reply user</span></a><div id="content-text">Reply</div></ytd-comment-view-model>';
-    document.body.innerHTML = `
+  it.each(['more-replies', 'more-replies-sub-thread'])(
+    'opens the visible YouTube %s control and extracts the delayed reply',
+    async (controlId) => {
+      const reply =
+        '<ytd-comment-view-model><a id="author-text"><span>Reply user</span></a><div id="content-text">Reply</div></ytd-comment-view-model>';
+      document.body.innerHTML = `
       <ytd-comments id="comments"><ytd-item-section-renderer id="sections">
         <ytd-comment-thread-renderer>
           <a id="author-text"><span>First</span></a><div id="content-text">First comment</div>
@@ -492,36 +494,41 @@ describe('ConfiguredStrategy', () => {
         <ytd-comment-thread-renderer>
           <a id="author-text"><span>Second</span></a><div id="content-text">Second comment</div>
           <ytd-comment-replies-renderer id="replies">
-            <div id="more-replies"><button>Show replies</button></div>
+            <ytd-button-renderer id="${controlId}"><yt-button-shape><button>Show replies</button></yt-button-shape></ytd-button-renderer>
           </ytd-comment-replies-renderer>
         </ytd-comment-thread-renderer>
       </ytd-item-section-renderer></ytd-comments>
     `;
-    const [hiddenToggle, activeToggle] = document.querySelectorAll<HTMLButtonElement>('button');
-    const hiddenClick = vi.spyOn(hiddenToggle, 'click');
-    const activeClick = vi.spyOn(activeToggle, 'click');
-    activeToggle.addEventListener('click', () => {
-      setTimeout(() => {
-        activeToggle.closest('#replies')!.insertAdjacentHTML('beforeend', reply);
-      }, TIMING.REPLY_POLL_INTERVAL_MS * 3);
-    });
+      const [hiddenToggle, activeToggle] = document.querySelectorAll<HTMLButtonElement>('button');
+      const hiddenClick = vi.spyOn(hiddenToggle, 'click');
+      const activeClick = vi.spyOn(activeToggle, 'click');
+      activeToggle.addEventListener('click', () => {
+        const markup =
+          controlId === 'more-replies-sub-thread'
+            ? `<div id="expanded-threads"><yt-sub-thread><ytd-comment-thread-renderer>${reply}</ytd-comment-thread-renderer></yt-sub-thread></div>`
+            : reply;
+        setTimeout(() => {
+          activeToggle.closest('#replies')!.insertAdjacentHTML('beforeend', markup);
+        }, TIMING.REPLY_POLL_INTERVAL_MS * 3);
+      });
 
-    const config = defaultRules.find((rule) => rule.domain === 'youtube.com') as CrawlingConfig;
-    const startedAt = Date.now();
-    const result = new ConfiguredStrategy(mockPageController, config)
-      .execute(2, 'youtube.com')
-      .then((comments) => ({ comments, elapsed: Date.now() - startedAt }));
-    await vi.runAllTimersAsync();
-    const { comments, elapsed } = await result;
+      const config = defaultRules.find((rule) => rule.domain === 'youtube.com') as CrawlingConfig;
+      const startedAt = Date.now();
+      const result = new ConfiguredStrategy(mockPageController, config)
+        .execute(2, 'youtube.com')
+        .then((comments) => ({ comments, elapsed: Date.now() - startedAt }));
+      await vi.runAllTimersAsync();
+      const { comments, elapsed } = await result;
 
-    expect(hiddenClick).not.toHaveBeenCalled();
-    expect(activeClick).toHaveBeenCalledOnce();
-    expect(elapsed).toBeLessThan(TIMING.REPLY_POLL_TIMEOUT_MS);
-    expect(commentTree(comments)).toEqual([
-      ['First', [['Reply user', []]]],
-      ['Second', [['Reply user', []]]],
-    ]);
-  });
+      expect(hiddenClick).not.toHaveBeenCalled();
+      expect(activeClick).toHaveBeenCalledOnce();
+      expect(elapsed).toBeLessThan(TIMING.REPLY_POLL_TIMEOUT_MS);
+      expect(commentTree(comments)).toEqual([
+        ['First', [['Reply user', []]]],
+        ['Second', [['Reply user', []]]],
+      ]);
+    },
+  );
 
   it('scrolls a lazy YouTube section into view and waits for its first comment', async () => {
     const section = document.createElement('ytd-comments');

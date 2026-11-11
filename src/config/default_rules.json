@@ -40,7 +40,7 @@
       "selector": "ytd-comment-thread-renderer",
       "type": "css"
     },
-    "lastUpdated": 1769776825087,
+    "lastUpdated": 1794385099543,
     "postContent": {
       "selector": "#description-inline-expander",
       "type": "css"
@@ -51,7 +51,7 @@
         "type": "css"
       },
       "expandBtn": {
-        "selector": "#more-replies button",
+        "selector": ":is(#more-replies, #more-replies-sub-thread) button",
         "type": "css"
       },
       "fields": [
@@ -85,7 +85,7 @@
         }
       ],
       "item": {
-        "selector": "ytd-comment-view-model",
+        "selector": ":is(ytd-comment-thread-renderer, ytd-comment-view-model)",
         "type": "css"
       }
     },

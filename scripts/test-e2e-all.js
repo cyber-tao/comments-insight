@@ -174,11 +174,12 @@ function startMockHttpServer() {
   <meta charset="UTF-8">
   <title>Mock Video Page - Automated Test</title>
   <style>
-    .comment-item { padding: 8px; margin: 4px 0; border: 1px solid #ccc; }
+    .comment-item { display: block; padding: 8px; margin: 4px 0; border: 1px solid #ccc; }
     .author { font-weight: bold; color: blue; }
     .content { margin: 4px 0; }
     .time { color: gray; font-size: 12px; }
     .likes { color: green; font-size: 12px; }
+    .legacy-replies { display: none; }
   </style>
 </head>
 <body>
@@ -188,25 +189,49 @@ function startMockHttpServer() {
     <p id="description">This is a mock video description for automated testing.</p>
   </div>
   <div id="comments-container">
-    <div class="comment-item" id="c1">
+    <ytd-comment-thread-renderer class="comment-item" id="c1">
       <span class="author">Alice</span>
       <div class="content">This extension is truly awesome!</div>
       <span class="time">2 hours ago</span>
       <span class="likes">42</span>
-    </div>
-    <div class="comment-item" id="c2">
+      <div id="replies">
+        <div id="expander" class="legacy-replies">
+          <div id="more-replies"><button type="button">1 reply</button></div>
+        </div>
+        <div id="collapsed-threads">
+          <ytd-button-renderer id="more-replies-sub-thread">
+            <yt-button-shape><button type="button">1 reply</button></yt-button-shape>
+          </ytd-button-renderer>
+        </div>
+      </div>
+    </ytd-comment-thread-renderer>
+    <ytd-comment-thread-renderer class="comment-item" id="c2">
       <span class="author">Bob</span>
       <div class="content">I had an issue with scrolling, but the new version works great.</div>
       <span class="time">1 hour ago</span>
       <span class="likes">15</span>
-    </div>
-    <div class="comment-item" id="c3">
+    </ytd-comment-thread-renderer>
+    <ytd-comment-thread-renderer class="comment-item" id="c3">
       <span class="author">Charlie</span>
       <div class="content">Can we analyze sentiment for non-English comments too?</div>
       <span class="time">30 mins ago</span>
       <span class="likes">8</span>
-    </div>
+    </ytd-comment-thread-renderer>
   </div>
+  <script>
+    const replies = document.querySelector('#c1 #replies');
+    const legacyButton = replies.querySelector('#more-replies button');
+    legacyButton.addEventListener('click', () => { legacyButton.dataset.clicked = 'true'; });
+    replies.querySelector('#more-replies-sub-thread button').addEventListener('click', () => {
+      setTimeout(() => {
+        replies.insertAdjacentHTML('beforeend', '<div id="expanded-threads"><yt-sub-thread>' +
+          '<ytd-comment-thread-renderer><ytd-comment-view-model>' +
+          '<a id="author-text"><span>Deborah</span></a>' +
+          '<div id="content-text">This is a reply loaded after expansion.</div>' +
+          '</ytd-comment-view-model></ytd-comment-thread-renderer></yt-sub-thread></div>');
+      }, 250);
+    }, { once: true });
+  </script>
 </body>
 </html>`;
 
@@ -290,13 +315,18 @@ async function runAllAutomatedTests() {
     assert(evalViolations.length === 0, 'Options page attempted CSP-blocked dynamic code');
     recordPass('OptionsPage', 'Validated schemas without a CSP-blocked eval probe');
 
+    const bundledRules = JSON.parse(
+      fs.readFileSync(path.resolve(scriptDir, '../src/config/default_rules.json'), 'utf8'),
+    );
+    const youtubeRule = bundledRules.find((rule) => rule.domain === 'youtube.com');
+    assert(youtubeRule?.replies?.expandBtn, 'The bundled YouTube reply expansion rule is missing');
     const mockRule = {
       id: 'local_test_rule',
       domain: '127.0.0.1',
       siteName: 'Local Test Server',
       lastUpdated: Date.now(),
       container: { selector: '#comments-container', type: 'css' },
-      item: { selector: '.comment-item', type: 'css' },
+      item: youtubeRule.item,
       postContent: { selector: '#description', type: 'css' },
       videoTime: { selector: '.video-duration', type: 'css' },
       fields: [
@@ -305,6 +335,7 @@ async function runAllAutomatedTests() {
         { name: 'timestamp', rule: { selector: '.time', type: 'css' } },
         { name: 'likes', rule: { selector: '.likes', type: 'css' } },
       ],
+      replies: youtubeRule.replies,
     };
 
     await optionsPage.evaluate((testRule) => {
@@ -791,8 +822,8 @@ async function runAllAutomatedTests() {
     assert(historyItem, 'Completed extraction did not persist history');
     assert(Array.isArray(historyItem.comments), 'Persisted history has no comments array');
     assert(
-      historyItem.comments.length >= 3,
-      `Expected at least 3 persisted comments, got ${historyItem.comments.length}`,
+      historyItem.comments.length === 3,
+      `Expected 3 persisted top-level comments, got ${historyItem.comments.length}`,
     );
 
     const firstComment = historyItem.comments[0];
@@ -800,11 +831,25 @@ async function runAllAutomatedTests() {
       firstComment.username && firstComment.content,
       'Persisted comment missing username or content',
     );
+    const alice = historyItem.comments.find((comment) => comment.username === 'Alice');
+    assert(
+      alice?.replies?.some(
+        (reply) =>
+          reply.username === 'Deborah' &&
+          reply.content === 'This is a reply loaded after expansion.',
+      ),
+      'The bundled YouTube rule did not expand and persist the reply under its parent',
+    );
+    const legacyButtonClicked = await contentPage.$eval('#more-replies button', (button) =>
+      button.hasAttribute('data-clicked'),
+    );
+    assert(!legacyButtonClicked, 'Extraction clicked the hidden legacy reply control');
     recordPass('TaskManager', `Completed background extraction task ${startResponse.taskId}`);
     recordPass(
       'ContentScript',
       `Extracted ${historyItem.comments.length} comments after same-document navigation`,
     );
+    recordPass('ContentScript', 'Expanded and persisted a reply using the bundled YouTube rules');
     recordPass('HistoryStore', 'Verified completed extraction was persisted and readable by URL');
 
     await verifyAiRequestPrivacy(controlPage);
