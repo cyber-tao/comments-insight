@@ -6,15 +6,15 @@
 
 # Comments Insight
 
-AI-powered Chrome Extension for comment extraction and insight analysis ✨
+Extract comments and replies from webpages, then analyze them with the AI service you configure.
 
-[English](README.md) | [简体中文](README.zh-CN.md) | [Privacy](PRIVACY.md)
+**English** · [简体中文](README.zh-CN.md) · [Privacy Policy](PRIVACY.md)
 
 [![Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Install-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.4-000000)](https://crxjs.dev/vite-plugin/)
 
 </div>
 
-> Extract comments from the web, analyze them with AI, and generate actionable, structured insights.
+The instructions below cover **v0.10.0**. The Chrome Web Store listing shows the version it currently distributes. [GitHub release v0.10.0](https://github.com/cyber-tao/comments-insight/releases/tag/v0.10.0)
 
 ## 📚 Table of Contents
 
@@ -28,9 +28,10 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
   - [📦 Project Structure](#-project-structure)
   - [🚀 Quick Start](#-quick-start)
     - [Install from Chrome Web Store](#install-from-chrome-web-store)
+    - [Install the GitHub Release](#install-the-github-release)
     - [Build from Source](#build-from-source)
   - [🧭 Usage](#-usage)
-    - [Getting Started with OpenRouter (Free Option)](#getting-started-with-openrouter-free-option)
+    - [Configure an AI Service](#configure-an-ai-service)
     - [Using the Extension](#using-the-extension)
   - [⚙️ Configuration](#️-configuration)
   - [🧰 Tech Stack](#-tech-stack)
@@ -79,11 +80,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
 
 ## ✨ Features
 
-- 🧲 **Smart Extraction**:
-  - Hybrid approach using Config + AI Discovery for robust selector detection.
-  - **Self-Correcting AI**: Two-phase AI generation (macro for post metadata, micro for comment fields) that instantly validates hallucinated CSS selectors against the live DOM.
-  - **Intelligent DOM Waiting**: Uses `MutationObserver` to precisely detect when lazy-loaded content or nested replies are fully mounted, instead of relying on static delays.
-  - Real-time granular progress tracking (e.g., "Verifying AI-generated schema...", "Extracting (55/100)").
+- 🧲 **Comment extraction.** Use built-in or custom site rules to collect comments and nested replies. AI-assisted rule generation checks selectors against the page before saving them. The popup shows progress, and extraction tasks stop if their source page changes.
 - 🧠 **AI Analysis**:
   - **Scalable Processing**: Automatically batches large comment sets with concurrency control (up to 3 concurrent requests) to handle long threads efficiently.
   - **Streaming Responses**: Streams Chat Completions output, keeps long requests alive with activity-based timeouts, and shows live receiving progress in Popup and History actions.
@@ -91,7 +88,7 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
   - **Invalid Output Guard**: Empty model responses are rejected and retried instead of being stored as successful blank reports.
   - Comprehensive reports including Sentiment Distribution, Hot Comments, Top Discussed, and Interaction Analysis.
   - **Dynamic Visual Reports** (enabled by default): generates a visual HTML dashboard through a second model call, strips scripts, forms, frames, event handlers, and external URLs, then renders the static result in a network-blocked sandbox.
-  - Customizable prompt templates with "Reset to Default" capability.
+  - The default analysis and report prompts follow the selected language. You can edit either template or reset it to the default.
 - 🧩 **Scraper Config**:
   - Automatically generate/edit/import/export per-site configs.
   - Visual selector validation and caching for performance.
@@ -100,15 +97,15 @@ AI-powered Chrome Extension for comment extraction and insight analysis ✨
   - IndexedDB history storage with metadata-only paging and search for fast browsing.
   - Sanitized AI/system logs with local inspection tools for debugging.
   - Searchable history with filtering and sorting (by Time, Likes, Replies).
-- 🌐 **i18n**: English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, European Portuguese, and Spanish.
+- 🌐 **Languages.** English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, European Portuguese, and Spanish. Choose a language in Options.
 - 🎨 **Theme Support**: Light, Dark, and System modes with automatic theme switching.
 - 🛠️ **Developer Mode**: Toggle advanced features like AI Logs and Selector Testing tools.
 
 ## 🔑 API Key Security Note
 
-API keys are encrypted in local extension storage, but the key material is stored in the same browser profile. This prevents accidental plaintext exposure; it is **not** a strong security boundary against malware or another actor with local access. Settings exports never include the API key, and importing a different API endpoint without a new key clears the stored key.
+API keys are encrypted in local extension storage. The same browser profile holds the encryption material, so anyone with access to that profile can potentially recover the key. Settings exports omit the key. Importing a different API endpoint without a new key clears the stored credential.
 
-AI-powered extraction, selector generation, analysis, model discovery, and visual reports send the API key and relevant page or report data directly to the endpoint selected by the user. Remote endpoints must use HTTPS; plain HTTP is allowed only for loopback development services. See the [Privacy Policy](PRIVACY.md) for the complete data-flow disclosure.
+The extension sends credentials and any data needed for the requested AI operation directly to your configured endpoint. Remote endpoints require HTTPS. Loopback development endpoints can use HTTP. Enter the final API URL because the extension rejects redirects. [Privacy Policy](PRIVACY.md)
 
 ## 🧱 Architecture
 
@@ -156,66 +153,47 @@ vitest.config.ts        # Test config
 
 **[📦 Install from Chrome Web Store →](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap)**
 
-Visit the Chrome Web Store to install the extension with one click.
+Comments Insight requires Chrome 116 or later. Choose **Add to Chrome** on the store listing to install the version currently available there.
+
+### Install the GitHub Release
+
+1. Download `extension.zip` from the [v0.10.0 release](https://github.com/cyber-tao/comments-insight/releases/tag/v0.10.0) and extract it.
+2. Open `chrome://extensions` and enable **Developer mode**.
+3. Click **Load unpacked** and select the extracted folder containing `manifest.json`. Pin the extension to open the popup from the toolbar.
 
 ### Build from Source
 
-1. **Prerequisites**: Node.js 20.19+ or 22.12+, Bun 1.3.11+, Chrome 116+.
-2. **Install dependencies**:
-   ```bash
-   bun install
-   ```
-3. **Development build**:
-   ```bash
-   bun run dev
-   ```
-4. **Load into Chrome**:
-   - Open `chrome://extensions`
-   - Enable **Developer mode** (top right)
-   - Click **Load unpacked** and select the `dist` folder
-5. **Production build**:
-   ```bash
-   bun run build
-   ```
+Use Node.js 20.19 or later in the 20.x series, or Node.js 22.12 or later. The repository uses Bun 1.4.4.
+
+Run these commands from the repository root.
+
+```bash
+bun install --frozen-lockfile
+bun run build
+```
+
+At `chrome://extensions`, enable **Developer mode** and select `dist` using **Load unpacked**. For live development, use `bun run dev`.
 
 ## 🧭 Usage
 
-### Getting Started with OpenRouter (Free Option)
+### Configure an AI Service
 
-OpenRouter provides access to various AI models, including free options. Here's how to set it up:
+AI-assisted rule generation, analysis, and visual reports require an OpenAI-compatible Chat Completions endpoint.
 
-1. **Get API Key**:
-   - Visit [OpenRouter](https://openrouter.ai/)
-   - Sign up or log in to your account
-   - Go to [Keys](https://openrouter.ai/keys) page
-   - Click "Create API Key" and copy your API key
-
-2. **Configure Extension**:
-   - Click the extension icon and select "Options" (or right-click the icon → Options)
-   - In the **AI Model Settings** section:
-     - **API URL**: Enter `https://openrouter.ai/api/v1`
-     - **API Key**: Paste your OpenRouter API key (settings are saved automatically)
-     - **Model**: Select a model from the dropdown list
-       - 💡 **Tip**: Models ending with `:free` are completely free to use (e.g., `z-ai/glm-4.5-air:free`, `stepfun/step-3.5-flash:free`)
-       - Browse all free models at [OpenRouter Free Models Collection](https://openrouter.ai/collections/free-models)
-
-3. **Verify Configuration**:
-   - Scroll down to the **Test AI Connection** section
-   - Click "Test Connection" button
-   - You should see a success message confirming the API is working
-   - If you see an error, double-check your API key and URL
+1. Open **Options** from the extension's toolbar menu and go to **AI Model**.
+2. Enter the service's **API URL** and its **API Key** if required. Enter a model ID or select one using **Fetch Available Models**.
+3. Click **Test Model**. A successful test confirms that the extension can reach the configured model.
 
 ### Using the Extension
 
-1. **Navigate**: Go to a post or video page with comments (e.g., YouTube, Reddit, Bilibili).
-2. **Extract**: Click the extension icon. If a config exists, click "Extract Comments". If not, click "Generate Config" to let AI find selectors.
-3. **Monitor**: Watch the progress bar in the popup.
-4. **Analyze**: Once extracted, click "Analyze Comments" and watch the streamed response progress.
-5. **View**: Click "View History" to see detailed comments, rerun analysis, and export the report.
+1. Open a post or video with comments and click the extension icon.
+2. Select **Extract Comments** when a rule is available. If the popup offers **Generate Config**, generate a rule with your AI service and then run extraction.
+3. After extraction finishes, select **View Comments** to see the saved discussion. With an AI service configured, select **Analyze Comments** to generate a report.
+4. Open **View History** to find saved results. Export comments as CSV, analysis as Markdown, and visual reports as HTML.
 
 ## ⚙️ Configuration
 
-- **AI Model**: Any OpenAI-compatible Chat Completions endpoint (OpenAI, DeepSeek, Kimi, Qwen, OpenRouter, Ollama, vLLM, etc.). Remote URLs require HTTPS; loopback development endpoints may use HTTP.
+- **AI Model.** Configure the endpoint, model ID, context window, and output token limit to match the service you use.
 - **DOM Analysis**: Configure advanced parameters like `initialDepth`, `expandDepth`, and `maxDepth` for complex pages.
 - **Prompts**: Customize labels/placeholders like `{comments_data}`, `{post_content}`, etc.
 - **Developer Mode**: Enable in Settings to see "View AI Logs" and selector testing tools.
@@ -239,7 +217,8 @@ OpenRouter provides access to various AI models, including free options. Here's 
 - `bun run preview`: Preview production build
 - `bun run package`: Build and package for distribution (.zip)
 - `bun run typecheck`: Run TypeScript checks
-- `bun run lint`: Run ESLint
+- `bun run lint`: Run ESLint and verify localization coverage
+- `bun run i18n:check`: Check the eight interface catalogs and Chrome metadata
 - `bun run lint:fix`: Run ESLint with auto-fix
 - `bun run format`: Format code with Prettier
 - `bun run format:check`: Check formatting with Prettier
@@ -251,8 +230,8 @@ OpenRouter provides access to various AI models, including free options. Here's 
 
 ## 🤝 Contributing
 
-Issues and PRs are welcome! Before submitting, run `bun run version:check`, `bun run format:check`, `bun run typecheck`, `bun run lint`, `bun run test:coverage`, and `bun run build`. Run `bun run test:e2e` after the build when a supported local browser is available.
+Report bugs and request features in [GitHub Issues](https://github.com/cyber-tao/comments-insight/issues). Before submitting a code change, run `bun run version:check`, `bun run format:check`, `bun run typecheck`, `bun run lint`, `bun run test:coverage`, and `bun run build`. See the [browser E2E guide](docs/e2e-testing.md) for `bun run test:e2e`.
 
 ## 📝 License
 
-MIT License
+[MIT License](LICENSE)
