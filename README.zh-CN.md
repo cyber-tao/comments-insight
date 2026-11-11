@@ -6,15 +6,15 @@
 
 # 评论洞察 (Comments Insight)
 
-基于 AI 的 Chrome 扩展程序，用于评论提取和洞察分析 ✨
+提取网页中的评论和回复，再用你配置的 AI 服务进行分析。
 
-[English](README.md) | [简体中文](README.zh-CN.md) | [隐私政策](PRIVACY.zh-CN.md)
+[English](README.md) · **简体中文** · [隐私政策](PRIVACY.zh-CN.md)
 
 [![Chrome 网上应用店](https://img.shields.io/badge/Chrome%20网上应用店-安装-blue?logo=googlechrome)](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/) [![React](https://img.shields.io/badge/React-19.2-61dafb)](https://react.dev/) [![Vite](https://img.shields.io/badge/Vite-6.4-646cff)](https://vitejs.dev/) [![CRXJS](https://img.shields.io/badge/CRXJS-2.4-000000)](https://crxjs.dev/vite-plugin/)
 
 </div>
 
-> 从网页中提取评论，使用 AI 进行分析，并生成可操作的、结构化的洞察。
+本文适用于 **v0.10.0**。Chrome 网上应用店页面会显示当前可安装的版本。 [GitHub v0.10.0 发布页](https://github.com/cyber-tao/comments-insight/releases/tag/v0.10.0)
 
 ## 📚 目录
 
@@ -28,12 +28,13 @@
   - [📦 项目结构](#-项目结构)
   - [🚀 快速开始](#-快速开始)
     - [从 Chrome 网上应用店安装](#从-chrome-网上应用店安装)
+    - [从 GitHub 发布页安装](#从-github-发布页安装)
     - [从源码构建](#从源码构建)
   - [🧭 使用方法](#-使用方法)
-    - [使用 OpenRouter 开始（免费选项）](#使用-openrouter-开始免费选项)
+    - [配置 AI 服务](#配置-ai-服务)
     - [使用扩展](#使用扩展)
   - [⚙️ 配置说明](#️-配置说明)
-  - [🧱 技术栈](#-技术栈)
+  - [🧰 技术栈](#-技术栈)
   - [🛠️ 开发命令](#️-开发命令)
   - [🤝 贡献指南](#-贡献指南)
   - [📝 开源协议](#-开源协议)
@@ -49,11 +50,11 @@
 
 <table>
   <tr>
-    <td width="25%">
+    <td width="50%">
       <img src="images/screenshots/popup.jpg" alt="扩展程序弹窗" />
       <p align="center"><em>扩展程序弹窗</em></p>
     </td>
-    <td width="75%">
+    <td width="50%">
       <img src="images/screenshots/analysis.jpg" alt="AI 分析报告" />
       <p align="center"><em>AI 分析报告</em></p>
     </td>
@@ -79,11 +80,7 @@
 
 ## ✨ 核心功能
 
-- 🧲 **智能提取**:
-  - 混合模式：使用"预设配置 + AI 自动检测"实现稳健的选择器匹配。
-  - **自纠错式 AI 规则生成**: 精细的双阶段请求策略（宏观抓取视频信息，微观抓取评论节点），生成 CSS 选择器后会立即在实时 DOM 上进行有效验证，杜绝 AI 幻觉污染配置库。
-  - **智能异步 DOM 加载监听**: 使用 `MutationObserver` 替代固定延时等待，在网络返回与懒加载展开（嵌套回复）完毕的瞬间立即响应。
-  - 细粒度、深层面的实时进度追踪（例如："正在对 AI 生成结果进行重检...", "正在提取 (55/100)"）。
+- 🧲 **评论提取**。使用内置或自定义站点规则收集评论和嵌套回复。AI 辅助生成的规则会先在当前页面验证选择器，再保存。弹窗显示提取进度，来源页面变化时，提取任务会停止。
 - 🧠 **AI 分析**:
   - **大规模并发处理**: 自动对长评论流进行分批处理，支持多达 3 个并发请求，大幅提升分析速度。
   - **流式响应**: 使用 Chat Completions 流式输出，通过响应活动刷新超时计时，并在弹窗和历史记录操作中显示实时接收进度。
@@ -91,7 +88,7 @@
   - **无效输出防护**: 空模型响应会被拒绝并重试，不会再保存为空白的成功报告。
   - 全方位报告：包含情感分布、热门评论、核心议题和互动分析。
   - **动态可视化报告**（默认开启）：通过第二次模型调用生成 HTML 仪表盘，移除脚本、表单、框架、事件处理器和外部 URL 后，在禁止联网的沙箱中渲染静态结果。
-  - 可自定义提示词模板，支持一键恢复默认。
+  - 分析和报告的默认提示词随界面语言切换。两种模板都可以编辑或恢复为默认值。
 - 🧩 **爬虫配置**:
   - 支持按站点全自动生成、编辑、导入/导出爬取配置。
   - 可视化选择器验证与性能缓存。
@@ -100,15 +97,15 @@
   - 使用 IndexedDB 保存历史记录，并通过元数据分页和搜索提升列表浏览性能。
   - 对 AI/系统日志进行敏感信息清洗，并提供本地调试查看工具。
   - 支持搜索、过滤和排序（时间、点赞数、回复数）。
-- 🌐 **多语言支持**: 简体中文、繁体中文、英语、日语、韩语、法语、葡萄牙葡语和西班牙语。
+- 🌐 **多语言支持**。在扩展选项中可选择简体中文、繁体中文、英语、日语、韩语、法语、葡萄牙语（葡萄牙）或西班牙语。
 - 🎨 **主题支持**: 支持亮色、暗色和跟随系统三种主题模式，自动切换。
 - 🛠️ **开发者模式**: 可开启 AI 日志详细视图和选择器测试工具。
 
 ## 🔑 API 密钥安全说明
 
-API 密钥会在扩展本地存储中加密，但密钥材料也保存在同一浏览器配置文件中。这能避免意外明文暴露，但**不足以**抵御恶意软件或其他具有本地访问权限的主体。设置导出永远不会包含 API 密钥；如果导入设置时更换了 API 端点却未提供新密钥，扩展会清除原有密钥。
+API 密钥以加密形式保存在扩展的本地存储中。用于加密的数据也存于同一浏览器配置文件中，能访问该配置文件的人有可能恢复密钥。导出的设置不包含 API 密钥。若导入的设置指定了不同的 API 端点，且未提供新密钥，扩展会清除已保存的密钥。
 
-AI 提取、选择器生成、分析、模型发现和可视化报告会把 API 密钥及相关页面或报告数据直接发送到用户选择的端点。远程端点必须使用 HTTPS，只有回环开发服务可以使用 HTTP。完整数据流说明见[隐私政策](PRIVACY.zh-CN.md)。
+执行 AI 操作时，扩展会将凭证及该操作所需的数据直接发送到你配置的端点。远程端点须使用 HTTPS，本地回环地址上的开发服务可使用 HTTP。扩展会拒绝重定向，请填写最终的 API URL。 [隐私政策](PRIVACY.zh-CN.md)
 
 ## 🧱 架构设计
 
@@ -156,71 +153,52 @@ vitest.config.ts        # 测试配置
 
 **[📦 从 Chrome 网上应用店安装 →](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap)**
 
-访问 Chrome 网上应用店，一键安装扩展程序。
+Comments Insight 需要 Chrome 116 或更高版本。在商店页面点击 **添加至 Chrome**，即可安装商店当前提供的版本。
+
+### 从 GitHub 发布页安装
+
+1. 在 [v0.10.0 发布页](https://github.com/cyber-tao/comments-insight/releases/tag/v0.10.0)下载并解压 `extension.zip`。
+2. 打开 `chrome://extensions`，启用 **开发者模式**。
+3. 点击 **加载已解压的扩展程序**，选择包含 `manifest.json` 的解压目录。将扩展固定到工具栏后，即可从工具栏打开弹窗。
 
 ### 从源码构建
 
-1. **环境准备**: Node.js 20.19+ 或 22.12+、Bun 1.3.11+、Chrome 116+。
-2. **安装依赖**:
-   ```bash
-   bun install
-   ```
-3. **开发环境构建**:
-   ```bash
-   bun run dev
-   ```
-4. **加载到 Chrome**:
-   - 打开 `chrome://extensions`
-   - 启用右上角的 **开发者模式**
-   - 点击 **加载已解压的扩展程序**，选择项目中的 `dist` 目录
-5. **生产构建**:
-   ```bash
-   bun run build
-   ```
+使用 Node.js 20.19 及以上的 20.x 版本，或 Node.js 22.12 及以上版本。项目使用 Bun 1.4.4。
+
+在仓库根目录运行以下命令。
+
+```bash
+bun install --frozen-lockfile
+bun run build
+```
+
+打开 `chrome://extensions` 并启用 **开发者模式**，通过 **加载已解压的扩展程序** 选择 `dist`。开发时可用 `bun run dev` 启动热更新。
 
 ## 🧭 使用方法
 
-### 使用 OpenRouter 开始（免费选项）
+### 配置 AI 服务
 
-OpenRouter 提供多种 AI 模型访问，包括免费选项。以下是配置步骤：
+AI 辅助生成规则、评论分析和可视化报告需要兼容 OpenAI Chat Completions 的 API 端点。
 
-1. **获取 API Key**:
-   - 访问 [OpenRouter](https://openrouter.ai/)
-   - 注册或登录您的账户
-   - 前往 [Keys](https://openrouter.ai/keys) 页面
-   - 点击 "Create API Key" 并复制您的 API key
-
-2. **配置扩展**:
-   - 点击扩展图标并选择"选项"（或右键点击图标 → 选项）
-   - 在 **AI 模型设置** 部分：
-     - **API URL**: 输入 `https://openrouter.ai/api/v1`
-     - **API Key**: 粘贴您的 OpenRouter API key（设置会自动保存）
-     - **模型**: 从下拉列表中选择一个模型
-       - 💡 **提示**: 以 `:free` 结尾的模型完全免费使用（例如 `z-ai/glm-4.5-air:free`、`stepfun/step-3.5-flash:free`）
-       - 在 [OpenRouter 免费模型合集](https://openrouter.ai/collections/free-models) 浏览所有免费模型
-
-3. **验证配置**:
-   - 向下滚动到 **测试 AI 连接** 部分
-   - 点击"测试连接"按钮
-   - 您应该看到确认 API 正常工作的成功消息
-   - 如果看到错误，请仔细检查您的 API key 和 URL
+1. 从工具栏的扩展菜单打开 **选项**，进入 **AI 模型**。
+2. 填入服务的 **API URL**。如果服务要求认证，再填入 **API密钥**。输入模型 ID，或点击 **获取可用模型** 后选择模型。
+3. 点击 **测试模型**。测试成功表示扩展可以调用已配置的模型。
 
 ### 使用扩展
 
-1. **访问页面**: 前往包含评论的帖子或视频页面（如 YouTube、Reddit、Bilibili）。
-2. **开始提取**: 点击扩展图标。如果已有配置，点击"提取评论"；否则点击"生成配置"让 AI 协助定位。
-3. **进度监控**: 在弹窗中实时查看提取进度。
-4. **洞察分析**: 提取完成后，点击"分析评论"生成深度报告，并实时查看流式响应进度。
-5. **查看详情**: 进入"历史记录"查看详细评论数据、重新分析并导出 AI 分析结果。
+1. 打开有评论的帖子或视频，点击扩展图标。
+2. 已有站点规则时，点击 **提取评论**。如果弹窗显示 **生成配置**，可先用你配置的 AI 服务生成规则，再提取评论。
+3. 提取完成后，点击 **查看评论** 浏览保存的讨论。配置了 AI 服务后，可点击 **分析评论** 生成报告。
+4. 打开 **历史记录** 查找保存的结果。评论可导出为 CSV，分析结果可导出为 Markdown，可视化报告可导出为 HTML。
 
 ## ⚙️ 配置说明
 
-- **AI 模型**: 支持任意 OpenAI 兼容的 Chat Completions 端点（OpenAI、DeepSeek、Kimi、Qwen、OpenRouter、Ollama、vLLM 等）。远程 URL 必须使用 HTTPS，回环开发端点可以使用 HTTP。
-- **DOM 分析**: 针对复杂页面，支持配置 `initialDepth` (初始深度), `expandDepth` (展开深度) 等高级参数。
+- **AI 模型**。根据所用服务配置端点、模型 ID、上下文长度和输出 Token 上限。
+- **DOM 分析**。针对复杂页面，可配置 `initialDepth`、`expandDepth` 和 `maxDepth` 等高级参数。
 - **提示词**: 可通过 `{comments_data}`, `{post_content}` 等占位符自定义分析逻辑。
 - **开发者模式**: 开启后可在弹窗中查看“AI 日志”和选择器测试工具。
 
-## 🧱 技术栈
+## 🧰 技术栈
 
 - **框架**: React 19.2, Vite 6.4
 - **语言**: TypeScript 5.9（严格模式）
@@ -239,7 +217,8 @@ OpenRouter 提供多种 AI 模型访问，包括免费选项。以下是配置�
 - `bun run preview`: 预览生产构建
 - `bun run package`: 构建并打包发布（生成 .zip）
 - `bun run typecheck`: 执行 TypeScript 类型检查
-- `bun run lint`: 执行代码检查
+- `bun run lint` 运行 ESLint 并检查本地化覆盖情况。
+- `bun run i18n:check` 检查八套界面翻译和 Chrome 扩展元数据。
 - `bun run lint:fix`: 执行代码检查并自动修复
 - `bun run format`: 使用 Prettier 格式化代码
 - `bun run format:check`: 使用 Prettier 检查格式
@@ -251,8 +230,8 @@ OpenRouter 提供多种 AI 模型访问，包括免费选项。以下是配置�
 
 ## 🤝 贡献指南
 
-欢迎提交 Issue 和 PR！提交前请运行 `bun run version:check`、`bun run format:check`、`bun run typecheck`、`bun run lint`、`bun run test:coverage` 和 `bun run build`；本地有受支持的浏览器时，再在构建后运行 `bun run test:e2e`。
+欢迎在 [GitHub Issues](https://github.com/cyber-tao/comments-insight/issues)反馈问题或提出功能建议。提交代码变更前，请运行 `bun run version:check`、`bun run format:check`、`bun run typecheck`、`bun run lint`、`bun run test:coverage` 和 `bun run build`。运行 `bun run test:e2e` 的方法见[浏览器端到端测试指南（英文）](docs/e2e-testing.md)。
 
 ## 📝 开源协议
 
-MIT License
+[MIT 许可证](LICENSE)
