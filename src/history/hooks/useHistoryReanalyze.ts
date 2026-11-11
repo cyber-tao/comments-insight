@@ -11,6 +11,11 @@ interface UseHistoryReanalyzeOptions {
   setSelectedItem: React.Dispatch<React.SetStateAction<HistoryItem | null>>;
 }
 
+interface HistoryTaskError {
+  historyId: string;
+  message: string;
+}
+
 export function useHistoryReanalyze({
   selectedItem,
   fetchHistoryItemById,
@@ -24,7 +29,8 @@ export function useHistoryReanalyze({
     null,
   );
   const [reanalyzeMessage, setReanalyzeMessage] = useState<string | null>(null);
-  const [reanalyzeError, setReanalyzeError] = useState('');
+  const [reanalyzeError, setReanalyzeError] = useState<HistoryTaskError | null>(null);
+  const [generateDynamicError, setGenerateDynamicError] = useState<HistoryTaskError | null>(null);
   const [isReanalyzing, setIsReanalyzing] = useState(false);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isUnmountedRef = useRef(false);
@@ -45,10 +51,6 @@ export function useHistoryReanalyze({
     setReanalyzeMessage(null);
   }, []);
 
-  const clearReanalyzeError = useCallback(() => {
-    setReanalyzeError('');
-  }, []);
-
   useEffect(() => {
     isUnmountedRef.current = false;
     return () => {
@@ -58,9 +60,12 @@ export function useHistoryReanalyze({
   }, [clearPollTimeout]);
 
   const monitorReanalyzeTask = useCallback(
-    (taskId: string, historyId: string) => {
+    (taskId: string, historyId: string, kind: 'analysis' | 'dynamic') => {
       clearPollTimeout();
 
+      const setTaskError = kind === 'dynamic' ? setGenerateDynamicError : setReanalyzeError;
+      const failureKey =
+        kind === 'dynamic' ? 'history.generateDynamicFailed' : 'history.reanalyzeFailed';
       let consecutiveErrors = 0;
       const pollTaskStatus = async () => {
         if (isUnmountedRef.current) {
@@ -69,12 +74,15 @@ export function useHistoryReanalyze({
 
         try {
           const task = await ExtensionAPI.getTaskStatus(taskId);
-          consecutiveErrors = 0;
+          if (isUnmountedRef.current) {
+            return;
+          }
           if (!task) {
             throw new Error(t('history.reanalyzeTaskMissing'));
           }
 
           if (task.status === 'running' || task.status === 'pending') {
+            consecutiveErrors = 0;
             setReanalyzeProgress(typeof task.progress === 'number' ? task.progress : 0);
             setReanalyzeDetailedProgress(task.detailedProgress ?? null);
             setReanalyzeMessage(task.message || task.error || null);
@@ -95,7 +103,7 @@ export function useHistoryReanalyze({
             return;
           }
 
-          setReanalyzeError(task.error || t('history.reanalyzeFailed'));
+          setTaskError({ historyId, message: task.error || t(failureKey) });
           resetReanalyzeState();
           clearPollTimeout();
         } catch (error) {
@@ -109,9 +117,10 @@ export function useHistoryReanalyze({
             return;
           }
           if (!isUnmountedRef.current) {
-            setReanalyzeError(
-              error instanceof Error ? error.message : t('history.reanalyzeFailed'),
-            );
+            setTaskError({
+              historyId,
+              message: error instanceof Error ? error.message : t(failureKey),
+            });
             resetReanalyzeState();
           }
           clearPollTimeout();
@@ -128,7 +137,7 @@ export function useHistoryReanalyze({
       return;
     }
 
-    setReanalyzeError('');
+    setReanalyzeError(null);
     setIsReanalyzing(true);
     setReanalyzeProgress(0);
     setReanalyzeDetailedProgress(null);
@@ -153,23 +162,25 @@ export function useHistoryReanalyze({
       }
 
       setReanalyzeTaskId(response.taskId);
-      monitorReanalyzeTask(response.taskId, selectedItem.id);
+      monitorReanalyzeTask(response.taskId, selectedItem.id, 'analysis');
     } catch (error) {
       Logger.error('[History] Failed to start reanalyze', { error });
-      setReanalyzeError(error instanceof Error ? error.message : t('history.reanalyzeFailed'));
+      setReanalyzeError({
+        historyId: selectedItem.id,
+        message: error instanceof Error ? error.message : t('history.reanalyzeFailed'),
+      });
       resetReanalyzeState();
     }
   }, [isReanalyzing, monitorReanalyzeTask, resetReanalyzeState, selectedItem, t]);
 
   const [isGeneratingDynamic, setIsGeneratingDynamic] = useState(false);
-  const [generateDynamicError, setGenerateDynamicError] = useState('');
 
   const handleGenerateDynamicReport = useCallback(async () => {
     if (!selectedItem || isGeneratingDynamic || isReanalyzing) {
       return;
     }
 
-    setGenerateDynamicError('');
+    setGenerateDynamicError(null);
     setIsGeneratingDynamic(true);
 
     try {
@@ -181,15 +192,19 @@ export function useHistoryReanalyze({
         setReanalyzeMessage(null);
         setReanalyzingHistoryId(selectedItem.id);
         setReanalyzeTaskId(response.taskId);
-        monitorReanalyzeTask(response.taskId, selectedItem.id);
+        monitorReanalyzeTask(response.taskId, selectedItem.id, 'dynamic');
       } else {
-        setGenerateDynamicError(response.error || t('history.generateDynamicFailed'));
+        setGenerateDynamicError({
+          historyId: selectedItem.id,
+          message: response.error || t('history.generateDynamicFailed'),
+        });
       }
     } catch (error) {
       Logger.error('[History] Failed to generate dynamic report', { error });
-      setGenerateDynamicError(
-        error instanceof Error ? error.message : t('history.generateDynamicFailed'),
-      );
+      setGenerateDynamicError({
+        historyId: selectedItem.id,
+        message: error instanceof Error ? error.message : t('history.generateDynamicFailed'),
+      });
     } finally {
       if (!isUnmountedRef.current) {
         setIsGeneratingDynamic(false);
@@ -198,17 +213,20 @@ export function useHistoryReanalyze({
   }, [isGeneratingDynamic, isReanalyzing, monitorReanalyzeTask, selectedItem, t]);
 
   return {
-    clearReanalyzeError,
     handleReanalyze,
     isReanalyzing,
-    reanalyzeError,
+    reanalyzeError:
+      reanalyzeError && reanalyzeError.historyId === selectedItem?.id ? reanalyzeError.message : '',
     reanalyzeDetailedProgress,
     reanalyzeMessage,
     reanalyzeProgress,
     reanalyzeTaskId,
     reanalyzingHistoryId,
     isGeneratingDynamic,
-    generateDynamicError,
+    generateDynamicError:
+      generateDynamicError && generateDynamicError.historyId === selectedItem?.id
+        ? generateDynamicError.message
+        : '',
     handleGenerateDynamicReport,
   };
 }

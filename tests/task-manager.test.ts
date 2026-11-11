@@ -1,15 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TaskManager } from '../src/background/TaskManager';
-import { AI, STORAGE, TASK } from '../src/config/constants';
+import { AI, STORAGE, TASK, TIMING } from '../src/config/constants';
 import { ErrorCode, ExtensionError } from '../src/utils/error-types';
 
 const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+const mockGetPlatformInfo = vi.fn().mockResolvedValue({});
 const mockStorageGet = vi.fn().mockResolvedValue({});
 const mockStorageSet = vi.fn().mockResolvedValue(undefined);
 
 vi.stubGlobal('chrome', {
   runtime: {
     sendMessage: mockSendMessage,
+    getPlatformInfo: mockGetPlatformInfo,
   },
   storage: {
     local: {
@@ -60,12 +62,17 @@ describe('TaskManager', () => {
 
     it('should mark persisted running and pending tasks as interrupted', async () => {
       const now = Date.now();
+      let finishSave!: () => void;
+      const save = new Promise<void>((resolve) => {
+        finishSave = resolve;
+      });
+      mockStorageSet.mockReturnValueOnce(save);
       mockStorageGet.mockResolvedValue({
         [STORAGE.TASK_STATE_KEY]: {
           tasks: [
             {
               id: 'task_running',
-              type: 'extract',
+              type: 'analyze',
               status: 'running',
               url: 'https://example.com/a',
               platform: 'Generic',
@@ -81,7 +88,7 @@ describe('TaskManager', () => {
             },
             {
               id: 'task_pending',
-              type: 'analyze',
+              type: 'extract',
               status: 'pending',
               url: 'https://example.com/b',
               platform: 'Generic',
@@ -99,7 +106,11 @@ describe('TaskManager', () => {
       const persistentTaskManager = new TaskManager(mockNotificationService as any, {
         enablePersistence: true,
       });
-      await persistentTaskManager.initialize();
+      const initialized = persistentTaskManager.initialize();
+      await vi.waitFor(() => expect(mockStorageSet).toHaveBeenCalledOnce());
+      expect(mockNotificationService.showTaskFailed).not.toHaveBeenCalled();
+      finishSave();
+      await initialized;
 
       const runningTask = persistentTaskManager.getTask('task_running');
       const pendingTask = persistentTaskManager.getTask('task_pending');
@@ -112,6 +123,13 @@ describe('TaskManager', () => {
 
       expect(pendingTask?.status).toBe('failed');
       expect(pendingTask?.error).toBeTruthy();
+      expect(mockNotificationService.showTaskFailed).toHaveBeenCalledExactlyOnceWith(
+        'analyze',
+        runningTask?.error,
+      );
+      expect(mockSendMessage).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ payload: runningTask }),
+      );
 
       expect(mockStorageSet).toHaveBeenCalledWith({
         [STORAGE.TASK_STATE_KEY]: expect.objectContaining({
@@ -119,6 +137,10 @@ describe('TaskManager', () => {
           currentTaskId: null,
         }),
       });
+
+      mockStorageGet.mockResolvedValue(mockStorageSet.mock.lastCall?.[0]);
+      await persistentTaskManager.initialize();
+      expect(mockNotificationService.showTaskFailed).toHaveBeenCalledOnce();
     });
 
     it('should allow interrupted task to be recovered for late completion', async () => {
@@ -611,6 +633,53 @@ describe('TaskManager', () => {
   });
 
   describe('setExecutor', () => {
+    it.each([
+      ['analyze', 'complete', 1],
+      ['analyze', 'fail', 1],
+      ['analyze', 'cancel', 1],
+      ['extract', 'complete', 0],
+      ['config', 'complete', 0],
+    ] as const)(
+      'only keeps the worker alive for running %s tasks (%s)',
+      async (type, outcome, calls) => {
+        vi.useFakeTimers();
+        let finishWork!: () => void;
+        const work = new Promise<void>((resolve) => {
+          finishWork = resolve;
+        });
+        try {
+          const taskId = taskManager.createTask(type, 'https://example.com', 'Generic');
+          taskManager.setExecutor(taskId, async () => {
+            await work;
+            if (outcome === 'fail') {
+              throw new Error('Analysis failed');
+            }
+            return {};
+          });
+
+          await vi.advanceTimersByTimeAsync(TIMING.ANALYSIS_WORKER_KEEPALIVE_MS);
+          expect(taskManager.getTask(taskId)?.status).toBe('running');
+          expect(mockGetPlatformInfo).toHaveBeenCalledTimes(calls);
+
+          if (outcome === 'cancel') {
+            taskManager.cancelTask(taskId);
+          } else {
+            finishWork();
+          }
+
+          await vi.advanceTimersByTimeAsync(TIMING.ANALYSIS_WORKER_KEEPALIVE_MS);
+          expect(mockGetPlatformInfo).toHaveBeenCalledTimes(calls);
+          expect(taskManager.getTask(taskId)?.status).toBe(
+            outcome === 'complete' ? 'completed' : 'failed',
+          );
+        } finally {
+          finishWork();
+          await vi.advanceTimersByTimeAsync(0);
+          vi.useRealTimers();
+        }
+      },
+    );
+
     it('logs the extraction timeout in the task failure line', async ({ onTestFinished }) => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       onTestFinished(() => {
@@ -744,16 +813,32 @@ describe('TaskManager', () => {
       const task = taskManager.getTask(taskId);
       expect(task?.status).toBe('failed');
       expect(task?.error).toBeDefined();
+      expect(task?.cancelledByUser).toBe(true);
     });
 
-    it('should cancel running task', async () => {
-      const taskId = taskManager.createTask('extract', 'https://example.com', 'Generic');
-      await taskManager.startTask(taskId);
+    it('should persist cancellation of a running task', async () => {
+      const persistentTaskManager = new TaskManager(mockNotificationService as any, {
+        enablePersistence: true,
+      });
+      const taskId = persistentTaskManager.createTask('analyze', 'https://example.com', 'Generic');
+      await persistentTaskManager.startTask(taskId);
 
-      taskManager.cancelTask(taskId);
+      persistentTaskManager.cancelTask(taskId);
 
-      const task = taskManager.getTask(taskId);
-      expect(task?.status).toBe('failed');
+      const cancelledTask = expect.objectContaining({
+        id: taskId,
+        status: 'failed',
+        cancelledByUser: true,
+      });
+      await vi.waitFor(() =>
+        expect(mockStorageSet).toHaveBeenLastCalledWith({
+          [STORAGE.TASK_STATE_KEY]: expect.objectContaining({ tasks: [cancelledTask] }),
+        }),
+      );
+      mockStorageGet.mockResolvedValue(mockStorageSet.mock.lastCall?.[0]);
+      await persistentTaskManager.initialize();
+      expect(persistentTaskManager.getTask(taskId)).toEqual(cancelledTask);
+      expect(mockNotificationService.showTaskFailed).not.toHaveBeenCalled();
     });
 
     it('should retain only the configured number of cancelled tasks', () => {

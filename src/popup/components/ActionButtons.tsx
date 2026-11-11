@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { UI_LIMITS } from '@/config/constants';
+import { NOTIFICATION_KEYS, UI_LIMITS } from '@/config/constants';
 import { formatTaskProgressMessage } from '@/utils/task-progress-display';
 import { NavigationService } from '../utils/navigation';
 import type { PageInfo, PageStatus } from '../hooks/usePageInfo';
@@ -68,6 +68,17 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
         Math.max(UI_LIMITS.PROGRESS_MIN_PERCENT, currentTask.progress),
       )
     : UI_LIMITS.PROGRESS_MIN_PERCENT;
+
+  let analysisError: string | undefined;
+  if (currentTask?.type === 'analyze') {
+    if (currentTask.status === 'failed') {
+      analysisError = t(NOTIFICATION_KEYS.ANALYSIS_FAILED, {
+        error: currentTask.message || t('errors.unknownError'),
+      });
+    } else if (currentTask.status === 'unavailable') {
+      analysisError = currentTask.message;
+    }
+  }
 
   const renderProgressBar = (className: string) => (
     <span
@@ -264,6 +275,16 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
           </button>
         )}
       </div>
+
+      {analysisError && (
+        <div
+          role="alert"
+          className="break-words rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm"
+          style={{ color: 'var(--accent-danger-hover)' }}
+        >
+          {analysisError}
+        </div>
+      )}
 
       {/* View History button */}
       <button

@@ -80,6 +80,7 @@ export interface Task {
   message?: string;
   /** Marks a task that was mid-flight when the service worker restarted */
   interruptedByRestart?: boolean;
+  cancelledByUser?: boolean;
   /** Detailed progress information for enhanced UI feedback */
   detailedProgress?: TaskProgress;
 }

@@ -4,10 +4,11 @@
 
 import { renderHook, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TIMING } from '../src/config/constants';
+import { ERROR_KEYS, RETRY, TIMING } from '../src/config/constants';
 import { useTask } from '../src/popup/hooks/useTask';
 import { usePageInfo } from '../src/popup/hooks/usePageInfo';
 import type { Comment, HistoryItem, Task } from '../src/types';
+import i18n from '../src/utils/i18n';
 
 const TAB_ID = 7;
 const PAGE_URL = 'https://www.youtube.com/watch?v=abc123';
@@ -199,6 +200,123 @@ describe('popup hooks', () => {
     expect(result.current.currentTask).toMatchObject({ status: 'running', progress: 35 });
   });
 
+  it('useTask keeps an analysis failure visible with its error after polling finishes', async () => {
+    vi.useFakeTimers();
+    extensionApiMock.getTaskStatus
+      .mockResolvedValueOnce(createTask({ type: 'analyze', status: 'running', progress: 70 }))
+      .mockResolvedValueOnce(
+        createTask({
+          type: 'analyze',
+          status: 'failed',
+          message: 'Receiving response',
+          error: 'Failed to save analysis history',
+        }),
+      );
+
+    const { result } = renderHook(() => useTask());
+    await act(async () => {
+      await result.current.startAnalysis(HISTORY_ID, createComments(), { url: PAGE_URL });
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMING.POLL_TASK_RUNNING_MS + TIMING.CLEAR_TASK_FAILED_MS);
+    });
+
+    expect(result.current.currentTask).toMatchObject({
+      type: 'analyze',
+      status: 'failed',
+      message: 'Failed to save analysis history',
+    });
+    expect(extensionApiMock.getTaskStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('useTask restores the latest failed analysis for the current page on reopen', async () => {
+    extensionApiMock.getTasks.mockResolvedValue([
+      createTask({
+        id: 'recent-failure',
+        type: 'analyze',
+        status: 'failed',
+        startTime: 2,
+        error: 'Failed to save analysis history',
+      }),
+      createTask({ id: 'old-success', type: 'analyze', status: 'completed', startTime: 1 }),
+      createTask({
+        id: 'unrelated-analysis',
+        type: 'analyze',
+        status: 'failed',
+        url: 'https://example.com/other',
+        startTime: 3,
+      }),
+    ]);
+    const { result } = renderHook(() => useTask());
+
+    await act(async () => {
+      await result.current.loadCurrentTask(PAGE_URL, TAB_ID);
+    });
+
+    expect(result.current.currentTask).toMatchObject({
+      id: 'recent-failure',
+      status: 'failed',
+      message: 'Failed to save analysis history',
+    });
+    expect(extensionApiMock.getTaskStatus).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { status: 'completed' },
+    { status: 'failed', cancelledByUser: true },
+    { status: 'failed', error: i18n.t(ERROR_KEYS.TASK_CANCELLED_BY_USER, { lng: 'zh-CN' }) },
+  ] satisfies Partial<Task>[])(
+    'useTask skips older failures if a later analysis succeeded or was cancelled (%j)',
+    async (latestOutcome) => {
+      extensionApiMock.getTasks.mockResolvedValue([
+        createTask({ id: 'old-failure', type: 'analyze', status: 'failed', startTime: 1 }),
+        createTask({ id: 'latest-analysis', type: 'analyze', startTime: 2, ...latestOutcome }),
+      ]);
+      const { result } = renderHook(() => useTask());
+
+      await act(async () => {
+        await result.current.loadCurrentTask(PAGE_URL, TAB_ID);
+      });
+
+      expect(result.current.currentTask).toBeNull();
+    },
+  );
+
+  it('useTask shows an unavailable status when a tracked analysis goes missing', async () => {
+    const { result } = renderHook(() => useTask());
+
+    await act(async () => {
+      await result.current.startAnalysis(HISTORY_ID, createComments(), { url: PAGE_URL });
+    });
+
+    expect(result.current.currentTask).toMatchObject({
+      type: 'analyze',
+      status: 'unavailable',
+      message: i18n.t('errors.taskNotFound'),
+    });
+  });
+
+  it('useTask shows an unavailable status when analysis polling exhausts retries', async () => {
+    vi.useFakeTimers();
+    extensionApiMock.getTaskStatus.mockRejectedValue(new Error('Service worker unavailable'));
+    const { result } = renderHook(() => useTask());
+
+    await act(async () => {
+      await result.current.startAnalysis(HISTORY_ID, createComments(), { url: PAGE_URL });
+    });
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(extensionApiMock.getTaskStatus).toHaveBeenCalledTimes(RETRY.MAX_ATTEMPTS);
+    expect(result.current.currentTask).toMatchObject({
+      type: 'analyze',
+      status: 'unavailable',
+      message: 'Service worker unavailable',
+    });
+  });
+
   it('useTask matches current task by tab id when multiple tabs share the same url', async () => {
     extensionApiMock.getTasks.mockResolvedValue([
       createTask({
@@ -291,11 +409,14 @@ describe('popup hooks', () => {
   });
 
   it('useTask starts analysis and delegates cancellation', async () => {
+    vi.useFakeTimers();
     const comments = createComments();
     const metadata = { url: PAGE_URL, platform: 'youtube', title: PAGE_TITLE };
-    extensionApiMock.getTaskStatus.mockResolvedValue(
-      createTask({ id: TASK_ID, type: 'analyze', status: 'pending', progress: 0 }),
-    );
+    extensionApiMock.getTaskStatus
+      .mockResolvedValueOnce(createTask({ type: 'analyze', status: 'pending', progress: 0 }))
+      .mockResolvedValueOnce(
+        createTask({ type: 'analyze', status: 'failed', cancelledByUser: true }),
+      );
 
     const { result } = renderHook(() => useTask());
 
@@ -316,6 +437,12 @@ describe('popup hooks', () => {
     });
 
     expect(extensionApiMock.cancelTask).toHaveBeenCalledWith(TASK_ID);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMING.POLL_TASK_RUNNING_MS);
+    });
+
+    expect(result.current.currentTask).toBeNull();
   });
 
   it('usePageInfo loads page info and preserves config status in page state', async () => {

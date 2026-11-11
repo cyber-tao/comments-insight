@@ -186,7 +186,6 @@ describe('History page', () => {
       setSelectedItem: vi.fn(),
     });
     useHistoryReanalyzeMock.mockReturnValue({
-      clearReanalyzeError: vi.fn(),
       handleReanalyze: vi.fn(),
       isReanalyzing: false,
       reanalyzeError: null,

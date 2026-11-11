@@ -6,7 +6,7 @@ import {
 } from '@/background/handlers/analysis';
 import { HandlerContext } from '@/background/handlers/types';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
-import { ANALYSIS_FORMAT } from '@/config/constants';
+import { ANALYSIS_FORMAT, TIMEOUT } from '@/config/constants';
 import type { HistoryItem, Task } from '@/types';
 
 vi.mock('@/utils/logger', () => ({
@@ -45,9 +45,13 @@ function createMockContext(overrides: Partial<HandlerContext> = {}): HandlerCont
     },
     commentAnalyzer: {
       analyzeComments: vi.fn().mockResolvedValue({
-        report: 'Analysis Report',
+        markdown: '# Analysis Report',
+        generatedAt: 2000,
         tokensUsed: 50,
       }),
+      generateDynamicHtml: vi
+        .fn()
+        .mockResolvedValue({ html: '<main>Report</main>', tokensUsed: 7 }),
     },
     aiService: {
       callAI: vi.fn().mockResolvedValue({
@@ -145,6 +149,7 @@ describe('analysis handlers', () => {
       });
       const localContext = createMockContext({
         commentAnalyzer: {
+          ...context.commentAnalyzer,
           analyzeComments,
         },
       } as unknown as Partial<HandlerContext>);
@@ -207,6 +212,121 @@ describe('analysis handlers', () => {
       );
       expect(localContext.historyStore.updateHistory).not.toHaveBeenCalled();
     });
+
+    it.each(['create', 'update'] as const)(
+      'saves the Markdown before generating HTML and attaches HTML to the same record (%s)',
+      async (operation) => {
+        const history: HistoryItem = {
+          id: 'history-analysis',
+          url: 'https://example.com/post',
+          title: 'Post',
+          platform: 'example.com',
+          extractedAt: 1000,
+          commentsCount: 0,
+          comments: [],
+        };
+        const task: Task = {
+          id: 'task_analysis_123',
+          type: 'analyze',
+          status: 'running',
+          url: history.url,
+          platform: history.platform,
+          progress: 0,
+          startTime: Date.now(),
+          tokensUsed: 0,
+        };
+        vi.mocked(context.historyStore.getHistoryItem).mockResolvedValue(history);
+        const writeHistory = vi.mocked(
+          operation === 'create'
+            ? context.historyStore.createHistory
+            : context.historyStore.updateHistory,
+        );
+        await handleStartAnalysis(
+          {
+            type: 'START_ANALYSIS',
+            payload: { comments: [], historyId: operation === 'update' ? history.id : undefined },
+          },
+          context,
+        );
+        const executor = vi.mocked(context.taskManager.setExecutor).mock.calls[0][1];
+        await expect(executor(task, new AbortController().signal)).resolves.toMatchObject({
+          tokensUsed: 57,
+        });
+
+        expect(writeHistory).toHaveBeenCalledBefore(
+          vi.mocked(context.commentAnalyzer.generateDynamicHtml),
+        );
+        const [saved] = writeHistory.mock.calls[0];
+        expect(saved.analysis).toEqual({
+          markdown: '# Analysis Report',
+          generatedAt: 2000,
+          tokensUsed: 50,
+        });
+        expect(context.historyStore.updateDynamicReport).toHaveBeenCalledWith(
+          saved.id,
+          saved.analysis,
+          { html: '<main>Report</main>', tokensUsed: 7 },
+          expect.any(AbortSignal),
+        );
+      },
+    );
+
+    it.each(['timeout', 'cancel'] as const)(
+      'preserves saved Markdown when optional HTML generation is interrupted by %s',
+      async (interruption) => {
+        vi.useFakeTimers();
+        const controller = new AbortController();
+        try {
+          let startGenerating!: () => void;
+          const generating = new Promise<void>((resolve) => {
+            startGenerating = resolve;
+          });
+          vi.mocked(context.commentAnalyzer.generateDynamicHtml).mockImplementation(
+            (_markdown, _model, _prompt, _language, _metadata, _count, signal) =>
+              new Promise((_resolve, reject) => {
+                signal!.addEventListener('abort', () => reject(signal!.reason), { once: true });
+                startGenerating();
+              }),
+          );
+          await handleStartAnalysis({ type: 'START_ANALYSIS', payload: { comments: [] } }, context);
+          const executor = vi.mocked(context.taskManager.setExecutor).mock.calls[0][1];
+          const running = executor(
+            {
+              id: 'task_analysis_123',
+              type: 'analyze',
+              status: 'running',
+              url: 'https://example.com/post',
+              platform: 'example.com',
+              progress: 0,
+              startTime: Date.now(),
+              tokensUsed: 0,
+            },
+            controller.signal,
+          );
+          const result =
+            interruption === 'timeout'
+              ? expect(running).resolves.toMatchObject({ tokensUsed: 50 })
+              : expect(running).rejects.toMatchObject({ name: 'AbortError' });
+          await generating;
+          expect(context.historyStore.createHistory).toHaveBeenCalledWith(
+            expect.objectContaining({
+              analysis: expect.objectContaining({ markdown: '# Analysis Report' }),
+            }),
+            expect.any(AbortSignal),
+          );
+          if (interruption === 'timeout') {
+            await vi.advanceTimersByTimeAsync(TIMEOUT.ANALYSIS_TASK_COMPLETION_MS);
+          } else {
+            controller.abort();
+          }
+          await result;
+          expect(context.historyStore.updateDynamicReport).not.toHaveBeenCalled();
+        } finally {
+          controller.abort();
+          vi.useRealTimers();
+        }
+      },
+    );
 
     it('does not mutate or save reanalysis cancelled while re-reading the history target', async () => {
       const original: HistoryItem = {

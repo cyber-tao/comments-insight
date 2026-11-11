@@ -168,6 +168,19 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
   const activeReanalyzeTitle = reanalyzeTaskId
     ? `${reanalyzeProgressMessage} #${reanalyzeTaskId}`
     : reanalyzeProgressMessage;
+  const dynamicErrorAlert = generateDynamicError ? (
+    <div
+      role="alert"
+      className="mb-4 p-3 rounded-lg text-sm"
+      style={{
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        color: 'var(--accent-danger)',
+        border: '1px solid rgba(239, 68, 68, 0.25)',
+      }}
+    >
+      {generateDynamicError}
+    </div>
+  ) : null;
 
   if (isFullscreen && viewMode === 'dynamic' && hasDynamicHtml) {
     return (
@@ -231,6 +244,8 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
             </button>
           </div>
         </div>
+
+        {dynamicErrorAlert}
 
         <div className="flex-1 w-full h-full overflow-hidden">
           <DynamicReportViewer
@@ -395,6 +410,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
             {reanalyzeError &&
               (!reanalyzingHistoryId || reanalyzingHistoryId === selectedItem.id) && (
                 <div
+                  role="alert"
                   className="mb-4 p-3 rounded-lg text-sm"
                   style={{
                     backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -486,18 +502,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
               </div>
             </div>
 
-            {generateDynamicError && (
-              <div
-                className="mb-4 p-3 rounded-lg text-sm"
-                style={{
-                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                  color: 'var(--accent-danger)',
-                  border: '1px solid rgba(239, 68, 68, 0.25)',
-                }}
-              >
-                {generateDynamicError}
-              </div>
-            )}
+            {dynamicErrorAlert}
 
             {hasDynamicHtml ? (
               <div

@@ -1,13 +1,14 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { RETRY, TIMING } from '@/config/constants';
+import { ERROR_KEYS, LANGUAGES, RETRY, TIMING } from '@/config/constants';
 import { Comment, Task, TaskProgress } from '@/types';
 import { Logger } from '@/utils/logger';
 import { ExtensionAPI } from '@/utils/extension-api';
+import i18n from '@/utils/i18n';
 
 export interface CurrentTask {
   id: string;
-  type: 'extract' | 'analyze' | 'config';
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  type: Task['type'];
+  status: Task['status'] | 'unavailable';
   progress: number;
   message?: string;
   detailedProgress?: TaskProgress;
@@ -18,6 +19,32 @@ interface UseTaskOptions {
   onStatusRefresh?: () => Promise<void>;
 }
 
+const hasActiveTask = (task: Pick<CurrentTask, 'status'> | null): boolean =>
+  task?.status === 'running' || task?.status === 'pending';
+
+function toCurrentTask(task: Task): CurrentTask {
+  return {
+    id: task.id,
+    type: task.type,
+    status: task.status,
+    progress: task.progress,
+    message: task.status === 'failed' ? task.error || task.message : task.message || task.error,
+    detailedProgress: task.detailedProgress,
+  };
+}
+
+function isCancelledAnalysis(task: Task): boolean {
+  return (
+    task.type === 'analyze' &&
+    task.status === 'failed' &&
+    (task.cancelledByUser === true ||
+      task.error === ERROR_KEYS.TASK_CANCELLED_BY_USER ||
+      LANGUAGES.SUPPORTED.some(
+        ({ code }) => task.error === i18n.t(ERROR_KEYS.TASK_CANCELLED_BY_USER, { lng: code }),
+      ))
+  );
+}
+
 export function useTask(options: UseTaskOptions = {}) {
   const { onTaskComplete, onStatusRefresh } = options;
   const [currentTask, setCurrentTask] = useState<CurrentTask | null>(null);
@@ -25,8 +52,6 @@ export function useTask(options: UseTaskOptions = {}) {
   const monitorGenerationRef = useRef(0);
   const isUnmountedRef = useRef(false);
   const isStartingRef = useRef(false);
-  const hasActiveTask = (task: CurrentTask | null): boolean =>
-    task !== null && (task.status === 'running' || task.status === 'pending');
 
   useEffect(() => {
     isUnmountedRef.current = false;
@@ -40,69 +65,66 @@ export function useTask(options: UseTaskOptions = {}) {
   }, []);
 
   const monitorTask = useCallback(
-    async (taskId: string) => {
+    (taskId: string, type: Task['type']) => {
       monitorGenerationRef.current += 1;
       const currentGeneration = monitorGenerationRef.current;
+      const isCurrentMonitor = () =>
+        !isUnmountedRef.current && monitorGenerationRef.current === currentGeneration;
 
       if (monitorTimeoutRef.current) {
         clearTimeout(monitorTimeoutRef.current);
         monitorTimeoutRef.current = null;
       }
 
+      const clearTaskAfter = (delay: number) => {
+        monitorTimeoutRef.current = setTimeout(() => {
+          if (isCurrentMonitor()) setCurrentTask(null);
+        }, delay);
+      };
+
       let consecutiveErrors = 0;
       const checkStatus = async () => {
-        if (isUnmountedRef.current || monitorGenerationRef.current !== currentGeneration) return;
+        if (!isCurrentMonitor()) return;
 
         try {
           const task = await ExtensionAPI.getTaskStatus(taskId);
 
-          if (isUnmountedRef.current || monitorGenerationRef.current !== currentGeneration) return;
+          if (!isCurrentMonitor()) return;
           consecutiveErrors = 0;
 
           if (!task) {
             Logger.warn('[useTask] Task status returned empty result', { taskId });
+            setCurrentTask((current) =>
+              current?.id === taskId && type === 'analyze'
+                ? { ...current, status: 'unavailable', message: i18n.t('errors.taskNotFound') }
+                : null,
+            );
+            return;
+          }
+
+          if (isCancelledAnalysis(task)) {
             setCurrentTask(null);
             return;
           }
 
-          const updatedTask: CurrentTask = {
-            id: task.id,
-            type: task.type,
-            status: task.status,
-            progress: task.progress,
-            message: task.message || task.error,
-            detailedProgress: task.detailedProgress,
-          };
-          if (isUnmountedRef.current || monitorGenerationRef.current !== currentGeneration) {
-            return;
-          }
+          const updatedTask = toCurrentTask(task);
           setCurrentTask(updatedTask);
 
-          if (task.status === 'running' || task.status === 'pending') {
+          if (hasActiveTask(task)) {
             monitorTimeoutRef.current = setTimeout(checkStatus, TIMING.POLL_TASK_RUNNING_MS);
           } else if (task.status === 'completed') {
             await onStatusRefresh?.();
+            if (!isCurrentMonitor()) return;
             onTaskComplete?.(updatedTask);
-            monitorTimeoutRef.current = setTimeout(() => {
-              if (!isUnmountedRef.current) {
-                setCurrentTask(null);
-              }
-            }, TIMING.CLEAR_TASK_DELAY_MS);
-          } else if (task.status === 'failed') {
-            monitorTimeoutRef.current = setTimeout(() => {
-              if (!isUnmountedRef.current) {
-                setCurrentTask(null);
-              }
-            }, TIMING.CLEAR_TASK_FAILED_MS);
+            clearTaskAfter(TIMING.CLEAR_TASK_DELAY_MS);
+          } else if (task.status === 'failed' && type !== 'analyze') {
+            clearTaskAfter(TIMING.CLEAR_TASK_FAILED_MS);
           }
         } catch (error) {
+          if (!isCurrentMonitor()) return;
           Logger.error('[useTask] Failed to check task status', { error });
           consecutiveErrors += 1;
-          if (
-            consecutiveErrors < RETRY.MAX_ATTEMPTS &&
-            !isUnmountedRef.current &&
-            monitorGenerationRef.current === currentGeneration
-          ) {
+          if (consecutiveErrors < RETRY.MAX_ATTEMPTS) {
             monitorTimeoutRef.current = setTimeout(
               checkStatus,
               TIMING.POLL_TASK_RUNNING_MS * consecutiveErrors,
@@ -112,13 +134,11 @@ export function useTask(options: UseTaskOptions = {}) {
 
           const message = error instanceof Error ? error.message : String(error);
           setCurrentTask((current) =>
-            current?.id === taskId ? { ...current, status: 'failed', message } : current,
+            current?.id === taskId
+              ? { ...current, status: type === 'analyze' ? 'unavailable' : 'failed', message }
+              : current,
           );
-          monitorTimeoutRef.current = setTimeout(() => {
-            if (!isUnmountedRef.current) {
-              setCurrentTask(null);
-            }
-          }, TIMING.CLEAR_TASK_FAILED_MS);
+          if (type !== 'analyze') clearTaskAfter(TIMING.CLEAR_TASK_FAILED_MS);
         }
       };
 
@@ -129,30 +149,44 @@ export function useTask(options: UseTaskOptions = {}) {
 
   const loadCurrentTask = useCallback(
     async (tabUrl: string, tabId?: number) => {
+      const generation = monitorGenerationRef.current;
       try {
         const tasks = await ExtensionAPI.getTasks();
-        const currentUrlTask = tasks.find(
+        if (
+          isUnmountedRef.current ||
+          isStartingRef.current ||
+          monitorGenerationRef.current !== generation
+        ) {
+          return;
+        }
+        const matchingTasks = tasks.filter(
           (task: Task) =>
             task.url === tabUrl &&
-            (task.status === 'running' || task.status === 'pending') &&
             (typeof tabId !== 'number' || typeof task.tabId !== 'number' || task.tabId === tabId),
         );
+        const activeTask = matchingTasks.find(hasActiveTask);
 
-        if (currentUrlTask) {
-          Logger.debug('[useTask] Found current task', { task: currentUrlTask });
-          setCurrentTask({
-            id: currentUrlTask.id,
-            type: currentUrlTask.type,
-            status: currentUrlTask.status,
-            progress: currentUrlTask.progress,
-            message: currentUrlTask.message || currentUrlTask.error,
-            detailedProgress: currentUrlTask.detailedProgress,
-          });
+        if (activeTask) {
+          Logger.debug('[useTask] Found current task', { task: activeTask });
+          setCurrentTask(toCurrentTask(activeTask));
+          monitorTask(activeTask.id, activeTask.type);
+          return;
+        }
 
-          if (currentUrlTask.status === 'running' || currentUrlTask.status === 'pending') {
-            monitorTask(currentUrlTask.id);
+        let latestAnalysis: Task | undefined;
+        for (const task of matchingTasks) {
+          if (
+            task.type === 'analyze' &&
+            (!latestAnalysis || task.startTime >= latestAnalysis.startTime)
+          ) {
+            latestAnalysis = task;
           }
         }
+        setCurrentTask(
+          latestAnalysis?.status === 'failed' && !isCancelledAnalysis(latestAnalysis)
+            ? toCurrentTask(latestAnalysis)
+            : null,
+        );
       } catch (error) {
         Logger.error('[useTask] Failed to load current task', { error });
       }
@@ -207,7 +241,7 @@ export function useTask(options: UseTaskOptions = {}) {
           status: 'pending',
           progress: 0,
         });
-        monitorTask(response.taskId);
+        monitorTask(response.taskId, 'extract');
         return response.taskId;
       }
       return null;
@@ -251,7 +285,7 @@ export function useTask(options: UseTaskOptions = {}) {
           status: 'pending',
           progress: 0,
         });
-        monitorTask(response.taskId);
+        monitorTask(response.taskId, 'config');
         return response.taskId;
       }
       return null;
@@ -291,7 +325,7 @@ export function useTask(options: UseTaskOptions = {}) {
           status: 'pending',
           progress: 0,
         });
-        monitorTask(response.taskId);
+        monitorTask(response.taskId, 'analyze');
         return response.taskId;
       }
       return null;

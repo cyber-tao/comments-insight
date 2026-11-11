@@ -71,7 +71,6 @@ const History: React.FC = () => {
   });
 
   const {
-    clearReanalyzeError,
     handleReanalyze,
     isReanalyzing,
     reanalyzeError,
@@ -161,10 +160,6 @@ const History: React.FC = () => {
   React.useEffect(() => {
     setCurrentPage(1);
   }, [commentSearchTerm, selectedItem]);
-
-  React.useEffect(() => {
-    clearReanalyzeError();
-  }, [clearReanalyzeError, selectedHistoryId]);
 
   const isFullscreen =
     typeof window !== 'undefined' &&

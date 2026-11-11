@@ -97,18 +97,13 @@ export async function handleStartAnalysis(
         postContent = metadata?.postContent || postContent;
       }
 
+      const analysisMetadata = { platform, url, title, videoTime, postContent };
       const result = await context.commentAnalyzer.analyzeComments(
         comments,
         analysisModel,
         settings.analyzerPromptTemplate,
         settings.language,
-        {
-          platform,
-          url,
-          title,
-          videoTime,
-          postContent,
-        },
+        analysisMetadata,
         combinedSignal,
         settings.aiTimeout,
         (progress) => {
@@ -122,68 +117,11 @@ export async function handleStartAnalysis(
         },
       );
 
-      // Stage 2: Generate dynamic visual HTML webpage if enabled (separate LLM API call)
-      if (settings.generateDynamicReport !== false && result.markdown) {
-        context.taskManager.updateDetailedProgress(taskId, {
-          stage: 'generating',
-          current: 0,
-          total: 100,
-          stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.GENERATING_DYNAMIC,
-        });
-
-        try {
-          const dynamicResult = await context.commentAnalyzer.generateDynamicHtml(
-            result.markdown,
-            analysisModel,
-            settings.dynamicReportPromptTemplate,
-            settings.language,
-            {
-              platform,
-              url,
-              title,
-              videoTime,
-              postContent,
-            },
-            comments.length,
-            combinedSignal,
-            settings.aiTimeout,
-            (progress) => {
-              context.taskManager.updateDetailedProgress(taskId, {
-                stage: 'generating',
-                current: Math.min(
-                  100,
-                  Math.floor(
-                    progress.charactersReceived / AI_CONST.DYNAMIC_REPORT_PROGRESS_CHARS_PER_UNIT,
-                  ),
-                ),
-                total: 100,
-                stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
-                stageMessageParams: {
-                  [AI_CONST.ANALYSIS_PROGRESS_PARAM_KEYS.CHARACTERS]: progress.charactersReceived,
-                },
-              });
-            },
-            comments,
-          );
-
-          if (dynamicResult.html) {
-            result.dynamicHtml = dynamicResult.html;
-            result.tokensUsed += dynamicResult.tokensUsed;
-          }
-        } catch (dynamicError) {
-          Logger.warn(
-            '[AnalysisHandler] Dynamic HTML report generation failed, continuing with markdown only',
-            {
-              error: dynamicError instanceof Error ? dynamicError.message : String(dynamicError),
-            },
-          );
-        }
-      }
-
       if (combinedSignal.aborted) {
         throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Analysis cancelled before persistence');
       }
 
+      const savedHistoryId = historyId || generateUniqueId('history');
       try {
         if (historyId) {
           const historyItem = await context.historyStore.getHistoryItem(historyId);
@@ -206,7 +144,7 @@ export async function handleStartAnalysis(
         } else {
           await context.historyStore.createHistory(
             {
-              id: generateUniqueId('history'),
+              id: savedHistoryId,
               url: task.url,
               title: `Analysis ${new Date().toLocaleString()}`,
               platform: task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM,
@@ -221,15 +159,86 @@ export async function handleStartAnalysis(
           );
         }
       } catch (saveError) {
-        Logger.error('[AnalysisHandler] Failed to save analysis history', { saveError });
+        Logger.error('[AnalysisHandler] Failed to save analysis history', { taskId, saveError });
         if (saveError instanceof ExtensionError) {
           throw saveError;
         }
         throw new ExtensionError(ErrorCode.STORAGE_WRITE_ERROR, 'Failed to save analysis history');
       }
 
+      let tokensUsed = result.tokensUsed;
+      if (settings.generateDynamicReport !== false && result.markdown && !combinedSignal.aborted) {
+        context.taskManager.updateDetailedProgress(taskId, {
+          stage: 'generating',
+          current: 0,
+          total: 100,
+          stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.GENERATING_DYNAMIC,
+        });
+
+        try {
+          const dynamicResult = await context.commentAnalyzer.generateDynamicHtml(
+            result.markdown,
+            analysisModel,
+            settings.dynamicReportPromptTemplate,
+            settings.language,
+            analysisMetadata,
+            comments.length,
+            combinedSignal,
+            settings.aiTimeout,
+            (progress) => {
+              context.taskManager.updateDetailedProgress(taskId, {
+                stage: 'generating',
+                current: Math.min(
+                  100,
+                  Math.floor(
+                    progress.charactersReceived / AI_CONST.DYNAMIC_REPORT_PROGRESS_CHARS_PER_UNIT,
+                  ),
+                ),
+                total: 100,
+                stageMessageKey: AI_CONST.ANALYSIS_PROGRESS_MESSAGE_KEYS.RECEIVING,
+                stageMessageParams: {
+                  [AI_CONST.ANALYSIS_PROGRESS_PARAM_KEYS.CHARACTERS]: progress.charactersReceived,
+                },
+              });
+            },
+            comments,
+          );
+
+          combinedSignal.throwIfAborted();
+          if (!dynamicResult.html) {
+            throw new ExtensionError(
+              ErrorCode.AI_INVALID_RESPONSE,
+              'Empty HTML received from model',
+            );
+          }
+          const updated = await context.historyStore.updateDynamicReport(
+            savedHistoryId,
+            result,
+            dynamicResult,
+            combinedSignal,
+          );
+          if (!updated) throw createHistoryNotFoundError(savedHistoryId);
+          tokensUsed += dynamicResult.tokensUsed;
+        } catch (dynamicError) {
+          if (
+            signal.aborted ||
+            (dynamicError instanceof ExtensionError &&
+              dynamicError.code === ErrorCode.TASK_NOT_FOUND)
+          ) {
+            throw dynamicError;
+          }
+          Logger.warn('[AnalysisHandler] Dynamic HTML report unavailable; Markdown report saved', {
+            taskId,
+            error: dynamicError,
+          });
+        }
+      }
+
+      if (signal.aborted) {
+        throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Analysis cancelled');
+      }
       return {
-        tokensUsed: result.tokensUsed,
+        tokensUsed,
         commentsCount: comments.length,
         title,
       };

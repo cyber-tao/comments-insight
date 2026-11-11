@@ -120,10 +120,14 @@ export class TaskManager {
 
       const now = Date.now();
       let changed = false;
+      const interruptedAnalysisTasks: Task[] = [];
 
       for (const task of this.tasks.values()) {
         if (task.status === 'pending' || task.status === 'running') {
           this.persistence.markInterruptedByRestart(task, now);
+          if (task.type === 'analyze') {
+            interruptedAnalysisTasks.push(task);
+          }
           changed = true;
         }
       }
@@ -139,6 +143,13 @@ export class TaskManager {
 
       if (changed) {
         await this.persistence.save();
+      }
+
+      for (const task of interruptedAnalysisTasks) {
+        const error = task.error ?? i18n.t(ERROR_KEYS.TASK_INTERRUPTED_BY_RESTART);
+        Logger.warn(`[TaskManager] Analysis task interrupted by restart: ${task.id}`);
+        this.notifyTaskUpdate(task, { immediate: true });
+        void this.notificationService.showTaskFailed(task.type, error);
       }
     } catch (error) {
       Logger.warn('[TaskManager] Failed to initialize task state', { error });
@@ -492,6 +503,7 @@ export class TaskManager {
 
     task.status = 'failed';
     task.error = i18n.t(ERROR_KEYS.TASK_CANCELLED_BY_USER);
+    task.cancelledByUser = true;
     task.endTime = Date.now();
 
     Logger.info(`[TaskManager] Task cancelled: ${taskId}`);
@@ -677,6 +689,8 @@ export class TaskManager {
           return;
         }
 
+        const stopKeepingWorkerAlive =
+          task.type === 'analyze' ? this.keepWorkerAlive(controller.signal) : undefined;
         try {
           const result = await executor(task, controller.signal);
           const latest = this.tasks.get(nextTaskId);
@@ -700,6 +714,8 @@ export class TaskManager {
                 ? error.message
                 : String(error),
           );
+        } finally {
+          stopKeepingWorkerAlive?.();
         }
       })
       .catch((error) => {
@@ -718,6 +734,20 @@ export class TaskManager {
         }
         this.processQueue();
       });
+  }
+
+  private keepWorkerAlive(signal: AbortSignal): () => void {
+    const timer = setInterval(() => {
+      void chrome.runtime.getPlatformInfo().catch((error) => {
+        Logger.debug('[TaskManager] Analysis worker keepalive failed', { error });
+      });
+    }, TIMING.ANALYSIS_WORKER_KEEPALIVE_MS);
+    const stop = (): void => {
+      clearInterval(timer);
+      signal.removeEventListener('abort', stop);
+    };
+    signal.addEventListener('abort', stop, { once: true });
+    return stop;
   }
 
   private schedulePersist(): void {

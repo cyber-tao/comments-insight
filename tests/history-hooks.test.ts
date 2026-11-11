@@ -5,7 +5,7 @@
 import * as React from 'react';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
-import { AI, PAGINATION, TIMING } from '../src/config/constants';
+import { AI, PAGINATION, RETRY, TIMING } from '../src/config/constants';
 import { useHistoryData } from '../src/history/hooks/useHistoryData';
 import { useHistoryReanalyze } from '../src/history/hooks/useHistoryReanalyze';
 import type { HistoryItem } from '../src/types';
@@ -22,6 +22,7 @@ const REANALYZE_FAILED = 'Reanalyze failed';
 const extensionApiMock = vi.hoisted(() => ({
   clearAllHistory: vi.fn(),
   deleteHistory: vi.fn(),
+  generateDynamicReport: vi.fn(),
   getHistoryItem: vi.fn(),
   getHistoryMetadataPage: vi.fn(),
   getTaskStatus: vi.fn(),
@@ -103,6 +104,7 @@ describe('history hooks', () => {
     extensionApiMock.deleteHistory.mockResolvedValue(undefined);
     extensionApiMock.clearAllHistory.mockResolvedValue({ success: true });
     extensionApiMock.startAnalysis.mockResolvedValue({ taskId: TASK_ID });
+    extensionApiMock.generateDynamicReport.mockResolvedValue({ success: true, taskId: TASK_ID });
     extensionApiMock.getTaskStatus.mockResolvedValue({ status: 'completed', progress: 100 });
   });
 
@@ -335,6 +337,45 @@ describe('history hooks', () => {
       expect(result.current.isReanalyzing).toBe(false);
       expect(result.current.reanalyzeTaskId).toBeNull();
     });
+    expect(fetchHistoryItemById).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      { status: 'failed', error: 'Could not save the dynamic report' },
+      'Could not save the dynamic report',
+    ],
+    [null, 'history.reanalyzeTaskMissing'],
+  ])('surfaces a dynamic report polling error on the originating item', async (status, message) => {
+    vi.useFakeTimers();
+    extensionApiMock.getTaskStatus
+      .mockResolvedValueOnce({ status: 'running', progress: 45 })
+      .mockResolvedValue(status);
+    const initialItem = createHistoryItem(HISTORY_ID);
+    const otherItem = createHistoryItem(SECOND_HISTORY_ID);
+    const fetchHistoryItemById = vi.fn();
+    const setSelectedItem = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ selectedItem }) =>
+        useHistoryReanalyze({ selectedItem, fetchHistoryItemById, setSelectedItem }),
+      { initialProps: { selectedItem: initialItem } },
+    );
+
+    await act(async () => {
+      await result.current.handleGenerateDynamicReport();
+    });
+    expect(result.current.isReanalyzing).toBe(true);
+    rerender({ selectedItem: otherItem });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMING.POLL_TASK_RUNNING_MS * RETRY.MAX_ATTEMPTS ** 2);
+    });
+
+    expect(result.current.isReanalyzing).toBe(false);
+    expect(result.current.generateDynamicError).toBe('');
+    rerender({ selectedItem: initialItem });
+    expect(result.current.generateDynamicError).toBe(message);
+    expect(result.current.reanalyzeError).toBe('');
     expect(fetchHistoryItemById).not.toHaveBeenCalled();
   });
 });

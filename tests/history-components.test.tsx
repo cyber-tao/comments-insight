@@ -604,7 +604,7 @@ describe('HistoryDetailPanel', () => {
       },
     });
 
-    render(
+    const detail = (
       <HistoryDetailPanel
         selectedItem={selectedItem}
         selectedItemError={null}
@@ -623,6 +623,7 @@ describe('HistoryDetailPanel', () => {
         reanalyzeProgress={null}
         reanalyzeTaskId={null}
         reanalyzingHistoryId={null}
+        generateDynamicError="Could not regenerate the dynamic report"
         onViewModeChange={vi.fn()}
         onReanalyze={vi.fn()}
         onCommentSearchTermChange={vi.fn()}
@@ -630,9 +631,11 @@ describe('HistoryDetailPanel', () => {
         onCommentsPerPageChange={vi.fn()}
         onCurrentPageChange={vi.fn()}
         formatDate={() => 'formatted-date'}
-      />,
+      />
     );
+    const { rerender } = render(detail);
 
+    expect(screen.getByRole('alert').textContent).toBe('Could not regenerate the dynamic report');
     const iframe = screen.getByTitle('History Title') as HTMLIFrameElement;
     expect(iframe).toBeTruthy();
     expect(iframe.getAttribute('src')).toContain('src/sandbox/index.html');
@@ -668,5 +671,15 @@ describe('HistoryDetailPanel', () => {
       },
       '*',
     );
+
+    const previousUrl = window.location.href;
+    try {
+      window.history.replaceState({}, '', '?tab=dynamic&fullscreen=true');
+      rerender(React.cloneElement(detail));
+      expect(screen.getByRole('alert').textContent).toBe('Could not regenerate the dynamic report');
+      expect(screen.getByText('history.backToHistory')).toBeTruthy();
+    } finally {
+      window.history.replaceState({}, '', previousUrl);
+    }
   });
 });

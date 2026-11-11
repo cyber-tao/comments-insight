@@ -30,6 +30,9 @@ vi.mock('react-i18next', () => ({
       if (key === 'popup.analysisProgressReceivingCompact') {
         return `compact receiving ${String(options?.characters)} chars`;
       }
+      if (key === 'notification.analysisFailed') {
+        return `Analysis failed: ${String(options?.error)}`;
+      }
       return key;
     },
   }),
@@ -208,6 +211,29 @@ describe('ActionButtons', () => {
     expect(chrome.tabs.create).toHaveBeenCalledWith({
       url: `chrome-extension://${PATHS.HISTORY_PAGE}?id=history-1&tab=analysis`,
     });
+  });
+
+  it.each([
+    ['failed', 'Could not save report', 'Analysis failed: Could not save report'],
+    ['unavailable', 'Analysis task not found', 'Analysis task not found'],
+  ] as const)('shows %s analysis feedback and allows retry', (status, message, expected) => {
+    const onAnalyze = vi.fn();
+    render(
+      <ActionButtons
+        pageInfo={{ url: 'https://example.com', title: 'Example', domain: 'example.com' }}
+        pageStatus={{ extracted: true, analyzed: false, hasConfig: true, historyId: 'history-1' }}
+        currentTask={{ id: 'task-1', type: 'analyze', status, progress: 75, message }}
+        onExtract={vi.fn()}
+        onGenerateConfig={vi.fn()}
+        onAnalyze={onAnalyze}
+        onCancel={vi.fn()}
+        onOpenHistory={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole('alert').textContent).toBe(expected);
+    fireEvent.click(screen.getByRole('button', { name: 'popup.analyzeComments' }));
+    expect(onAnalyze).toHaveBeenCalledOnce();
   });
 });
 

@@ -160,6 +160,7 @@ const taskSchema = z.object({
   error: z.string().optional(),
   message: z.string().optional(),
   interruptedByRestart: z.boolean().optional(),
+  cancelledByUser: z.boolean().optional(),
   detailedProgress: taskProgressSchema.optional(),
 });
 const historyItemSchema = z.object({
