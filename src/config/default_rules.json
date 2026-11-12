@@ -220,10 +220,11 @@
         }
       },
       {
+        "attribute": "score",
         "name": "likes",
         "rule": {
-          "selector": "shreddit-comment-action-row faceplate-number",
-          "type": "css"
+          "selector": "self::shreddit-comment[number(@score) >= 0]",
+          "type": "xpath"
         }
       }
     ],
@@ -232,7 +233,7 @@
       "selector": "shreddit-comment",
       "type": "css"
     },
-    "lastUpdated": 1769776825087,
+    "lastUpdated": 1794482273529,
     "postContent": {
       "selector": "shreddit-post-text-body",
       "type": "css"
@@ -244,6 +245,10 @@
     "replies": {
       "container": {
         "selector": "shreddit-comment",
+        "type": "css"
+      },
+      "expandBtn": {
+        "selector": "faceplate-partial[loading=\"action\"][slot=\"children\"][src^=\"/svc/shreddit/more-comments/\"] button:not(.invisible):not(.pointer-events-none)",
         "type": "css"
       },
       "fields": [
@@ -270,10 +275,11 @@
           }
         },
         {
+          "attribute": "score",
           "name": "likes",
           "rule": {
-            "selector": "shreddit-comment-action-row faceplate-number",
-            "type": "css"
+            "selector": "self::shreddit-comment[number(@score) >= 0]",
+            "type": "xpath"
           }
         }
       ],
@@ -290,7 +296,7 @@
   },
   {
     "container": {
-      "selector": "[data-testid=\"primaryColumn\"] section [aria-label]",
+      "selector": "[data-testid=\"primaryColumn\"] section [aria-label]:has(> div > [data-testid=\"cellInnerDiv\"] article[data-testid=\"tweet\"][tabindex=\"-1\"])",
       "type": "css"
     },
     "domain": "x.com",
@@ -320,28 +326,28 @@
       {
         "name": "likes",
         "rule": {
-          "selector": "[data-testid=\"like\"] [data-testid=\"app-text-transition-container\"]",
+          "selector": ":is([data-testid=\"like\"], [data-testid=\"unlike\"]) [data-testid=\"app-text-transition-container\"]",
           "type": "css"
         }
       }
     ],
     "id": "x",
     "item": {
-      "selector": "article[data-testid=\"tweet\"]",
+      "selector": ":scope > div > [data-testid=\"cellInnerDiv\"]:has(article[data-testid=\"tweet\"][tabindex=\"-1\"]) ~ [data-testid=\"cellInnerDiv\"] article[data-testid=\"tweet\"]:has(time[datetime]):not([data-testid=\"placementTracking\"] *)",
       "type": "css"
     },
-    "lastUpdated": 1769776825087,
+    "lastUpdated": 1794482273529,
     "postContent": {
-      "selector": "article:first-child [data-testid=\"tweetText\"]",
+      "selector": "article[data-testid=\"tweet\"][tabindex=\"-1\"] [data-testid=\"tweetText\"]",
       "type": "css"
     },
     "postTime": {
-      "selector": "article[data-testid=\"tweet\"]:first-child time[datetime]",
+      "selector": "article[data-testid=\"tweet\"][tabindex=\"-1\"] time[datetime]",
       "type": "css"
     },
     "siteName": "X (Twitter)",
     "videoTime": {
-      "selector": "article:first-child time[datetime]",
+      "selector": "article[data-testid=\"tweet\"][tabindex=\"-1\"] time[datetime]",
       "type": "css"
     }
   },
@@ -369,24 +375,24 @@
       {
         "name": "timestamp",
         "rule": {
-          "selector": "[data-e2e=\"comment-time-1\"]",
+          "selector": ":is([data-e2e=\"comment-time-1\"], [class*=\"DivCommentSubContentWrapper\"] > span:first-child):not([class*=\"DivReplyContainer\"] *)",
           "type": "css"
         }
       },
       {
         "name": "likes",
         "rule": {
-          "selector": "[data-e2e=\"comment-like-count\"]",
+          "selector": ":is([data-e2e=\"comment-like-count\"], [class*=\"DivLikeContainer\"] span):not([class*=\"DivReplyContainer\"] *)",
           "type": "css"
         }
       }
     ],
     "id": "tiktok",
     "item": {
-      "selector": "[class*=\"DivCommentItemContainer\"]",
+      "selector": ":is([class*=\"DivCommentObjectWrapper\"], [class*=\"DivCommentItemContainer\"])",
       "type": "css"
     },
-    "lastUpdated": 1769776825087,
+    "lastUpdated": 1794482273529,
     "postContent": {
       "selector": "[data-e2e=\"browse-video-desc\"]",
       "type": "css"
@@ -397,7 +403,7 @@
         "type": "css"
       },
       "expandBtn": {
-        "selector": "[data-e2e=\"view-more-1\"]",
+        "selector": ":is([data-e2e=\"view-more-1\"], [class*=\"DivViewMoreRepliesWrapper\"] [class*=\"DivViewRepliesContainer\"] > button:first-of-type)",
         "type": "css"
       },
       "fields": [
@@ -418,20 +424,20 @@
         {
           "name": "timestamp",
           "rule": {
-            "selector": "[data-e2e=\"comment-time-2\"]",
+            "selector": ":is([data-e2e=\"comment-time-2\"], [class*=\"DivCommentSubContentWrapper\"] > span:first-child)",
             "type": "css"
           }
         },
         {
           "name": "likes",
           "rule": {
-            "selector": "[data-e2e=\"comment-like-count\"]",
+            "selector": ":is([data-e2e=\"comment-like-count\"], [class*=\"DivLikeContainer\"] span)",
             "type": "css"
           }
         }
       ],
       "item": {
-        "selector": "[class*=\"DivContentContainer\"]",
+        "selector": ":is([class*=\"DivCommentItemWrapper\"]:has([data-e2e=\"comment-level-2\"]), [class*=\"DivContentContainer\"]:has([data-e2e=\"comment-level-2\"]))",
         "type": "css"
       }
     },
