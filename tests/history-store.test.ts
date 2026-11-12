@@ -96,6 +96,31 @@ describe('HistoryStore (IndexedDB)', () => {
     database.close();
   });
 
+  it.each(['listing', 'search'] as const)(
+    'counts all matching rows independently of the %s page slice',
+    async (mode) => {
+      for (let index = 0; index < 47; index += 1) {
+        await store.createHistory(createHistoryItem(`match_${index}`, index + 1));
+      }
+      if (mode === 'search') {
+        await store.createHistory(createHistoryItem('unrelated', 100));
+      }
+
+      const readPage = (page: number) =>
+        mode === 'search'
+          ? store.searchHistoryMetadataPage('match_', page, 20)
+          : store.getHistoryMetadataPage(page, 20);
+      const ids: string[] = [];
+      for (const [page, count] of [20, 20, 7, 0].entries()) {
+        const result = await readPage(page);
+        expect(result).toMatchObject({ total: 47, totalPages: 3, page, pageSize: 20 });
+        expect(result.entries).toHaveLength(count);
+        ids.push(...result.entries.map((entry) => entry.id));
+      }
+      expect(ids).toEqual(Array.from({ length: 47 }, (_, index) => `match_${46 - index}`));
+    },
+  );
+
   it('should save and retrieve a history item', async () => {
     const id = 'history_1';
     const comments = [

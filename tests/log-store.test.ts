@@ -427,14 +427,23 @@ describe('TokenStatsStore', () => {
     expect(mockStorageSet).toHaveBeenCalledTimes(usages.length);
   });
 
-  it('returns zeroed stats when storage cannot be read', async () => {
+  it('rejects a failed read instead of reporting an empty record', async () => {
     mockStorageGet.mockRejectedValueOnce(new Error('storage unavailable'));
 
-    await expect(store.getTokenStats()).resolves.toEqual({
-      today: 0,
-      total: 0,
-      lastReset: 0,
-    });
+    await expect(store.getTokenStats()).rejects.toThrow('storage unavailable');
+  });
+
+  it('preserves existing totals after a failed read and records later usage', async () => {
+    const previous = { today: 80, total: 1200, lastReset: startOfToday() };
+    backing[STORAGE.TOKEN_STATS_KEY] = previous;
+    mockStorageGet.mockRejectedValueOnce(new Error('storage unavailable'));
+
+    await expect(store.recordTokenUsage(10)).resolves.toBeUndefined();
+    expect(mockStorageSet).not.toHaveBeenCalled();
+    expect(backing[STORAGE.TOKEN_STATS_KEY]).toEqual(previous);
+
+    await store.recordTokenUsage(7);
+    expect(backing[STORAGE.TOKEN_STATS_KEY]).toEqual({ ...previous, today: 87, total: 1207 });
   });
 
   it('does not reject callers when storage cannot persist a record', async () => {

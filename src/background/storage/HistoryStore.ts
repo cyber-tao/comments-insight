@@ -288,14 +288,18 @@ export class HistoryStore {
 
   async getHistoryMetadataPage(page: number = 0, pageSize: number = PAGINATION.DEFAULT_PER_PAGE) {
     try {
-      const ordered = db.historyMetadata.orderBy('extractedAt').reverse();
-      const [total, items] = await Promise.all([
-        ordered.count(),
-        ordered
-          .offset(page * pageSize)
-          .limit(pageSize)
-          .toArray(),
-      ]);
+      const [total, items] = await db.transaction('r', db.historyMetadata, async () => {
+        const ordered = db.historyMetadata.orderBy('extractedAt').reverse();
+        // Dexie pagination mutates the collection; the count must stay unpaged.
+        return Promise.all([
+          ordered.clone().count(),
+          ordered
+            .clone()
+            .offset(page * pageSize)
+            .limit(pageSize)
+            .toArray(),
+        ]);
+      });
       const totalPages = Math.ceil(total / pageSize);
 
       const entries = items.map(toMetadataEntry);
@@ -318,22 +322,21 @@ export class HistoryStore {
   ) {
     try {
       const lowerQuery = query.toLowerCase();
-      // Use Dexie filter() so the predicate runs inside IndexedDB cursor without
-      // materialising the entire table in memory; ordered scan stops at offset+limit.
-      const orderedCollection = db.historyMetadata
-        .orderBy('extractedAt')
-        .reverse()
-        .filter((entry) => historyMetadataMatchesQuery(entry, lowerQuery));
+      const [total, pageItems] = await db.transaction('r', db.historyMetadata, async () => {
+        const orderedCollection = db.historyMetadata
+          .orderBy('extractedAt')
+          .reverse()
+          .filter((entry) => historyMetadataMatchesQuery(entry, lowerQuery));
 
-      // Count and page slice scan the same filtered collection; running them
-      // concurrently halves the wait instead of two serial cursor passes.
-      const [total, pageItems] = await Promise.all([
-        orderedCollection.count(),
-        orderedCollection
-          .offset(page * pageSize)
-          .limit(pageSize)
-          .toArray(),
-      ]);
+        return Promise.all([
+          orderedCollection.clone().count(),
+          orderedCollection
+            .clone()
+            .offset(page * pageSize)
+            .limit(pageSize)
+            .toArray(),
+        ]);
+      });
       const totalPages = Math.ceil(total / pageSize);
 
       const entries = pageItems.map(toMetadataEntry);

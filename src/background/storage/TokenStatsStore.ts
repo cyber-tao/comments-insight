@@ -36,12 +36,9 @@ export class TokenStatsStore {
   }
 
   async getTokenStats(): Promise<TokenStats> {
-    try {
-      const result = await chrome.storage.local.get(STORAGE.TOKEN_STATS_KEY);
-      return sanitizeTokenStats(result[STORAGE.TOKEN_STATS_KEY]);
-    } catch (error) {
-      Logger.error('[TokenStatsStore] Failed to get token stats', { error });
-      return { today: 0, total: 0, lastReset: 0 };
-    }
+    // A missing record can start at zero; a failed read must never reset an
+    // existing total in recordTokenUsage's read-modify-write operation.
+    const result = await chrome.storage.local.get(STORAGE.TOKEN_STATS_KEY);
+    return sanitizeTokenStats(result[STORAGE.TOKEN_STATS_KEY]);
   }
 }
