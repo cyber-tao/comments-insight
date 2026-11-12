@@ -5,6 +5,15 @@ import { Logger } from '../utils/logger';
 import { ErrorCode, ExtensionError } from '@/utils/error-types';
 import { checkAborted, abortableDelay } from './utils/abort';
 
+function hasContentMutation(mutations: MutationRecord[]): boolean {
+  return mutations.some(
+    (mutation) =>
+      mutation.type === 'characterData' ||
+      mutation.addedNodes.length > 0 ||
+      mutation.removedNodes.length > 0,
+  );
+}
+
 /**
  * PageController handles page interactions like scrolling and clicking
  */
@@ -62,10 +71,7 @@ export class PageController {
 
     return new Promise((resolve, reject) => {
       const observer = new MutationObserver((mutations) => {
-        const hasMeaningfulChange = mutations.some(
-          (m) => m.addedNodes.length > 0 || m.type === 'characterData',
-        );
-        if (hasMeaningfulChange) {
+        if (hasContentMutation(mutations)) {
           cleanup();
           abortableDelay(TIMING.MICRO_WAIT_MS, signal, false).then(() => resolve(true), reject);
         }
@@ -112,60 +118,78 @@ export class PageController {
 
     const beforeScrollHeight = container.scrollHeight;
     const beforeChildCount = container.childElementCount;
+    let contentMutated = false;
+    const observer = new MutationObserver((mutations) => {
+      contentMutated ||= hasContentMutation(mutations);
+    });
+    // Virtual lists can replace text during the scroll pause without changing
+    // either geometry or child count. Observe before triggering the scroll.
+    observer.observe(container, { childList: true, subtree: true, characterData: true });
 
-    const isScrollable =
-      container.scrollHeight > container.clientHeight &&
-      (container as HTMLElement).style.overflow !== 'hidden';
+    try {
+      const isScrollable =
+        container.scrollHeight > container.clientHeight &&
+        (container as HTMLElement).style.overflow !== 'hidden';
 
-    if (isScrollable) {
-      const scrollStep = SCROLL.CONTAINER_SCROLL_STEP;
-      const currentScrollTop = container.scrollTop;
-      const maxScrollTop = container.scrollHeight - container.clientHeight;
+      if (isScrollable) {
+        const scrollStep = SCROLL.CONTAINER_SCROLL_STEP;
+        const currentScrollTop = container.scrollTop;
+        const maxScrollTop = container.scrollHeight - container.clientHeight;
 
-      if (currentScrollTop < maxScrollTop) {
-        container.scrollTo({
-          top: Math.min(currentScrollTop + scrollStep, maxScrollTop),
-          behavior: 'smooth',
-        });
-        await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal, false);
-      }
-    } else {
-      const containerRect = container.getBoundingClientRect();
-      const containerBottom = containerRect.bottom;
-      const viewportHeight = window.innerHeight;
-
-      if (containerBottom > viewportHeight) {
-        const scrollTarget =
-          window.scrollY + Math.min(SCROLL.CONTAINER_SCROLL_STEP, containerBottom - viewportHeight);
-        window.scrollTo({
-          top: scrollTarget,
-          behavior: 'smooth',
-        });
-        await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal, false);
+        if (currentScrollTop < maxScrollTop) {
+          container.scrollTo({
+            top: Math.min(currentScrollTop + scrollStep, maxScrollTop),
+            behavior: 'smooth',
+          });
+          await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal, false);
+        }
       } else {
-        window.scrollTo({
-          top: window.scrollY + SCROLL.CONTAINER_SCROLL_STEP,
-          behavior: 'smooth',
-        });
-        await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal, false);
+        const containerRect = container.getBoundingClientRect();
+        const containerBottom = containerRect.bottom;
+        const viewportHeight = window.innerHeight;
+
+        if (containerBottom > viewportHeight) {
+          const scrollTarget =
+            window.scrollY +
+            Math.min(SCROLL.CONTAINER_SCROLL_STEP, containerBottom - viewportHeight);
+          window.scrollTo({
+            top: scrollTarget,
+            behavior: 'smooth',
+          });
+          await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal, false);
+        } else {
+          window.scrollTo({
+            top: window.scrollY + SCROLL.CONTAINER_SCROLL_STEP,
+            behavior: 'smooth',
+          });
+          await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal, false);
+        }
       }
+
+      // Use MutationObserver for intelligent waiting rather than static delay
+      if (contentMutated) {
+        await abortableDelay(TIMING.MICRO_WAIT_MS, signal, false);
+      } else {
+        contentMutated = await this.waitForDOMChanges(container, TIMING.SCROLL_DELAY_MS, signal);
+      }
+      if (!contentMutated) {
+        Logger.debug(
+          '[PageController] No DOM changes detected after scroll, relying on static properties',
+        );
+      }
+
+      const afterScrollHeight = container.scrollHeight;
+      const afterChildCount = container.childElementCount;
+
+      const contentChanged =
+        contentMutated ||
+        afterScrollHeight !== beforeScrollHeight ||
+        afterChildCount !== beforeChildCount;
+
+      return { contentChanged };
+    } finally {
+      observer.disconnect();
     }
-
-    // Use MutationObserver for intelligent waiting rather than static delay
-    const contentMutated = await this.waitForDOMChanges(container, TIMING.SCROLL_DELAY_MS, signal);
-    if (!contentMutated) {
-      Logger.debug(
-        '[PageController] No DOM changes detected after scroll, relying on static properties',
-      );
-    }
-
-    const afterScrollHeight = container.scrollHeight;
-    const afterChildCount = container.childElementCount;
-
-    const contentChanged =
-      afterScrollHeight !== beforeScrollHeight || afterChildCount !== beforeChildCount;
-
-    return { contentChanged };
   }
 
   /**

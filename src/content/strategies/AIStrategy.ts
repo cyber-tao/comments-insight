@@ -154,23 +154,40 @@ export class AIStrategy implements ExtractionStrategy {
     }
 
     const allComments: Comment[] = [];
-    const seenHashes = new Set<string>();
     let noNewCommentsCount = 0;
     let scrollCount = 0;
-    let unchangedScrollCount = 0;
 
-    // Incremental extraction setup
-    let newElementsToProcess: Element[] = [sectionElement];
+    const processedVersions = new WeakMap<Element, string>();
+    const pendingElements = new Set<Element>(
+      sectionElement.shadowRoot || sectionElement.children.length === 0
+        ? [sectionElement]
+        : sectionElement.children,
+    );
+    const queueRegion = (node: Node): void => {
+      let element = node instanceof Element ? node : node.parentElement;
+      if (!element || !sectionElement.contains(element)) return;
+      if (sectionElement.shadowRoot) {
+        pendingElements.add(sectionElement);
+        return;
+      }
+      // Keep the containing thread's author and parent context when a reply or
+      // text node changes, without observing or resending the rest of the page.
+      while (element !== sectionElement && element.parentElement !== sectionElement) {
+        if (!element.parentElement) return;
+        element = element.parentElement;
+      }
+      pendingElements.add(element);
+    };
     const observer = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        for (const node of m.addedNodes) {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            newElementsToProcess.push(node as Element);
-          }
+      for (const mutation of mutations) {
+        if (mutation.target === sectionElement && mutation.type === 'childList') {
+          for (const node of mutation.addedNodes) queueRegion(node);
+        } else {
+          queueRegion(mutation.target);
         }
       }
     });
-    observer.observe(sectionElement, { childList: true, subtree: true });
+    observer.observe(sectionElement, { childList: true, subtree: true, characterData: true });
 
     let iterationCount = 0;
 
@@ -182,11 +199,6 @@ export class AIStrategy implements ExtractionStrategy {
 
         if (noNewCommentsCount >= DOM.NO_NEW_COMMENTS_THRESHOLD) {
           Logger.info('[AIStrategy] No new comments found after multiple attempts. Stopping.');
-          break;
-        }
-
-        if (unchangedScrollCount >= SCROLL.UNCHANGED_SCROLL_THRESHOLD) {
-          Logger.info('[AIStrategy] Comment container stopped loading new content. Stopping.');
           break;
         }
 
@@ -205,60 +217,51 @@ export class AIStrategy implements ExtractionStrategy {
             maxComments,
           );
 
-          const { contentChanged } = await this.pageController.scrollContainer(
-            sectionElement,
-            signal,
-          );
-
-          if (!contentChanged) {
-            unchangedScrollCount++;
-            Logger.debug('[AIStrategy] Scroll did not load new content', { unchangedScrollCount });
-          } else {
-            unchangedScrollCount = 0;
-          }
+          await this.pageController.scrollContainer(sectionElement, signal);
         }
         scrollCount++;
 
         onProgress?.(currentProgress, `extracting`, 'extracting', allComments.length, maxComments);
 
-        // 2.1 Get current content of the section
-        // Process only new elements to save memory and CPU
         const chunksToProcess: string[] = [];
-        const elementsBatch = [...newElementsToProcess];
-        newElementsToProcess = [];
+        const elementsBatch = pendingElements.has(sectionElement)
+          ? [sectionElement]
+          : [...pendingElements].filter((element) => sectionElement.contains(element));
+        pendingElements.clear();
+        const batchVersions = new Map<Element, string>();
+        const batchNodes: import('../../types').SimplifiedNode[] = [];
 
-        if (elementsBatch.length > 0) {
-          const simplifier = this.simplifier;
-          const batchSimplifiedNodes: import('../../types').SimplifiedNode[] = [];
-          for (let index = 0; index < elementsBatch.length; index += 1) {
+        for (const element of elementsBatch) {
+          const regionElements = [element];
+          const regionNodes: import('../../types').SimplifiedNode[] = [];
+          for (let index = 0; index < regionElements.length; index += 1) {
             checkAborted(signal);
-            const node = simplifier.simplifyElement(elementsBatch[index], {
+            const node = this.simplifier.simplifyElement(regionElements[index], {
               maxDepth: domConfig.maxDepth,
               includeText: true,
               textMode: 'full',
               maxNodes: extractMaxNodes,
             });
-            batchSimplifiedNodes.push(node);
-            elementsBatch.push(...simplifier.takeDeferredElements());
+            regionNodes.push(node);
+            regionElements.push(...this.simplifier.takeDeferredElements());
           }
+          const version = regionNodes.map((node) => this.simplifier.nodeToString(node)).join('');
+          if (processedVersions.get(element) === version) continue;
+          batchVersions.set(element, version);
+          batchNodes.push(...regionNodes);
+        }
 
+        if (batchNodes.length > 0) {
           const simplifiedRoot: import('../../types').SimplifiedNode = {
             tag: 'div',
             id: 'ai-incremental-batch',
-            childCount: batchSimplifiedNodes.length,
+            childCount: batchNodes.length,
             expanded: true,
-            children: batchSimplifiedNodes,
+            children: batchNodes,
             selector: '',
             depth: 0,
           };
-
-          // 2.2 Chunking
-          const chunks = Chunker.chunkSimplifiedNode(simplifiedRoot, maxChunkTokens);
-          chunksToProcess.push(...chunks);
-          Logger.debug('[AIStrategy] Chunked incremental section', {
-            chunks: chunks.length,
-            elements: elementsBatch.length,
-          });
+          chunksToProcess.push(...Chunker.chunkSimplifiedNode(simplifiedRoot, maxChunkTokens));
         }
 
         // 2.3 AI Extraction
@@ -276,19 +279,14 @@ export class AIStrategy implements ExtractionStrategy {
 
         // Check abort status after AI extraction
         checkAborted(signal);
+        // Commit the submitted snapshots only after success. Mutations received
+        // while AI was running remain pending for the next iteration.
+        for (const [element, version] of batchVersions) {
+          processedVersions.set(element, version);
+        }
 
         // 2.4 Merge & Dedup
-        let added = 0;
-        for (const comment of newComments) {
-          const hash = generateCommentHash(comment);
-          if (!seenHashes.has(hash)) {
-            seenHashes.add(hash);
-            comment.platform = platform;
-            comment.id = comment.id || hash;
-            allComments.push(comment);
-            added++;
-          }
-        }
+        const added = this.mergeComments(allComments, newComments, platform);
 
         Logger.info('[AIStrategy] Extracted batch', {
           found: newComments.length,
@@ -343,6 +341,28 @@ export class AIStrategy implements ExtractionStrategy {
     }
 
     return result;
+  }
+
+  private mergeComments(previous: Comment[], current: Comment[], platform: Platform): number {
+    const commentsByHash = new Map(
+      previous.map((comment) => [generateCommentHash(comment), comment]),
+    );
+    let added = 0;
+    for (const comment of current) {
+      const hash = generateCommentHash(comment);
+      const existing = commentsByHash.get(hash);
+      const replies = existing?.replies || [];
+      added += this.mergeComments(replies, comment.replies, platform);
+      if (existing) {
+        Object.assign(existing, comment, { id: existing.id, platform, replies });
+      } else {
+        const merged = { ...comment, id: comment.id || hash, platform, replies };
+        previous.push(merged);
+        commentsByHash.set(hash, merged);
+        added++;
+      }
+    }
+    return added;
   }
 
   private async extractFromChunks(

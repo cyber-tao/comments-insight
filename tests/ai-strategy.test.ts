@@ -314,6 +314,248 @@ describe('AIStrategy execution', () => {
     expect(aiServiceMock.callAI.mock.calls[0][0].payload.chunks.join('')).toContain(longContent);
   });
 
+  describe('incremental collection', () => {
+    beforeEach(() => {
+      document.body.innerHTML =
+        '<aside id="outside">Outside content</aside><section id="comments"><article><b>Alice</b><p class="content">first</p></article></section>';
+      vi.spyOn(AIConfigGenerator.prototype, 'detectCommentSection').mockResolvedValue('#comments');
+      vi.spyOn(AIConfigGenerator.prototype, 'generateIntelligentConfig').mockResolvedValue(null);
+    });
+
+    it.each(['characterData', 'textContent'])(
+      'collects reused-node %s changes even when the scroll geometry stays unchanged',
+      async (mutationType) => {
+        const content = document.querySelector('.content')!;
+        const pageController = createPageController();
+        let scrolls = 0;
+        vi.mocked(pageController.scrollContainer).mockImplementation(async () => {
+          scrolls++;
+          if (mutationType === 'characterData') {
+            content.firstChild!.nodeValue = `next-${scrolls}`;
+          } else {
+            content.textContent = `next-${scrolls}`;
+          }
+          return { contentChanged: false };
+        });
+        aiServiceMock.callAI.mockImplementation(async () => ({
+          comments: [{ ...createComment(''), content: content.textContent! }],
+        }));
+
+        const comments = await new AIStrategy(pageController).execute(8, 'test-platform');
+
+        expect(comments.map((comment) => comment.content)).toEqual([
+          'first',
+          ...Array.from({ length: 7 }, (_, index) => `next-${index + 1}`),
+        ]);
+        expect(aiServiceMock.callAI).toHaveBeenCalledTimes(8);
+        for (const [message] of aiServiceMock.callAI.mock.calls) {
+          const prompt = message.payload.chunks.join('');
+          expect(prompt).toContain('Alice');
+          expect(prompt).not.toContain('Outside content');
+        }
+      },
+    );
+
+    it('does not call AI again for unchanged content or changes outside the selected container', async () => {
+      const pageController = createPageController();
+      let scrolls = 0;
+      vi.mocked(pageController.scrollContainer).mockImplementation(async () => {
+        document.querySelector('#outside')!.textContent = `outside-${++scrolls}`;
+        document.querySelector('.content')!.firstChild!.nodeValue = 'first';
+        return { contentChanged: true };
+      });
+      aiServiceMock.callAI.mockResolvedValue({ comments: [createComment('first')] });
+
+      const comments = await new AIStrategy(pageController).execute(2, 'test-platform');
+
+      expect(comments).toHaveLength(1);
+      expect(scrolls).toBeGreaterThan(1);
+      expect(aiServiceMock.callAI).toHaveBeenCalledOnce();
+    });
+
+    it('keeps mutations received during an AI request pending after confirming its snapshot', async () => {
+      aiServiceMock.callAI
+        .mockImplementationOnce(async () => {
+          document.querySelector('.content')!.firstChild!.nodeValue = 'second';
+          await Promise.resolve();
+          return { comments: [createComment('first')] };
+        })
+        .mockResolvedValueOnce({ comments: [createComment('second')] });
+
+      const comments = await new AIStrategy(createPageController()).execute(2, 'test-platform');
+
+      expect(comments.map((comment) => comment.content)).toEqual([
+        'comment-first',
+        'comment-second',
+      ]);
+      expect(aiServiceMock.callAI).toHaveBeenCalledTimes(2);
+      expect(aiServiceMock.callAI.mock.calls[1][0].payload.chunks.join('')).toContain('second');
+    });
+
+    it('batches initial regions together and resends only the changed thread context', async () => {
+      document
+        .querySelector('#comments')!
+        .insertAdjacentHTML('beforeend', '<article><b>Bob</b><p>unchanged sibling</p></article>');
+      aiServiceMock.callAI
+        .mockResolvedValueOnce({ comments: [createComment('first'), createComment('second')] })
+        .mockResolvedValueOnce({ comments: [createComment('third')] });
+      const pageController = createPageController();
+      vi.mocked(pageController.scrollContainer).mockImplementation(async () => {
+        document.querySelector('.content')!.textContent = 'new virtual comment';
+        return { contentChanged: false };
+      });
+
+      const comments = await new AIStrategy(pageController).execute(3, 'test-platform');
+
+      expect(comments).toHaveLength(3);
+      expect(aiServiceMock.callAI).toHaveBeenCalledTimes(2);
+      const firstBatch = aiServiceMock.callAI.mock.calls[0][0].payload.chunks.join('');
+      const nextBatch = aiServiceMock.callAI.mock.calls[1][0].payload.chunks.join('');
+      expect(firstBatch).toContain('Alice');
+      expect(firstBatch).toContain('Bob');
+      expect(nextBatch).toContain('Alice');
+      expect(nextBatch).toContain('new virtual comment');
+      expect(nextBatch).not.toContain('Bob');
+      expect(nextBatch).not.toContain('unchanged sibling');
+    });
+
+    it('preserves the initial shadow content when the selected host also has light children', async () => {
+      document.querySelector('#comments')!.attachShadow({ mode: 'open' }).innerHTML =
+        '<article>Shadow comment</article>';
+      aiServiceMock.callAI.mockResolvedValue({ comments: [createComment('first')] });
+
+      await new AIStrategy(createPageController()).execute(1, 'test-platform');
+
+      const prompt = aiServiceMock.callAI.mock.calls[0][0].payload.chunks.join('');
+      expect(prompt).toContain('Shadow comment');
+      expect(prompt).toContain('Alice');
+      expect(aiServiceMock.callAI).toHaveBeenCalledOnce();
+    });
+
+    it('merges repeated parent and reply identities while retaining replies absent from later views', async () => {
+      const root = createComment('root');
+      const child = createComment('child');
+      const oldGrandchild = createComment('old-grandchild');
+      const newGrandchild = createComment('new-grandchild');
+      const oldReply = createComment('old-reply');
+      const newReply = createComment('new-reply');
+      aiServiceMock.callAI
+        .mockResolvedValueOnce({
+          comments: [{ ...root, replies: [{ ...child, replies: [oldGrandchild] }, oldReply] }],
+        })
+        .mockResolvedValueOnce({
+          comments: [
+            {
+              ...root,
+              id: 'rerendered-root',
+              replies: [
+                { ...child, id: 'rerendered-child', replies: [oldGrandchild, newGrandchild] },
+                newReply,
+              ],
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          comments: [{ ...root, likes: 9, replies: [{ ...child, replies: [newGrandchild] }] }],
+        });
+      const pageController = createPageController();
+      let scrolls = 0;
+      vi.mocked(pageController.scrollContainer).mockImplementation(async () => {
+        if (++scrolls <= 2) {
+          document
+            .querySelector('article')!
+            .insertAdjacentHTML('beforeend', `<p>Updated replies ${scrolls}</p>`);
+        }
+        return { contentChanged: false };
+      });
+
+      const comments = await new AIStrategy(pageController).execute(2, 'test-platform');
+
+      expect(comments).toHaveLength(1);
+      expect(comments[0]).toMatchObject({ id: root.id, likes: 9, platform: 'test-platform' });
+      expect(comments[0].replies.map((reply) => reply.id)).toEqual([
+        child.id,
+        oldReply.id,
+        newReply.id,
+      ]);
+      expect(comments[0].replies[0].replies.map((reply) => reply.id)).toEqual([
+        oldGrandchild.id,
+        newGrandchild.id,
+      ]);
+      expect(comments[0].replies[0].replies[1].platform).toBe('test-platform');
+      expect(aiServiceMock.callAI).toHaveBeenCalledTimes(3);
+      expect(aiServiceMock.callAI.mock.calls[1][0].payload.chunks.join('')).toContain('Alice');
+    });
+
+    it('continues collecting new replies across more than five batches of the same root', async () => {
+      const root = createComment('root');
+      let scrolls = 0;
+      const pageController = createPageController();
+      vi.mocked(pageController.scrollContainer).mockImplementation(async () => {
+        if (++scrolls <= 7) {
+          document
+            .querySelector('article')!
+            .insertAdjacentHTML('beforeend', `<p>reply-${scrolls}</p>`);
+        }
+        return { contentChanged: false };
+      });
+      aiServiceMock.callAI.mockImplementation(async () => ({
+        comments: [{ ...root, replies: scrolls === 0 ? [] : [createComment(`reply-${scrolls}`)] }],
+      }));
+
+      const comments = await new AIStrategy(pageController).execute(2, 'test-platform');
+
+      expect(comments).toHaveLength(1);
+      expect(comments[0].replies.map((reply) => reply.id)).toEqual(
+        Array.from({ length: 7 }, (_, index) => `reply-${index + 1}`),
+      );
+      expect(aiServiceMock.callAI).toHaveBeenCalledTimes(8);
+      expect(root.replies).toEqual([]);
+    });
+
+    it('preserves the requested root limit when a batch contains extra comments and replies', async () => {
+      aiServiceMock.callAI.mockResolvedValue({
+        comments: [
+          { ...createComment('first'), replies: [createComment('reply')] },
+          createComment('second'),
+          createComment('third'),
+        ],
+      });
+
+      const comments = await new AIStrategy(createPageController()).execute(2, 'test-platform');
+
+      expect(comments.map((comment) => comment.id)).toEqual(['first', 'second']);
+      expect(comments[0].replies).toHaveLength(1);
+      expect(aiServiceMock.callAI).toHaveBeenCalledOnce();
+    });
+
+    it('disconnects the container observer when extraction is cancelled', async () => {
+      const disconnect = vi.spyOn(MutationObserver.prototype, 'disconnect');
+      const observe = vi.spyOn(MutationObserver.prototype, 'observe');
+      const controller = new AbortController();
+      const pageController = createPageController();
+      vi.mocked(pageController.scrollContainer).mockImplementation(async () => {
+        controller.abort();
+        return { contentChanged: false };
+      });
+      aiServiceMock.callAI.mockResolvedValue({ comments: [createComment('first')] });
+
+      await expect(
+        new AIStrategy(pageController).execute(2, 'test-platform', undefined, controller.signal),
+      ).rejects.toMatchObject({ code: ErrorCode.TASK_CANCELLED });
+
+      expect(observe).toHaveBeenCalledWith(document.querySelector('#comments'), {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+      expect(disconnect).toHaveBeenCalledOnce();
+      document.querySelector('.content')!.textContent = 'after cancellation';
+      await Promise.resolve();
+      expect(aiServiceMock.callAI).toHaveBeenCalledOnce();
+    });
+  });
+
   it('fails when AI cannot locate a comment section', async () => {
     vi.spyOn(AIConfigGenerator.prototype, 'detectCommentSection').mockResolvedValue(null);
     const strategy = new AIStrategy(createPageController());
