@@ -23,7 +23,6 @@ export const storeScreenshotCopy = {
     discussion: 'What people said',
     findings: 'What stands out',
     analysisPanel: 'AI analysis',
-    popupPanel: 'Extension popup',
     commentsPanel: 'Saved comments',
     exports: [
       { type: 'Markdown', label: 'Analysis' },
@@ -55,7 +54,6 @@ export const storeScreenshotCopy = {
     discussion: '大家怎么说',
     findings: '值得关注的反馈',
     analysisPanel: 'AI 分析',
-    popupPanel: '扩展弹窗',
     commentsPanel: '已保存的评论',
     exports: [
       { type: 'Markdown', label: '分析结果' },
@@ -87,7 +85,6 @@ export const storeScreenshotCopy = {
     discussion: '大家怎麼說',
     findings: '值得關注的意見',
     analysisPanel: 'AI 分析',
-    popupPanel: '擴充功能彈出視窗',
     commentsPanel: '已儲存的留言',
     exports: [
       { type: 'Markdown', label: '分析結果' },
@@ -119,7 +116,6 @@ export const storeScreenshotCopy = {
     discussion: '寄せられた声',
     findings: '注目すべき意見',
     analysisPanel: 'AI 分析',
-    popupPanel: '拡張機能のポップアップ',
     commentsPanel: '保存したコメント',
     exports: [
       { type: 'Markdown', label: '分析結果' },
@@ -151,7 +147,6 @@ export const storeScreenshotCopy = {
     discussion: '사람들의 의견',
     findings: '주목할 의견',
     analysisPanel: 'AI 분석',
-    popupPanel: '확장 프로그램 팝업',
     commentsPanel: '저장한 댓글',
     exports: [
       { type: 'Markdown', label: '분석 결과' },
@@ -176,7 +171,7 @@ export const storeScreenshotCopy = {
         'Sur les sites compatibles, enregistrez la discussion sous la publication ou la vidéo ouverte.',
     },
     verify: {
-      title: 'Revenez aux commentaires d’origine',
+      title: 'Retrouvez les commentaires originaux',
       description:
         'Recherchez et triez les commentaires enregistrés, puis ouvrez les réponses pour retrouver le contexte.',
     },
@@ -188,7 +183,6 @@ export const storeScreenshotCopy = {
     discussion: 'Ce que dit le public',
     findings: 'Ce qui ressort',
     analysisPanel: 'Analyse par IA',
-    popupPanel: 'Fenêtre de l’extension',
     commentsPanel: 'Commentaires enregistrés',
     exports: [
       { type: 'Markdown', label: 'Analyse' },
@@ -224,7 +218,6 @@ export const storeScreenshotCopy = {
     discussion: 'O que dizem as pessoas',
     findings: 'O que se destaca',
     analysisPanel: 'Análise por IA',
-    popupPanel: 'Janela da extensão',
     commentsPanel: 'Comentários guardados',
     exports: [
       { type: 'Markdown', label: 'Análise' },
@@ -259,7 +252,6 @@ export const storeScreenshotCopy = {
     discussion: 'Lo que dice la gente',
     findings: 'Lo que destaca',
     analysisPanel: 'Análisis con IA',
-    popupPanel: 'Ventana de la extensión',
     commentsPanel: 'Comentarios guardados',
     exports: [
       { type: 'Markdown', label: 'Análisis' },

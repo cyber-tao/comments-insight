@@ -16,10 +16,10 @@ async function main() {
   const { version } = await readJson('package.json');
   const locales = Object.keys(await readJson('src/config/locales.json'));
   const output = path.resolve(
-    process.argv[2] ?? path.join(projectRoot, 'build', 'store-assets', `v${version}-youtube`),
+    process.argv[2] ?? path.join(projectRoot, 'build', 'store-assets', `v${version}`),
   );
-  const archive = path.resolve(
-    process.argv[3] ?? path.join(projectRoot, 'build', 'store-preview-v0.10.0-video'),
+  const captures = path.resolve(
+    process.argv[3] ?? path.join(projectRoot, 'build', `store-v${version}-raw`),
   );
   const relativeToDist = path.relative(path.join(projectRoot, 'dist'), output);
   if (
@@ -39,9 +39,10 @@ async function main() {
     for (const locale of locales) {
       const sample = youtubeExample[locale];
       if (!sample) throw new Error(`Missing YouTube example copy for ${locale}`);
+      const { options } = await readJson(`src/locales/${locale}.json`);
       const directory = path.join(output, locale);
       await fs.mkdir(directory, { recursive: true });
-      await renderStoreSlides(browser, directory, locale, sample, archive);
+      await renderStoreSlides(browser, directory, locale, sample, captures, options);
       console.log(`Rendered ${locale}`);
     }
     console.log(`Chrome Web Store screenshots: ${output}`);

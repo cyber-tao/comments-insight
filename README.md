@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="images/banners/banner-1400x560.jpg" alt="Comments Insight turns comments into reports" width="100%" />
+  <img src="images/banners/banner-1400x560.jpg" alt="Comments Insight banner with its teal speech bubble and magnifying glass icon" width="100%" />
 </div>
 
 <div align="center">
@@ -14,7 +14,7 @@ Extract comments and replies from supported webpages. Use your configured AI ser
 
 </div>
 
-The instructions below cover **v0.11.0**. The Chrome Web Store listing shows the version it currently distributes. [GitHub release v0.11.0](https://github.com/cyber-tao/comments-insight/releases/tag/v0.11.0)
+**v0.11.0** introduces a new icon and redesigned light and dark themes for the extension. The Chrome Web Store listing shows the version it currently distributes. [GitHub release v0.11.0](https://github.com/cyber-tao/comments-insight/releases/tag/v0.11.0)
 
 ## 📚 Table of Contents
 
@@ -49,7 +49,7 @@ The instructions below cover **v0.11.0**. The Chrome Web Store listing shows the
 ## 📸 Screenshots
 
 <a href="images/screenshots/en-US/00-cover.jpg">
-  <img src="images/screenshots/en-US/00-cover.jpg" alt="Find what matters in the comments. See what viewers discussed after a top-speed test, with built-in support for six platforms." width="100%" />
+  <img src="images/screenshots/en-US/00-cover.jpg" alt="Topics from the Yangwang U9 Xtreme speed test and six platforms with built-in comment extraction rules" width="100%" />
 </a>
 
 The screenshots follow the discussion on YOUCAR’s Yangwang U9 Xtreme speed-test video. Comment excerpts are anonymized paraphrases, and the analysis and dashboard are adapted from the original exports. [Source video](https://www.youtube.com/watch?v=uxdE0I-VaFc)
@@ -58,24 +58,24 @@ The screenshots follow the discussion on YOUCAR’s Yangwang U9 Xtreme speed-tes
   <tr>
     <td width="50%">
       <a href="images/screenshots/en-US/01-analysis.jpg">
-        <img src="images/screenshots/en-US/01-analysis.jpg" alt="AI analysis summarizes what viewers discussed about driver safety, the speed at impact, and stability" />
+        <img src="images/screenshots/en-US/01-analysis.jpg" alt="Dark theme analysis of viewer discussions about driver safety, impact speed, and stability" />
       </a>
     </td>
     <td width="50%">
       <a href="images/screenshots/en-US/02-collect.jpg">
-        <img src="images/screenshots/en-US/02-collect.jpg" alt="The source YouTube video and extension popup showing collected comments" />
+        <img src="images/screenshots/en-US/02-collect.jpg" alt="Light and dark extension popups showing comment collection side by side" />
       </a>
     </td>
   </tr>
   <tr>
     <td width="50%">
       <a href="images/screenshots/en-US/03-comments.jpg">
-        <img src="images/screenshots/en-US/03-comments.jpg" alt="Saved comments with search, sorting, and an expanded reply" />
+        <img src="images/screenshots/en-US/03-comments.jpg" alt="Saved comments in the light theme with search, sorting, and an expanded reply" />
       </a>
     </td>
     <td width="50%">
       <a href="images/screenshots/en-US/04-export.jpg">
-        <img src="images/screenshots/en-US/04-export.jpg" alt="Export the analysis as Markdown, the visual report as HTML, or the comments as CSV" />
+        <img src="images/screenshots/en-US/04-export.jpg" alt="Visual dashboard and export options for Markdown analysis, HTML reports, and CSV comments" />
       </a>
     </td>
   </tr>
@@ -101,7 +101,7 @@ The screenshots follow the discussion on YOUCAR’s Yangwang U9 Xtreme speed-tes
   - Sanitized AI/system logs with local inspection tools for debugging.
   - Searchable history with filtering and sorting (by Time, Likes, Replies).
 - 🌐 **Languages.** English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, European Portuguese, and Spanish. Choose a language in Options.
-- 🎨 **Theme Support**: Light, Dark, and System modes with automatic theme switching.
+- 🎨 **Appearance.** Choose **Light** with warm paper tones, **Dark** with charcoal tones, or **System** to follow your device setting. Find the controls under **Options → Extension Settings → Basic Settings → Theme**.
 - 🛠️ **Developer Mode**: Toggle advanced features like AI Logs and Selector Testing tools.
 
 ## 🔑 API Key Security Note

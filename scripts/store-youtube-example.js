@@ -20,7 +20,6 @@ export const youtubeExample = {
     discussionNote:
       'A question about airbags led to a discussion of how roll cages and racing harnesses work together.',
     verification: 'Actual impact speed unverified',
-    sourceLabel: 'Source video',
     videoLabel: 'Real example',
     platformsLabel: 'Built-in support',
   },
@@ -38,7 +37,6 @@ export const youtubeExample = {
     discussion: '回复里的技术讨论',
     discussionNote: '对气囊的疑问引出了防滚架与赛车安全带如何协同保护车手的讨论。',
     verification: '实际撞击速度尚未证实',
-    sourceLabel: '源视频',
     videoLabel: '真实案例',
     platformsLabel: '内置支持',
   },
@@ -56,7 +54,6 @@ export const youtubeExample = {
     discussion: '回覆中的技術討論',
     discussionNote: '對安全氣囊的疑問，引出防滾籠與賽車安全帶如何共同保護車手的討論。',
     verification: '實際撞擊速度尚未證實',
-    sourceLabel: '來源影片',
     videoLabel: '真實案例',
     platformsLabel: '內建支援',
   },
@@ -75,7 +72,6 @@ export const youtubeExample = {
     discussionNote:
       'エアバッグをめぐる疑問から、ロールケージと競技用ハーネスの役割について議論が広がりました。',
     verification: '実際の衝突速度は未確認',
-    sourceLabel: '元の動画',
     videoLabel: '実際の分析例',
     platformsLabel: '標準対応',
   },
@@ -94,7 +90,6 @@ export const youtubeExample = {
     discussionNote:
       '에어백에 대한 질문이 롤 케이지와 경주용 안전벨트가 운전자를 보호하는 방식에 대한 논의로 이어졌습니다.',
     verification: '실제 충돌 속도는 확인되지 않음',
-    sourceLabel: '원본 영상',
     videoLabel: '실제 분석 사례',
     platformsLabel: '기본 지원',
   },
@@ -117,7 +112,6 @@ export const youtubeExample = {
     discussionNote:
       'Une question sur les airbags a lancé un échange sur le rôle de l’arceau-cage et du harnais de course.',
     verification: 'Vitesse réelle à l’impact non vérifiée',
-    sourceLabel: 'Vidéo source',
     videoLabel: 'Cas réel',
     platformsLabel: 'Compatibilité intégrée',
   },
@@ -140,7 +134,6 @@ export const youtubeExample = {
     discussionNote:
       'Uma pergunta sobre os airbags deu origem a uma conversa sobre a estrutura de segurança e os cintos de competição.',
     verification: 'Velocidade real do impacto por confirmar',
-    sourceLabel: 'Vídeo original',
     videoLabel: 'Caso real',
     platformsLabel: 'Suporte integrado',
   },
@@ -163,7 +156,6 @@ export const youtubeExample = {
     discussionNote:
       'Una pregunta sobre los airbags abrió un debate sobre la jaula antivuelco y el arnés de competición.',
     verification: 'Velocidad real del impacto sin verificar',
-    sourceLabel: 'Vídeo original',
     videoLabel: 'Caso real',
     platformsLabel: 'Compatibilidad integrada',
   },

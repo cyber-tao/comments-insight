@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="images/banners/banner-1400x560.jpg" alt="评论洞察，从评论和回复生成可导出的分析报告" width="100%" />
+  <img src="images/banners/banner-1400x560.jpg" alt="评论洞察横幅，图标以青绿色对话气泡和放大镜为主" width="100%" />
 </div>
 
 <div align="center">
@@ -14,7 +14,7 @@
 
 </div>
 
-本文适用于 **v0.11.0**。Chrome 网上应用店页面会显示当前可安装的版本。 [GitHub v0.11.0 发布页](https://github.com/cyber-tao/comments-insight/releases/tag/v0.11.0)
+**v0.11.0** 更新了扩展图标，并重新设计了浅色和深色主题。Chrome 网上应用店页面会显示当前可安装的版本。 [GitHub v0.11.0 发布页](https://github.com/cyber-tao/comments-insight/releases/tag/v0.11.0)
 
 ## 📚 目录
 
@@ -49,7 +49,7 @@
 ## 📸 演示截图
 
 <a href="images/screenshots/zh-CN/00-cover.jpg">
-  <img src="images/screenshots/zh-CN/00-cover.jpg" alt="看懂大家真正在意什么。从极速测试视频的评论中发现观众关心的话题，并查看六个内置支持的平台。" width="100%" />
+  <img src="images/screenshots/zh-CN/00-cover.jpg" alt="仰望 U9 Xtreme 极速测试的评论议题，以及内置评论提取规则的六个平台" width="100%" />
 </a>
 
 下方用 YOUCAR 仰望 U9 Xtreme 极速测试视频展示如何归纳讨论。评论节选已匿名转述，分析与看板依据原始导出整理。 [原视频](https://www.youtube.com/watch?v=uxdE0I-VaFc)
@@ -58,24 +58,24 @@
   <tr>
     <td width="50%">
       <a href="images/screenshots/zh-CN/01-analysis.jpg">
-        <img src="images/screenshots/zh-CN/01-analysis.jpg" alt="AI 分析归纳观众对车手安全、撞击速度和高速稳定性的讨论" />
+        <img src="images/screenshots/zh-CN/01-analysis.jpg" alt="深色主题下的 AI 分析，归纳观众对车手安全、撞击速度和高速稳定性的讨论" />
       </a>
     </td>
     <td width="50%">
       <a href="images/screenshots/zh-CN/02-collect.jpg">
-        <img src="images/screenshots/zh-CN/02-collect.jpg" alt="YouTube 视频画面与显示已采集评论的扩展弹窗" />
+        <img src="images/screenshots/zh-CN/02-collect.jpg" alt="并排展示提取评论的浅色和深色扩展弹窗" />
       </a>
     </td>
   </tr>
   <tr>
     <td width="50%">
       <a href="images/screenshots/zh-CN/03-comments.jpg">
-        <img src="images/screenshots/zh-CN/03-comments.jpg" alt="在已保存的评论中搜索、排序和展开回复" />
+        <img src="images/screenshots/zh-CN/03-comments.jpg" alt="浅色主题下搜索和排序已保存的评论，并展开一条回复" />
       </a>
     </td>
     <td width="50%">
       <a href="images/screenshots/zh-CN/04-export.jpg">
-        <img src="images/screenshots/zh-CN/04-export.jpg" alt="将分析结果导出为 Markdown、网页报告导出为 HTML，或将评论原文导出为 CSV" />
+        <img src="images/screenshots/zh-CN/04-export.jpg" alt="动态看板与导出选项，支持 Markdown 分析、HTML 报告和 CSV 评论" />
       </a>
     </td>
   </tr>
@@ -101,7 +101,7 @@
   - 对 AI/系统日志进行敏感信息清洗，并提供本地调试查看工具。
   - 支持搜索、过滤和排序（时间、点赞数、回复数）。
 - 🌐 **多语言支持**。在扩展选项中可选择简体中文、繁体中文、英语、日语、韩语、法语、葡萄牙语（葡萄牙）或西班牙语。
-- 🎨 **主题支持**: 支持亮色、暗色和跟随系统三种主题模式，自动切换。
+- 🎨 **外观**。浅色主题采用暖纸色，深色主题采用炭灰色。可在 **选项 → 扩展设置 → 基本设置 → 主题** 中选择 **浅色**、**深色**或**跟随系统**。
 - 🛠️ **开发者模式**: 可开启 AI 日志详细视图和选择器测试工具。
 
 ## 🔑 API 密钥安全说明
