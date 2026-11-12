@@ -22,12 +22,13 @@ export class AIErrorHandler {
     if (status === 400) {
       if (
         errorText.includes('max_tokens') ||
+        errorText.includes('max_output_tokens') ||
         errorText.includes('context length') ||
         errorText.includes('maximum context')
       ) {
         throw createAIError(
           ErrorCode.INVALID_CONFIG,
-          `Context limit exceeded. Please reduce 'Context Length' in settings or use a larger model. API Error: ${safeText}`,
+          `Token limit exceeded. Please check 'Context Length' and 'Max Output Tokens' in settings or use a larger model. API Error: ${safeText}`,
           { status, response: safeText },
           false,
         );

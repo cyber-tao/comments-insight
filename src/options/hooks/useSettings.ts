@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { STORAGE, TIMING } from '@/config/constants';
-import { Settings, SettingsPatch } from '@/types';
+import { AI, STORAGE, TIMING } from '@/config/constants';
+import { AIProtocol, Settings, SettingsPatch } from '@/types';
 import { crawlingConfigsFingerprint } from '@/utils/crawling-config';
 import { ExtensionError } from '@/utils/error-types';
 import { changeLanguage } from '@/utils/i18n';
@@ -46,6 +46,7 @@ export function useSettings() {
   const rulesFingerprintRef = useRef('');
   // This is the persisted source, not an unsaved URL currently displayed in the form.
   const savedAiEndpointRef = useRef('');
+  const savedAiProtocolRef = useRef<AIProtocol>(AI.DEFAULT_PROTOCOL);
   const importGenerationRef = useRef(0);
   const importingRef = useRef(false);
   const [importing, setImporting] = useState(false);
@@ -86,6 +87,7 @@ export function useSettings() {
       setSettings(loaded);
       rulesFingerprintRef.current = crawlingConfigsFingerprint(loaded.crawlingConfigs);
       savedAiEndpointRef.current = loaded.aiModel.apiUrl;
+      savedAiProtocolRef.current = loaded.aiModel.protocol;
       setHasExternalConflict(false);
       if (loaded.language) void changeLanguage(loaded.language);
       return true;
@@ -146,6 +148,7 @@ export function useSettings() {
       const patch = pendingPatchRef.current;
       pendingPatchRef.current = {};
       const expectedEndpoint = savedAiEndpointRef.current;
+      const expectedProtocol = savedAiProtocolRef.current;
       isSavingRef.current = true;
       setSaving(true);
 
@@ -153,12 +156,14 @@ export function useSettings() {
         const endpointBoundEdit =
           patch.aiModel?.apiUrl !== undefined ||
           patch.aiModel?.apiKey !== undefined ||
+          patch.aiModel?.protocol !== undefined ||
           patch.aiModel?.model !== undefined;
         const response = endpointBoundEdit
           ? await ExtensionAPI.saveSettings(
               patch,
               patch.crawlingConfigs ? rulesFingerprintRef.current : undefined,
               expectedEndpoint,
+              expectedProtocol,
             )
           : patch.crawlingConfigs
             ? await ExtensionAPI.saveSettings(patch, rulesFingerprintRef.current)
@@ -171,6 +176,8 @@ export function useSettings() {
           rulesFingerprintRef.current = crawlingConfigsFingerprint(patch.crawlingConfigs);
         }
         if (patch.aiModel?.apiUrl !== undefined) savedAiEndpointRef.current = patch.aiModel.apiUrl;
+        if (patch.aiModel?.protocol !== undefined)
+          savedAiProtocolRef.current = patch.aiModel.protocol;
         if (changeRevisionRef.current === revisionToSave) {
           toastRef.current.success(tRef.current('options.savedSuccess'));
           isUserChangeRef.current = false;
@@ -232,7 +239,11 @@ export function useSettings() {
         endpointIdentity(settingsRef.current.aiModel.apiUrl)
     ) {
       // A queued key was entered for the previous endpoint, even if it shares this debounce batch.
-      patch.aiModel = { ...patch.aiModel, apiKey: patch.aiModel.apiKey ?? '' };
+      patch.aiModel = {
+        ...patch.aiModel,
+        apiKey: patch.aiModel.apiKey ?? '',
+        model: patch.aiModel.model ?? '',
+      };
     }
     isUserChangeRef.current = true;
     changeRevisionRef.current += 1;

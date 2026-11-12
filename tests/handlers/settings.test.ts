@@ -41,8 +41,7 @@ describe('Settings Handlers', () => {
       model: 'gpt-4',
       contextWindowSize: 200000,
       maxOutputTokens: 4096,
-      temperature: 1,
-      topP: 0.95,
+      protocol: 'openai-chat-completions' as const,
     },
     aiTimeout: 120000,
     analyzerPromptTemplate: 'Analyze these comments',
@@ -130,6 +129,7 @@ describe('Settings Handlers', () => {
         partialSettings,
         undefined,
         undefined,
+        undefined,
       );
       expect(mockAIService.clearVerifiedConfig).toHaveBeenCalledOnce();
     });
@@ -168,7 +168,12 @@ describe('Settings Handlers', () => {
       const result = await handleSaveSettings(message, context);
 
       expect(result).toEqual({ success: true });
-      expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith({}, undefined, undefined);
+      expect(mockSettingsStore.saveSettings).toHaveBeenCalledWith(
+        {},
+        undefined,
+        undefined,
+        undefined,
+      );
     });
 
     it('forwards the source endpoint and rules preconditions without persisting them as settings', async () => {
@@ -180,6 +185,7 @@ describe('Settings Handlers', () => {
           payload: {
             settings: patch,
             expectedAiEndpoint: 'https://old.example/v1',
+            expectedAiProtocol: 'anthropic-messages',
             expectedCrawlingConfigsFingerprint: 'rules-fingerprint',
           },
         },
@@ -189,6 +195,7 @@ describe('Settings Handlers', () => {
         patch,
         'rules-fingerprint',
         'https://old.example/v1',
+        'anthropic-messages',
       );
     });
 

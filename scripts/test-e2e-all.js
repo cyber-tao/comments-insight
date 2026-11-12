@@ -98,6 +98,324 @@ async function verifyAiRequestPrivacy(page) {
   }
 }
 
+async function saveAiFixture(page, config) {
+  const current = await sendExtensionMessage(page, { type: 'GET_SETTINGS' });
+  return sendExtensionMessage(page, {
+    type: 'SAVE_SETTINGS',
+    payload: {
+      settings: { aiModel: config, generateDynamicReport: false },
+      expectedAiEndpoint: current.settings.aiModel.apiUrl,
+      expectedAiProtocol: current.settings.aiModel.protocol,
+    },
+  });
+}
+
+async function verifyAiProtocols(page, comments) {
+  const requests = [];
+  const report = '# Protocol report\n\nComplete analysis: 评论正常。';
+  const credential = 'synthetic-protocol-key';
+  const server = http.createServer(async (request, response) => {
+    const url = new URL(request.url, 'http://127.0.0.1');
+    if (url.pathname.endsWith('/models')) {
+      if (url.pathname.includes('unauthorized')) {
+        response.writeHead(401, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify({ error: { message: 'Invalid ' + credential } }));
+        return;
+      }
+      const paginated = url.pathname.includes('anthropic-messages');
+      const next = url.searchParams.has('after_id');
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          data: [{ id: next ? 'second-model' : 'mock-model' }],
+          has_more: paginated && !next,
+          last_id: next ? 'second-model' : 'mock-model',
+        }),
+      );
+      return;
+    }
+    let body = '';
+    for await (const chunk of request) body += chunk;
+    const payload = JSON.parse(body);
+    requests.push({ path: url.pathname, headers: request.headers, payload });
+    response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    const emit = (event) => {
+      if (event.type) response.write('event: ' + event.type + '\r\n');
+      response.write('data: ' + JSON.stringify(event) + '\r\n\r\n');
+    };
+    if (url.pathname.endsWith('/chat/completions')) {
+      emit({ choices: [{ delta: { content: report }, finish_reason: null }] });
+      emit({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { total_tokens: 12 } });
+      response.write('data: [DONE]\r\n\r\n');
+    } else if (url.pathname.endsWith('/responses')) {
+      emit({
+        type: 'response.output_text.delta',
+        output_index: 0,
+        content_index: 0,
+        delta: report,
+      });
+      const incomplete = url.pathname.includes('incomplete');
+      emit({
+        type: incomplete ? 'response.incomplete' : 'response.completed',
+        response: {
+          status: incomplete ? 'incomplete' : 'completed',
+          incomplete_details: incomplete ? { reason: 'max_output_tokens' } : null,
+          output: [{ type: 'message', content: [{ type: 'output_text', text: report }] }],
+          usage: { input_tokens: 9, output_tokens: 3, total_tokens: 12 },
+        },
+      });
+    } else if (url.pathname.endsWith('/messages')) {
+      emit({
+        type: 'message_start',
+        message: { content: [], usage: { input_tokens: 9, output_tokens: 0 } },
+      });
+      emit({ type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } });
+      emit({ type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: report } });
+      emit({ type: 'content_block_stop', index: 0 });
+      emit({
+        type: 'message_delta',
+        delta: { stop_reason: 'end_turn' },
+        usage: { output_tokens: 3 },
+      });
+      emit({ type: 'message_stop' });
+    }
+    response.end();
+  });
+  const origin = await listenLocally(server);
+  try {
+    for (const protocol of ['openai-chat-completions', 'openai-responses', 'anthropic-messages']) {
+      const config = {
+        protocol,
+        apiUrl: origin + '/' + protocol + '/v1',
+        apiKey: credential,
+        model: 'mock-model',
+        contextWindowSize: 32768,
+        maxOutputTokens: 1024,
+      };
+      const models = await sendExtensionMessage(page, {
+        type: 'GET_AVAILABLE_MODELS',
+        payload: config,
+      });
+      assert(models.models.includes('mock-model'), protocol + ' did not discover models');
+      if (protocol === 'anthropic-messages') {
+        assert(models.models.includes('second-model'), 'Anthropic model pagination was incomplete');
+      }
+      const connection = await sendExtensionMessage(page, {
+        type: 'TEST_MODEL',
+        payload: { config },
+      });
+      assert(connection.success, protocol + ' connection test failed');
+      await saveAiFixture(page, config);
+      const url = 'https://protocol.e2e.invalid/' + protocol;
+      const started = await sendExtensionMessage(page, {
+        type: 'START_ANALYSIS',
+        payload: { comments, metadata: { url, title: 'Protocol fixture' } },
+      });
+      const task = await waitForTask(page, started.taskId);
+      const saved = await sendExtensionMessage(page, {
+        type: 'GET_HISTORY_BY_URL',
+        payload: { url },
+      });
+      assert(
+        saved.item?.analysis?.markdown === report,
+        protocol + ' saved missing or duplicate text',
+      );
+      assert(saved.item.analysis.tokensUsed === 12, protocol + ' recorded incorrect usage');
+      assert(task.tokensUsed === 12, protocol + ' task usage did not match the report');
+      recordPass('AI Protocols', protocol + ' models, connection test and persisted analysis');
+    }
+    for (const { path: requestPath, headers, payload } of requests) {
+      for (const field of ['temperature', 'top_p', 'top_k']) {
+        assert(!(field in payload), 'Sampling parameter was sent: ' + field);
+      }
+      assert(payload.stream === true, 'Protocol request did not enable streaming');
+      if (requestPath.endsWith('/messages')) {
+        assert(headers['x-api-key'] === credential, 'Anthropic API key header is missing');
+        assert(headers['anthropic-version'] === '2023-06-01', 'Anthropic version changed');
+        assert(
+          headers['anthropic-dangerous-direct-browser-access'] === 'true',
+          'Missing browser header',
+        );
+        assert(payload.max_tokens === 1024, 'Anthropic output limit was not forwarded');
+      } else {
+        assert(
+          headers.authorization === 'Bearer ' + credential,
+          'Bearer authentication is missing',
+        );
+        if (requestPath.endsWith('/responses')) {
+          assert(payload.store === false, 'Responses request enabled remote response storage');
+          assert(payload.max_output_tokens === 1024, 'Responses output limit was not forwarded');
+          assert(!('messages' in payload), 'Responses request used Chat Completions messages');
+        }
+      }
+    }
+    const current = await sendExtensionMessage(page, { type: 'GET_SETTINGS' });
+    await saveAiFixture(page, {
+      ...current.settings.aiModel,
+      protocol: 'openai-responses',
+      apiUrl: origin + '/incomplete/v1',
+      apiKey: credential,
+    });
+    const failedUrl = 'https://protocol.e2e.invalid/incomplete';
+    const started = await sendExtensionMessage(page, {
+      type: 'START_ANALYSIS',
+      payload: { comments, metadata: { url: failedUrl } },
+    });
+    let failed = false;
+    try {
+      await waitForTask(page, started.taskId);
+    } catch (error) {
+      if (error.message.includes('did not complete within')) throw error;
+      failed = true;
+    }
+    assert(failed, 'Incomplete Responses output was marked as successful');
+    const failedHistory = await sendExtensionMessage(page, {
+      type: 'GET_HISTORY_BY_URL',
+      payload: { url: failedUrl },
+    });
+    assert(!failedHistory.item, 'Incomplete output was persisted as a report');
+    recordPass(
+      'AI Protocols',
+      'Incomplete Responses analysis failed without saving a partial report',
+    );
+    const modelsFailure = await page.evaluate(
+      (payload) => chrome.runtime.sendMessage({ type: 'GET_AVAILABLE_MODELS', payload }),
+      { apiUrl: origin + '/unauthorized/v1', apiKey: credential, protocol: 'openai-responses' },
+    );
+    assert(
+      modelsFailure.error?.code === 'MISSING_API_KEY',
+      'Model discovery hid an authentication failure',
+    );
+    assert(
+      !JSON.stringify(modelsFailure).includes(credential),
+      'Model discovery exposed a credential',
+    );
+    recordPass(
+      'AI Protocols',
+      'Model discovery reports authentication failures without exposing keys',
+    );
+    await verifyAiSettingsUi(page, origin, requests);
+  } finally {
+    server.close();
+  }
+}
+
+async function verifyAiSettingsUi(page, origin, requests) {
+  const uiErrors = [];
+  const onPageError = (error) => uiErrors.push(error.message);
+  page.on('pageerror', onPageError);
+  const waitForSaved = async (expected) => {
+    try {
+      await page.waitForFunction(
+        async (values) => {
+          const result = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
+          return Object.entries(values).every(
+            ([key, value]) => result.settings.aiModel[key] === value,
+          );
+        },
+        { timeout: 10000, polling: 100 },
+        expected,
+      );
+    } catch (error) {
+      const actual = await page.evaluate(async () => {
+        const response = await chrome.runtime.sendMessage({ type: 'GET_SETTINGS' });
+        const { apiKey, ...model } = response.settings.aiModel;
+        return {
+          ...model,
+          hasApiKey: Boolean(apiKey),
+          alerts: [...document.querySelectorAll('[role="alert"]')].map((item) => item.textContent),
+        };
+      });
+      throw new Error(
+        'AI settings did not persist ' +
+          JSON.stringify(expected) +
+          '; actual: ' +
+          JSON.stringify(actual),
+        { cause: error },
+      );
+    }
+  };
+  try {
+    await page.bringToFront();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#ai-provider-preset', { visible: true });
+    assert(
+      new URL(page.url()).protocol === 'chrome-extension:',
+      'AI settings loaded outside the extension',
+    );
+    assert((await page.title()).length > 0, 'AI settings page has no title');
+    const choices = await page.$$eval('#ai-provider-preset option', (options) =>
+      options.map((option) => option.value),
+    );
+    assert(choices.length === 6, 'Expected five provider presets plus Custom');
+    const requestCount = requests.length;
+    for (const [provider, apiUrl, protocol] of [
+      ['openai', 'https://api.openai.com/v1', 'openai-responses'],
+      ['anthropic', 'https://api.anthropic.com/v1', 'anthropic-messages'],
+      [
+        'gemini',
+        'https://generativelanguage.googleapis.com/v1beta/openai',
+        'openai-chat-completions',
+      ],
+      ['deepseek', 'https://api.deepseek.com', 'openai-chat-completions'],
+      ['openrouter', 'https://openrouter.ai/api/v1', 'openai-chat-completions'],
+    ]) {
+      await page.select('#ai-provider-preset', provider);
+      await waitForSaved({ apiUrl, protocol, apiKey: '', model: '' });
+      assert(
+        await page.$eval('#ai-protocol', (input, expected) => input.value === expected, protocol),
+        'Preset protocol was not rendered',
+      );
+    }
+    assert(requests.length === requestCount, 'Choosing a preset invoked an AI request');
+    await page.select('#ai-provider-preset', 'custom');
+    assert(
+      await page.$eval('#ai-api-url', (input) => input.value === 'https://openrouter.ai/api/v1'),
+      'Choosing Custom discarded the current address',
+    );
+    const localUrl = origin + '/openai-chat-completions/v1';
+    await page.click('#ai-api-url', { clickCount: 3 });
+    await page.keyboard.down('Control');
+    await page.keyboard.press('KeyA');
+    await page.keyboard.up('Control');
+    await page.type('#ai-api-url', localUrl);
+    await waitForSaved({ apiUrl: localUrl });
+    await page.click('#ai-fetch-models');
+    await page.waitForSelector('#ai-model[role="combobox"]');
+    await page.type('#ai-model', 'manual-model');
+    await page.keyboard.press('Enter');
+    await waitForSaved({ model: 'manual-model' });
+    await page.select('#ai-protocol', 'openai-responses');
+    await waitForSaved({ protocol: 'openai-responses', model: 'manual-model' });
+    assert(
+      !(await page.$eval('#root', (root) => /Temperature|Top P|温度/.test(root.innerText))),
+      'Removed sampling controls are still displayed',
+    );
+    const screenshotDir = process.env.COMMENTS_INSIGHT_E2E_SCREENSHOT_DIR;
+    if (screenshotDir) {
+      await page.select('#ai-provider-preset', 'openai');
+      await waitForSaved({ apiUrl: 'https://api.openai.com/v1', protocol: 'openai-responses' });
+      await page.waitForSelector('[role="alert"]', { hidden: true, timeout: 10000 });
+      fs.mkdirSync(screenshotDir, { recursive: true });
+      await page.setViewport({ width: 1280, height: 1000 });
+      await page.$eval('#ai-provider-preset', (element) =>
+        element.closest('section').scrollIntoView({ block: 'start' }),
+      );
+      await page.screenshot({ path: path.join(screenshotDir, 'ai-settings-desktop.png') });
+      await page.setViewport({ width: 390, height: 844 });
+      await page.$eval('#ai-provider-preset', (element) =>
+        element.closest('section').scrollIntoView({ block: 'start' }),
+      );
+      await page.screenshot({ path: path.join(screenshotDir, 'ai-settings-mobile.png') });
+    }
+    assert(uiErrors.length === 0, 'AI settings page errors: ' + uiErrors.join(', '));
+    recordPass('AI Settings', 'Five presets, protocol switching and custom model entry in Chrome');
+  } finally {
+    page.off('pageerror', onPageError);
+    await page.setViewport({ width: 1280, height: 800 });
+  }
+}
+
 let passedCount = 0;
 let failedCount = 0;
 const testResults = [];
@@ -954,6 +1272,8 @@ async function runAllAutomatedTests() {
     );
     recordPass('ContentScript', 'Expanded and persisted a reply using the bundled YouTube rules');
     recordPass('HistoryStore', 'Verified completed extraction was persisted and readable by URL');
+
+    await verifyAiProtocols(controlPage, historyItem.comments);
 
     await verifyAiRequestPrivacy(controlPage);
     recordPass('AI Privacy', 'Rejected 307/308 in Chrome and redacted a gateway credential echo');

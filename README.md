@@ -86,7 +86,7 @@ The screenshots follow the discussion on YOUCAR’s Yangwang U9 Xtreme speed-tes
 - 🧲 **Comment extraction.** Use built-in or custom site rules to collect comments and nested replies. AI-assisted rule generation checks selectors against the page before saving them. The popup shows progress, and extraction tasks stop if their source page changes.
 - 🧠 **AI Analysis**:
   - **Scalable Processing**: Automatically batches large comment sets with concurrency control (up to 3 concurrent requests) to handle long threads efficiently.
-  - **Streaming Responses**: Streams Chat Completions output, keeps long requests alive with activity-based timeouts, and shows live receiving progress in Popup and History actions.
+  - **Streaming Responses**: Streams Chat Completions, OpenAI Responses, and Anthropic Messages output, keeps long requests alive with activity-based timeouts, and shows live receiving progress in Popup and History actions.
   - **Thought Filtering**: Supports reasoning models (like DeepSeek) by automatically stripping `<think>` tags from output for clean reports.
   - **Invalid Output Guard**: Empty model responses are rejected and retried instead of being stored as successful blank reports.
   - Comprehensive reports including Sentiment Distribution, Hot Comments, Top Discussed, and Interaction Analysis.
@@ -115,7 +115,7 @@ The extension sends credentials and any data needed for the requested AI operati
 - **Background**: The Service Worker runs migrations before initializing `TaskManager`, owns streaming `AIService` calls, and persists data through stores injected by `ServiceContainer`. UI requests use `START_*` messages; background jobs send validated `RUN_*` commands to content scripts.
 - **Content Scripts**: Accept validated content-only commands, perform abortable DOM traversal and `MutationObserver`-powered interactions, and return extraction/configuration outcomes to the background task.
 - **Popup**: Main control center for triggering tasks, viewing page status, and monitoring granular real-time progress.
-- **Options**: Configuration for AI models (OpenAI-compatible services and local endpoints), prompts, and scraper management.
+- **Options**: AI provider presets, protocol and model configuration, prompts, and scraper management.
 - **History**: Browses Dexie-backed extraction records, reruns analysis, monitors streaming progress, and exports sanitized reports.
 - **Sandbox**: An opaque-origin, network-blocked iframe that sanitizes model-generated HTML and renders only static HTML/CSS without `chrome.*` APIs or extension-page privileges.
 
@@ -181,11 +181,14 @@ At `chrome://extensions`, enable **Developer mode** and select `dist` using **Lo
 
 ### Configure an AI Service
 
-AI-assisted rule generation, analysis, and visual reports require an OpenAI-compatible Chat Completions endpoint.
+AI-assisted rule generation, analysis, and visual reports support OpenAI Chat Completions, OpenAI Responses, and Anthropic Messages endpoints.
 
 1. Open **Options** from the extension's toolbar menu and go to **AI Model**.
-2. Enter the service's **API URL** and its **API Key** if required. Enter a model ID or select one using **Fetch Available Models**.
-3. Click **Test Model**. A successful test confirms that the extension can reach the configured model.
+2. Choose a **Provider preset** (OpenAI, Anthropic, Gemini, DeepSeek, or OpenRouter), or choose **Custom** and enter the **API URL** and **API protocol**. Presets fill the address and protocol; switching endpoints clears the previous key and model. Gemini uses its OpenAI-compatible API.
+3. Enter the service's **API Key** if required. Enter a model ID or select one using **Fetch Available Models**. Manual model IDs remain available even when model discovery fails or the model is not listed. Anthropic uses a workspace-scoped API key.
+4. Click **Test Model**. A successful test confirms that the extension can reach the configured model.
+
+The extension keeps one active configuration. Existing configurations retain Chat Completions on upgrade. Sampling parameters (`temperature`, `top_p`, and `top_k`) are omitted so the service uses its defaults.
 
 ### Using the Extension
 
@@ -196,7 +199,7 @@ AI-assisted rule generation, analysis, and visual reports require an OpenAI-comp
 
 ## ⚙️ Configuration
 
-- **AI Model.** Configure the endpoint, model ID, context window, and output token limit to match the service you use.
+- **AI Model.** Configure the provider, protocol, endpoint, model ID, context window, and output token limit to match the service you use.
 - **DOM Analysis**: Configure advanced parameters like `initialDepth`, `expandDepth`, and `maxDepth` for complex pages.
 - **Prompts**: Customize labels/placeholders like `{comments_data}`, `{post_content}`, etc.
 - **Developer Mode**: Enable in Settings to see "View AI Logs" and selector testing tools.

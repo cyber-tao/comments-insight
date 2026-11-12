@@ -29,6 +29,7 @@ function buildCurrentMigrations(step2: () => Promise<void>): Record<number, () =
     2: step2,
     3: async () => undefined,
     4: async () => undefined,
+    5: async () => undefined,
   };
 }
 

@@ -2,16 +2,17 @@ import * as React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AI, API, UI_LIMITS } from '@/config/constants';
+import { AI_PROVIDER_PRESETS } from '@/config/ai-providers';
 import {
   DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
   DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
   getAnalysisPromptTemplate,
   getDynamicReportPromptTemplate,
 } from '@/utils/prompts';
-import { Settings, SettingsPatch } from '@/types';
+import { AIProtocol, Settings, SettingsPatch } from '@/types';
 import { ExtensionAPI } from '@/utils/extension-api';
 import { ErrorCode, ExtensionError } from '@/utils/error-types';
-import { parseFiniteIntegerInput, parseFiniteNumberInput } from '@/utils/number';
+import { parseFiniteIntegerInput } from '@/utils/number';
 import { normalizeAiApiUrl } from '@/utils/url';
 import { EyeIcon, EyeOffIcon, RefreshIcon, SparklesIcon } from '@/components/Icons';
 import { SearchableModelSelect } from './SearchableModelSelect';
@@ -39,6 +40,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
   const [testingModel, setTestingModel] = useState(false);
   const [showPlaceholders, setShowPlaceholders] = useState(false);
   const [showDynamicPlaceholders, setShowDynamicPlaceholders] = useState(false);
+  const [customPresetEndpoint, setCustomPresetEndpoint] = useState<string | null>(null);
   const maxOutputTokens =
     typeof settings.aiModel.maxOutputTokens === 'number' &&
     Number.isFinite(settings.aiModel.maxOutputTokens)
@@ -52,9 +54,13 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
   const configRef = useRef(settings.aiModel);
   configRef.current = settings.aiModel;
   const modelRequestRef = useRef(0);
-  const modelEditRevisionRef = useRef(0);
   const testRequestRef = useRef(0);
   const endpoint = normalizeAiApiUrl(settings.aiModel.apiUrl) ?? settings.aiModel.apiUrl.trim();
+  const selectedPreset =
+    customPresetEndpoint === endpoint
+      ? 'custom'
+      : (AI_PROVIDER_PRESETS.find((preset) => normalizeAiApiUrl(preset.apiUrl) === endpoint)?.id ??
+        'custom');
 
   useEffect(() => {
     modelRequestRef.current += 1;
@@ -66,10 +72,28 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
       modelRequestRef.current += 1;
       testRequestRef.current += 1;
     };
-  }, [endpoint, settings.aiModel.apiKey]);
+  }, [endpoint, settings.aiModel.apiKey, settings.aiModel.protocol]);
+
+  const handlePresetChange = (id: string) => {
+    if (id === 'custom') {
+      setCustomPresetEndpoint(endpoint);
+      return;
+    }
+    const preset = AI_PROVIDER_PRESETS.find((entry) => entry.id === id);
+    if (!preset) return;
+    setCustomPresetEndpoint(null);
+    onSettingsChange({
+      aiModel: {
+        apiUrl: preset.apiUrl,
+        protocol: preset.protocol,
+        ...(normalizeAiApiUrl(preset.apiUrl) !== endpoint ? { apiKey: '', model: '' } : {}),
+      },
+    });
+  };
 
   const handleModelChange = (model: string) => {
-    modelEditRevisionRef.current += 1;
+    testRequestRef.current += 1;
+    setTestingModel(false);
     onSettingsChange({ aiModel: { model } });
   };
 
@@ -82,31 +106,25 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
     }
 
     const requestId = ++modelRequestRef.current;
-    const editRevision = modelEditRevisionRef.current;
     const isCurrent = () =>
       requestId === modelRequestRef.current &&
       endpoint ===
         (normalizeAiApiUrl(configRef.current.apiUrl) ?? configRef.current.apiUrl.trim()) &&
-      config.apiKey === configRef.current.apiKey;
+      config.apiKey === configRef.current.apiKey &&
+      config.protocol === configRef.current.protocol;
     setLoadingModels(true);
 
     try {
-      const models = await ExtensionAPI.getAvailableModels(config.apiUrl, config.apiKey);
+      const models = await ExtensionAPI.getAvailableModels(
+        config.apiUrl,
+        config.apiKey,
+        config.protocol,
+      );
       if (!isCurrent()) return;
 
       if (models.length > 0) {
         setAvailableModels(models);
         toast.success(t('options.modelsFound', { count: models.length }));
-
-        if (
-          modelEditRevisionRef.current === editRevision &&
-          configRef.current.model === config.model &&
-          (!models.includes(config.model) || models.length === 1)
-        ) {
-          onSettingsChange({
-            aiModel: { model: models[0] },
-          });
-        }
       } else {
         setAvailableModels([]);
         toast.info(t('options.noModelsFound'));
@@ -117,7 +135,8 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
       toast.error(
         error instanceof ExtensionError && error.code === ErrorCode.AI_ENDPOINT_REDIRECT
           ? t('errors.aiEndpointRedirect')
-          : t('options.fetchModelsFailed'),
+          : t('options.fetchModelsFailed') +
+              (error instanceof Error && error.message ? `: ${error.message}` : ''),
       );
     } finally {
       if (isCurrent()) setLoadingModels(false);
@@ -138,6 +157,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
       endpoint ===
         (normalizeAiApiUrl(configRef.current.apiUrl) ?? configRef.current.apiUrl.trim()) &&
       config.apiKey === configRef.current.apiKey &&
+      config.protocol === configRef.current.protocol &&
       config.model === configRef.current.model;
     setTestingModel(true);
 
@@ -176,14 +196,62 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           {t('options.aiModel')}
         </h2>
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label
+              htmlFor="ai-provider-preset"
+              className="block text-sm font-medium mb-2"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {t('options.providerPreset')}
+            </label>
+            <select
+              id="ai-provider-preset"
+              value={selectedPreset}
+              onChange={(e) => handlePresetChange(e.target.value)}
+              className="w-full theme-input text-sm"
+            >
+              <option value="custom">{t('options.customProvider')}</option>
+              {AI_PROVIDER_PRESETS.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label
+              htmlFor="ai-protocol"
+              className="block text-sm font-medium mb-2"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              {t('options.apiProtocol')}
+            </label>
+            <select
+              id="ai-protocol"
+              value={settings.aiModel.protocol}
+              onChange={(e) =>
+                onSettingsChange({ aiModel: { protocol: e.target.value as AIProtocol } })
+              }
+              className="w-full theme-input text-sm"
+            >
+              <option value="openai-chat-completions">OpenAI Chat Completions</option>
+              <option value="openai-responses">OpenAI Responses</option>
+              <option value="anthropic-messages">Anthropic Messages</option>
+            </select>
+          </div>
+        </div>
+
         <div className="mb-4">
           <label
+            htmlFor="ai-api-url"
             className="block text-sm font-medium mb-2"
             style={{ color: 'var(--text-secondary)' }}
           >
             {t('options.apiUrl')}
           </label>
           <input
+            id="ai-api-url"
             type="text"
             value={settings.aiModel.apiUrl}
             onChange={(e) =>
@@ -198,6 +266,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
 
         <div className="mb-4">
           <label
+            htmlFor="ai-api-key"
             className="block text-sm font-medium mb-2"
             style={{ color: 'var(--text-secondary)' }}
           >
@@ -205,6 +274,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           </label>
           <div className="flex gap-2">
             <input
+              id="ai-api-key"
               type={showApiKey ? 'text' : 'password'}
               value={settings.aiModel.apiKey}
               onChange={(e) =>
@@ -232,6 +302,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
 
         <div className="mb-4">
           <label
+            htmlFor="ai-model"
             className="block text-sm font-medium mb-2"
             style={{ color: 'var(--text-secondary)' }}
           >
@@ -239,12 +310,14 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           </label>
           {availableModels.length > 0 ? (
             <SearchableModelSelect
+              id="ai-model"
               models={availableModels}
               value={settings.aiModel.model}
               onChange={handleModelChange}
             />
           ) : (
             <input
+              id="ai-model"
               type="text"
               value={settings.aiModel.model}
               onChange={(e) => handleModelChange(e.target.value)}
@@ -313,65 +386,9 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 mb-4">
-          <div>
-            <label
-              className="block text-sm font-medium mb-2"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              {t('options.temperature')}
-            </label>
-            <input
-              type="number"
-              step="0.1"
-              value={settings.aiModel.temperature}
-              onChange={(e) => {
-                const temperature = parseFiniteNumberInput(e.target.value);
-                if (temperature === null) {
-                  return;
-                }
-                onSettingsChange({
-                  aiModel: {
-                    temperature,
-                  },
-                });
-              }}
-              className="w-full theme-input tabular-nums"
-              min={UI_LIMITS.TEMPERATURE_MIN}
-              max={UI_LIMITS.TEMPERATURE_MAX}
-            />
-          </div>
-          <div>
-            <label
-              className="block text-sm font-medium mb-2"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              {t('options.topP')}
-            </label>
-            <input
-              type="number"
-              step="0.1"
-              value={settings.aiModel.topP}
-              onChange={(e) => {
-                const topP = parseFiniteNumberInput(e.target.value);
-                if (topP === null) {
-                  return;
-                }
-                onSettingsChange({
-                  aiModel: {
-                    topP,
-                  },
-                });
-              }}
-              className="w-full theme-input tabular-nums"
-              min={UI_LIMITS.TOP_P_MIN}
-              max={UI_LIMITS.TOP_P_MAX}
-            />
-          </div>
-        </div>
-
         <div className="mt-5 flex gap-2.5">
           <button
+            id="ai-fetch-models"
             type="button"
             onClick={handleFetchModels}
             disabled={loadingModels || testingModel}
@@ -387,6 +404,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             )}
           </button>
           <button
+            id="ai-test-model"
             type="button"
             onClick={handleTestModel}
             disabled={testingModel || loadingModels}

@@ -10,6 +10,24 @@ vi.mock('../src/utils/chrome-message', () => ({
 }));
 
 describe('ExtensionAPI', () => {
+  it('includes the selected protocol in model discovery messages', async () => {
+    sendMessageMock.mockResolvedValueOnce({ models: ['claude-test'] });
+    expect(
+      await ExtensionAPI.getAvailableModels(
+        'https://api.anthropic.com/v1',
+        'test-key',
+        'anthropic-messages',
+      ),
+    ).toEqual(['claude-test']);
+    expect(sendMessageMock).toHaveBeenLastCalledWith({
+      type: MESSAGES.GET_AVAILABLE_MODELS,
+      payload: {
+        apiUrl: 'https://api.anthropic.com/v1',
+        apiKey: 'test-key',
+        protocol: 'anthropic-messages',
+      },
+    });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -59,8 +77,7 @@ describe('ExtensionAPI', () => {
         model: 'gpt-4o-mini',
         contextWindowSize: 200000,
         maxOutputTokens: 4096,
-        temperature: 1,
-        topP: 0.95,
+        protocol: 'openai-chat-completions' as const,
       }),
     ).toEqual({ success: true, response: 'pong' });
 
@@ -81,7 +98,11 @@ describe('ExtensionAPI', () => {
       [
         {
           type: MESSAGES.GET_AVAILABLE_MODELS,
-          payload: { apiUrl: 'https://api.example.com', apiKey: 'secret' },
+          payload: {
+            apiUrl: 'https://api.example.com',
+            apiKey: 'secret',
+            protocol: 'openai-chat-completions',
+          },
         },
       ],
       // testModel reads settings first to compute the message timeout
@@ -96,8 +117,7 @@ describe('ExtensionAPI', () => {
               model: 'gpt-4o-mini',
               contextWindowSize: 200000,
               maxOutputTokens: 4096,
-              temperature: 1,
-              topP: 0.95,
+              protocol: 'openai-chat-completions' as const,
             },
           },
         },
@@ -174,12 +194,14 @@ describe('ExtensionAPI', () => {
       { aiModel: { apiUrl: 'https://first.example/v1', apiKey: 'new-key' } },
       undefined,
       '',
+      'openai-responses',
     );
     expect(sendMessageMock).toHaveBeenLastCalledWith({
       type: MESSAGES.SAVE_SETTINGS,
       payload: {
         settings: { aiModel: { apiUrl: 'https://first.example/v1', apiKey: 'new-key' } },
         expectedAiEndpoint: '',
+        expectedAiProtocol: 'openai-responses',
       },
     });
     const error = new ExtensionError(ErrorCode.VALIDATION_ERROR, 'AI endpoint changed', {
@@ -219,8 +241,7 @@ describe('ExtensionAPI', () => {
       model: 'gpt-4o-mini',
       contextWindowSize: 200000,
       maxOutputTokens: 4096,
-      temperature: 1,
-      topP: 0.95,
+      protocol: 'openai-chat-completions' as const,
     };
     const calls: Array<() => Promise<unknown>> = [
       () => ExtensionAPI.getSettings(),

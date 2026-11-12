@@ -93,14 +93,18 @@ export const selectorCacheSchema = z.object({
   lastUsed: finiteNumberSchema,
   successCount: finiteNumberSchema,
 });
+export const aiProtocolSchema = z.enum([
+  'openai-chat-completions',
+  'openai-responses',
+  'anthropic-messages',
+]);
 export const aiConfigSchema = z.object({
+  protocol: aiProtocolSchema,
   apiUrl: z.string(),
   apiKey: z.string(),
   model: z.string(),
   contextWindowSize: positiveIntegerSchema.min(AI.MIN_CONTEXT_WINDOW),
   maxOutputTokens: positiveIntegerSchema.min(AI.MIN_OUTPUT_TOKENS).optional(),
-  temperature: finiteNumberSchema.min(UI_LIMITS.TEMPERATURE_MIN).max(UI_LIMITS.TEMPERATURE_MAX),
-  topP: finiteNumberSchema.min(UI_LIMITS.TOP_P_MIN).max(UI_LIMITS.TOP_P_MAX),
 });
 export const completeAiConfigSchema = aiConfigSchema.superRefine((config, context) => {
   const maxOutputTokens = config.maxOutputTokens ?? AI.DEFAULT_MAX_OUTPUT_TOKENS;

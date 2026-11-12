@@ -3,7 +3,7 @@ import { AIService } from '../src/background/AIService';
 import { CommentAnalyzer } from '../src/background/ai/CommentAnalyzer';
 import { mockAIConfig, mockComment, mockComments } from './fixtures';
 import { ErrorCode } from '../src/utils/errors';
-import { AI, TEXT } from '../src/config/constants';
+import { AI, TEXT, TIMEOUT } from '../src/config/constants';
 import { Logger } from '../src/utils/logger';
 
 vi.hoisted(() => vi.resetModules());
@@ -79,6 +79,91 @@ describe('AIService', () => {
   });
 
   describe('callAI', () => {
+    it('classifies Responses output-limit errors without retrying or leaking credentials', async () => {
+      const apiKey = 'responses-private-key';
+      mockFetch.mockResolvedValue(
+        new Response(`max_output_tokens exceeds the model limit: ${apiKey}`, { status: 400 }),
+      );
+      await expect(
+        aiService.callAI({
+          prompt: 'Test',
+          config: mockAIConfig({ protocol: 'openai-responses', apiKey }),
+        }),
+      ).rejects.toMatchObject({
+        code: ErrorCode.INVALID_CONFIG,
+        retryable: false,
+        details: { response: 'max_output_tokens exceeds the model limit: [redacted]' },
+      });
+      expect(mockFetch).toHaveBeenCalledOnce();
+      expect(JSON.stringify(vi.mocked(Logger.warn).mock.calls)).not.toContain(apiKey);
+      expect(JSON.stringify(vi.mocked(Logger.error).mock.calls)).not.toContain(apiKey);
+    });
+
+    it.each(['openai-responses', 'anthropic-messages'] as const)(
+      'uses %s headers, endpoint and token accounting',
+      async (protocol) => {
+        const response =
+          protocol === 'openai-responses'
+            ? {
+                status: 'completed',
+                output: [{ type: 'message', content: [{ type: 'output_text', text: 'Hello' }] }],
+                usage: { total_tokens: 10 },
+              }
+            : {
+                content: [{ type: 'text', text: 'Hello' }],
+                stop_reason: 'end_turn',
+                usage: { input_tokens: 6, output_tokens: 4 },
+              };
+        mockFetch.mockResolvedValue(Response.json(response));
+        const result = await aiService.callAI({
+          prompt: 'Test',
+          config: mockAIConfig({ protocol }),
+        });
+        expect(result).toEqual({ content: 'Hello', tokensUsed: 10, finishReason: 'stop' });
+        expect(mockTokenStatsStore.recordTokenUsage).toHaveBeenCalledExactlyOnceWith(10);
+        const [url, init] = mockFetch.mock.calls[0];
+        expect(url).toBe(
+          `https://api.openai.com/v1/${protocol === 'openai-responses' ? 'responses' : 'messages'}`,
+        );
+        expect(init.redirect).toBe('manual');
+        expect(init.headers[protocol === 'openai-responses' ? 'Authorization' : 'x-api-key']).toBe(
+          protocol === 'openai-responses' ? 'Bearer test-api-key' : 'test-api-key',
+        );
+      },
+    );
+
+    it('does not reuse verified credentials across protocols on the same endpoint', async () => {
+      aiService.rememberVerifiedConfig(mockAIConfig({ apiKey: 'remembered-key' }));
+      mockFetch.mockResolvedValue(
+        Response.json({
+          status: 'completed',
+          output: [{ type: 'message', content: [{ type: 'output_text', text: 'Hello' }] }],
+        }),
+      );
+      await aiService.callAI({
+        prompt: 'Test',
+        config: mockAIConfig({ protocol: 'openai-responses', apiKey: '' }),
+      });
+      expect(mockFetch.mock.calls[0][1].headers).not.toHaveProperty('Authorization');
+    });
+
+    it('rejects an incomplete Responses result without recording partial tokens or retrying', async () => {
+      mockFetch.mockResolvedValue(
+        createStreamingResponse([
+          'data: {"type":"response.output_text.delta","delta":"Partial"}\n\n',
+          'data: {"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"usage":{"total_tokens":10}}}\n\n',
+        ]),
+      );
+      await expect(
+        aiService.callAI({
+          prompt: 'Test',
+          config: mockAIConfig({ protocol: 'openai-responses' }),
+        }),
+      ).rejects.toMatchObject({ code: ErrorCode.AI_INVALID_RESPONSE, retryable: false });
+      expect(mockFetch).toHaveBeenCalledOnce();
+      expect(mockTokenStatsStore.recordTokenUsage).not.toHaveBeenCalled();
+    });
+
     it.each([{ type: 'opaqueredirect', status: 0 }, { status: 307 }, { status: 308 }])(
       'rejects provider redirects without retrying (%j)',
       async (redirectResponse) => {
@@ -675,6 +760,69 @@ describe('AIService', () => {
   });
 
   describe('getAvailableModels', () => {
+    it('fetches all Anthropic pages with protocol headers and preserves URL parameters', async () => {
+      mockFetch.mockResolvedValueOnce(
+        Response.json({ data: [{ id: 'claude-a' }], has_more: true, last_id: 'claude-a' }),
+      );
+      mockFetch.mockResolvedValueOnce(
+        Response.json({ data: [{ id: 'claude-b' }, { id: 'claude-a' }], has_more: false }),
+      );
+      expect(
+        await aiService.getAvailableModels(
+          'https://api.anthropic.com/v1/messages?tenant=1',
+          'anthropic-key',
+          'anthropic-messages',
+        ),
+      ).toEqual(['claude-a', 'claude-b']);
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        'https://api.anthropic.com/v1/models?tenant=1&limit=1000',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'x-api-key': 'anthropic-key',
+            'anthropic-version': '2023-06-01',
+          }),
+          redirect: 'manual',
+        }),
+      );
+      expect(mockFetch.mock.calls[1][0]).toBe(
+        'https://api.anthropic.com/v1/models?tenant=1&limit=1000&after_id=claude-a',
+      );
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('stops malformed pagination without returning a silently partial model list', async () => {
+      mockFetch.mockImplementation(() =>
+        Promise.resolve(
+          Response.json({ data: [{ id: 'claude-a' }], has_more: true, last_id: 'claude-a' }),
+        ),
+      );
+      await expect(
+        aiService.getAvailableModels('https://api.anthropic.com/v1', 'key', 'anthropic-messages'),
+      ).rejects.toMatchObject({
+        code: ErrorCode.AI_INVALID_RESPONSE,
+        message: expect.stringContaining('pagination cursor'),
+      });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('uses the shared model endpoint for Responses with Bearer authentication', async () => {
+      mockFetch.mockResolvedValue(Response.json({ data: [{ id: 'model-a' }] }));
+      expect(
+        await aiService.getAvailableModels(
+          'https://api.example/v1/responses',
+          'key',
+          'openai-responses',
+        ),
+      ).toEqual(['model-a']);
+      expect(mockFetch).toHaveBeenCalledExactlyOnceWith(
+        'https://api.example/v1/models',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer key' }),
+        }),
+      );
+    });
+
     it('reports a provider redirect without fetching the redirect target', async () => {
       mockFetch.mockResolvedValue({ type: 'opaqueredirect', status: 0, ok: false });
       await expect(
@@ -695,7 +843,10 @@ describe('AIService', () => {
 
       await expect(
         aiService.getAvailableModels('https://api.example.com/v1', apiKey),
-      ).resolves.toEqual([]);
+      ).rejects.toMatchObject({
+        code: ErrorCode.AI_INVALID_RESPONSE,
+        message: 'Failed to fetch available models: Invalid JSON: [redacted]',
+      });
       expect(vi.mocked(Logger.error)).toHaveBeenCalledWith('[AIService] Failed to get models', {
         message: 'Invalid JSON: [redacted]',
       });
@@ -719,29 +870,76 @@ describe('AIService', () => {
       expect(models).toContain('gpt-4o-mini');
     });
 
-    it('should return empty array on API error', async () => {
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 500,
+    it('reports API errors with sanitized diagnostics', async () => {
+      mockFetch.mockResolvedValue(new Response('Server rejected test-api-key', { status: 500 }));
+      await expect(
+        aiService.getAvailableModels('https://api.openai.com/v1', 'test-api-key'),
+      ).rejects.toMatchObject({
+        code: ErrorCode.API_ERROR,
+        message: 'API error (500): Server rejected [redacted]',
+        details: { response: 'Server rejected [redacted]' },
       });
-
-      const models = await aiService.getAvailableModels(
-        'https://api.openai.com/v1',
-        'test-api-key',
-      );
-
-      expect(models.length).toBe(0);
     });
 
-    it('should return empty array on network error', async () => {
+    it('reports network errors instead of an empty catalogue', async () => {
       mockFetch.mockRejectedValue(new Error('Network error'));
+      await expect(
+        aiService.getAvailableModels('https://api.openai.com/v1', 'test-api-key'),
+      ).rejects.toMatchObject({
+        code: ErrorCode.API_ERROR,
+        message: 'Failed to fetch available models: Network error',
+      });
+    });
 
-      const models = await aiService.getAvailableModels(
-        'https://api.openai.com/v1',
-        'test-api-key',
+    it('reports authentication failures explicitly', async () => {
+      mockFetch.mockResolvedValue(new Response('Unauthorized key', { status: 401 }));
+      await expect(
+        aiService.getAvailableModels('https://api.example/v1', 'key'),
+      ).rejects.toMatchObject({ code: ErrorCode.MISSING_API_KEY });
+    });
+
+    it('reports an invalid URL without sending credentials', async () => {
+      await expect(
+        aiService.getAvailableModels('http://remote.example/v1', 'key'),
+      ).rejects.toMatchObject({ code: ErrorCode.INVALID_API_URL });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it.each([{}, { data: 'invalid' }, { data: [{}] }, null])(
+      'rejects malformed model listings (%j)',
+      async (body) => {
+        mockFetch.mockResolvedValue(Response.json(body));
+        await expect(
+          aiService.getAvailableModels('https://api.example/v1', 'key'),
+        ).rejects.toMatchObject({ code: ErrorCode.AI_INVALID_RESPONSE });
+      },
+    );
+
+    it('allows a genuinely empty model list', async () => {
+      mockFetch.mockResolvedValue(Response.json({ data: [] }));
+      await expect(aiService.getAvailableModels('https://api.example/v1', 'key')).resolves.toEqual(
+        [],
       );
+    });
 
-      expect(models.length).toBe(0);
+    it('reports model discovery timeouts and clears its timer', async () => {
+      mockFetch.mockImplementation(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject(new DOMException('Aborted', 'AbortError')),
+            );
+          }),
+      );
+      const failure = expect(
+        aiService.getAvailableModels('https://api.example/v1', 'key'),
+      ).rejects.toMatchObject({
+        code: ErrorCode.AI_TIMEOUT,
+        message: expect.stringContaining('timed out'),
+      });
+      await vi.advanceTimersByTimeAsync(TIMEOUT.AVAILABLE_MODELS_FETCH_MS);
+      await failure;
+      expect(vi.getTimerCount()).toBe(0);
     });
 
     it('should strip trailing slash and /chat/completions from URL', async () => {

@@ -35,11 +35,15 @@ The suite starts a local HTTP page containing a fixed comment fixture, creates a
 4. model-provided Markdown images become alt text, raw HTML and JavaScript links stay inert, and ordinary text links remain user-operated; all HTTP(S) requests from the report page are intercepted and any attempted automatic request fails the test;
 5. Logs and Popup render without page errors; a real background diagnostic is persisted through the local writer, and clearing indexed/orphaned logs preserves settings, token usage, and the log-level setting;
 6. the sandbox renders safe static report content while removing scripts, event handlers, external image URLs, and frames;
-7. a real `START_EXTRACTION` request creates a `TaskManager` task, dispatches `RUN_EXTRACTION` to the content script, extracts the fixture comments, and persists a readable history record.
+7. a real `START_EXTRACTION` request creates a `TaskManager` task, dispatches `RUN_EXTRACTION` to the content script, extracts the fixture comments, and persists a readable history record;
+8. local mock Chat Completions, Responses, and Anthropic Messages servers exercise model discovery, connection testing, and analysis persistence through the production message handlers, including Anthropic model pagination and rejection of incomplete Responses output;
+9. the AI settings UI applies all five provider presets, clears credentials and models on endpoint changes, switches protocols, and accepts a manually entered model after fetching the available models.
 
 The final extraction assertion reads the persisted record through `GET_HISTORY_BY_URL`; it does not use a webpage test hook and does not accept an empty page or an unmodified sandbox document as success.
 
-This suite needs no API key and makes no AI-provider request. It uses a configured crawling rule for `127.0.0.1` so the extraction path is deterministic.
+This suite needs no real API key and makes no external AI-provider request. It uses synthetic credentials with loopback mock services and a configured crawling rule for `127.0.0.1` so extraction and analysis are deterministic. The protocol assertions check authentication, output limits, omitted sampling parameters, and Responses' `store: false`.
+
+Set `COMMENTS_INSIGHT_E2E_SCREENSHOT_DIR` to an absolute directory outside the repository to capture desktop and mobile AI settings screenshots. Set `COMMENTS_INSIGHT_E2E_HEADLESS=1` to run without visible browser windows.
 
 ### CI
 

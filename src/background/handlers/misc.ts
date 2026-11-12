@@ -2,7 +2,7 @@ import { Message } from '@/types';
 import { HandlerContext, PingResponse, SelectorTestResponse } from './types';
 import { Logger } from '@/utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
-import { LIMITS, MESSAGES, TEXT } from '@/config/constants';
+import { AI, LIMITS, MESSAGES, TEXT } from '@/config/constants';
 import { ensureContentScriptInjected } from '../ContentScriptInjector';
 import { resolveTabId } from '@/utils/chrome-message';
 
@@ -46,22 +46,14 @@ export async function handleGetAvailableModels(
   message: Extract<Message, { type: 'GET_AVAILABLE_MODELS' }>,
   context: HandlerContext,
 ): Promise<ModelsResponse> {
-  const { apiUrl, apiKey } = message.payload || {};
+  const { apiUrl, apiKey, protocol = AI.DEFAULT_PROTOCOL } = message.payload || {};
 
   if (!apiUrl) {
     throw new ExtensionError(ErrorCode.INVALID_API_URL, 'API configuration is required');
   }
 
-  try {
-    const models = await context.aiService.getAvailableModels(apiUrl, apiKey || '');
-    return { models };
-  } catch (error) {
-    if (error instanceof ExtensionError && error.code === ErrorCode.AI_ENDPOINT_REDIRECT) {
-      throw error;
-    }
-    Logger.error('[MiscHandler] Failed to get models', { error });
-    return { models: [], error: error instanceof Error ? error.message : 'Unknown error' };
-  }
+  const models = await context.aiService.getAvailableModels(apiUrl, apiKey || '', protocol);
+  return { models };
 }
 
 export async function handleTestModel(
@@ -87,7 +79,13 @@ export async function handleTestModel(
     });
 
     if (response && response.content) {
-      context.aiService.rememberVerifiedConfig(config, verificationEpoch);
+      const currentSettings = await context.settingsStore.getSettings();
+      if (
+        (currentSettings.aiModel?.protocol ?? AI.DEFAULT_PROTOCOL) ===
+        (config.protocol ?? AI.DEFAULT_PROTOCOL)
+      ) {
+        context.aiService.rememberVerifiedConfig(config, verificationEpoch);
+      }
 
       return {
         success: true,

@@ -6,6 +6,8 @@ export const API = {
     'https://github.com/cyber-tao/comments-insight/blob/master/src/config/default_rules.json',
   ENDPOINTS: {
     CHAT_COMPLETIONS: '/chat/completions',
+    RESPONSES: '/responses',
+    MESSAGES: '/messages',
     MODELS: '/models',
   },
 };

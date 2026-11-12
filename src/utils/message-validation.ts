@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import type { Message, ProgressStage } from '@/types';
 import { ExtensionError, ErrorCode } from './errors';
-import { settingsPatchSchema } from '@/utils/storage-validation';
-import { ANALYSIS_FORMAT, UI_LIMITS } from '@/config/constants';
+import { aiProtocolSchema, settingsPatchSchema } from '@/utils/storage-validation';
+import { AI, ANALYSIS_FORMAT, UI_LIMITS } from '@/config/constants';
 import { isWithinValidationBudget, VALIDATION_BUDGET } from '@/utils/validation-budget';
 
 const nonEmptyString = z.string().trim().min(1);
@@ -68,6 +68,7 @@ const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
     settings: settingsPatchSchema,
     expectedCrawlingConfigsFingerprint: z.string().optional(),
     expectedAiEndpoint: z.string().optional(),
+    expectedAiProtocol: aiProtocolSchema.optional(),
   }),
   IMPORT_SETTINGS: z.object({
     data: nonEmptyString,
@@ -187,10 +188,12 @@ const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
   GET_AVAILABLE_MODELS: z.object({
     apiUrl: nonEmptyString,
     apiKey: z.string(),
+    protocol: aiProtocolSchema.default(AI.DEFAULT_PROTOCOL),
   }),
   TEST_MODEL: z.object({
     config: z
       .object({
+        protocol: aiProtocolSchema.default(AI.DEFAULT_PROTOCOL),
         apiUrl: nonEmptyString,
         model: nonEmptyString,
       })

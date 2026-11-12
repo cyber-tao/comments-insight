@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { handleTestModel } from '../../src/background/handlers/misc';
+import { handleGetAvailableModels, handleTestModel } from '../../src/background/handlers/misc';
 import { handleSaveSettings, handleImportSettings } from '../../src/background/handlers/settings';
 import { AIService } from '../../src/background/AIService';
 import type { AIResponse } from '../../src/types';
@@ -7,6 +7,7 @@ import type { HandlerContext } from '../../src/background/handlers/types';
 import { TEXT } from '../../src/config/constants';
 import type { Message } from '../../src/types';
 import { createMockHandlerContext } from '../helpers/handler-context';
+import { createAIError, ErrorCode } from '../../src/utils/errors';
 
 vi.mock('../../src/utils/logger', () => ({
   Logger: {
@@ -23,8 +24,7 @@ const baseConfig = {
   model: 'demo-model',
   contextWindowSize: 128000,
   maxOutputTokens: 100,
-  temperature: 0.7,
-  topP: 0.9,
+  protocol: 'openai-chat-completions' as const,
 };
 
 const asAIService = (callAI: ReturnType<typeof vi.fn>): HandlerContext['aiService'] =>
@@ -237,5 +237,65 @@ describe('misc handlers - model test', () => {
     expect(res.success).toBe(false);
     expect(res.error).toContain(errorMessage);
     expect(res.error).toContain(TEXT.MODEL_TEST_HINT);
+  });
+
+  it('does not remember a completed test for a protocol that has changed', async () => {
+    const rememberVerifiedConfig = vi.fn();
+    const getSettings = vi
+      .fn()
+      .mockResolvedValueOnce({ aiTimeout: 60000, aiModel: baseConfig })
+      .mockResolvedValueOnce({
+        aiTimeout: 60000,
+        aiModel: { ...baseConfig, protocol: 'openai-responses' },
+      });
+    const result = await handleTestModel(
+      { type: 'TEST_MODEL', payload: { config: baseConfig } },
+      createMockHandlerContext({
+        aiService: {
+          callAI: vi.fn().mockResolvedValue({ content: 'OK', tokensUsed: 1 }),
+          rememberVerifiedConfig,
+          getVerificationEpoch: vi.fn().mockReturnValue(0),
+        } as unknown as HandlerContext['aiService'],
+        settingsStore: { getSettings } as unknown as HandlerContext['settingsStore'],
+      }),
+    );
+    expect(result.success).toBe(true);
+    expect(rememberVerifiedConfig).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, 'anthropic-messages'] as const)(
+    'forwards model discovery with the selected or legacy protocol (%s)',
+    async (protocol) => {
+      const getAvailableModels = vi.fn().mockResolvedValue(['test-model']);
+      const result = await handleGetAvailableModels(
+        {
+          type: 'GET_AVAILABLE_MODELS',
+          payload: { apiUrl: baseConfig.apiUrl, apiKey: 'key', protocol },
+        },
+        createMockHandlerContext({
+          aiService: { getAvailableModels } as unknown as HandlerContext['aiService'],
+        }),
+      );
+      expect(result.models).toEqual(['test-model']);
+      expect(getAvailableModels).toHaveBeenCalledWith(
+        baseConfig.apiUrl,
+        'key',
+        protocol ?? 'openai-chat-completions',
+      );
+    },
+  );
+
+  it('propagates model discovery errors for message-router serialization', async () => {
+    const error = createAIError(ErrorCode.MISSING_API_KEY, 'Invalid API key', {}, false);
+    await expect(
+      handleGetAvailableModels(
+        { type: 'GET_AVAILABLE_MODELS', payload: { apiUrl: baseConfig.apiUrl, apiKey: 'key' } },
+        createMockHandlerContext({
+          aiService: {
+            getAvailableModels: vi.fn().mockRejectedValue(error),
+          } as unknown as HandlerContext['aiService'],
+        }),
+      ),
+    ).rejects.toBe(error);
   });
 });

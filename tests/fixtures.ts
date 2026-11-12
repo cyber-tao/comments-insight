@@ -46,13 +46,12 @@ export const mockTask = (overrides: Partial<Task> = {}): Task => ({
 });
 
 export const mockAIConfig = (overrides: Partial<AIConfig> = {}): AIConfig => ({
+  protocol: 'openai-chat-completions',
   apiUrl: 'https://api.openai.com/v1',
   apiKey: 'test-api-key',
   model: 'gpt-4o-mini',
   contextWindowSize: 128000,
   maxOutputTokens: 4000,
-  temperature: 0.7,
-  topP: 1.0,
   ...overrides,
 });
 

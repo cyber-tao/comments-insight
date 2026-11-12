@@ -1,4 +1,4 @@
-import { APP_DATA_VERSION, STORAGE } from '@/config/constants';
+import { AI, APP_DATA_VERSION, STORAGE } from '@/config/constants';
 import DEFAULT_CRAWLING_RULES from '@/config/default_rules.json';
 import type { CrawlingConfig } from '@/types';
 import { hasPersistedCrawlingConfigChanged } from '@/utils/crawling-config';
@@ -172,6 +172,26 @@ export class DataMigrator {
         };
         if (JSON.stringify(next) !== JSON.stringify(settings)) {
           await chrome.storage.local.set({ [STORAGE.SETTINGS_KEY]: next });
+        }
+      },
+      5: async () => {
+        const stored = await chrome.storage.local.get(STORAGE.SETTINGS_KEY);
+        const value = stored[STORAGE.SETTINGS_KEY];
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+        const settings = value as Record<string, unknown>;
+        const model = settings.aiModel;
+        if (!model || typeof model !== 'object' || Array.isArray(model)) return;
+        const {
+          temperature: _temperature,
+          topP: _topP,
+          topK: _topK,
+          ...config
+        } = model as Record<string, unknown>;
+        const nextModel = { ...config, protocol: config.protocol ?? AI.DEFAULT_PROTOCOL };
+        if (JSON.stringify(nextModel) !== JSON.stringify(model)) {
+          await chrome.storage.local.set({
+            [STORAGE.SETTINGS_KEY]: { ...settings, aiModel: nextModel },
+          });
         }
       },
     };

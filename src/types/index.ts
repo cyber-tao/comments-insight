@@ -85,14 +85,15 @@ export interface Task {
   detailedProgress?: TaskProgress;
 }
 
+export type AIProtocol = 'openai-chat-completions' | 'openai-responses' | 'anthropic-messages';
+
 export interface AIConfig {
+  protocol: AIProtocol;
   apiUrl: string;
   apiKey: string;
   model: string;
   contextWindowSize: number;
   maxOutputTokens?: number;
-  temperature: number;
-  topP: number;
 }
 
 export interface AIRequest {

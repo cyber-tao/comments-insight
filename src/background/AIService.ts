@@ -1,38 +1,17 @@
-import { AIConfig, AIRequest, AIResponse, AIStreamProgress } from '../types';
+import { AIConfig, AIProtocol, AIRequest, AIResponse } from '../types';
 
 import { Logger } from '../utils/logger';
 import { ErrorHandler, createAIError, ErrorCode, ExtensionError } from '../utils/errors';
-import {
-  AI as AI_CONST,
-  RETRY,
-  TEXT,
-  API as API_CONST,
-  TIMEOUT,
-  SECURITY,
-} from '@/config/constants';
+import { AI as AI_CONST, RETRY, TEXT, TIMEOUT, SECURITY } from '@/config/constants';
 import type { SettingsStore } from './storage/SettingsStore';
 import type { LogStore } from './storage/LogStore';
 import type { TokenStatsStore } from './storage/TokenStatsStore';
-import { buildAiChatCompletionsUrl, parseAllowedAiApiUrl } from '@/utils/url';
+import { buildAiRequestUrl, buildAiModelsUrl, normalizeAiApiUrl } from '@/utils/url';
 import { redactApiKey } from '@/utils/log-sanitize';
 
 import { AIErrorHandler } from './ai/AIErrorHandler';
 import { DataNormalizer } from './ai/DataNormalizer';
-
-interface ChatCompletionData {
-  choices?: Array<{
-    message?: { content?: string };
-    delta?: { content?: string };
-    finish_reason?: string | null;
-  }>;
-  usage?: { total_tokens?: number };
-}
-
-interface StreamingAIResult {
-  content: string;
-  tokensUsed: number;
-  finishReason: string;
-}
+import { buildAIHeaders, buildAIRequest, readAIResponse } from './ai/ProtocolAdapter';
 
 const REDIRECT_STATUS_CODES = new Set([301, 302, 303, 307, 308]);
 
@@ -110,9 +89,14 @@ export class AIService {
       return config;
     }
 
-    const currentApiUrl = config.apiUrl.trim();
-    const fallbackApiUrl = this.lastVerifiedConfig.apiUrl.trim();
-    if (!currentApiUrl || currentApiUrl !== fallbackApiUrl) {
+    const currentApiUrl = normalizeAiApiUrl(config.apiUrl);
+    const fallbackApiUrl = normalizeAiApiUrl(this.lastVerifiedConfig.apiUrl);
+    if (
+      !currentApiUrl ||
+      currentApiUrl !== fallbackApiUrl ||
+      (config.protocol ?? AI_CONST.DEFAULT_PROTOCOL) !==
+        (this.lastVerifiedConfig.protocol ?? AI_CONST.DEFAULT_PROTOCOL)
+    ) {
       return config;
     }
 
@@ -142,7 +126,7 @@ export class AIService {
         hasModel: !!config.model,
       });
     }
-    const apiUrl = buildAiChatCompletionsUrl(config.apiUrl);
+    const apiUrl = buildAiRequestUrl(config.apiUrl, config.protocol ?? AI_CONST.DEFAULT_PROTOCOL);
     if (!apiUrl) {
       throw createAIError(
         ErrorCode.INVALID_API_URL,
@@ -150,155 +134,6 @@ export class AIService {
       );
     }
     return apiUrl;
-  }
-
-  private buildChatCompletionRequest(
-    prompt: string,
-    systemPrompt: string | undefined,
-    config: AIConfig,
-  ): string {
-    return JSON.stringify({
-      model: config.model,
-      messages: [
-        ...(systemPrompt ? [{ role: AI_CONST.ROLES.SYSTEM, content: systemPrompt }] : []),
-        { role: AI_CONST.ROLES.USER, content: prompt },
-      ],
-      max_tokens: config.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS,
-      temperature: config.temperature,
-      top_p: config.topP,
-      stream: true,
-      stream_options: { include_usage: true },
-    });
-  }
-
-  private async readAIResponse(
-    response: Response,
-    onStreamActivity: () => void,
-    onStreamProgress?: (progress: AIStreamProgress) => void,
-  ): Promise<StreamingAIResult> {
-    if (!response.body || response.headers?.get('content-type')?.includes('application/json')) {
-      const data = (await response.json()) as ChatCompletionData;
-      const result = this.parseChatCompletionData(data);
-      onStreamProgress?.({
-        chunksReceived: result.content ? 1 : 0,
-        charactersReceived: result.content.length,
-        finishReason: result.finishReason,
-      });
-      return result;
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let content = '';
-    let tokensUsed = 0;
-    let finishReason = AI_CONST.STREAM.UNKNOWN_FINISH_REASON;
-    let streamDone = false;
-    let chunksReceived = 0;
-
-    const emitProgress = (): void => {
-      onStreamProgress?.({
-        chunksReceived,
-        charactersReceived: content.length,
-        finishReason,
-      });
-    };
-
-    const consumeLine = (line: string): void => {
-      const trimmed = line.trim();
-      if (!trimmed || streamDone) {
-        return;
-      }
-
-      const payload = trimmed.startsWith(AI_CONST.STREAM.DATA_PREFIX)
-        ? trimmed.slice(AI_CONST.STREAM.DATA_PREFIX.length).trim()
-        : trimmed;
-      if (!payload || payload === AI_CONST.STREAM.DONE_MARKER) {
-        streamDone = payload === AI_CONST.STREAM.DONE_MARKER;
-        return;
-      }
-      if (!payload.startsWith(AI_CONST.STREAM.JSON_START)) {
-        return;
-      }
-
-      let chunk: ChatCompletionData;
-      try {
-        chunk = JSON.parse(payload) as ChatCompletionData;
-      } catch {
-        Logger.warn('[AIService] Skipped malformed SSE frame', {
-          previewLength: payload.length,
-        });
-        return;
-      }
-      const choice = chunk.choices?.[0];
-      const deltaContent = choice?.delta?.content;
-      const messageContent = choice?.message?.content;
-      if (deltaContent) {
-        content += deltaContent;
-        chunksReceived += 1;
-        emitProgress();
-      } else if (messageContent) {
-        content += messageContent;
-        chunksReceived += 1;
-        emitProgress();
-      }
-      if (choice?.finish_reason) {
-        finishReason = choice.finish_reason;
-        emitProgress();
-      }
-      if (typeof chunk.usage?.total_tokens === 'number') {
-        tokensUsed = chunk.usage.total_tokens;
-      }
-    };
-
-    try {
-      while (!streamDone) {
-        const { value, done } = await reader.read();
-        if (done) {
-          break;
-        }
-        onStreamActivity();
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split(/\r?\n/);
-        buffer = lines.pop() || '';
-        for (const line of lines) {
-          consumeLine(line);
-        }
-      }
-
-      buffer += decoder.decode();
-      if (buffer.trim()) {
-        consumeLine(buffer);
-      }
-      if (!streamDone && finishReason === AI_CONST.STREAM.UNKNOWN_FINISH_REASON) {
-        throw createAIError(
-          ErrorCode.AI_INVALID_RESPONSE,
-          'Model stream ended before completion',
-          {},
-          false,
-        );
-      }
-    } catch (streamError) {
-      try {
-        await reader.cancel();
-      } catch {
-        Logger.warn('[AIService] Failed to cancel SSE reader after error');
-      }
-      throw streamError;
-    } finally {
-      if (streamDone) await reader.cancel().catch(() => undefined);
-      reader.releaseLock();
-    }
-
-    return { content, tokensUsed, finishReason };
-  }
-
-  private parseChatCompletionData(data: ChatCompletionData): StreamingAIResult {
-    return {
-      content: data.choices?.[0]?.message?.content || '',
-      tokensUsed: data.usage?.total_tokens || 0,
-      finishReason: data.choices?.[0]?.finish_reason || AI_CONST.STREAM.UNKNOWN_FINISH_REASON,
-    };
   }
 
   async callAI(request: AIRequest & { redactResponse?: boolean }): Promise<AIResponse> {
@@ -363,19 +198,9 @@ export class AIService {
               hasApiKey: Boolean(activeKey),
             });
 
-            const headers: Record<string, string> = {
-              'Content-Type': 'application/json',
-            };
-
-            if (activeKey) {
-              headers.Authorization = `Bearer ${activeKey}`;
-            }
-
-            const requestBody = this.buildChatCompletionRequest(
-              prompt,
-              systemPrompt,
-              resolvedConfig,
-            );
+            const protocol = resolvedConfig.protocol ?? AI_CONST.DEFAULT_PROTOCOL;
+            const headers = buildAIHeaders(protocol, activeKey);
+            const requestBody = buildAIRequest(prompt, systemPrompt, resolvedConfig);
 
             const response = await fetchAiEndpoint(apiUrl, {
               method: 'POST',
@@ -401,8 +226,10 @@ export class AIService {
 
             resetTimeout();
 
-            const streamResult = await this.readAIResponse(
+            const streamResult = await readAIResponse(
               response,
+              protocol,
+              activeKey,
               resetTimeout,
               onStreamProgress &&
                 ((progress) => {
@@ -499,73 +326,115 @@ export class AIService {
     }
   }
 
-  async getAvailableModels(apiUrl: string, apiKey: string): Promise<string[]> {
-    const trimmedUrl = typeof apiUrl === 'string' ? apiUrl.trim() : '';
-    if (!trimmedUrl) {
-      Logger.warn('[AIService] getAvailableModels called without API URL');
-      return [];
+  async getAvailableModels(
+    apiUrl: string,
+    apiKey: string,
+    protocol: AIProtocol = AI_CONST.DEFAULT_PROTOCOL,
+  ): Promise<string[]> {
+    const modelsUrl = buildAiModelsUrl(typeof apiUrl === 'string' ? apiUrl : '');
+    if (!modelsUrl) {
+      throw createAIError(
+        ErrorCode.INVALID_API_URL,
+        'AI API URL must use HTTPS, except for loopback development endpoints',
+        {},
+        false,
+      );
     }
 
-    // Validate the URL up-front so we never issue a request to a malformed
-    // origin and never block on DNS for arbitrary user input.
-    const parsedUrl = parseAllowedAiApiUrl(trimmedUrl);
-    if (!parsedUrl) {
-      Logger.warn('[AIService] Invalid or insecure API URL for models lookup');
-      return [];
-    }
-
-    let pathname = parsedUrl.pathname.replace(/\/$/, '');
-    if (pathname.endsWith(API_CONST.ENDPOINTS.CHAT_COMPLETIONS)) {
-      pathname = pathname.slice(0, -API_CONST.ENDPOINTS.CHAT_COMPLETIONS.length);
-    }
-    parsedUrl.pathname = `${pathname}${API_CONST.ENDPOINTS.MODELS}`;
-    parsedUrl.hash = '';
-    const modelsUrl = parsedUrl.toString();
     const activeKey = typeof apiKey === 'string' ? apiKey.trim() : '';
     Logger.info('[AIService] Fetching available models', {
       url: redactApiKey(modelsUrl, activeKey),
     });
-
-    const headers: Record<string, string> = {};
-    if (activeKey) {
-      headers.Authorization = `Bearer ${activeKey}`;
-    }
-
+    const headers = buildAIHeaders(protocol, activeKey);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT.AVAILABLE_MODELS_FETCH_MS);
 
     try {
-      const response = await fetchAiEndpoint(modelsUrl, {
-        method: 'GET',
-        headers,
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        Logger.warn('[AIService] Failed to fetch models', {
-          status: response.status,
+      const url = new URL(modelsUrl);
+      const models = new Set<string>();
+      const cursors = new Set<string>();
+      if (protocol === 'anthropic-messages') url.searchParams.set('limit', '1000');
+      while (true) {
+        const response = await fetchAiEndpoint(url.toString(), {
+          method: 'GET',
+          headers,
+          signal: controller.signal,
         });
-        return [];
+        if (!response.ok) {
+          const errorText = await response.text();
+          if (response.status === 404) {
+            throw createAIError(
+              ErrorCode.API_ERROR,
+              'Model listing endpoint was not found (404)',
+              { status: 404 },
+              false,
+            );
+          }
+          AIErrorHandler.classifyHTTPError(response.status, errorText, '', activeKey);
+        }
+        const data = (await response.json()) as {
+          data?: Array<{ id?: unknown }>;
+          has_more?: boolean;
+          last_id?: unknown;
+        };
+        if (!data || !Array.isArray(data.data)) {
+          throw createAIError(
+            ErrorCode.AI_INVALID_RESPONSE,
+            'Model listing response must contain a data array',
+            {},
+            false,
+          );
+        }
+        for (const model of data.data) {
+          if (typeof model?.id !== 'string' || !model.id.trim()) {
+            throw createAIError(
+              ErrorCode.AI_INVALID_RESPONSE,
+              'Model listing response contains an invalid model ID',
+              {},
+              false,
+            );
+          }
+          models.add(model.id);
+        }
+        if (protocol !== 'anthropic-messages' || !data.has_more) break;
+        if (typeof data.last_id !== 'string' || !data.last_id || cursors.has(data.last_id)) {
+          throw createAIError(
+            ErrorCode.AI_INVALID_RESPONSE,
+            'Model listing returned an invalid or repeated pagination cursor',
+            {},
+            false,
+          );
+        }
+        cursors.add(data.last_id);
+        url.searchParams.set('after_id', data.last_id);
       }
-
-      const data = (await response.json()) as { data?: Array<{ id: string }> };
-      const models = data.data?.map((model) => model.id) || [];
-      Logger.info('[AIService] Available models fetched', { count: models.length });
-      return models;
+      Logger.info('[AIService] Available models fetched', { count: models.size });
+      return [...models];
     } catch (error) {
-      if (error instanceof ExtensionError && error.code === ErrorCode.AI_ENDPOINT_REDIRECT) {
+      if (error instanceof ExtensionError) {
         throw error;
       }
       if ((error as { name?: string })?.name === 'AbortError') {
-        Logger.warn('[AIService] Models fetch aborted by timeout', {
-          timeoutMs: TIMEOUT.AVAILABLE_MODELS_FETCH_MS,
-        });
-        return [];
+        throw createAIError(
+          ErrorCode.AI_TIMEOUT,
+          `Fetching available models timed out after ${TIMEOUT.AVAILABLE_MODELS_FETCH_MS}ms`,
+          {},
+          false,
+        );
       }
+      const message = redactApiKey(
+        error instanceof Error ? error.message : String(error),
+        activeKey,
+      );
       Logger.error('[AIService] Failed to get models', {
-        message: redactApiKey(error instanceof Error ? error.message : String(error), activeKey),
+        message,
       });
-      return [];
+      throw createAIError(
+        error instanceof SyntaxError ? ErrorCode.AI_INVALID_RESPONSE : ErrorCode.API_ERROR,
+        `Failed to fetch available models: ${message}`,
+        {},
+        false,
+      );
     } finally {
       clearTimeout(timer);
     }

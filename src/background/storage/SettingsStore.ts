@@ -1,4 +1,11 @@
-import { Settings, SettingsPatch, AIConfig, CrawlingConfig, FieldValidationStatus } from '@/types';
+import {
+  Settings,
+  SettingsPatch,
+  AIConfig,
+  AIProtocol,
+  CrawlingConfig,
+  FieldValidationStatus,
+} from '@/types';
 import {
   AI,
   LANGUAGES,
@@ -34,13 +41,12 @@ import {
 export const DEFAULT_SETTINGS: Settings = {
   maxComments: EXTRACTION_DEFAULTS.MAX_COMMENTS,
   aiModel: {
+    protocol: AI.DEFAULT_PROTOCOL,
     apiUrl: '',
     apiKey: '',
     model: '',
     contextWindowSize: AI.DEFAULT_CONTEXT_WINDOW,
     maxOutputTokens: AI.DEFAULT_MAX_OUTPUT_TOKENS,
-    temperature: AI.DEFAULT_TEMPERATURE,
-    topP: AI.DEFAULT_TOP_P,
   },
   aiTimeout: AI.DEFAULT_TIMEOUT,
   normalizeTimestamps: false,
@@ -275,10 +281,14 @@ export class SettingsStore {
     settings: SettingsPatch,
     expectedCrawlingConfigsFingerprint?: string,
     expectedAiEndpoint?: string,
+    expectedAiProtocol?: AIProtocol,
   ): Promise<void> {
     return this.saveMutex.withLock(async () => {
       if (
-        (settings.aiModel?.apiUrl !== undefined || settings.aiModel?.apiKey !== undefined) &&
+        (settings.aiModel?.apiUrl !== undefined ||
+          settings.aiModel?.apiKey !== undefined ||
+          settings.aiModel?.protocol !== undefined ||
+          expectedAiProtocol !== undefined) &&
         expectedAiEndpoint === undefined
       ) {
         throw new ExtensionError(
@@ -289,7 +299,12 @@ export class SettingsStore {
           },
         );
       }
-      await this._saveSettings(settings, expectedCrawlingConfigsFingerprint, expectedAiEndpoint);
+      await this._saveSettings(
+        settings,
+        expectedCrawlingConfigsFingerprint,
+        expectedAiEndpoint,
+        expectedAiProtocol,
+      );
     });
   }
 
@@ -324,6 +339,7 @@ export class SettingsStore {
     settings: SettingsPatch,
     expectedCrawlingConfigsFingerprint?: string,
     expectedAiEndpoint?: string,
+    expectedAiProtocol?: AIProtocol,
   ): Promise<void> {
     try {
       const updatesCrawlingConfigs =
@@ -365,12 +381,13 @@ export class SettingsStore {
       const currentModel = this.normalizeAIModel(currentSettings);
       if (
         expectedAiEndpoint !== undefined &&
-        (normalizeAiApiUrl(currentModel.apiUrl) ?? currentModel.apiUrl.trim()) !==
-          (normalizeAiApiUrl(expectedAiEndpoint) ?? expectedAiEndpoint.trim())
+        ((normalizeAiApiUrl(currentModel.apiUrl) ?? currentModel.apiUrl.trim()) !==
+          (normalizeAiApiUrl(expectedAiEndpoint) ?? expectedAiEndpoint.trim()) ||
+          currentModel.protocol !== (expectedAiProtocol ?? AI.DEFAULT_PROTOCOL))
       ) {
         throw new ExtensionError(
           ErrorCode.VALIDATION_ERROR,
-          'AI endpoint changed; reload settings before saving',
+          'AI endpoint or protocol changed; reload settings before saving',
           {
             messageKey: 'options.settingsConflict',
           },
@@ -566,7 +583,12 @@ export class SettingsStore {
           crawlingConfigValidationByDomain: _crawlingConfigValidationByDomain,
           ...rest
         } = sanitized;
-        const importedModel = rest.aiModel;
+        // Older exports with an endpoint always described Chat Completions.
+        // Keep protocol-free partial imports from changing the current protocol.
+        const importedModel =
+          rest.aiModel?.apiUrl !== undefined
+            ? { ...rest.aiModel, protocol: rest.aiModel.protocol ?? AI.DEFAULT_PROTOCOL }
+            : rest.aiModel;
         if (
           typeof importedModel?.apiKey === 'string' &&
           importedModel.apiKey.startsWith(SECURITY.ENCRYPTION_PREFIX)

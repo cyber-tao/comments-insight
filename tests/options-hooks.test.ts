@@ -80,8 +80,7 @@ function createSettings(): Settings {
       model: 'gpt-4o-mini',
       contextWindowSize: 200000,
       maxOutputTokens: 4096,
-      temperature: 1,
-      topP: 0.95,
+      protocol: 'openai-chat-completions',
     },
     aiTimeout: 120000,
     analyzerPromptTemplate: 'Analyze comments',
@@ -253,13 +252,13 @@ describe('useSettings', () => {
       await vi.advanceTimersByTimeAsync(TIMING.MICRO_WAIT_MS);
     });
     await act(async () => {
-      result.current.handleSettingsChange({ aiModel: { temperature: 0.2 } });
+      result.current.handleSettingsChange({ aiModel: { maxOutputTokens: 2048 } });
     });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
     });
     expect(extensionApiMock.saveSettings).toHaveBeenLastCalledWith({
-      aiModel: { temperature: 0.2 },
+      aiModel: { maxOutputTokens: 2048 },
     });
     expect(result.current.settings?.aiModel.model).toBe('gpt-4o-mini');
     await act(async () => {
@@ -490,6 +489,7 @@ describe('useSettings', () => {
       { aiModel: { model: 'old-endpoint-result' } },
       undefined,
       'https://api.example.com',
+      'openai-chat-completions',
     );
     expect(toastMock.error).toHaveBeenCalledExactlyOnceWith('options.settingsConflict');
     expect(result.current.settings?.aiModel.apiUrl).toBe('https://api.example.com');
@@ -622,6 +622,7 @@ describe('useSettings', () => {
       { aiModel: { apiKey: 'edited-key' } },
       undefined,
       'https://api.example.com',
+      'openai-chat-completions',
     );
   });
 
@@ -635,13 +636,77 @@ describe('useSettings', () => {
       result.current.handleSettingsChange({ aiModel: { apiUrl: 'https://second.example/v1' } });
     });
     expect(result.current.settings?.aiModel.apiKey).toBe('');
+    expect(result.current.settings?.aiModel.model).toBe('');
+    expect(result.current.settings?.aiModel.maxOutputTokens).toBe(4096);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
     });
     expect(extensionApiMock.saveSettings).toHaveBeenCalledWith(
-      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: '' } },
+      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: '', model: '' } },
       undefined,
       'https://api.example.com',
+      'openai-chat-completions',
+    );
+  });
+
+  it('binds a protocol edit to the saved protocol and preserves the current key and model', async () => {
+    const { result } = renderHook(() => useSettings());
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    act(() => result.current.handleSettingsChange({ aiModel: { protocol: 'openai-responses' } }));
+    expect(result.current.settings?.aiModel).toMatchObject({
+      protocol: 'openai-responses',
+      apiKey: 'test-key',
+      model: 'gpt-4o-mini',
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
+    });
+    expect(extensionApiMock.saveSettings).toHaveBeenCalledExactlyOnceWith(
+      { aiModel: { protocol: 'openai-responses' } },
+      undefined,
+      'https://api.example.com',
+      'openai-chat-completions',
+    );
+  });
+
+  it('advances the protocol precondition only after its in-flight save succeeds', async () => {
+    let resolveSave!: (response: { success: boolean }) => void;
+    extensionApiMock.saveSettings.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useSettings());
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    act(() => result.current.handleSettingsChange({ aiModel: { protocol: 'anthropic-messages' } }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
+    });
+    act(() => result.current.handleSettingsChange({ aiModel: { model: 'second-model' } }));
+    await act(async () => {
+      resolveSave({ success: true });
+      await flushMicrotasks();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
+    });
+    expect(extensionApiMock.saveSettings).toHaveBeenNthCalledWith(
+      1,
+      { aiModel: { protocol: 'anthropic-messages' } },
+      undefined,
+      'https://api.example.com',
+      'openai-chat-completions',
+    );
+    expect(extensionApiMock.saveSettings).toHaveBeenNthCalledWith(
+      2,
+      { aiModel: { model: 'second-model' } },
+      undefined,
+      'https://api.example.com',
+      'anthropic-messages',
     );
   });
 
@@ -658,9 +723,10 @@ describe('useSettings', () => {
       await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
     });
     expect(extensionApiMock.saveSettings).toHaveBeenCalledWith(
-      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: 'new-endpoint-key' } },
+      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: 'new-endpoint-key', model: '' } },
       undefined,
       'https://api.example.com',
+      'openai-chat-completions',
     );
   });
 
@@ -683,6 +749,7 @@ describe('useSettings', () => {
       { aiModel: { apiUrl: ' https://API.example.com:443/ ', apiKey: 'same-endpoint-key' } },
       undefined,
       'https://api.example.com',
+      'openai-chat-completions',
     );
   });
 
@@ -713,15 +780,17 @@ describe('useSettings', () => {
     });
     expect(extensionApiMock.saveSettings).toHaveBeenNthCalledWith(
       1,
-      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: '' } },
+      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: '', model: '' } },
       undefined,
       'https://api.example.com',
+      'openai-chat-completions',
     );
     expect(extensionApiMock.saveSettings).toHaveBeenNthCalledWith(
       2,
       { aiModel: { apiKey: 'second-key' } },
       undefined,
       'https://second.example/v1',
+      'openai-chat-completions',
     );
   });
 
@@ -751,9 +820,10 @@ describe('useSettings', () => {
       await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
     });
     expect(extensionApiMock.saveSettings).toHaveBeenLastCalledWith(
-      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: '' } },
+      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: '', model: '' } },
       undefined,
       'https://api.example.com',
+      'openai-chat-completions',
     );
   });
 
@@ -792,6 +862,7 @@ describe('useSettings', () => {
       { aiModel: { apiKey: 'unsaved-second-key' } },
       undefined,
       'https://second.example/v1',
+      'openai-chat-completions',
     );
   });
 

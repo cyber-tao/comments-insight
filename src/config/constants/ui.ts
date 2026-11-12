@@ -44,12 +44,6 @@ export const UI_LIMITS = {
   /** Max comments input range */
   MAX_COMMENTS_MIN: 1,
   MAX_COMMENTS_MAX: 10000,
-  /** Temperature range (0-2) */
-  TEMPERATURE_MIN: 0,
-  TEMPERATURE_MAX: 2,
-  /** Top P range (0-1) */
-  TOP_P_MIN: 0,
-  TOP_P_MAX: 1,
   /** DOM analysis depth limits */
   INITIAL_DEPTH_MIN: 1,
   INITIAL_DEPTH_MAX: 5,

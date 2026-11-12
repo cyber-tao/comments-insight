@@ -1,20 +1,25 @@
 import * as React from 'react';
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import { UI_LIMITS } from '@/config/constants';
 
 interface SearchableModelSelectProps {
+  id?: string;
   models: string[];
   value: string;
   onChange: (model: string) => void;
 }
 
 export const SearchableModelSelect: React.FC<SearchableModelSelectProps> = ({
+  id,
   models,
   value,
   onChange,
 }) => {
   const { t } = useTranslation();
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
+  const listId = `${inputId}-list`;
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
@@ -81,6 +86,9 @@ export const SearchableModelSelect: React.FC<SearchableModelSelectProps> = ({
           e.preventDefault();
           if (highlightedIndex >= 0 && highlightedIndex < filteredModels.length) {
             handleSelect(filteredModels[highlightedIndex]);
+          } else {
+            setIsOpen(false);
+            setSearchTerm('');
           }
           break;
         case 'Escape':
@@ -93,10 +101,14 @@ export const SearchableModelSelect: React.FC<SearchableModelSelectProps> = ({
     [isOpen, filteredModels, highlightedIndex, handleSelect],
   );
 
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
-    setIsOpen(true);
-  }, []);
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setSearchTerm(e.target.value);
+      setIsOpen(true);
+      onChange(e.target.value);
+    },
+    [onChange],
+  );
 
   const handleInputFocus = useCallback(() => {
     setIsOpen(true);
@@ -132,7 +144,16 @@ export const SearchableModelSelect: React.FC<SearchableModelSelectProps> = ({
     UI_LIMITS.MODEL_SELECT_VISIBLE_ITEMS * UI_LIMITS.MODEL_SELECT_ITEM_HEIGHT_PX;
 
   return (
-    <div ref={containerRef} className="relative">
+    <div
+      ref={containerRef}
+      className="relative"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setIsOpen(false);
+          setSearchTerm('');
+        }
+      }}
+    >
       <div
         className="flex items-center theme-input cursor-pointer"
         onClick={() => {
@@ -142,9 +163,17 @@ export const SearchableModelSelect: React.FC<SearchableModelSelectProps> = ({
         style={{ padding: 0, overflow: 'hidden' }}
       >
         <input
+          id={inputId}
           ref={inputRef}
           type="text"
-          value={isOpen ? searchTerm : value}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={isOpen}
+          aria-controls={isOpen ? listId : undefined}
+          aria-activedescendant={
+            isOpen && highlightedIndex >= 0 ? `${listId}-${highlightedIndex}` : undefined
+          }
+          value={value}
           onChange={handleInputChange}
           onFocus={handleInputFocus}
           onKeyDown={handleKeyDown}
@@ -207,10 +236,18 @@ export const SearchableModelSelect: React.FC<SearchableModelSelectProps> = ({
                   total: models.length,
                 })}
               </div>
-              <div ref={listRef} style={{ maxHeight: `${dropdownMaxHeight}px`, overflowY: 'auto' }}>
+              <div
+                id={listId}
+                role="listbox"
+                ref={listRef}
+                style={{ maxHeight: `${dropdownMaxHeight}px`, overflowY: 'auto' }}
+              >
                 {filteredModels.map((model, index) => (
                   <div
                     key={model}
+                    id={`${listId}-${index}`}
+                    role="option"
+                    aria-selected={model === value}
                     className="px-3 py-2 text-sm cursor-pointer transition-colors"
                     style={{
                       color: model === value ? 'var(--accent-primary)' : 'var(--text-primary)',

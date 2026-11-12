@@ -7,7 +7,7 @@ import { DataMigrator } from '../src/background/storage/DataMigrator';
 import { crawlingConfigsFingerprint } from '../src/utils/crawling-config';
 import type { EncryptionService } from '../src/background/storage/EncryptionService';
 import type { AIConfig, CrawlingConfig, HistoryItem, Settings } from '../src/types';
-import { ANALYSIS_FORMAT, SECURITY, STORAGE } from '../src/config/constants';
+import { AI, ANALYSIS_FORMAT, APP_DATA_VERSION, SECURITY, STORAGE } from '../src/config/constants';
 import {
   sanitizePersistedTaskState,
   sanitizeStoredSettings,
@@ -386,7 +386,7 @@ describe('SettingsStore crawling config persistence', () => {
       createCrawlingConfig('new.example.com'),
     );
     await store.saveSettings({ theme: 'dark', aiModel: { model: 'new-model' } });
-    await store.saveSettings({ aiModel: { temperature: 0.5 } });
+    await store.saveSettings({ aiModel: { maxOutputTokens: 512 } });
     await expect(
       store.saveSettings(
         { crawlingConfigs: snapshot.crawlingConfigs },
@@ -395,7 +395,7 @@ describe('SettingsStore crawling config persistence', () => {
     ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
     const latest = await store.getSettings();
     expect(latest.crawlingConfigs.some((config) => config.domain === 'new.example.com')).toBe(true);
-    expect(latest.aiModel).toMatchObject({ model: 'new-model', temperature: 0.5 });
+    expect(latest.aiModel).toMatchObject({ model: 'new-model', maxOutputTokens: 512 });
     expect(latest.theme).toBe('dark');
   });
 
@@ -775,10 +775,10 @@ describe('SettingsStore endpoint-bound credential patches', () => {
     await expect(store.saveSettings({ aiModel: { apiKey: 'unbound-key' } })).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
     });
-    await store.saveSettings({ aiModel: { temperature: 0.3 } });
+    await store.saveSettings({ aiModel: { maxOutputTokens: 1024 } });
     expect((storage.read() as Settings).aiModel).toMatchObject({
       apiKey: 'enc:first-key',
-      temperature: 0.3,
+      maxOutputTokens: 1024,
     });
   });
 
@@ -838,6 +838,153 @@ describe('SettingsStore endpoint-bound credential patches', () => {
       apiUrl: secondEndpoint,
       apiKey: 'enc:second-key',
     });
+  });
+});
+
+describe('AI protocol storage compatibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockStorageGet.mockReset();
+    mockStorageSet.mockReset();
+  });
+
+  it('migrates v4 model settings without changing credentials and is idempotent', async () => {
+    const legacy = {
+      apiUrl: 'https://api.example.com/v1',
+      apiKey: 'enc:preserved-key',
+      model: 'legacy-model',
+      contextWindowSize: 128000,
+      maxOutputTokens: 4096,
+      temperature: 0.7,
+      topP: 0.9,
+      topK: 40,
+    };
+    const data: Record<string, unknown> = {
+      [STORAGE.APP_DATA_VERSION_KEY]: 4,
+      [STORAGE.SETTINGS_KEY]: { aiModel: legacy, language: 'zh-CN' },
+    };
+    mockStorageGet.mockImplementation(async (key: string) => ({ [key]: data[key] }));
+    mockStorageSet.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(data, structuredClone(values));
+    });
+    await new DataMigrator().migrate();
+    expect(data[STORAGE.APP_DATA_VERSION_KEY]).toBe(APP_DATA_VERSION.CURRENT);
+    expect(data[STORAGE.SETTINGS_KEY]).toEqual({
+      language: 'zh-CN',
+      aiModel: {
+        protocol: AI.DEFAULT_PROTOCOL,
+        apiUrl: legacy.apiUrl,
+        apiKey: legacy.apiKey,
+        model: legacy.model,
+        contextWindowSize: legacy.contextWindowSize,
+        maxOutputTokens: legacy.maxOutputTokens,
+      },
+    });
+    data[STORAGE.APP_DATA_VERSION_KEY] = 4;
+    mockStorageSet.mockClear();
+    await new DataMigrator().migrate();
+    expect(mockStorageSet).toHaveBeenCalledExactlyOnceWith({
+      [STORAGE.APP_DATA_VERSION_KEY]: APP_DATA_VERSION.CURRENT,
+    });
+  });
+
+  it.each([undefined, {}, { aiModel: null }, { aiModel: [] }])(
+    'tolerates absent or partial settings during migration (%j)',
+    async (settings) => {
+      const data: Record<string, unknown> = {
+        [STORAGE.APP_DATA_VERSION_KEY]: 4,
+        ...(settings === undefined ? {} : { [STORAGE.SETTINGS_KEY]: settings }),
+      };
+      mockStorageGet.mockImplementation(async (key: string) => ({ [key]: data[key] }));
+      mockStorageSet.mockImplementation(async (values: Record<string, unknown>) => {
+        Object.assign(data, structuredClone(values));
+      });
+      await new DataMigrator().migrate();
+      expect(data[STORAGE.SETTINGS_KEY]).toEqual(settings);
+      expect(data[STORAGE.APP_DATA_VERSION_KEY]).toBe(APP_DATA_VERSION.CURRENT);
+    },
+  );
+
+  it('preserves a saved protocol on partial writes and imports legacy endpoints as Chat Completions', async () => {
+    const storage = useInMemorySettingsStorage({
+      aiModel: {
+        ...DEFAULT_SETTINGS.aiModel,
+        protocol: 'anthropic-messages',
+        apiUrl: 'https://api.anthropic.com/v1',
+        apiKey: 'enc:original-key',
+      },
+    });
+    const store = new SettingsStore(
+      createEncryptionServiceMock({
+        decrypt: vi.fn().mockResolvedValue('original-key'),
+      }),
+    );
+    await store.saveSettings({ aiModel: { maxOutputTokens: 1024 } });
+    expect((storage.read() as Settings).aiModel.protocol).toBe('anthropic-messages');
+    await store.importSettings(JSON.stringify({ aiModel: { model: 'new-model' } }));
+    expect((storage.read() as Settings).aiModel.protocol).toBe('anthropic-messages');
+    await store.importSettings(
+      JSON.stringify({
+        aiModel: {
+          apiUrl: 'https://legacy.example/v1',
+          model: 'legacy-model',
+          temperature: 0.3,
+          topP: 1,
+        },
+      }),
+    );
+    const savedModel = (storage.read() as Settings).aiModel;
+    expect(savedModel).toMatchObject({
+      protocol: AI.DEFAULT_PROTOCOL,
+      apiKey: '',
+      model: 'legacy-model',
+    });
+    expect(savedModel).not.toHaveProperty('temperature');
+    expect(savedModel).not.toHaveProperty('topP');
+  });
+
+  it('rejects stale protocol-bound edits while allowing a switch with the current protocol', async () => {
+    const endpoint = 'https://gateway.example/v1';
+    const storage = useInMemorySettingsStorage({
+      aiModel: {
+        ...DEFAULT_SETTINGS.aiModel,
+        protocol: 'openai-responses',
+        apiUrl: endpoint,
+        apiKey: 'enc:original-key',
+      },
+    });
+    const store = new SettingsStore(
+      createEncryptionServiceMock({
+        decrypt: vi.fn().mockResolvedValue('original-key'),
+      }),
+    );
+    await expect(
+      store.saveSettings({ aiModel: { protocol: 'anthropic-messages' } }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await expect(
+      store.saveSettings({ aiModel: { apiKey: 'stale-key' } }, undefined, endpoint),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await expect(
+      store.saveSettings(
+        { aiModel: { model: 'stale-model' } },
+        undefined,
+        endpoint,
+        'anthropic-messages',
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_ERROR' });
+    await store.saveSettings(
+      { aiModel: { protocol: 'anthropic-messages' } },
+      undefined,
+      endpoint,
+      'openai-responses',
+    );
+    expect((storage.read() as Settings).aiModel).toMatchObject({
+      protocol: 'anthropic-messages',
+      apiKey: 'enc:original-key',
+    });
+    const exported = JSON.parse(await store.exportSettings());
+    expect(exported.aiModel.protocol).toBe('anthropic-messages');
+    expect(exported.aiModel).not.toHaveProperty('apiKey');
   });
 });
 
@@ -988,8 +1135,7 @@ describe('SettingsStore decryption resilience', () => {
             apiKey: '',
             model: 'model',
             contextWindowSize: 128_000,
-            temperature: 1,
-            topP: 1,
+            protocol: 'openai-chat-completions',
           },
         },
         undefined,
@@ -1014,8 +1160,7 @@ describe('SettingsStore decryption resilience', () => {
             model: 'model',
             contextWindowSize: 4096,
             maxOutputTokens: 3000,
-            temperature: 1,
-            topP: 1,
+            protocol: 'openai-chat-completions',
           },
         },
         undefined,

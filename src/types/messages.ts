@@ -3,6 +3,7 @@ import {
   Task,
   SettingsPatch,
   AIConfig,
+  AIProtocol,
   CrawlingConfig,
   FieldValidationStatus,
   ProgressStage,
@@ -30,6 +31,7 @@ export type SettingsMessage =
         settings: SettingsPatch;
         expectedCrawlingConfigsFingerprint?: string;
         expectedAiEndpoint?: string;
+        expectedAiProtocol?: AIProtocol;
       };
     }
   | { type: 'IMPORT_SETTINGS'; payload: { data: string } }
@@ -142,7 +144,10 @@ export type HistoryMessage =
   | { type: 'CLEAR_ALL_HISTORY'; payload?: never };
 
 export type AIModelMessage =
-  | { type: 'GET_AVAILABLE_MODELS'; payload: { apiUrl: string; apiKey: string } }
+  | {
+      type: 'GET_AVAILABLE_MODELS';
+      payload: { apiUrl: string; apiKey: string; protocol?: AIProtocol };
+    }
   | { type: 'TEST_MODEL'; payload: { config: AIConfig } };
 
 export type ExportMessage = {

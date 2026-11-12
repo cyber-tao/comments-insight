@@ -28,6 +28,7 @@ export async function handleSaveSettings(
     userSettings,
     message.payload.expectedCrawlingConfigsFingerprint,
     message.payload.expectedAiEndpoint,
+    message.payload.expectedAiProtocol,
   );
   context.aiService.clearVerifiedConfig();
   return { success: true };

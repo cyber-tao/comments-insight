@@ -35,8 +35,7 @@ function createSettings(overrides: Partial<Settings> = {}): Settings {
       model: 'gpt-4o-mini',
       contextWindowSize: 200000,
       maxOutputTokens: 4096,
-      temperature: 1,
-      topP: 0.95,
+      protocol: 'openai-chat-completions',
     },
     aiTimeout: 120000,
     analyzerPromptTemplate: 'Custom template {comments_data}',
@@ -101,6 +100,144 @@ describe('AIModelSettings', () => {
     extensionApiMock.testModel.mockResolvedValue({ success: true });
   });
 
+  it.each([
+    ['openai', 'https://api.openai.com/v1', 'openai-responses'],
+    ['anthropic', 'https://api.anthropic.com/v1', 'anthropic-messages'],
+    [
+      'gemini',
+      'https://generativelanguage.googleapis.com/v1beta/openai',
+      'openai-chat-completions',
+    ],
+    ['deepseek', 'https://api.deepseek.com', 'openai-chat-completions'],
+    ['openrouter', 'https://openrouter.ai/api/v1', 'openai-chat-completions'],
+  ])(
+    'applies the %s preset and clears credentials and model for the new endpoint',
+    (id, apiUrl, protocol) => {
+      const { onSettingsChange } = renderComponent();
+      fireEvent.change(screen.getByLabelText('options.providerPreset'), { target: { value: id } });
+      expect(onSettingsChange).toHaveBeenCalledExactlyOnceWith({
+        aiModel: { apiUrl, protocol, apiKey: '', model: '' },
+      });
+      expect((screen.getByLabelText('options.apiUrl') as HTMLInputElement).value).toBe(apiUrl);
+      expect((screen.getByLabelText('options.apiProtocol') as HTMLSelectElement).value).toBe(
+        protocol,
+      );
+      expect((screen.getByLabelText('options.apiKey') as HTMLInputElement).value).toBe('');
+      expect((screen.getByLabelText('options.model') as HTMLInputElement).value).toBe('');
+      expect(screen.getByDisplayValue('200000')).toBeTruthy();
+      expect(screen.getByDisplayValue('4096')).toBeTruthy();
+      expect(screen.queryByText('options.temperature')).toBeNull();
+      expect(screen.queryByText('options.topP')).toBeNull();
+      expect(extensionApiMock.getAvailableModels).not.toHaveBeenCalled();
+      expect(extensionApiMock.testModel).not.toHaveBeenCalled();
+    },
+  );
+
+  it('keeps the current fields when selecting custom after a preset', () => {
+    const { onSettingsChange } = renderComponent();
+    fireEvent.change(screen.getByLabelText('options.providerPreset'), {
+      target: { value: 'openai' },
+    });
+    fireEvent.change(screen.getByLabelText('options.apiKey'), { target: { value: 'openai-key' } });
+    fireEvent.change(screen.getByLabelText('options.model'), { target: { value: 'manual-model' } });
+    onSettingsChange.mockClear();
+    fireEvent.change(screen.getByLabelText('options.providerPreset'), {
+      target: { value: 'custom' },
+    });
+    expect(onSettingsChange).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue('https://api.openai.com/v1')).toBeTruthy();
+    expect(screen.getByDisplayValue('openai-key')).toBeTruthy();
+    expect(screen.getByDisplayValue('manual-model')).toBeTruthy();
+    expect((screen.getByLabelText('options.providerPreset') as HTMLSelectElement).value).toBe(
+      'custom',
+    );
+    fireEvent.change(screen.getByLabelText('options.apiProtocol'), {
+      target: { value: 'openai-chat-completions' },
+    });
+    expect((screen.getByLabelText('options.providerPreset') as HTMLSelectElement).value).toBe(
+      'custom',
+    );
+  });
+
+  it('keeps the key and model when a preset only changes the protocol at the same endpoint', () => {
+    const initial = createSettings();
+    initial.aiModel.apiUrl = ' https://API.openai.com:443/v1/chat/completions ';
+    const { onSettingsChange } = renderComponent(initial);
+    fireEvent.change(screen.getByLabelText('options.providerPreset'), {
+      target: { value: 'openai' },
+    });
+    expect(onSettingsChange).toHaveBeenCalledExactlyOnceWith({
+      aiModel: { apiUrl: 'https://api.openai.com/v1', protocol: 'openai-responses' },
+    });
+    expect(screen.getByDisplayValue('secret-key')).toBeTruthy();
+    expect(screen.getByDisplayValue('gpt-4o-mini')).toBeTruthy();
+  });
+
+  it('identifies the provider by its endpoint after switching protocols', () => {
+    const initial = createSettings();
+    initial.aiModel.apiUrl = 'https://api.openai.com/v1';
+    initial.aiModel.protocol = 'openai-responses';
+    renderComponent(initial);
+    fireEvent.change(screen.getByLabelText('options.apiProtocol'), {
+      target: { value: 'openai-chat-completions' },
+    });
+    expect((screen.getByLabelText('options.providerPreset') as HTMLSelectElement).value).toBe(
+      'openai',
+    );
+    expect(screen.getByDisplayValue('secret-key')).toBeTruthy();
+    expect(screen.getByDisplayValue('gpt-4o-mini')).toBeTruthy();
+  });
+
+  it('leaves an empty model unselected after discovery and allows a custom model', async () => {
+    const initial = createSettings();
+    initial.aiModel.model = '';
+    extensionApiMock.getAvailableModels.mockResolvedValue(['embedding-model', 'chat-model']);
+    const { onSettingsChange, toast } = renderComponent(initial);
+    fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
+    await waitFor(() => expect(toast.success).toHaveBeenCalledOnce());
+    const input = screen.getByLabelText('options.model');
+    expect((input as HTMLInputElement).value).toBe('');
+    expect(onSettingsChange).not.toHaveBeenCalled();
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: 'private-chat-model' } });
+    fireEvent.blur(input);
+    expect(screen.getByDisplayValue('private-chat-model')).toBeTruthy();
+    expect(onSettingsChange).toHaveBeenCalledExactlyOnceWith({
+      aiModel: { model: 'private-chat-model' },
+    });
+  });
+
+  it('ignores a connection test from a previous protocol and permits a new test', async () => {
+    let resolveOld!: (result: { success: boolean; response: string }) => void;
+    extensionApiMock.testModel
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveOld = resolve;
+        }),
+      )
+      .mockResolvedValueOnce({ success: true, response: 'current response' });
+    const { toast } = renderComponent();
+    fireEvent.click(screen.getByRole('button', { name: /options.testModel/i }));
+    fireEvent.change(screen.getByLabelText('options.apiProtocol'), {
+      target: { value: 'anthropic-messages' },
+    });
+    expect(screen.getByDisplayValue('secret-key')).toBeTruthy();
+    expect(screen.getByDisplayValue('gpt-4o-mini')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /options.testModel/i }));
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+        'options.testSuccess: current response',
+      ),
+    );
+    await act(async () => {
+      resolveOld({ success: true, response: 'obsolete response' });
+    });
+    expect(toast.success).toHaveBeenCalledOnce();
+    expect(extensionApiMock.testModel).toHaveBeenLastCalledWith(
+      expect.objectContaining({ protocol: 'anthropic-messages' }),
+    );
+  });
+
   it('warns when fetching or testing without required model configuration', async () => {
     const { toast } = renderComponent(
       createSettings({
@@ -110,8 +247,7 @@ describe('AIModelSettings', () => {
           model: '',
           contextWindowSize: 200000,
           maxOutputTokens: 4096,
-          temperature: 1,
-          topP: 0.95,
+          protocol: 'openai-chat-completions',
         },
       }),
     );
@@ -125,7 +261,7 @@ describe('AIModelSettings', () => {
     expect(extensionApiMock.testModel).not.toHaveBeenCalled();
   });
 
-  it('fetches models, switches to select mode, and applies the first available model', async () => {
+  it('fetches model choices without overwriting a manually configured model', async () => {
     extensionApiMock.getAvailableModels.mockResolvedValue(['gpt-4.1', 'gpt-4o-mini']);
     const { onSettingsChange, toast } = renderComponent(
       createSettings({
@@ -135,8 +271,7 @@ describe('AIModelSettings', () => {
           model: 'missing-model',
           contextWindowSize: 200000,
           maxOutputTokens: 4096,
-          temperature: 1,
-          topP: 0.95,
+          protocol: 'openai-chat-completions',
         },
       }),
     );
@@ -147,6 +282,7 @@ describe('AIModelSettings', () => {
       expect(extensionApiMock.getAvailableModels).toHaveBeenCalledWith(
         'https://api.example.com/v1',
         'secret-key',
+        'openai-chat-completions',
       );
     });
 
@@ -154,15 +290,11 @@ describe('AIModelSettings', () => {
       expect(toast.success).toHaveBeenCalledWith('options.modelsFound');
     });
 
-    const modelInput = await screen.findByDisplayValue('gpt-4.1');
+    const modelInput = screen.getByDisplayValue('missing-model');
     expect(modelInput).toBeTruthy();
-    expect(onSettingsChange).toHaveBeenCalledWith(
-      expect.objectContaining({
-        aiModel: expect.objectContaining({
-          model: 'gpt-4.1',
-        }),
-      }),
-    );
+    expect(onSettingsChange).not.toHaveBeenCalled();
+    fireEvent.focus(modelInput);
+    expect(screen.getByRole('option', { name: 'gpt-4.1' })).toBeTruthy();
   });
 
   it('shows info for empty model results and error for fetch failures', async () => {
@@ -179,9 +311,31 @@ describe('AIModelSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
 
     await waitFor(() => {
-      expect(toast.error).toHaveBeenCalledWith('options.fetchModelsFailed');
+      expect(toast.error).toHaveBeenCalledWith('options.fetchModelsFailed: network');
     });
   });
+
+  it.each([
+    [ErrorCode.API_ERROR, 'HTTP 401: Invalid API key [REDACTED]'],
+    [ErrorCode.AI_TIMEOUT, 'Model discovery timed out'],
+  ])(
+    'shows the safe discovery error %s and preserves the manually configured model',
+    async (code, message) => {
+      extensionApiMock.getAvailableModels.mockRejectedValueOnce(new ExtensionError(code, message));
+      const { toast } = renderComponent();
+      fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+          `options.fetchModelsFailed: ${message}`,
+        ),
+      );
+      expect(toast.info).not.toHaveBeenCalled();
+      const input = screen.getByLabelText('options.model');
+      expect((input as HTMLInputElement).value).toBe('gpt-4o-mini');
+      fireEvent.change(input, { target: { value: 'manual-after-discovery-error' } });
+      expect(screen.getByDisplayValue('manual-after-discovery-error')).toBeTruthy();
+    },
+  );
 
   it('tests the configured model and reports success and failure responses', async () => {
     const { toast } = renderComponent();
@@ -224,7 +378,7 @@ describe('AIModelSettings', () => {
     },
   );
 
-  it.each(['apiUrl', 'apiKey'] as const)(
+  it.each(['apiUrl', 'apiKey', 'protocol'] as const)(
     'ignores an old model response after %s changes and a newer request completes',
     async (field) => {
       let resolveOld!: (models: string[]) => void;
@@ -235,23 +389,33 @@ describe('AIModelSettings', () => {
           }),
         )
         .mockResolvedValueOnce(['new-model']);
-      const { onSettingsChange, toast } = renderComponent();
+      const { toast } = renderComponent();
       fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
       const input =
         field === 'apiUrl'
           ? screen.getByDisplayValue('https://api.example.com/v1')
-          : screen.getByPlaceholderText('options.apiKeyPlaceholder');
+          : field === 'apiKey'
+            ? screen.getByPlaceholderText('options.apiKeyPlaceholder')
+            : screen.getByLabelText('options.apiProtocol');
       fireEvent.change(input, {
-        target: { value: field === 'apiUrl' ? 'https://second.example/v1' : 'new-key' },
+        target: {
+          value:
+            field === 'apiUrl'
+              ? 'https://second.example/v1'
+              : field === 'apiKey'
+                ? 'new-key'
+                : 'openai-responses',
+        },
       });
       fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
-      await waitFor(() => expect(screen.getByDisplayValue('new-model')).toBeTruthy());
+      await waitFor(() => expect(toast.success).toHaveBeenCalledOnce());
+      fireEvent.focus(screen.getByLabelText('options.model'));
+      expect(screen.getByRole('option', { name: 'new-model' })).toBeTruthy();
       await act(async () => {
         resolveOld(['old-model']);
       });
-      expect(screen.getByDisplayValue('new-model')).toBeTruthy();
-      expect(screen.queryByDisplayValue('old-model')).toBeNull();
-      expect(onSettingsChange).toHaveBeenLastCalledWith({ aiModel: { model: 'new-model' } });
+      expect(screen.getByRole('option', { name: 'new-model' })).toBeTruthy();
+      expect(screen.queryByRole('option', { name: 'old-model' })).toBeNull();
       expect(toast.success).toHaveBeenCalledTimes(1);
     },
   );
@@ -291,15 +455,17 @@ describe('AIModelSettings', () => {
     fireEvent.change(key, { target: { value: 'temporary-key' } });
     fireEvent.change(key, { target: { value: 'secret-key' } });
     fireEvent.click(screen.getByRole('button', { name: /options.fetchModels/i }));
-    await waitFor(() => expect(screen.getByDisplayValue('current-model')).toBeTruthy());
+    await waitFor(() => expect(toast.success).toHaveBeenCalledOnce());
+    fireEvent.focus(screen.getByLabelText('options.model'));
+    expect(screen.getByRole('option', { name: 'current-model' })).toBeTruthy();
     await act(async () => {
       resolveOld(['obsolete-model']);
     });
-    expect(screen.getByDisplayValue('current-model')).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'current-model' })).toBeTruthy();
     expect(toast.success).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['apiUrl', 'apiKey'] as const)(
+  it.each(['apiUrl', 'apiKey', 'protocol'] as const)(
     'clears the discovered list when %s changes',
     async (field) => {
       extensionApiMock.getAvailableModels.mockResolvedValueOnce(['gpt-4o-mini', 'other-model']);
@@ -311,9 +477,18 @@ describe('AIModelSettings', () => {
       const input =
         field === 'apiUrl'
           ? screen.getByDisplayValue('https://api.example.com/v1')
-          : screen.getByPlaceholderText('options.apiKeyPlaceholder');
+          : field === 'apiKey'
+            ? screen.getByPlaceholderText('options.apiKeyPlaceholder')
+            : screen.getByLabelText('options.apiProtocol');
       fireEvent.change(input, {
-        target: { value: field === 'apiUrl' ? 'https://new.example/v1' : 'replacement-key' },
+        target: {
+          value:
+            field === 'apiUrl'
+              ? 'https://new.example/v1'
+              : field === 'apiKey'
+                ? 'replacement-key'
+                : 'anthropic-messages',
+        },
       });
       expect(screen.getByPlaceholderText('options.modelPlaceholder')).toBeTruthy();
     },
@@ -335,7 +510,9 @@ describe('AIModelSettings', () => {
         aiModel: { model: 'manual-after-failure' },
       });
       expect(outcome === 'empty' ? toast.info : toast.error).toHaveBeenCalledWith(
-        outcome === 'empty' ? 'options.noModelsFound' : 'options.fetchModelsFailed',
+        outcome === 'empty'
+          ? 'options.noModelsFound'
+          : 'options.fetchModelsFailed: discovery failed',
       );
     },
   );
@@ -370,7 +547,8 @@ describe('AIModelSettings', () => {
     await act(async () => {
       resolveNew(['new-model']);
     });
-    expect(screen.getByDisplayValue('new-model')).toBeTruthy();
+    fireEvent.focus(screen.getByLabelText('options.model'));
+    expect(screen.getByRole('option', { name: 'new-model' })).toBeTruthy();
   });
 
   it('supports api key visibility, prompt reset, and placeholder details', () => {
@@ -410,8 +588,7 @@ describe('AIModelSettings', () => {
         model: 'gpt-4o-mini',
         contextWindowSize: 200000,
         maxOutputTokens: undefined,
-        temperature: 1,
-        topP: 0.95,
+        protocol: 'openai-chat-completions',
       },
     });
     const { onSettingsChange } = renderComponent(settings);

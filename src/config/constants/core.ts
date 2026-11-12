@@ -77,7 +77,7 @@ export const STORAGE = {
  * existing sanitizers.
  */
 export const APP_DATA_VERSION = {
-  CURRENT: 4,
+  CURRENT: 5,
   INITIAL: 1,
 } as const;
 

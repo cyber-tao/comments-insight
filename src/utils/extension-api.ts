@@ -1,5 +1,13 @@
 import { MESSAGES, TEXT, AI, TIMEOUT } from '@/config/constants';
-import type { Comment, HistoryItem, Message, Settings, SettingsPatch, Task } from '@/types';
+import type {
+  AIProtocol,
+  Comment,
+  HistoryItem,
+  Message,
+  Settings,
+  SettingsPatch,
+  Task,
+} from '@/types';
 import { sendMessage } from './chrome-message';
 import { fromExtensionErrorPayload } from './error-types';
 
@@ -134,6 +142,7 @@ export const ExtensionAPI = {
     settings: SettingsPatch,
     expectedCrawlingConfigsFingerprint?: string,
     expectedAiEndpoint?: string,
+    expectedAiProtocol?: AIProtocol,
   ): Promise<SaveSettingsResponse> {
     return sendMessageOrThrow<SaveSettingsResponse>({
       type: MESSAGES.SAVE_SETTINGS,
@@ -143,6 +152,7 @@ export const ExtensionAPI = {
           ? { expectedCrawlingConfigsFingerprint }
           : {}),
         ...(expectedAiEndpoint !== undefined ? { expectedAiEndpoint } : {}),
+        ...(expectedAiProtocol !== undefined ? { expectedAiProtocol } : {}),
       },
     });
   },
@@ -283,10 +293,14 @@ export const ExtensionAPI = {
     return response?.data ?? null;
   },
 
-  async getAvailableModels(apiUrl: string, apiKey: string): Promise<string[]> {
+  async getAvailableModels(
+    apiUrl: string,
+    apiKey: string,
+    protocol: AIProtocol = AI.DEFAULT_PROTOCOL,
+  ): Promise<string[]> {
     const response = await sendMessageOrThrow<GetAvailableModelsResponse>({
       type: MESSAGES.GET_AVAILABLE_MODELS,
-      payload: { apiUrl, apiKey },
+      payload: { apiUrl, apiKey, protocol },
     });
     return response?.models ?? [];
   },

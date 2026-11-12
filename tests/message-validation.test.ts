@@ -88,9 +88,7 @@ describe('validateMessagePayload SAVE_SETTINGS limits', () => {
       ),
     ).toThrowError(/SAVE_SETTINGS/);
     expect(() =>
-      validateMessagePayload(
-        makeMessage({ aiModel: { temperature: UI_LIMITS.TEMPERATURE_MAX + 0.1 } }),
-      ),
+      validateMessagePayload(makeMessage({ aiModel: { protocol: 'unknown-protocol' } })),
     ).toThrowError(/SAVE_SETTINGS/);
   });
 
@@ -115,9 +113,55 @@ describe('validateMessagePayload SAVE_SETTINGS limits', () => {
           maxComments: UI_LIMITS.MAX_COMMENTS_MAX,
           aiTimeout: TIMEOUT.MAX_AI_SECONDS * TIMEOUT.MS_PER_SEC,
           domAnalysisConfig: { maxDepth: UI_LIMITS.MAX_DEPTH_MAX },
-          aiModel: { topP: UI_LIMITS.TOP_P_MAX },
+          aiModel: { protocol: 'anthropic-messages' },
         }),
       ),
     ).not.toThrow();
+  });
+});
+
+describe('AI protocol message validation', () => {
+  it('defaults legacy model discovery and testing messages to Chat Completions', () => {
+    expect(
+      validateMessagePayload({
+        type: 'GET_AVAILABLE_MODELS',
+        payload: { apiUrl: 'https://api.example/v1', apiKey: '' },
+      }),
+    ).toMatchObject({ payload: { protocol: 'openai-chat-completions' } });
+    expect(
+      validateMessagePayload({
+        type: 'TEST_MODEL',
+        payload: { config: { apiUrl: 'https://api.example/v1', model: 'test' } },
+      } as Message),
+    ).toMatchObject({ payload: { config: { protocol: 'openai-chat-completions' } } });
+  });
+
+  it('rejects unknown discovery, test, and save precondition protocols', () => {
+    for (const message of [
+      {
+        type: 'GET_AVAILABLE_MODELS',
+        payload: { apiUrl: 'https://api.example/v1', apiKey: '', protocol: 'unknown' },
+      },
+      {
+        type: 'TEST_MODEL',
+        payload: {
+          config: { apiUrl: 'https://api.example/v1', model: 'test', protocol: 'unknown' },
+        },
+      },
+      { type: 'SAVE_SETTINGS', payload: { settings: {}, expectedAiProtocol: 'unknown' } },
+    ]) {
+      expect(() => validateMessagePayload(message as Message)).toThrow();
+    }
+  });
+
+  it('does not add a protocol to partial settings patches', () => {
+    const message: Message = {
+      type: 'SAVE_SETTINGS',
+      payload: {
+        settings: { aiModel: { model: 'new-model' } },
+        expectedAiProtocol: 'openai-responses',
+      },
+    };
+    expect(validateMessagePayload(message)).toEqual(message);
   });
 });

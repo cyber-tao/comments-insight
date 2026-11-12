@@ -1,4 +1,5 @@
 import { API, HOST, REGEX } from '@/config/constants';
+import type { AIProtocol } from '@/types';
 
 export interface ParsedUrl {
   hostname: string;
@@ -126,26 +127,43 @@ export function normalizeAiApiUrl(value: string): string | null {
     return null;
   }
 
-  let pathname = parsed.pathname.replace(/\/+$/, '');
-  if (pathname.endsWith(API.ENDPOINTS.CHAT_COMPLETIONS)) {
-    pathname = pathname.slice(0, -API.ENDPOINTS.CHAT_COMPLETIONS.length);
-  }
+  const pathname = aiBasePath(parsed.pathname);
   parsed.pathname = pathname || '/';
   parsed.hash = '';
   parsed.searchParams.sort();
   return parsed.toString();
 }
 
-export function buildAiChatCompletionsUrl(value: string): string | null {
+function aiBasePath(pathname: string): string {
+  const path = pathname.replace(/\/+$/, '');
+  const suffix = [
+    API.ENDPOINTS.CHAT_COMPLETIONS,
+    API.ENDPOINTS.RESPONSES,
+    API.ENDPOINTS.MESSAGES,
+  ].find((endpoint) => path.endsWith(endpoint));
+  return suffix ? path.slice(0, -suffix.length) : path;
+}
+
+function buildAiEndpointUrl(value: string, endpoint: string): string | null {
   const parsed = parseAllowedAiApiUrl(value);
   if (!parsed) {
     return null;
   }
 
-  const pathname = parsed.pathname.replace(/\/+$/, '');
-  if (!pathname.endsWith(API.ENDPOINTS.CHAT_COMPLETIONS)) {
-    parsed.pathname = `${pathname}${API.ENDPOINTS.CHAT_COMPLETIONS}`;
-  }
+  parsed.pathname = `${aiBasePath(parsed.pathname)}${endpoint}`;
   parsed.hash = '';
   return parsed.toString();
+}
+
+export function buildAiRequestUrl(value: string, protocol: AIProtocol): string | null {
+  const endpoints: Record<AIProtocol, string> = {
+    'openai-chat-completions': API.ENDPOINTS.CHAT_COMPLETIONS,
+    'openai-responses': API.ENDPOINTS.RESPONSES,
+    'anthropic-messages': API.ENDPOINTS.MESSAGES,
+  };
+  return endpoints[protocol] ? buildAiEndpointUrl(value, endpoints[protocol]) : null;
+}
+
+export function buildAiModelsUrl(value: string): string | null {
+  return buildAiEndpointUrl(value, API.ENDPOINTS.MODELS);
 }
