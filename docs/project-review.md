@@ -290,3 +290,37 @@ V8 测量为语句 **80.16%**、分支 **71.41%**、函数 **80.90%**、行 **81
 安装验证创建的隔离缓存 `build/audit-20261113/browser-cache-4d815704f15043a2b9a5988a11f59fef/` 未提交。验收后尝试清理被自动审批策略拒绝（`blocked by policy`），因此保留原目录，没有换工具绕过。
 
 本轮不改变单次展开按钮策略，不增加连续加载全部回复行为；无需数据迁移。动态预算仍使用项目 Tokenizer 估算，不能保证与每个真实提供商的精确计数一致。真实模型质量、全部线上站点 DOM、Chrome 116 实机、商店签名升级及线上 CI 未验证。
+
+## AUD-034 剩余中低危治理（2026-11-13）
+
+基线为 `88b2f39`，开始时工作区干净。用户继续授权处理上节保留的 7 条中危、2 条低危告警，范围为依赖、锁文件、必要验证和本地提交。本次按 review-project 的 Libraries and Tools、Reporting and Follow-up 检查安装解析、调用兼容和交付产物，未重新扩大产品审核范围。
+
+**当前状态：verified fixed。** 完整 `bun audit` 检查 626 个包，零告警；生产审计检查 112 个包，同样无告警。上节的 open 状态和失败审计保留为修复前历史。此结论针对当前锁图及本次公告查询，不代表所有未知漏洞或项目利用路径均被排除。
+
+| 包 / 告警                                   | 实际升级                      | 处置依据与兼容范围                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| @babel/core，1 条低危                       | `7.29.0 → 7.29.13`            | 在既有 7.x 依赖范围内更新核心及必要 Babel 子包，覆盖 [7.29.6 起的修复](https://github.com/advisories/GHSA-4x5r-pxfx-6jf8)，未迁移 Babel 8。                                                                                                                                                             |
+| @humanfs/node，1 条中危                     | `0.16.7 → 0.16.8`             | 保持 ESLint 现有依赖范围，同时更新所需 core/types；[复制时符号链接处理公告](https://github.com/advisories/GHSA-p498-v437-472g)。                                                                                                                                                                        |
+| Vitest / @vitest/mocker，3 条中危记录       | `4.1.5 → 4.1.12`              | Vitest、coverage-v8 与其余 @vitest 包同步。4.1.12 覆盖 [路径穿越](https://github.com/advisories/GHSA-82fw-gwwq-j7x9)、[手动 mock 注入](https://github.com/advisories/GHSA-qxg6-89mg-rqv8)，以及核对时发现的 [4.1.11 Windows 绕过](https://github.com/advisories/GHSA-xp26-3454-mjgp)，未转为 Vitest 5。 |
+| fflate，1 条中危                            | `0.8.2 → 0.8.3`               | 升级修复 [畸形 ZIP64 解压无限循环](https://github.com/advisories/GHSA-px8p-9vwx-vf98)。本项目实际调用 zipSync 生成归档，未建立该解压攻击入口；升级后独立验证 ZIP 内容。                                                                                                                                 |
+| minimatch，1 条中危                         | estree 分支 `10.2.4 → 11.0.8` | [公告](https://github.com/advisories/GHSA-g3hv-75wg-m249)影响 7.x 至 11.0.1 之前；核对时最新 estree 仍要求 ^10.2.2，因此增加父包限定 override。ESLint/react 的 `3.1.5` 保留，没有全局替换。                                                                                                             |
+| postcss-selector-parser，1 条中危、1 条低危 | `6.0.10 / 6.1.2 → 6.1.6`      | typography 仍精确声明 6.0.10，新增 `^6.1.5` override，保持 6.x 并覆盖 [递归深度](https://github.com/advisories/GHSA-w9m9-85wc-3x92)与[平面选择器复杂度](https://github.com/advisories/GHSA-rj75-hqrm-r3gf)修复。                                                                                        |
+
+定向 minimatch override 使用 [Bun 的父包限定配置](https://bun.com/docs/pm/overrides)，实际生成 `lockfileVersion: 3`。`engines.bun` 从 `>=1.3.11` 同步为 `>=1.4.4`，与既有 packageManager、CI 和开发文档一致；旧 Bun 不再属于支持的安装环境。Node 最低版本仍为 22.12，生产依赖声明、扩展版本、存储结构及应用源码均未变更。
+
+安装验证发现本地 `node_modules/@tailwindcss/typography/node_modules/postcss-selector-parser` 残留 6.0.10，虽然锁图已去重到 6.1.6，构建和一个测试文件仍因旧副本依赖的 cssesc 缺失而失败。执行 `bun install --frozen-lockfile --force --ignore-scripts` 刷新安装目录后，实际从 typography、tailwindcss、postcss-nested 三个入口均解析到 6.1.6，构建及全套测试通过。没有添加 cssesc 来掩盖旧副本，也没有修改测试或降低门槛。
+
+| 验证                                   | 实际结果                                                                                                                                                       |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 冻结安装及强制重装                     | 均退出 0；锁文件无漂移。浏览器工具未升级，跳过安装脚本并复用上轮官方安装缓存。                                                                                 |
+| `bun audit` / `bun run audit`          | 均退出 0；全图 626 个包、生产 112 个包零告警，无忽略项或严重性过滤调整。                                                                                       |
+| 实际模块解析与匹配                     | Node createRequire 验证 estree 加载 minimatch 11.0.8、ESLint 加载 3.1.5；10 项 dot:true 路径匹配断言通过，覆盖正反匹配、递归、点文件、隐藏目录及扩展名花括号。 |
+| `bun run typecheck` / `bun run lint`   | 退出 0；八语 481 个键一致。                                                                                                                                    |
+| `bun run test:coverage --maxWorkers=2` | 64 个文件、1051 项通过；语句 80.16%、分支 71.41%、函数 80.90%、行 81.22%，原阈值不变。                                                                         |
+| `bun run package`                      | 退出 0，包含 TypeScript、Vite 构建和 fflate 打包；生成 465860 字节 ZIP。                                                                                       |
+| ZIP 独立读取                           | .NET ZipFile 读取 42 个文件，逐文件 SHA-256 与 dist 一致；manifest 版本 0.11.0，八语文件完整，无源码映射和嵌套 ZIP。                                           |
+| CSS 产物比较                           | 两份 CSS 的 SHA-256 与升级前完全一致。                                                                                                                         |
+| `bun run test:e2e`                     | 退出 0；44/44 通过，覆盖历史三页、错误重试、独立删除、协议拒绝损坏流及八语恢复。                                                                               |
+| 版本、格式及 diff 检查                 | bun run version:check、bun run format:check、git diff --check 均通过。                                                                                         |
+
+验证环境为 Windows、Node 24.22.2、Bun 1.4.4。构建仍有既存的 Zod 注释位置提示；本轮没有修改其代码或版本。浏览器测试沿用隔离 Chrome for Testing 157、本地模拟提供商与合成数据，未访问真实模型、远程 CI、商店后台或推送 Git。
