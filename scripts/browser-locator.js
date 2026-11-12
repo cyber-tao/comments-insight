@@ -5,10 +5,10 @@ import puppeteer from 'puppeteer';
 // Chrome for Testing, Chromium and Edge still honour --load-extension, which
 // branded Chrome 137+ ignores. Prefer those builds and only fall back to
 // branded Chrome, which may silently refuse to load the unpacked extension.
-function getPuppeteerCacheBrowsers() {
+async function getPuppeteerCacheBrowsers() {
   let pinnedPath;
   try {
-    pinnedPath = puppeteer.executablePath();
+    pinnedPath = await puppeteer.executablePath();
   } catch {
     return [];
   }
@@ -35,10 +35,10 @@ function getPuppeteerCacheBrowsers() {
   return [pinnedPath, ...builds.map((build) => path.join(buildsDir, build, executableSuffix))];
 }
 
-export function getChromeExecutablePath() {
+export async function getChromeExecutablePath() {
   const candidatePaths = [
     process.env.PUPPETEER_EXECUTABLE_PATH,
-    ...getPuppeteerCacheBrowsers(),
+    ...(await getPuppeteerCacheBrowsers()),
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
     '/Applications/Chromium.app/Contents/MacOS/Chromium',
@@ -63,8 +63,8 @@ export function getChromeExecutablePath() {
   return undefined;
 }
 
-export function requireChromeExecutablePath() {
-  const executablePath = getChromeExecutablePath();
+export async function requireChromeExecutablePath() {
+  const executablePath = await getChromeExecutablePath();
   if (!executablePath) {
     throw new Error(
       'No usable browser found. Run "bunx puppeteer browsers install chrome" or set PUPPETEER_EXECUTABLE_PATH to Chrome for Testing, Chromium, or Edge.',

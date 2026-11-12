@@ -311,7 +311,7 @@ async function main() {
   }
 
   const browser = await puppeteer.launch({
-    executablePath: requireChromeExecutablePath(),
+    executablePath: await requireChromeExecutablePath(),
     headless: true,
     pipe: true,
     enableExtensions: [extension],

@@ -152,7 +152,7 @@ async function runTest() {
   console.log('Extension path:', extensionPath);
   console.log('Target URL:', videoUrl);
 
-  const executablePath = requireChromeExecutablePath();
+  const executablePath = await requireChromeExecutablePath();
   console.log('Browser executable:', executablePath);
 
   const browser = await puppeteer.launch({

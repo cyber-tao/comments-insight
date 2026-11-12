@@ -110,6 +110,199 @@ async function saveAiFixture(page, config) {
   });
 }
 
+async function captureThemeScreenshots(page, name) {
+  const directory = process.env.COMMENTS_INSIGHT_E2E_SCREENSHOT_DIR;
+  if (!directory) return;
+  fs.mkdirSync(directory, { recursive: true });
+  const { settings } = await sendExtensionMessage(page, { type: 'GET_SETTINGS' });
+  try {
+    for (const theme of ['light', 'dark']) {
+      await sendExtensionMessage(page, {
+        type: 'SAVE_SETTINGS',
+        payload: { settings: { theme } },
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(
+        (mode) =>
+          document.documentElement.style.colorScheme === mode &&
+          document.querySelector('#root')?.textContent.length > 0,
+        {},
+        theme,
+      );
+      await page.evaluate(async () => {
+        await document.fonts.ready;
+        await new Promise(requestAnimationFrame);
+        const finiteAnimations = document.getAnimations().filter((animation) => {
+          const endTime = animation.effect?.getComputedTiming().endTime;
+          return animation.playState === 'running' && Number.isFinite(endTime);
+        });
+        await Promise.allSettled(finiteAnimations.map((animation) => animation.finished));
+        await new Promise(requestAnimationFrame);
+      });
+      await page.screenshot({ path: path.join(directory, `${name}-${theme}.png`), fullPage: true });
+    }
+  } finally {
+    await sendExtensionMessage(page, {
+      type: 'SAVE_SETTINGS',
+      payload: { settings: { theme: settings.theme } },
+    });
+  }
+}
+
+async function verifyHistoryErrorFeedback(page, expectedTotal) {
+  const { settings } = await sendExtensionMessage(page, { type: 'GET_SETTINGS' });
+  const labels = JSON.parse(
+    fs.readFileSync(path.resolve(scriptDir, `../src/locales/${settings.language}.json`), 'utf8'),
+  );
+  const snapshot = () =>
+    page.evaluate(() => ({
+      rows: [...document.querySelectorAll('button[aria-pressed] h3')].map(
+        (entry) => entry.textContent,
+      ),
+      selected: document.querySelector('button[aria-pressed="true"] h3')?.textContent,
+      detail: document.querySelector('a[target="_blank"]')?.textContent,
+      id: new URL(location.href).searchParams.get('id'),
+    }));
+  const clickButton = (text) =>
+    page.evaluate((label) => {
+      const button = [...document.querySelectorAll('button')].find(
+        (entry) => entry.textContent.trim() === label,
+      );
+      if (!button || button.disabled) throw new Error(`History action unavailable: ${label}`);
+      button.click();
+    }, text);
+  const failNext = (type) =>
+    page.evaluate((messageType) => {
+      globalThis.__historyE2eFaults.pending.add(messageType);
+    }, type);
+  const waitForError = (message) =>
+    page.waitForFunction(
+      (text) =>
+        document.querySelector('[role="alert"]')?.textContent.includes(text) &&
+        !document.querySelector('[role="dialog"]'),
+      {},
+      message,
+    );
+  const confirmOperation = async () => {
+    await page.waitForSelector('[role="dialog"]', { visible: true });
+    await page.click('[role="dialog"] button:last-child');
+  };
+  await page.evaluate(() => {
+    const original = chrome.runtime.sendMessage;
+    const state = { original, pending: new Set(), intercepted: [] };
+    globalThis.__historyE2eFaults = state;
+    chrome.runtime.sendMessage = function (...args) {
+      const message = args[0];
+      const isListRead = message?.type === 'GET_HISTORY' && !message.payload?.id;
+      const isMutation =
+        message?.type === 'DELETE_HISTORY' || message?.type === 'CLEAR_ALL_HISTORY';
+      if ((isListRead || isMutation) && state.pending.delete(message.type)) {
+        state.intercepted.push(message.type);
+        const response = {
+          error: {
+            code: isListRead ? 'STORAGE_READ_ERROR' : 'STORAGE_WRITE_ERROR',
+            message: 'Synthetic history storage failure',
+            retryable: true,
+          },
+        };
+        const callback = args.at(-1);
+        if (typeof callback === 'function') {
+          queueMicrotask(() => callback(response));
+          return;
+        }
+        return Promise.resolve(response);
+      }
+      return Reflect.apply(original, chrome.runtime, args);
+    };
+  });
+  try {
+    const beforeRead = await snapshot();
+    assert(
+      beforeRead.selected && beforeRead.detail,
+      'History error fixture has no selected detail',
+    );
+    await failNext('GET_HISTORY');
+    await page.type('input[aria-label]', 'History resize fixture');
+    await page.keyboard.press('Enter');
+    await waitForError(labels.history.loadFailed);
+    assert(
+      JSON.stringify(await snapshot()) === JSON.stringify(beforeRead),
+      'Failed list read changed loaded records or selection',
+    );
+    await clickButton(labels.history.retryLoad);
+    await page.waitForFunction(
+      () =>
+        !document.querySelector('[role="alert"]') &&
+        document.querySelector('button[aria-pressed] h3')?.textContent ===
+          'History resize fixture 1' &&
+        document.querySelector('[aria-busy]')?.getAttribute('aria-busy') === 'false',
+    );
+
+    await page.click('input[aria-label]');
+    await page.keyboard.down('Control');
+    await page.keyboard.press('A');
+    await page.keyboard.up('Control');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(
+      (title) =>
+        document.querySelector('button[aria-pressed] h3')?.textContent === title &&
+        document.querySelector('[aria-busy]')?.getAttribute('aria-busy') === 'false',
+      {},
+      beforeRead.rows[0],
+    );
+    const beforeMutation = await snapshot();
+
+    await failNext('DELETE_HISTORY');
+    await page.evaluate(() => {
+      const row = document.querySelector('button[aria-pressed="false"]')?.parentElement;
+      const button = row?.querySelector('button[aria-label]');
+      if (!button || button.disabled)
+        throw new Error('Unselected history record cannot be deleted');
+      button.click();
+    });
+    await page.waitForSelector('[role="dialog"]', { visible: true });
+    assert(
+      JSON.stringify(await snapshot()) === JSON.stringify(beforeMutation),
+      'Delete button also selected another record',
+    );
+    await confirmOperation();
+    await waitForError(labels.history.deleteFailed);
+    assert(
+      JSON.stringify(await snapshot()) === JSON.stringify(beforeMutation),
+      'Failed deletion changed records or selected detail',
+    );
+
+    await failNext('CLEAR_ALL_HISTORY');
+    await clickButton(labels.history.clearAll);
+    await confirmOperation();
+    await waitForError(labels.history.clearFailed);
+    assert(
+      JSON.stringify(await snapshot()) === JSON.stringify(beforeMutation),
+      'Failed clear changed records or selected detail',
+    );
+    const preserved = await sendExtensionMessage(page, {
+      type: 'GET_HISTORY',
+      payload: { page: 0, pageSize: 20 },
+    });
+    assert(
+      preserved.total === expectedTotal,
+      'Failure fixtures changed the persisted history count',
+    );
+    const intercepted = await page.evaluate(() => globalThis.__historyE2eFaults.intercepted);
+    assert(
+      JSON.stringify(intercepted) ===
+        JSON.stringify(['GET_HISTORY', 'DELETE_HISTORY', 'CLEAR_ALL_HISTORY']),
+      'History fault injection did not match the expected UI actions',
+    );
+  } finally {
+    await page.evaluate(() => {
+      chrome.runtime.sendMessage = globalThis.__historyE2eFaults.original;
+      delete globalThis.__historyE2eFaults;
+    });
+  }
+}
+
 async function verifyAiProtocols(page, comments) {
   const requests = [];
   const report = '# Protocol report\n\nComplete analysis: 评论正常。';
@@ -145,6 +338,7 @@ async function verifyAiProtocols(page, comments) {
     };
     if (url.pathname.endsWith('/chat/completions')) {
       emit({ choices: [{ delta: { content: report }, finish_reason: null }] });
+      if (url.pathname.includes('malformed')) response.write('data: {broken-json}\r\n\r\n');
       emit({ choices: [{ delta: {}, finish_reason: 'stop' }], usage: { total_tokens: 12 } });
       response.write('data: [DONE]\r\n\r\n');
     } else if (url.pathname.endsWith('/responses')) {
@@ -250,34 +444,38 @@ async function verifyAiProtocols(page, comments) {
       }
     }
     const current = await sendExtensionMessage(page, { type: 'GET_SETTINGS' });
-    await saveAiFixture(page, {
-      ...current.settings.aiModel,
-      protocol: 'openai-responses',
-      apiUrl: origin + '/incomplete/v1',
-      apiKey: credential,
-    });
-    const failedUrl = 'https://protocol.e2e.invalid/incomplete';
-    const started = await sendExtensionMessage(page, {
-      type: 'START_ANALYSIS',
-      payload: { comments, metadata: { url: failedUrl } },
-    });
-    let failed = false;
-    try {
-      await waitForTask(page, started.taskId);
-    } catch (error) {
-      if (error.message.includes('did not complete within')) throw error;
-      failed = true;
+    for (const [protocol, failure] of [
+      ['openai-responses', 'incomplete'],
+      ['openai-chat-completions', 'malformed'],
+    ]) {
+      await saveAiFixture(page, {
+        ...current.settings.aiModel,
+        protocol,
+        apiUrl: origin + '/' + failure + '/v1',
+        apiKey: credential,
+      });
+      const failedUrl = 'https://protocol.e2e.invalid/' + failure;
+      const requestCount = requests.length;
+      const started = await sendExtensionMessage(page, {
+        type: 'START_ANALYSIS',
+        payload: { comments, metadata: { url: failedUrl } },
+      });
+      let failed = false;
+      try {
+        await waitForTask(page, started.taskId);
+      } catch (error) {
+        if (error.message.includes('did not complete within')) throw error;
+        failed = true;
+      }
+      assert(failed, failure + ' output was marked as successful');
+      const failedHistory = await sendExtensionMessage(page, {
+        type: 'GET_HISTORY_BY_URL',
+        payload: { url: failedUrl },
+      });
+      assert(!failedHistory.item, failure + ' output was persisted as a report');
+      assert(requests.length === requestCount + 1, failure + ' output was retried');
+      recordPass('AI Protocols', failure + ' analysis failed without retry or partial persistence');
     }
-    assert(failed, 'Incomplete Responses output was marked as successful');
-    const failedHistory = await sendExtensionMessage(page, {
-      type: 'GET_HISTORY_BY_URL',
-      payload: { url: failedUrl },
-    });
-    assert(!failedHistory.item, 'Incomplete output was persisted as a report');
-    recordPass(
-      'AI Protocols',
-      'Incomplete Responses analysis failed without saving a partial report',
-    );
     const modelsFailure = await page.evaluate(
       (payload) => chrome.runtime.sendMessage({ type: 'GET_AVAILABLE_MODELS', payload }),
       { apiUrl: origin + '/unauthorized/v1', apiKey: credential, protocol: 'openai-responses' },
@@ -604,7 +802,7 @@ async function runAllAutomatedTests() {
   console.log('🚀 COMMENTS INSIGHT - FULL AUTOMATED E2E TEST SUITE');
   console.log('======================================================\n');
 
-  const executablePath = requireChromeExecutablePath();
+  const executablePath = await requireChromeExecutablePath();
   console.log(`Browser executable: ${executablePath}`);
 
   const { server, port } = await startMockHttpServer();
@@ -732,6 +930,7 @@ async function runAllAutomatedTests() {
     assert(navButtons.length > 0, 'No navigation or action buttons found on Options page');
     recordPass('OptionsPage', `Found ${navButtons.length} interactive UI elements on Options page`);
 
+    await captureThemeScreenshots(optionsPage, 'options');
     await optionsPage.close();
 
     // ----------------------------------------------------
@@ -831,8 +1030,8 @@ async function runAllAutomatedTests() {
             analyzedAt: item.analyzedAt,
             hasAnalysis: Boolean(item.analysis),
           });
-          const historyPageSize = 20;
-          for (let index = 1; index < historyPageSize; index += 1) {
+          const historyFixtureCount = 47;
+          for (let index = 1; index < historyFixtureCount; index += 1) {
             const fixture = {
               id: `${item.id}_${index}`,
               url: `https://fixture.invalid/history/${index}`,
@@ -854,7 +1053,7 @@ async function runAllAutomatedTests() {
 
     recordPass(
       'HistoryPage',
-      'Inserted a page of mock history records into CommentsInsightDatabase IndexedDB',
+      'Inserted 47 mock history records into CommentsInsightDatabase IndexedDB',
     );
 
     await historyPage.reload({ waitUntil: 'domcontentloaded' });
@@ -862,6 +1061,64 @@ async function runAllAutomatedTests() {
       (title) => document.querySelector('h3')?.textContent === title,
       {},
       mockHistoryItem.title,
+    );
+    for (const [pageIndex, pageCount] of [20, 20, 7].entries()) {
+      const result = await sendExtensionMessage(historyPage, {
+        type: 'GET_HISTORY',
+        payload: { page: pageIndex, pageSize: 20 },
+      });
+      assert(result.total === 47 && result.totalPages === 3, 'History total was limited to a page');
+      assert(result.entries.length === pageCount, 'Unexpected history page size');
+      if (pageIndex > 0) {
+        await historyPage.evaluate(() => {
+          const next = [...document.querySelectorAll('button')].find((button) =>
+            button.textContent.trim().endsWith('→'),
+          );
+          if (!next || next.disabled) throw new Error('Next history page is unavailable');
+          next.click();
+        });
+        await historyPage.waitForFunction(
+          (title) => document.querySelector('h3')?.textContent === title,
+          {},
+          `History resize fixture ${pageIndex * 20}`,
+        );
+      }
+      assert(
+        (await historyPage.$$('button[aria-pressed]')).length === pageCount,
+        'History UI page mismatch',
+      );
+    }
+    recordPass('HistoryPage', 'Browsed all 47 records across three correctly counted pages');
+    await historyPage.reload({ waitUntil: 'domcontentloaded' });
+    await historyPage.waitForSelector('button[aria-pressed]');
+    const firstHistoryButton = await historyPage.$('button[aria-pressed]');
+    await firstHistoryButton.focus();
+    await historyPage.keyboard.press('Enter');
+    await historyPage.waitForFunction(
+      () =>
+        document.querySelector('button[aria-pressed="true"] h3')?.textContent ===
+        'Automated E2E Test Mock Video',
+    );
+    await firstHistoryButton.focus();
+    await historyPage.keyboard.press('Tab');
+    assert(
+      await historyPage.evaluate(() => document.activeElement?.hasAttribute('aria-label')),
+      'Delete button was not independently focusable',
+    );
+    await historyPage.keyboard.press('Tab');
+    assert(
+      await historyPage.evaluate(() => document.activeElement?.hasAttribute('aria-pressed')),
+      'Next history row was not keyboard reachable',
+    );
+    await historyPage.keyboard.press('Space');
+    await historyPage.waitForFunction(
+      () =>
+        document.querySelector('button[aria-pressed="true"] h3')?.textContent ===
+        'History resize fixture 1',
+    );
+    recordPass(
+      'HistoryPage',
+      'Selected history with Tab, Enter and Space independently of deletion',
     );
     const initialViewport = historyPage.viewport();
     const historyViewports = [
@@ -897,6 +1154,12 @@ async function runAllAutomatedTests() {
     recordPass(
       'HistoryPage',
       'Scrolled a full page of history while resizing without observer errors',
+    );
+
+    await verifyHistoryErrorFeedback(historyPage, 47);
+    recordPass(
+      'HistoryPage',
+      'Retried a failed list read and preserved records and selection after delete and clear failures',
     );
 
     // Select the persisted report, not just its list entry, so the Markdown
@@ -966,6 +1229,7 @@ async function runAllAutomatedTests() {
     }
 
     assert(historyErrors.length === 0, `History page had JS errors: ${historyErrors.join(', ')}`);
+    await captureThemeScreenshots(historyPage, 'history');
     await historyPage.close();
 
     // ----------------------------------------------------
@@ -1116,6 +1380,7 @@ async function runAllAutomatedTests() {
       'Expanded, copied, collapsed, scrolled and filtered 100 logs without a resize error',
     );
 
+    await captureThemeScreenshots(logsPage, 'logs');
     await logsPage.close();
 
     // ----------------------------------------------------
@@ -1137,6 +1402,7 @@ async function runAllAutomatedTests() {
     await popupPage.waitForSelector('#root h1', { visible: true });
     recordPass('PopupPage', 'Verified Popup page components');
 
+    await captureThemeScreenshots(popupPage, 'popup');
     await popupPage.close();
 
     // ----------------------------------------------------

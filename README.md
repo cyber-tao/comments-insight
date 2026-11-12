@@ -166,7 +166,7 @@ Comments Insight requires Chrome 116 or later. Choose **Add to Chrome** on the s
 
 ### Build from Source
 
-Use Node.js 20.19 or later in the 20.x series, or Node.js 22.12 or later. The repository uses Bun 1.4.4.
+Use Node.js 22.12 or later. The repository uses Bun 1.4.4.
 
 Run these commands from the repository root.
 

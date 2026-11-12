@@ -11,6 +11,7 @@ The repository provides two Puppeteer scripts:
 
 ## Prerequisites
 
+- Node.js 22.12 or later and Bun 1.4.4
 - `bun install`
 - `bunx puppeteer browsers install chrome` (Chrome for Testing; Chromium or Edge 116+ also work)
 - `bun run build` before each browser run
@@ -31,19 +32,21 @@ The suite starts a local HTTP page containing a fixed comment fixture, creates a
 
 1. the background service worker starts;
 2. Options renders without CSP-blocked dynamic code and settings round-trip through `chrome.storage.local`;
-3. History renders a valid Dexie/IndexedDB report and filters the saved record;
+3. History counts and displays 47 Dexie/IndexedDB records across three pages (20/20/7), opens details with Tab/Enter/Space, keeps deletion independently focusable, and filters the saved records; one-shot message failures exercise load retry and preservation of records and selection after failed deletion or clearing;
 4. model-provided Markdown images become alt text, raw HTML and JavaScript links stay inert, and ordinary text links remain user-operated; all HTTP(S) requests from the report page are intercepted and any attempted automatic request fails the test;
 5. Logs and Popup render without page errors; a real background diagnostic is persisted through the local writer, and clearing indexed/orphaned logs preserves settings, token usage, and the log-level setting;
 6. the sandbox renders safe static report content while removing scripts, event handlers, external image URLs, and frames;
 7. a real `START_EXTRACTION` request creates a `TaskManager` task, dispatches `RUN_EXTRACTION` to the content script, extracts the fixture comments, and persists a readable history record;
-8. local mock Chat Completions, Responses, and Anthropic Messages servers exercise model discovery, connection testing, and analysis persistence through the production message handlers, including Anthropic model pagination and rejection of incomplete Responses output;
+8. local mock Chat Completions, Responses, and Anthropic Messages servers exercise model discovery, connection testing, and analysis persistence through the production message handlers, including Anthropic model pagination and rejection of incomplete Responses output or malformed Chat Completions data without retries or partial report persistence;
 9. the AI settings UI applies all five provider presets, clears credentials and models on endpoint changes, switches protocols, and accepts a manually entered model after fetching the available models.
 
 The final extraction assertion reads the persisted record through `GET_HISTORY_BY_URL`; it does not use a webpage test hook and does not accept an empty page or an unmodified sandbox document as success.
 
 This suite needs no real API key and makes no external AI-provider request. It uses synthetic credentials with loopback mock services and a configured crawling rule for `127.0.0.1` so extraction and analysis are deterministic. The protocol assertions check authentication, output limits, omitted sampling parameters, and Responses' `store: false`.
 
-Set `COMMENTS_INSIGHT_E2E_SCREENSHOT_DIR` to an absolute directory outside the repository to capture desktop and mobile AI settings screenshots. Set `COMMENTS_INSIGHT_E2E_HEADLESS=1` to run without visible browser windows.
+Set `COMMENTS_INSIGHT_E2E_SCREENSHOT_DIR` to an absolute directory outside version control to capture light/dark Options, History, Logs, and Popup screenshots, plus desktop and mobile AI settings screenshots. Set `COMMENTS_INSIGHT_E2E_HEADLESS=1` to run without visible browser windows.
+
+For browser installation verification, set `PUPPETEER_CACHE_DIR` to a new empty temporary directory before both the browser install and E2E commands. Confirm that the reported browser executable comes from that directory. The browser locator is asynchronous with Puppeteer 25; every caller must await `requireChromeExecutablePath()`.
 
 ### CI
 

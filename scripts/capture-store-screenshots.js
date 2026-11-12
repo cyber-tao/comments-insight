@@ -30,7 +30,7 @@ async function main() {
   }
 
   const browser = await puppeteer.launch({
-    executablePath: requireChromeExecutablePath(),
+    executablePath: await requireChromeExecutablePath(),
     headless: true,
     pipe: true,
     args: ['--disable-background-networking', '--no-first-run'],
