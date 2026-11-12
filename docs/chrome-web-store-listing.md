@@ -2,7 +2,9 @@
 
 ## Store screenshots
 
-Build the extension with `bun run build`, then run `bun scripts/capture-store-screenshots.js` to render five 1280 × 800 JPEGs per locale. The script uses an isolated Chromium profile and a fictional headphone review. It writes to `build/store-assets/v<version>/` by default. An optional first argument selects a different output directory outside `dist/`.
+Run `bun scripts/capture-store-screenshots.js` to render five 1280 × 800 JPEGs per locale in an isolated Chromium profile. The script reads the approved YouTube example from `build/store-preview-v0.10.0-video/` and writes to `build/store-assets/v<version>-youtube/`. The first optional argument sets the output directory outside `dist/`. The second points to a different copy of the approved source directory.
+
+The source directory includes `source/video-frame.jpg`, `source/approved-popup/<locale>.png`, and `screenshots/<locale>/02-analysis.jpg`, `03-dashboard.jpg`, and `04-comments.jpg`. It uses anonymized excerpts and exports from [YOUCAR’s Yangwang U9 Xtreme speed-test video](https://www.youtube.com/watch?v=uxdE0I-VaFc).
 
 In the **Store listing** tab, choose a language and upload the five numbered files to **Localized screenshots** in filename order. Use the files at the top level of each locale directory. English and Simplified Chinese previews are also tracked under `images/screenshots/`.
 

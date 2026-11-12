@@ -49,21 +49,21 @@
 ## 📸 演示截图
 
 <a href="images/screenshots/zh-CN/00-cover.jpg">
-  <img src="images/screenshots/zh-CN/00-cover.jpg" alt="看懂大家真正在意什么。从评论里找出喜欢的地方、遇到的问题和最希望改进的地方。" width="100%" />
+  <img src="images/screenshots/zh-CN/00-cover.jpg" alt="看懂大家真正在意什么。从极速测试视频的评论中发现观众关心的话题，并查看六个内置支持的平台。" width="100%" />
 </a>
 
-下方用一组虚构的耳机评测评论演示如何归纳反馈、采集回复和回看原始讨论。
+下方用 YOUCAR 仰望 U9 Xtreme 极速测试视频展示如何归纳讨论。评论节选已匿名转述，分析与看板依据原始导出整理。 [原视频](https://www.youtube.com/watch?v=uxdE0I-VaFc)
 
 <table>
   <tr>
     <td width="50%">
       <a href="images/screenshots/zh-CN/01-analysis.jpg">
-        <img src="images/screenshots/zh-CN/01-analysis.jpg" alt="AI 分析归纳示例评论中反复出现的问题和建议" />
+        <img src="images/screenshots/zh-CN/01-analysis.jpg" alt="AI 分析归纳观众对车手安全、撞击速度和高速稳定性的讨论" />
       </a>
     </td>
     <td width="50%">
       <a href="images/screenshots/zh-CN/02-collect.jpg">
-        <img src="images/screenshots/zh-CN/02-collect.jpg" alt="从扩展弹窗收集受支持网页上的评论和回复" />
+        <img src="images/screenshots/zh-CN/02-collect.jpg" alt="YouTube 视频画面与显示已采集评论的扩展弹窗" />
       </a>
     </td>
   </tr>

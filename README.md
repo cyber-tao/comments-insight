@@ -49,21 +49,21 @@ The instructions below cover **v0.10.1**. The Chrome Web Store listing shows the
 ## 📸 Screenshots
 
 <a href="images/screenshots/en-US/00-cover.jpg">
-  <img src="images/screenshots/en-US/00-cover.jpg" alt="Find what matters in the comments. See what buyers like, where they struggle, and what they want improved." width="100%" />
+  <img src="images/screenshots/en-US/00-cover.jpg" alt="Find what matters in the comments. See what viewers discussed after a top-speed test, with built-in support for six platforms." width="100%" />
 </a>
 
-The screenshots use a fictional headphone review to show how Comments Insight surfaces feedback, collects replies, and lets you revisit the original discussion.
+The screenshots follow the discussion on YOUCAR’s Yangwang U9 Xtreme speed-test video. Comment excerpts are anonymized paraphrases, and the analysis and dashboard are adapted from the original exports. [Source video](https://www.youtube.com/watch?v=uxdE0I-VaFc)
 
 <table>
   <tr>
     <td width="50%">
       <a href="images/screenshots/en-US/01-analysis.jpg">
-        <img src="images/screenshots/en-US/01-analysis.jpg" alt="AI analysis groups the issues that come up repeatedly in the sample comments" />
+        <img src="images/screenshots/en-US/01-analysis.jpg" alt="AI analysis summarizes what viewers discussed about driver safety, the speed at impact, and stability" />
       </a>
     </td>
     <td width="50%">
       <a href="images/screenshots/en-US/02-collect.jpg">
-        <img src="images/screenshots/en-US/02-collect.jpg" alt="The extension popup captures comments and replies from a supported page" />
+        <img src="images/screenshots/en-US/02-collect.jpg" alt="The source YouTube video and extension popup showing collected comments" />
       </a>
     </td>
   </tr>
