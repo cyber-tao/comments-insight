@@ -14,7 +14,7 @@ Extract comments and replies from supported webpages. Use your configured AI ser
 
 </div>
 
-**v0.11.0** introduces a new icon and redesigned light and dark themes for the extension. The Chrome Web Store listing shows the version it currently distributes. [GitHub release v0.11.0](https://github.com/cyber-tao/comments-insight/releases/tag/v0.11.0)
+**v0.11.1** adds Responses and Anthropic protocol support, fixes history pagination and incremental reply collection, and improves failure feedback. The Chrome Web Store listing shows the version it currently distributes. [GitHub release v0.11.1](https://github.com/cyber-tao/comments-insight/releases/tag/v0.11.1)
 
 ## 📚 Table of Contents
 
@@ -160,7 +160,7 @@ Comments Insight requires Chrome 116 or later. Choose **Add to Chrome** on the s
 
 ### Install the GitHub Release
 
-1. Download `extension.zip` from the [v0.11.0 release](https://github.com/cyber-tao/comments-insight/releases/tag/v0.11.0) and extract it.
+1. Download `extension.zip` from the [v0.11.1 release](https://github.com/cyber-tao/comments-insight/releases/tag/v0.11.1) and extract it.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Click **Load unpacked** and select the extracted folder containing `manifest.json`. Pin the extension to open the popup from the toolbar.
 
