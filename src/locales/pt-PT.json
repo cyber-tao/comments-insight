@@ -104,7 +104,9 @@
     "selectorTesterEmptyItem": "(vazio)",
     "selectorTesterTruncated": "A mostrar os primeiros {{count}} resultados",
     "viewLogs": "Ver registos",
-    "viewGitHub": "Ver o projeto no GitHub"
+    "viewGitHub": "Ver o projeto no GitHub",
+    "extractionStartFailed": "Não foi possível iniciar a extração: {{error}}",
+    "configStartFailed": "Não foi possível iniciar a geração de regras: {{error}}"
   },
   "options": {
     "title": "Definições",
@@ -341,7 +343,12 @@
     "searchAria": "Pesquisar no histórico",
     "reportBatch": "Lote {{number}}",
     "reportRenderFailed": "Não foi possível apresentar o relatório",
-    "reportRenderRecovery": "Experimente reabrir o relatório."
+    "reportRenderRecovery": "Experimente reabrir o relatório.",
+    "loadFailed": "Não foi possível carregar o histórico. Tente novamente.",
+    "deleteFailed": "Não foi possível eliminar este registo. O registo foi mantido.",
+    "clearFailed": "Não foi possível limpar o histórico. Os registos foram mantidos.",
+    "retryLoad": "Voltar a carregar",
+    "retryOperation": "Repetir operação"
   },
   "task": {
     "pending": "Pendente",
@@ -454,7 +461,8 @@
     "renderRecovery": "Experimente recarregar a página.",
     "sourcePageChanged": "A página de origem mudou. Reabra a extensão na página pretendida e tente novamente.",
     "extractionResultTooLarge": "Os comentários e as respostas extraídos excedem o limite do resultado. Reduza o número de comentários e tente novamente.",
-    "aiEndpointRedirect": "O endpoint de IA devolveu um redirecionamento. Introduza o URL final da API nas Definições."
+    "aiEndpointRedirect": "O endpoint de IA devolveu um redirecionamento. Introduza o URL final da API nas Definições.",
+    "dynamicReportContextExceeded": "O relatório de análise e o prompt excedem o limite de contexto do modelo. Use uma janela de contexto maior ou encurte o prompt do relatório. O relatório Markdown permanece guardado."
   },
   "notification": {
     "extractionCompleted": "Extração concluída para \"{{title}}\"{{comments}}",

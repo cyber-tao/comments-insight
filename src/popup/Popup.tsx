@@ -77,7 +77,15 @@ const Popup: React.FC = () => {
 
   const handleExtractComments = async () => {
     if (!pageInfo) return;
-    await startExtraction(pageInfo.url);
+    try {
+      await startExtraction(pageInfo.url);
+    } catch (error) {
+      toast.error(
+        t('popup.extractionStartFailed', {
+          error: String(error instanceof Error ? error.message : error),
+        }),
+      );
+    }
   };
 
   const handleAnalyzeComments = async () => {
@@ -105,7 +113,15 @@ const Popup: React.FC = () => {
 
   const handleGenerateConfig = async () => {
     if (!pageInfo) return;
-    await startConfigGeneration(pageInfo.url);
+    try {
+      await startConfigGeneration(pageInfo.url);
+    } catch (error) {
+      toast.error(
+        t('popup.configStartFailed', {
+          error: String(error instanceof Error ? error.message : error),
+        }),
+      );
+    }
   };
 
   const handleOpenHistory = () => {

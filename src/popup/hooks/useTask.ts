@@ -33,9 +33,8 @@ function toCurrentTask(task: Task): CurrentTask {
   };
 }
 
-function isCancelledAnalysis(task: Task): boolean {
+function isCancelledTask(task: Task): boolean {
   return (
-    task.type === 'analyze' &&
     task.status === 'failed' &&
     (task.cancelledByUser === true ||
       task.error === ERROR_KEYS.TASK_CANCELLED_BY_USER ||
@@ -102,7 +101,7 @@ export function useTask(options: UseTaskOptions = {}) {
             return;
           }
 
-          if (isCancelledAnalysis(task)) {
+          if (isCancelledTask(task)) {
             setCurrentTask(null);
             return;
           }
@@ -117,8 +116,6 @@ export function useTask(options: UseTaskOptions = {}) {
             if (!isCurrentMonitor()) return;
             onTaskComplete?.(updatedTask);
             clearTaskAfter(TIMING.CLEAR_TASK_DELAY_MS);
-          } else if (task.status === 'failed' && type !== 'analyze') {
-            clearTaskAfter(TIMING.CLEAR_TASK_FAILED_MS);
           }
         } catch (error) {
           if (!isCurrentMonitor()) return;
@@ -138,7 +135,6 @@ export function useTask(options: UseTaskOptions = {}) {
               ? { ...current, status: type === 'analyze' ? 'unavailable' : 'failed', message }
               : current,
           );
-          if (type !== 'analyze') clearTaskAfter(TIMING.CLEAR_TASK_FAILED_MS);
         }
       };
 
@@ -183,7 +179,7 @@ export function useTask(options: UseTaskOptions = {}) {
           }
         }
         setCurrentTask(
-          latestAnalysis?.status === 'failed' && !isCancelledAnalysis(latestAnalysis)
+          latestAnalysis?.status === 'failed' && !isCancelledTask(latestAnalysis)
             ? toCurrentTask(latestAnalysis)
             : null,
         );
@@ -225,10 +221,10 @@ export function useTask(options: UseTaskOptions = {}) {
     let targetTabId = tabId;
     try {
       targetTabId = await ensureContentScript(tabId);
-    } catch (_error) {
+    } catch (error) {
       Logger.error('[useTask] Failed to inject content script');
       isStartingRef.current = false;
-      return null;
+      throw error;
     }
 
     try {
@@ -244,7 +240,7 @@ export function useTask(options: UseTaskOptions = {}) {
         monitorTask(response.taskId, 'extract');
         return response.taskId;
       }
-      return null;
+      throw new Error(i18n.t('errors.unknownError'));
     } catch (error) {
       const message =
         error instanceof Error
@@ -254,7 +250,7 @@ export function useTask(options: UseTaskOptions = {}) {
             : JSON.stringify(error);
       Logger.error('[useTask] Failed to start extraction', { error: message });
       setCurrentTask(null);
-      return null;
+      throw error;
     } finally {
       isStartingRef.current = false;
     }
@@ -269,10 +265,10 @@ export function useTask(options: UseTaskOptions = {}) {
     let targetTabId = tabId;
     try {
       targetTabId = await ensureContentScript(tabId);
-    } catch (_error) {
+    } catch (error) {
       Logger.error('[useTask] Failed to inject content script');
       isStartingRef.current = false;
-      return null;
+      throw error;
     }
 
     try {
@@ -288,7 +284,7 @@ export function useTask(options: UseTaskOptions = {}) {
         monitorTask(response.taskId, 'config');
         return response.taskId;
       }
-      return null;
+      throw new Error(i18n.t('errors.unknownError'));
     } catch (error) {
       const message =
         error instanceof Error
@@ -298,7 +294,7 @@ export function useTask(options: UseTaskOptions = {}) {
             : JSON.stringify(error);
       Logger.error('[useTask] Failed to start config generation', { error: message });
       setCurrentTask(null);
-      return null;
+      throw error;
     } finally {
       isStartingRef.current = false;
     }

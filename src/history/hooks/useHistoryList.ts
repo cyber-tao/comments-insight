@@ -27,6 +27,8 @@ interface UseHistoryListOptions {
   onClearSelectedItem: () => void;
 }
 
+export type FailedHistoryOperation = { kind: 'delete'; id: string } | { kind: 'clear' };
+
 export function useHistoryList({
   listContainerRef,
   onResetListScroll,
@@ -41,8 +43,15 @@ export function useHistoryList({
   const [historyPageSize] = useState(PAGINATION.DEFAULT_PER_PAGE);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyTotalPages, setHistoryTotalPages] = useState(0);
+  const [loadError, setLoadError] = useState(false);
+  const [failedOperation, setFailedOperation] = useState<FailedHistoryOperation | null>(null);
+  const [operationPending, setOperationPending] = useState(false);
 
   const listRequestSeqRef = useRef(0);
+  const listLoadingRef = useRef(false);
+  const operationInFlightRef = useRef(false);
+  const lastRequestRef = useRef({ page: 1, query: '' });
+  const mountedRef = useRef(true);
   const selectedHistoryIdRef = useRef(selectedHistoryId);
   const onClearSelectedItemRef = useRef(onClearSelectedItem);
 
@@ -54,10 +63,22 @@ export function useHistoryList({
     onClearSelectedItemRef.current = onClearSelectedItem;
   }, [onClearSelectedItem]);
 
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      listRequestSeqRef.current += 1;
+    };
+  }, []);
+
   const loadHistory = useCallback(
-    async (page: number = 1, query: string = '') => {
+    async (page: number = 1, query: string = '', afterMutation = false) => {
+      if (operationInFlightRef.current && !afterMutation) return;
+      lastRequestRef.current = { page, query };
       const listRequestSeq = ++listRequestSeqRef.current;
+      listLoadingRef.current = true;
       setLoading(true);
+      setLoadError(false);
       try {
         const response = (await ExtensionAPI.getHistoryMetadataPage(
           Math.max(0, page - 1),
@@ -88,8 +109,10 @@ export function useHistoryList({
         }
       } catch (error) {
         Logger.error('[History] Failed to load history', { error });
+        if (listRequestSeq === listRequestSeqRef.current) setLoadError(true);
       } finally {
         if (listRequestSeq === listRequestSeqRef.current) {
+          listLoadingRef.current = false;
           setLoading(false);
         }
       }
@@ -102,6 +125,7 @@ export function useHistoryList({
   }, [historyPage, activeSearchQuery, loadHistory]);
 
   const handleSearch = useCallback(() => {
+    if (operationInFlightRef.current) return;
     const query = searchQuery.trim();
     const queryChanged = query !== activeSearchQuery;
 
@@ -121,22 +145,37 @@ export function useHistoryList({
 
   const handleDelete = useCallback(
     async (id: string, shouldConfirm: boolean) => {
-      if (!shouldConfirm) {
-        return;
+      if (!shouldConfirm || operationInFlightRef.current || listLoadingRef.current) {
+        return false;
       }
 
+      operationInFlightRef.current = true;
+      listRequestSeqRef.current += 1;
+      setLoading(false);
+      setOperationPending(true);
+      setFailedOperation(null);
       try {
-        await ExtensionAPI.deleteHistory(id);
+        const response = await ExtensionAPI.deleteHistory(id);
+        if (!response?.success) throw new Error('History deletion did not succeed');
+        if (!mountedRef.current) return false;
 
+        setHistory((current) => current.filter((entry) => entry.id !== id));
+        setHistoryTotal((current) => Math.max(0, current - 1));
         if (selectedHistoryIdRef.current === id) {
           onClearSelectedItemRef.current();
         }
 
         const isLastItemOnPage = history.length <= 1 && historyPage > 1;
         const targetPage = isLastItemOnPage ? historyPage - 1 : historyPage;
-        await loadHistory(targetPage, activeSearchQuery);
+        await loadHistory(targetPage, activeSearchQuery, true);
+        return true;
       } catch (error) {
         Logger.error('[History] Failed to delete', { error });
+        if (mountedRef.current) setFailedOperation({ kind: 'delete', id });
+        return false;
+      } finally {
+        operationInFlightRef.current = false;
+        if (mountedRef.current) setOperationPending(false);
       }
     },
     [activeSearchQuery, history.length, historyPage, loadHistory],
@@ -144,12 +183,18 @@ export function useHistoryList({
 
   const handleClearAll = useCallback(
     async (shouldConfirm: boolean) => {
-      if (!shouldConfirm) {
-        return;
+      if (!shouldConfirm || operationInFlightRef.current || listLoadingRef.current) {
+        return false;
       }
 
+      operationInFlightRef.current = true;
+      listRequestSeqRef.current += 1;
+      setLoading(false);
+      setOperationPending(true);
+      setFailedOperation(null);
       try {
         const response = await ExtensionAPI.clearAllHistory();
+        if (!mountedRef.current) return false;
 
         if (response?.success) {
           listRequestSeqRef.current += 1;
@@ -160,14 +205,27 @@ export function useHistoryList({
           setHistoryPage(1);
           setSearchQuery('');
           setActiveSearchQuery('');
+          setLoadError(false);
           onResetListScroll();
+          return true;
         }
+        throw new Error('History clear did not succeed');
       } catch (error) {
         Logger.error('[History] Failed to clear all', { error });
+        if (mountedRef.current) setFailedOperation({ kind: 'clear' });
+        return false;
+      } finally {
+        operationInFlightRef.current = false;
+        if (mountedRef.current) setOperationPending(false);
       }
     },
     [onResetListScroll],
   );
+
+  const retryLoadHistory = useCallback(() => {
+    const { page, query } = lastRequestRef.current;
+    return loadHistory(page, query);
+  }, [loadHistory]);
 
   return {
     history,
@@ -175,6 +233,10 @@ export function useHistoryList({
     setSearchQuery,
     activeSearchQuery,
     loading,
+    loadError,
+    failedOperation,
+    operationPending,
+    retryLoadHistory,
     historyPage,
     setHistoryPage,
     historyTotal,

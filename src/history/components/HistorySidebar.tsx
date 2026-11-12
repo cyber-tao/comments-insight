@@ -9,6 +9,11 @@ interface HistorySidebarProps {
   historyTotal: number;
   historyTotalPages: number;
   loading: boolean;
+  loadError?: boolean;
+  operationError?: 'delete' | 'clear' | null;
+  operationPending?: boolean;
+  onRetryLoad?: () => void;
+  onRetryOperation?: () => void;
   searchQuery: string;
   selectedHistoryId: string | null;
   listContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -27,6 +32,11 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   historyTotal,
   historyTotalPages,
   loading,
+  loadError = false,
+  operationError = null,
+  operationPending = false,
+  onRetryLoad,
+  onRetryOperation,
   searchQuery,
   selectedHistoryId,
   listContainerRef,
@@ -45,16 +55,20 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
     return (
       <div
         key={item.id}
-        onClick={() => onSelectHistoryItem(item)}
-        className="group relative px-5 py-3.5 cursor-pointer transition-colors hover:bg-[var(--bg-hover)]"
+        className="group relative flex items-start transition-colors hover:bg-[var(--bg-hover)]"
         style={{
           backgroundColor: isSelected ? 'var(--bg-selected)' : undefined,
           borderBottom: '1px solid var(--border-primary)',
           borderLeft: isSelected ? '3px solid var(--accent-primary)' : '3px solid transparent',
         }}
       >
-        <div className="flex items-start gap-3 mb-1.5">
-          <div className="flex-1 min-w-0">
+        <button
+          type="button"
+          onClick={() => onSelectHistoryItem(item)}
+          aria-pressed={isSelected}
+          className="min-w-0 flex-1 px-5 py-3.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-primary)]"
+        >
+          <div className="min-w-0 mb-1.5">
             <h3
               className="text-sm font-semibold truncate mb-1 leading-snug"
               style={{ color: 'var(--text-primary)' }}
@@ -65,31 +79,33 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
               {formatDate(item.extractedAt)}
             </p>
           </div>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeleteHistoryItem(item.id);
-            }}
-            className="p-1.5 rounded-md opacity-75 group-hover:opacity-100 hover:bg-[var(--accent-danger-soft)] transition-all"
-            style={{ color: 'var(--accent-danger)' }}
-            aria-label={t('common.delete')}
-            title={t('common.delete')}
+          <div
+            className="flex items-center gap-2 text-xs"
+            style={{ color: 'var(--text-tertiary)' }}
           >
-            <TrashIcon size={14} />
-          </button>
-        </div>
-        <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-          <span
-            className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono-code text-[11px]"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            <GlobeIcon size={11} />
-            {item.platform}
-          </span>
-        </div>
+            <span
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono-code text-[11px]"
+              style={{
+                backgroundColor: 'var(--bg-tertiary)',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <GlobeIcon size={11} />
+              {item.platform}
+            </span>
+          </div>
+        </button>
+        <button
+          type="button"
+          onClick={() => onDeleteHistoryItem(item.id)}
+          disabled={loading || operationPending}
+          className="mr-3 mt-3.5 p-1.5 rounded-md opacity-75 group-hover:opacity-100 hover:bg-[var(--accent-danger-soft)] transition-all disabled:opacity-50"
+          style={{ color: 'var(--accent-danger)' }}
+          aria-label={t('common.delete')}
+          title={t('common.delete')}
+        >
+          <TrashIcon size={14} />
+        </button>
       </div>
     );
   };
@@ -116,6 +132,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           {history.length > 0 && (
             <button
               onClick={onClearAll}
+              disabled={loading || operationPending}
               className="theme-button-danger px-2.5 py-1.5 text-xs inline-flex items-center gap-1.5 shrink-0"
             >
               <TrashIcon size={13} />
@@ -127,6 +144,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           <input
             type="text"
             value={searchQuery}
+            disabled={operationPending}
             onChange={(e) => onSearchQueryChange(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && onSearch()}
             placeholder={t('history.searchPlaceholder')}
@@ -135,6 +153,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           />
           <button
             onClick={onSearch}
+            disabled={operationPending}
             className="theme-button-primary px-3.5 py-2 inline-flex items-center justify-center"
             aria-label={t('history.searchAria')}
             title={t('history.searchAria')}
@@ -154,8 +173,45 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
         </div>
       </div>
 
-      <div ref={listContainerRef} className="flex-1 overflow-y-auto">
-        {loading ? (
+      {(loadError || operationError) && (
+        <div role="alert" className="px-5 py-3 text-sm" style={{ color: 'var(--accent-danger)' }}>
+          {loadError && (
+            <div>
+              <p>{t('history.loadFailed')}</p>
+              <button
+                type="button"
+                onClick={onRetryLoad}
+                disabled={loading || operationPending}
+                className="theme-button-secondary mt-2 px-3 py-1 text-xs"
+              >
+                {t('history.retryLoad')}
+              </button>
+            </div>
+          )}
+          {operationError && (
+            <div>
+              <p>
+                {t(operationError === 'delete' ? 'history.deleteFailed' : 'history.clearFailed')}
+              </p>
+              <button
+                type="button"
+                onClick={onRetryOperation}
+                disabled={loading || operationPending}
+                className="theme-button-secondary mt-2 px-3 py-1 text-xs"
+              >
+                {t('history.retryOperation')}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div
+        ref={listContainerRef}
+        aria-busy={loading || operationPending}
+        className="flex-1 overflow-y-auto"
+      >
+        {loading && history.length === 0 ? (
           <div
             className="p-8 flex flex-col items-center justify-center gap-2.5 text-center"
             style={{ color: 'var(--text-muted)' }}
@@ -166,7 +222,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
             />
             <div className="text-sm">{t('common.loading')}</div>
           </div>
-        ) : history.length === 0 ? (
+        ) : history.length === 0 && !loadError ? (
           <div
             className="p-10 flex flex-col items-center justify-center text-center"
             style={{ color: 'var(--text-muted)' }}
@@ -194,7 +250,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
         >
           <button
             onClick={() => onHistoryPageChange((current) => Math.max(1, current - 1))}
-            disabled={historyPage <= 1 || loading}
+            disabled={historyPage <= 1 || loading || operationPending}
             className="theme-button-secondary px-3 py-1 text-xs disabled:opacity-50"
           >
             ← {t('common.previous')}
@@ -209,7 +265,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
             onClick={() =>
               onHistoryPageChange((current) => Math.min(historyTotalPages, current + 1))
             }
-            disabled={historyPage >= historyTotalPages || loading}
+            disabled={historyPage >= historyTotalPages || loading || operationPending}
             className="theme-button-secondary px-3 py-1 text-xs disabled:opacity-50"
           >
             {t('common.next')} →

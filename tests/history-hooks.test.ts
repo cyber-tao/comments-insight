@@ -87,6 +87,25 @@ function createHistoryItem(id: string, title: string = HISTORY_TITLE): HistoryIt
   };
 }
 
+function renderHistoryData() {
+  const options = {
+    listContainerRef: { current: document.createElement('div') },
+    onResetListScroll: vi.fn(),
+    onSelectViewMode: vi.fn(),
+  };
+  return renderHook(() => useHistoryData(options));
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('history hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,7 +120,7 @@ describe('history hooks', () => {
       totalPages: 1,
     });
     extensionApiMock.getHistoryItem.mockImplementation(async (id: string) => createHistoryItem(id));
-    extensionApiMock.deleteHistory.mockResolvedValue(undefined);
+    extensionApiMock.deleteHistory.mockResolvedValue({ success: true });
     extensionApiMock.clearAllHistory.mockResolvedValue({ success: true });
     extensionApiMock.startAnalysis.mockResolvedValue({ taskId: TASK_ID });
     extensionApiMock.generateDynamicReport.mockResolvedValue({ success: true, taskId: TASK_ID });
@@ -211,6 +230,192 @@ describe('history hooks', () => {
     expect(result.current.selectedItem).toBeNull();
     expect(result.current.selectedItemLoading).toBe(false);
     expect(result.current.selectedItemError).toBe('Failed to load history item');
+  });
+
+  it('exposes initial list failure and retries the same query', async () => {
+    extensionApiMock.getHistoryMetadataPage.mockRejectedValueOnce(new Error('Read failed'));
+    const { result } = renderHistoryData();
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.loadError).toBe(true);
+    expect(result.current.history).toEqual([]);
+    await act(async () => {
+      await result.current.retryLoadHistory();
+    });
+    expect(result.current.loadError).toBe(false);
+    expect(result.current.history).toHaveLength(2);
+    expect(extensionApiMock.getHistoryMetadataPage).toHaveBeenLastCalledWith(
+      0,
+      PAGINATION.DEFAULT_PER_PAGE,
+      '',
+    );
+  });
+
+  it.each(['delete', 'clear'] as const)(
+    'retains rows and selection after %s failure and retries',
+    async (kind) => {
+      const { result } = renderHistoryData();
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      await act(async () => {
+        await result.current.handleSelectHistoryItem(createHistoryListEntry(HISTORY_ID));
+      });
+      const failingApi =
+        kind === 'delete' ? extensionApiMock.deleteHistory : extensionApiMock.clearAllHistory;
+      failingApi.mockRejectedValueOnce(new Error('Write failed'));
+      await act(async () => {
+        if (kind === 'delete') await result.current.handleDelete(HISTORY_ID, true);
+        else await result.current.handleClearAll(true);
+      });
+      expect(result.current.history).toHaveLength(2);
+      expect(result.current.selectedItem?.id).toBe(HISTORY_ID);
+      expect(result.current.failedOperation?.kind).toBe(kind);
+      expect(result.current.operationPending).toBe(false);
+
+      extensionApiMock.getHistoryMetadataPage.mockResolvedValue({
+        entries: [createHistoryListEntry(SECOND_HISTORY_ID)],
+        total: 1,
+        totalPages: 1,
+      });
+      await act(async () => {
+        await result.current.retryHistoryOperation();
+      });
+      expect(failingApi).toHaveBeenCalledTimes(2);
+      expect(result.current.failedOperation).toBeNull();
+      expect(result.current.selectedItem).toBeNull();
+      expect(result.current.history).toHaveLength(kind === 'delete' ? 1 : 0);
+    },
+  );
+
+  it('keeps loaded rows and selection when refresh fails', async () => {
+    const { result } = renderHistoryData();
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.handleSelectHistoryItem(createHistoryListEntry(HISTORY_ID));
+    });
+    extensionApiMock.getHistoryMetadataPage.mockRejectedValueOnce(new Error('Refresh failed'));
+    await act(async () => {
+      await result.current.retryLoadHistory();
+    });
+    expect(result.current.loadError).toBe(true);
+    expect(result.current.history).toHaveLength(2);
+    expect(result.current.selectedItem?.id).toBe(HISTORY_ID);
+  });
+
+  it.each(['resolve', 'reject'] as const)(
+    'ignores stale list %s after history is cleared',
+    async (completion) => {
+      const { result } = renderHistoryData();
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      const lateRead = deferred<{
+        entries: ReturnType<typeof createHistoryListEntry>[];
+        total: number;
+        totalPages: number;
+      }>();
+      extensionApiMock.getHistoryMetadataPage.mockReturnValueOnce(lateRead.promise);
+      let request!: Promise<void>;
+      act(() => {
+        request = result.current.retryLoadHistory();
+      });
+      await act(async () => {
+        await result.current.retryLoadHistory();
+      });
+      await act(async () => {
+        await result.current.handleClearAll(true);
+      });
+      await act(async () => {
+        if (completion === 'resolve')
+          lateRead.resolve({
+            entries: [createHistoryListEntry(HISTORY_ID)],
+            total: 1,
+            totalPages: 1,
+          });
+        else lateRead.reject(new Error('Late failure'));
+        await request;
+      });
+      expect(result.current.history).toEqual([]);
+      expect(result.current.loadError).toBe(false);
+      expect(result.current.loading).toBe(false);
+    },
+  );
+
+  it.each(['delete', 'clear'] as const)(
+    'keeps an in-flight search current when %s is attempted on retained rows',
+    async (kind) => {
+      const { result } = renderHistoryData();
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      const pendingSearch = deferred<{
+        entries: ReturnType<typeof createHistoryListEntry>[];
+        total: number;
+        totalPages: number;
+      }>();
+      extensionApiMock.getHistoryMetadataPage.mockReturnValueOnce(pendingSearch.promise);
+      await act(async () => {
+        result.current.setSearchQuery('new');
+      });
+      act(() => {
+        result.current.handleSearch();
+      });
+      expect(result.current.loading).toBe(true);
+      expect(result.current.history[0].id).toBe(HISTORY_ID);
+      await act(async () => {
+        if (kind === 'delete') await result.current.handleDelete(HISTORY_ID, true);
+        else await result.current.handleClearAll(true);
+      });
+      expect(extensionApiMock.deleteHistory).not.toHaveBeenCalled();
+      expect(extensionApiMock.clearAllHistory).not.toHaveBeenCalled();
+      expect(result.current.loading).toBe(true);
+      await act(async () => {
+        pendingSearch.resolve({
+          entries: [createHistoryListEntry('new')],
+          total: 1,
+          totalPages: 1,
+        });
+        await pendingSearch.promise;
+      });
+      expect(result.current.activeSearchQuery).toBe('new');
+      expect(result.current.history.map(({ id }) => id)).toEqual(['new']);
+      expect(result.current.loading).toBe(false);
+      expect(result.current.loadError).toBe(false);
+      expect(result.current.failedOperation).toBeNull();
+    },
+  );
+
+  it.each(['delete', 'clear'] as const)(
+    'blocks %s immediately when a refresh starts before React rerenders',
+    async (kind) => {
+      const { result } = renderHistoryData();
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      const actions = result.current;
+      await act(async () => {
+        const refresh = actions.retryLoadHistory();
+        if (kind === 'delete') await actions.handleDelete(HISTORY_ID, true);
+        else await actions.handleClearAll(true);
+        await refresh;
+      });
+      expect(extensionApiMock.deleteHistory).not.toHaveBeenCalled();
+      expect(extensionApiMock.clearAllHistory).not.toHaveBeenCalled();
+      expect(result.current.history).toHaveLength(2);
+      expect(result.current.loadError).toBe(false);
+    },
+  );
+
+  it('ignores an older read failure after a newer refresh succeeds', async () => {
+    const { result } = renderHistoryData();
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const lateRead = deferred<never>();
+    extensionApiMock.getHistoryMetadataPage.mockReturnValueOnce(lateRead.promise);
+    let request!: Promise<void>;
+    act(() => {
+      request = result.current.retryLoadHistory();
+    });
+    await act(async () => {
+      await result.current.retryLoadHistory();
+    });
+    await act(async () => {
+      lateRead.reject(new Error('Old read failed'));
+      await request;
+    });
+    expect(result.current.loadError).toBe(false);
+    expect(result.current.history).toHaveLength(2);
   });
 
   it('polls reanalyze task until completion and refreshes selected item', async () => {

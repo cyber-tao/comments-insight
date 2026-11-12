@@ -33,6 +33,12 @@ vi.mock('react-i18next', () => ({
       if (key === 'notification.analysisFailed') {
         return `Analysis failed: ${String(options?.error)}`;
       }
+      if (
+        key === 'notification.extractionFailed' ||
+        key === 'notification.configGenerationFailed'
+      ) {
+        return `${key}: ${String(options?.error)}`;
+      }
       return key;
     },
   }),
@@ -234,6 +240,36 @@ describe('ActionButtons', () => {
     expect(screen.getByRole('alert').textContent).toBe(expected);
     fireEvent.click(screen.getByRole('button', { name: 'popup.analyzeComments' }));
     expect(onAnalyze).toHaveBeenCalledOnce();
+  });
+
+  it.each(['extract', 'config'] as const)('shows %s failure feedback and enables retry', (type) => {
+    const onExtract = vi.fn();
+    const onGenerateConfig = vi.fn();
+    render(
+      <ActionButtons
+        pageInfo={{ url: 'https://example.com', title: 'Example', domain: 'example.com' }}
+        pageStatus={{ extracted: false, analyzed: false, hasConfig: type === 'extract' }}
+        currentTask={{
+          id: 'task-1',
+          type,
+          status: 'failed',
+          progress: 0,
+          message: 'Visible failure',
+        }}
+        onExtract={onExtract}
+        onGenerateConfig={onGenerateConfig}
+        onAnalyze={vi.fn()}
+        onCancel={vi.fn()}
+        onOpenHistory={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('alert').textContent).toContain('Visible failure');
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: type === 'extract' ? 'popup.extractComments' : 'Generate Config',
+      }),
+    );
+    expect(type === 'extract' ? onExtract : onGenerateConfig).toHaveBeenCalledOnce();
   });
 });
 

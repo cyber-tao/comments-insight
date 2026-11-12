@@ -104,7 +104,9 @@
     "selectorTesterEmptyItem": "（空）",
     "selectorTesterTruncated": "先頭 {{count}} 件を表示",
     "viewLogs": "ログを表示",
-    "viewGitHub": "GitHub でプロジェクトを表示"
+    "viewGitHub": "GitHub でプロジェクトを表示",
+    "extractionStartFailed": "抽出を開始できませんでした：{{error}}",
+    "configStartFailed": "ルール生成を開始できませんでした：{{error}}"
   },
   "options": {
     "title": "設定",
@@ -341,7 +343,12 @@
     "searchAria": "履歴を検索",
     "reportBatch": "バッチ {{number}}",
     "reportRenderFailed": "レポートを表示できませんでした",
-    "reportRenderRecovery": "レポートを開き直してください。"
+    "reportRenderRecovery": "レポートを開き直してください。",
+    "loadFailed": "履歴を読み込めませんでした。再試行してください。",
+    "deleteFailed": "履歴を削除できませんでした。元の記録は保持されています。",
+    "clearFailed": "履歴を消去できませんでした。元の記録は保持されています。",
+    "retryLoad": "再読み込み",
+    "retryOperation": "操作を再試行"
   },
   "task": {
     "pending": "保留中",
@@ -454,7 +461,8 @@
     "renderRecovery": "ページを再読み込みしてください。",
     "sourcePageChanged": "元のページが変わりました。対象のページで拡張機能を開き直して、もう一度お試しください。",
     "extractionResultTooLarge": "抽出したコメントと返信が結果の上限を超えています。コメント数を減らして、もう一度お試しください。",
-    "aiEndpointRedirect": "AI エンドポイントがリダイレクトを返しました。設定に最終的な API URL を入力してください。"
+    "aiEndpointRedirect": "AI エンドポイントがリダイレクトを返しました。設定に最終的な API URL を入力してください。",
+    "dynamicReportContextExceeded": "分析レポートとプロンプトがモデルのコンテキスト上限を超えています。コンテキストウィンドウを大きくするか、レポートのプロンプトを短くしてください。Markdown レポートは保存されています。"
   },
   "notification": {
     "extractionCompleted": "\"{{title}}\" の抽出が完了しました{{comments}}",

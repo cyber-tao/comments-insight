@@ -104,7 +104,9 @@
     "selectorTesterEmptyItem": "(empty)",
     "selectorTesterTruncated": "Showing first {{count}} results",
     "viewLogs": "View logs",
-    "viewGitHub": "View project on GitHub"
+    "viewGitHub": "View project on GitHub",
+    "extractionStartFailed": "Failed to start extraction: {{error}}",
+    "configStartFailed": "Failed to start configuration generation: {{error}}"
   },
   "options": {
     "title": "Settings",
@@ -341,7 +343,12 @@
     "searchAria": "Search history records",
     "reportBatch": "Batch {{number}}",
     "reportRenderFailed": "Report could not be displayed",
-    "reportRenderRecovery": "Try reopening the report."
+    "reportRenderRecovery": "Try reopening the report.",
+    "loadFailed": "Could not load history. Please retry.",
+    "deleteFailed": "Could not delete this history record. It has been kept.",
+    "clearFailed": "Could not clear history. Your records have been kept.",
+    "retryLoad": "Retry loading",
+    "retryOperation": "Retry operation"
   },
   "task": {
     "pending": "Pending",
@@ -454,7 +461,8 @@
     "renderRecovery": "Try reloading the page.",
     "sourcePageChanged": "The source page changed. Reopen the extension on the intended page and try again.",
     "extractionResultTooLarge": "The extracted comments and replies exceed the result limit. Reduce the number of comments and try again.",
-    "aiEndpointRedirect": "The AI endpoint returned a redirect. Enter the final API URL in Settings."
+    "aiEndpointRedirect": "The AI endpoint returned a redirect. Enter the final API URL in Settings.",
+    "dynamicReportContextExceeded": "The analysis report and prompt exceed the model context limit. Use a larger context window or shorten the report prompt. The Markdown report remains saved."
   },
   "notification": {
     "extractionCompleted": "Extraction completed for \"{{title}}\"{{comments}}",

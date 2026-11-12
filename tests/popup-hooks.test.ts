@@ -384,6 +384,65 @@ describe('popup hooks', () => {
     expect(extensionApiMock.startExtraction).toHaveBeenCalledTimes(1);
   });
 
+  it.each(['startExtraction', 'startConfigGeneration'] as const)(
+    'useTask propagates injection and request failures from %s and allows retry',
+    async (method) => {
+      const { result } = renderHook(() => useTask());
+      extensionApiMock.ensureContentScript.mockRejectedValueOnce(new Error('Injection blocked'));
+      await act(async () => {
+        await expect(result.current[method](PAGE_URL)).rejects.toThrow('Injection blocked');
+      });
+      expect(extensionApiMock[method]).not.toHaveBeenCalled();
+
+      extensionApiMock[method].mockRejectedValueOnce(new Error('Task could not start'));
+      await act(async () => {
+        await expect(result.current[method](PAGE_URL)).rejects.toThrow('Task could not start');
+      });
+      expect(result.current.currentTask).toBeNull();
+
+      extensionApiMock[method].mockResolvedValueOnce({});
+      await act(async () => {
+        await expect(result.current[method](PAGE_URL)).rejects.toThrow();
+      });
+
+      extensionApiMock.getTaskStatus.mockResolvedValue(createTask({ status: 'pending' }));
+      await act(async () => {
+        await expect(result.current[method](PAGE_URL)).resolves.toBe(TASK_ID);
+      });
+    },
+  );
+
+  it.each(['extract', 'config'] as const)(
+    'useTask retains %s failure feedback and hides user cancellation',
+    async (type) => {
+      vi.useFakeTimers();
+      extensionApiMock.getTasks.mockResolvedValue([createTask({ type, status: 'running' })]);
+      extensionApiMock.getTaskStatus.mockResolvedValue(
+        createTask({ type, status: 'failed', error: 'Task failed' }),
+      );
+      const { result } = renderHook(() => useTask());
+      await act(async () => {
+        await result.current.loadCurrentTask(PAGE_URL);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(TIMING.CLEAR_TASK_FAILED_MS + 1);
+      });
+      expect(result.current.currentTask).toMatchObject({
+        type,
+        status: 'failed',
+        message: 'Task failed',
+      });
+
+      extensionApiMock.getTaskStatus.mockResolvedValue(
+        createTask({ type, status: 'failed', cancelledByUser: true }),
+      );
+      await act(async () => {
+        await result.current.loadCurrentTask(PAGE_URL);
+      });
+      expect(result.current.currentTask).toBeNull();
+    },
+  );
+
   it('useTask clears stale task state when task status is missing', async () => {
     extensionApiMock.getTasks.mockResolvedValue([
       createTask({

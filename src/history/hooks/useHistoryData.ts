@@ -50,13 +50,19 @@ export function useHistoryData({
   }, [list.history, selectedHistoryId, handleSelectHistoryItem, selectHistoryItemById]);
 
   const handleDelete = async (id: string, shouldConfirm: boolean) => {
-    detail.invalidateCache(id);
-    await list.handleDelete(id, shouldConfirm);
+    if (await list.handleDelete(id, shouldConfirm)) detail.invalidateCache(id);
   };
 
   const handleClearAll = async (shouldConfirm: boolean) => {
-    detail.clearCache();
-    await list.handleClearAll(shouldConfirm);
+    if (await list.handleClearAll(shouldConfirm)) detail.clearCache();
+  };
+
+  const retryHistoryOperation = async () => {
+    if (list.failedOperation?.kind === 'delete') {
+      await handleDelete(list.failedOperation.id, true);
+    } else if (list.failedOperation?.kind === 'clear') {
+      await handleClearAll(true);
+    }
   };
 
   return {
@@ -72,6 +78,11 @@ export function useHistoryData({
     historyTotal: list.historyTotal,
     historyTotalPages: list.historyTotalPages,
     loading: list.loading,
+    loadError: list.loadError,
+    failedOperation: list.failedOperation,
+    operationPending: list.operationPending,
+    retryLoadHistory: list.retryLoadHistory,
+    retryHistoryOperation,
     searchQuery: list.searchQuery,
     selectedHistoryId: detail.selectedHistoryId,
     selectedItem: detail.selectedItem,

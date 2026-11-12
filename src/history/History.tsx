@@ -56,6 +56,11 @@ const History: React.FC = () => {
     historyTotal,
     historyTotalPages,
     loading,
+    loadError,
+    failedOperation,
+    operationPending,
+    retryLoadHistory,
+    retryHistoryOperation,
     searchQuery,
     selectedHistoryId,
     selectedItem,
@@ -222,6 +227,11 @@ const History: React.FC = () => {
         historyTotal={historyTotal}
         historyTotalPages={historyTotalPages}
         loading={loading}
+        loadError={loadError}
+        operationError={failedOperation?.kind}
+        operationPending={operationPending}
+        onRetryLoad={() => void retryLoadHistory()}
+        onRetryOperation={() => void retryHistoryOperation()}
         searchQuery={searchQuery}
         selectedHistoryId={selectedHistoryId}
         listContainerRef={listContainerRef}

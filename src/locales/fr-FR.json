@@ -104,7 +104,9 @@
     "selectorTesterEmptyItem": "(vide)",
     "selectorTesterTruncated": "Affichage des {{count}} premiers résultats",
     "viewLogs": "Afficher les journaux",
-    "viewGitHub": "Voir le projet sur GitHub"
+    "viewGitHub": "Voir le projet sur GitHub",
+    "extractionStartFailed": "Impossible de démarrer l’extraction : {{error}}",
+    "configStartFailed": "Impossible de démarrer la génération des règles : {{error}}"
   },
   "options": {
     "title": "Paramètres",
@@ -341,7 +343,12 @@
     "searchAria": "Rechercher dans l’historique",
     "reportBatch": "Lot {{number}}",
     "reportRenderFailed": "Impossible d’afficher le rapport",
-    "reportRenderRecovery": "Essayez de rouvrir le rapport."
+    "reportRenderRecovery": "Essayez de rouvrir le rapport.",
+    "loadFailed": "Impossible de charger l’historique. Veuillez réessayer.",
+    "deleteFailed": "Impossible de supprimer cet enregistrement. Il a été conservé.",
+    "clearFailed": "Impossible de vider l’historique. Vos enregistrements ont été conservés.",
+    "retryLoad": "Recharger",
+    "retryOperation": "Réessayer l’opération"
   },
   "task": {
     "pending": "En attente",
@@ -454,7 +461,8 @@
     "renderRecovery": "Essayez de recharger la page.",
     "sourcePageChanged": "La page source a changé. Rouvrez l’extension sur la page souhaitée et réessayez.",
     "extractionResultTooLarge": "Les commentaires et réponses extraits dépassent la taille maximale du résultat. Réduisez le nombre de commentaires et réessayez.",
-    "aiEndpointRedirect": "Le point de terminaison IA a renvoyé une redirection. Saisissez l’URL finale de l’API dans les paramètres."
+    "aiEndpointRedirect": "Le point de terminaison IA a renvoyé une redirection. Saisissez l’URL finale de l’API dans les paramètres.",
+    "dynamicReportContextExceeded": "Le rapport d’analyse et le prompt dépassent la limite de contexte du modèle. Utilisez une fenêtre de contexte plus grande ou raccourcissez le prompt du rapport. Le rapport Markdown reste enregistré."
   },
   "notification": {
     "extractionCompleted": "Extraction terminée pour \"{{title}}\"{{comments}}",

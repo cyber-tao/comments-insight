@@ -104,7 +104,9 @@
     "selectorTesterEmptyItem": "（空）",
     "selectorTesterTruncated": "仅显示前 {{count}} 条",
     "viewLogs": "查看日志",
-    "viewGitHub": "在 GitHub 上查看项目"
+    "viewGitHub": "在 GitHub 上查看项目",
+    "extractionStartFailed": "无法启动提取：{{error}}",
+    "configStartFailed": "无法启动规则生成：{{error}}"
   },
   "options": {
     "title": "设置",
@@ -341,7 +343,12 @@
     "searchAria": "搜索历史记录",
     "reportBatch": "第 {{number}} 批",
     "reportRenderFailed": "无法显示报告",
-    "reportRenderRecovery": "请重新打开报告。"
+    "reportRenderRecovery": "请重新打开报告。",
+    "loadFailed": "历史记录加载失败，请重试。",
+    "deleteFailed": "历史记录删除失败，原记录已保留。",
+    "clearFailed": "清空历史记录失败，原记录已保留。",
+    "retryLoad": "重新加载",
+    "retryOperation": "重试操作"
   },
   "task": {
     "pending": "等待中",
@@ -454,7 +461,8 @@
     "renderRecovery": "请重新加载页面。",
     "sourcePageChanged": "来源页面已变化。请在目标页面重新打开扩展并重试。",
     "extractionResultTooLarge": "提取的评论和回复超出结果上限。请减少评论数量后重试。",
-    "aiEndpointRedirect": "AI 端点返回了重定向。请在设置中填写最终的 API 网址。"
+    "aiEndpointRedirect": "AI 端点返回了重定向。请在设置中填写最终的 API 网址。",
+    "dynamicReportContextExceeded": "分析报告和提示词超出模型上下文限制。请使用更大的上下文窗口或缩短报告提示词。Markdown 报告已保留。"
   },
   "notification": {
     "extractionCompleted": "\"{{title}}\" 提取完成{{comments}}",

@@ -155,11 +155,19 @@ describe('HistorySidebar', () => {
     fireEvent.click(screen.getByText('history.clearAll'));
     expect(onClearAll).toHaveBeenCalledOnce();
 
-    fireEvent.click(screen.getByText('Entry 1'));
+    const selection = screen.getByRole('button', { name: /Entry 1 formatted-date youtube/ });
+    expect(selection.tagName).toBe('BUTTON');
+    expect(selection.tabIndex).toBe(0);
+    expect(selection.getAttribute('aria-pressed')).toBe('true');
+    selection.focus();
+    expect(document.activeElement).toBe(selection);
+    fireEvent.click(selection);
     expect(onSelectHistoryItem).toHaveBeenCalledWith(entries[0]);
 
     fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]);
     expect(onDeleteHistoryItem).toHaveBeenCalledWith('1');
+    expect(onSelectHistoryItem).toHaveBeenCalledOnce();
+    expect(selection.querySelector('button')).toBeNull();
 
     fireEvent.click(screen.getByText('← common.previous'));
     const previousUpdater = onHistoryPageChange.mock.calls[0][0] as (current: number) => number;
@@ -219,6 +227,77 @@ describe('HistorySidebar', () => {
     );
 
     expect(screen.getByText('history.noHistory')).toBeTruthy();
+  });
+
+  it('distinguishes load failure from empty history and exposes retry actions', () => {
+    const onRetryLoad = vi.fn();
+    const onRetryOperation = vi.fn();
+    render(
+      <HistorySidebar
+        history={[]}
+        historyPage={1}
+        historyTotal={0}
+        historyTotalPages={0}
+        loading={false}
+        loadError
+        operationError="delete"
+        onRetryLoad={onRetryLoad}
+        onRetryOperation={onRetryOperation}
+        searchQuery=""
+        selectedHistoryId={null}
+        listContainerRef={{ current: null }}
+        onSearchQueryChange={vi.fn()}
+        onSearch={vi.fn()}
+        onSelectHistoryItem={vi.fn()}
+        onDeleteHistoryItem={vi.fn()}
+        onClearAll={vi.fn()}
+        onHistoryPageChange={vi.fn()}
+        formatDate={() => 'date'}
+      />,
+    );
+    expect(screen.queryByText('history.noHistory')).toBeNull();
+    expect(screen.getByRole('alert').textContent).toContain('history.loadFailed');
+    expect(screen.getByRole('alert').textContent).toContain('history.deleteFailed');
+    fireEvent.click(screen.getByRole('button', { name: 'history.retryLoad' }));
+    fireEvent.click(screen.getByRole('button', { name: 'history.retryOperation' }));
+    expect(onRetryLoad).toHaveBeenCalledOnce();
+    expect(onRetryOperation).toHaveBeenCalledOnce();
+  });
+
+  it('keeps old rows visible but disables mutations while loading a new list', () => {
+    const onDeleteHistoryItem = vi.fn();
+    const onClearAll = vi.fn();
+    const onRetryOperation = vi.fn();
+    render(
+      <HistorySidebar
+        history={[createSidebarEntry('old')]}
+        historyPage={1}
+        historyTotal={1}
+        historyTotalPages={1}
+        loading
+        operationError="clear"
+        onRetryOperation={onRetryOperation}
+        searchQuery="new"
+        selectedHistoryId={null}
+        listContainerRef={{ current: null }}
+        onSearchQueryChange={vi.fn()}
+        onSearch={vi.fn()}
+        onSelectHistoryItem={vi.fn()}
+        onDeleteHistoryItem={onDeleteHistoryItem}
+        onClearAll={onClearAll}
+        onHistoryPageChange={vi.fn()}
+        formatDate={() => 'date'}
+      />,
+    );
+    expect(screen.getByText('Entry old')).toBeTruthy();
+    for (const name of ['common.delete', 'history.clearAll', 'history.retryOperation']) {
+      const button = screen.getByRole('button', { name }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+      fireEvent.click(button);
+    }
+    expect(onDeleteHistoryItem).not.toHaveBeenCalled();
+    expect(onClearAll).not.toHaveBeenCalled();
+    expect(onRetryOperation).not.toHaveBeenCalled();
   });
 });
 

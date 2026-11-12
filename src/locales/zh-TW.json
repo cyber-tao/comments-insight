@@ -104,7 +104,9 @@
     "selectorTesterEmptyItem": "（空白）",
     "selectorTesterTruncated": "顯示前 {{count}} 個結果",
     "viewLogs": "檢視記錄",
-    "viewGitHub": "在 GitHub 上檢視專案"
+    "viewGitHub": "在 GitHub 上檢視專案",
+    "extractionStartFailed": "無法啟動擷取：{{error}}",
+    "configStartFailed": "無法啟動規則產生：{{error}}"
   },
   "options": {
     "title": "設定",
@@ -341,7 +343,12 @@
     "searchAria": "搜尋歷史記錄",
     "reportBatch": "第 {{number}} 批",
     "reportRenderFailed": "無法顯示報告",
-    "reportRenderRecovery": "請重新開啟報告。"
+    "reportRenderRecovery": "請重新開啟報告。",
+    "loadFailed": "歷史紀錄載入失敗，請重試。",
+    "deleteFailed": "歷史紀錄刪除失敗，原紀錄已保留。",
+    "clearFailed": "清空歷史紀錄失敗，原紀錄已保留。",
+    "retryLoad": "重新載入",
+    "retryOperation": "重試操作"
   },
   "task": {
     "pending": "待處理",
@@ -454,7 +461,8 @@
     "renderRecovery": "請重新載入網頁。",
     "sourcePageChanged": "來源網頁已變更。請在目標網頁重新開啟擴充功能並再試一次。",
     "extractionResultTooLarge": "擷取的留言與回覆已超出結果上限。請減少留言數量後再試一次。",
-    "aiEndpointRedirect": "AI 端點傳回重新導向。請在設定中輸入最終的 API 網址。"
+    "aiEndpointRedirect": "AI 端點傳回重新導向。請在設定中輸入最終的 API 網址。",
+    "dynamicReportContextExceeded": "分析報告與提示詞超出模型的上下文限制。請使用更大的上下文視窗或縮短報告提示詞。Markdown 報告已保留。"
   },
   "notification": {
     "extractionCompleted": "「{{title}}」的擷取已完成{{comments}}",

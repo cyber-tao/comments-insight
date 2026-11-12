@@ -70,14 +70,20 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
       )
     : UI_LIMITS.PROGRESS_MIN_PERCENT;
 
-  let analysisError: string | undefined;
-  if (currentTask?.type === 'analyze') {
+  let taskError: string | undefined;
+  if (currentTask) {
     if (currentTask.status === 'failed') {
-      analysisError = t(NOTIFICATION_KEYS.ANALYSIS_FAILED, {
+      const failureKey =
+        currentTask.type === 'extract'
+          ? NOTIFICATION_KEYS.EXTRACTION_FAILED
+          : currentTask.type === 'config'
+            ? NOTIFICATION_KEYS.CONFIG_GENERATION_FAILED
+            : NOTIFICATION_KEYS.ANALYSIS_FAILED;
+      taskError = t(failureKey, {
         error: currentTask.message || t('errors.unknownError'),
       });
     } else if (currentTask.status === 'unavailable') {
-      analysisError = currentTask.message;
+      taskError = currentTask.message;
     }
   }
 
@@ -263,7 +269,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
         )}
       </div>
 
-      {analysisError && (
+      {taskError && (
         <div
           role="alert"
           className="break-words rounded-lg px-3 py-2 text-xs leading-relaxed"
@@ -273,7 +279,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
             color: 'var(--accent-danger)',
           }}
         >
-          {analysisError}
+          {taskError}
         </div>
       )}
 

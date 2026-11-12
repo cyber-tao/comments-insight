@@ -307,4 +307,15 @@ describe('Popup', () => {
     const taskHook = useTaskMock.mock.results[0]?.value;
     expect(taskHook.startAnalysis).not.toHaveBeenCalled();
   });
+
+  it.each([
+    ['extract', 'startExtraction', 'popup.extractionStartFailed'],
+    ['config', 'startConfigGeneration', 'popup.configStartFailed'],
+  ])('surfaces %s startup failures in a toast', async (button, method, key) => {
+    render(<Popup />);
+    const taskHook = useTaskMock.mock.results[0]?.value;
+    taskHook[method].mockRejectedValueOnce(new Error('Startup failed'));
+    fireEvent.click(screen.getByText(button));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain(key));
+  });
 });

@@ -104,7 +104,9 @@
     "selectorTesterEmptyItem": "(vacío)",
     "selectorTesterTruncated": "Mostrando los primeros {{count}} resultados",
     "viewLogs": "Ver registros",
-    "viewGitHub": "Ver el proyecto en GitHub"
+    "viewGitHub": "Ver el proyecto en GitHub",
+    "extractionStartFailed": "No se pudo iniciar la extracción: {{error}}",
+    "configStartFailed": "No se pudo iniciar la generación de reglas: {{error}}"
   },
   "options": {
     "title": "Configuración",
@@ -341,7 +343,12 @@
     "searchAria": "Buscar en el historial",
     "reportBatch": "Lote {{number}}",
     "reportRenderFailed": "No se pudo mostrar el informe",
-    "reportRenderRecovery": "Vuelve a abrir el informe."
+    "reportRenderRecovery": "Vuelve a abrir el informe.",
+    "loadFailed": "No se pudo cargar el historial. Vuelve a intentarlo.",
+    "deleteFailed": "No se pudo eliminar este registro. Se ha conservado.",
+    "clearFailed": "No se pudo vaciar el historial. Se han conservado los registros.",
+    "retryLoad": "Volver a cargar",
+    "retryOperation": "Reintentar operación"
   },
   "task": {
     "pending": "Pendiente",
@@ -454,7 +461,8 @@
     "renderRecovery": "Intenta recargar la página.",
     "sourcePageChanged": "La página de origen ha cambiado. Vuelve a abrir la extensión en la página deseada e inténtalo de nuevo.",
     "extractionResultTooLarge": "Los comentarios y las respuestas extraídos superan el límite de resultados. Reduce la cantidad de comentarios e inténtalo de nuevo.",
-    "aiEndpointRedirect": "El endpoint de IA ha devuelto una redirección. Introduce la URL final de la API en los ajustes."
+    "aiEndpointRedirect": "El endpoint de IA ha devuelto una redirección. Introduce la URL final de la API en los ajustes.",
+    "dynamicReportContextExceeded": "El informe de análisis y el prompt superan el límite de contexto del modelo. Usa una ventana de contexto mayor o acorta el prompt del informe. El informe Markdown sigue guardado."
   },
   "notification": {
     "extractionCompleted": "Extracción completada para \"{{title}}\"{{comments}}",
