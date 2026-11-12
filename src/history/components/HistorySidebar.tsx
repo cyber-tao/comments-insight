@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
-import { BrandInkIcon, GlobeIcon, HistoryIcon, SearchIcon, TrashIcon } from '@/components/Icons';
+import { BrandIcon, GlobeIcon, HistoryIcon, SearchIcon, TrashIcon } from '@/components/Icons';
 import { type HistoryListEntry } from '../hooks/useHistoryData';
 
 interface HistorySidebarProps {
@@ -105,15 +105,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
       <div className="p-5" style={{ borderBottom: '1px solid var(--border-primary)' }}>
         <div className="flex items-center justify-between gap-2 mb-4">
           <div className="flex items-center gap-2.5 min-w-0">
-            <span
-              className="flex h-8 w-8 items-center justify-center rounded-lg shrink-0"
-              style={{
-                backgroundColor: 'var(--accent-primary-soft)',
-                color: 'var(--accent-primary)',
-              }}
-            >
-              <BrandInkIcon size={18} />
-            </span>
+            <BrandIcon size={32} />
             <h2
               className="text-xl font-bold tracking-tight truncate font-serif-editorial"
               style={{ color: 'var(--text-primary)' }}

@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
-import { BrandInkIcon, SettingsIcon, TerminalIcon } from '@/components/Icons';
+import { BrandIcon, SettingsIcon, TerminalIcon } from '@/components/Icons';
 
 interface HeaderProps {
   version: string;
@@ -30,15 +30,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span
-              className="flex h-7 w-7 items-center justify-center rounded-md shrink-0"
-              style={{
-                backgroundColor: 'var(--accent-primary-soft)',
-                color: 'var(--accent-primary)',
-              }}
-            >
-              <BrandInkIcon size={16} />
-            </span>
+            <BrandIcon size={28} />
             <h1
               className="text-base font-bold tracking-tight truncate font-serif-editorial"
               style={{ color: 'var(--text-primary)' }}

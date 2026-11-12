@@ -8,13 +8,7 @@ import { AdvancedSettings } from './components/AdvancedSettings';
 import { ConfigSettings } from './components/ConfigSettings';
 import { useTheme } from '@/hooks/useTheme';
 import { useConfirm } from '@/hooks/useConfirm';
-import {
-  BrandInkIcon,
-  DownloadIcon,
-  GlobeIcon,
-  SettingsIcon,
-  UploadIcon,
-} from '@/components/Icons';
+import { BrandIcon, DownloadIcon, GlobeIcon, SettingsIcon, UploadIcon } from '@/components/Icons';
 
 type Tab = 'extension' | 'crawling';
 
@@ -84,16 +78,7 @@ const Options: React.FC = () => {
           style={{ borderColor: 'var(--border-primary)' }}
         >
           <div className="flex items-center gap-3">
-            <span
-              className="flex h-10 w-10 items-center justify-center rounded-xl shrink-0"
-              style={{
-                backgroundColor: 'var(--accent-primary-soft)',
-                color: 'var(--accent-primary)',
-                border: '1px solid rgba(var(--accent-primary-rgb), 0.2)',
-              }}
-            >
-              <BrandInkIcon size={20} />
-            </span>
+            <BrandIcon size={40} />
             <div>
               <h1
                 className="text-2xl font-bold tracking-tight font-serif-editorial"
