@@ -2,7 +2,6 @@ import { AI } from '@/config/constants';
 import type { AIConfig, AIProtocol, AIResponse, AIStreamProgress } from '@/types';
 import { createAIError, ErrorCode } from '@/utils/errors';
 import { redactApiKey } from '@/utils/log-sanitize';
-import { Logger } from '@/utils/logger';
 
 type JsonObject = Record<string, unknown>;
 
@@ -294,11 +293,7 @@ export async function readAIResponse(
     try {
       data = JSON.parse(payload);
     } catch {
-      if (protocol !== 'openai-chat-completions') {
-        throw createAIError(ErrorCode.AI_INVALID_RESPONSE, 'Malformed AI stream event', {}, false);
-      }
-      Logger.warn('[AIService] Skipped malformed SSE frame', { previewLength: payload.length });
-      return;
+      throw createAIError(ErrorCode.AI_INVALID_RESPONSE, 'Malformed AI stream event', {}, false);
     }
     state.consumeEvent(data, event);
   };

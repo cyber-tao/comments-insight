@@ -93,6 +93,54 @@ describe('AI protocol requests', () => {
   });
 });
 
+describe('Stream integrity', () => {
+  it.each(protocols)('cancels and unlocks malformed %s streams', async (protocol) => {
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {not-json\n\n'));
+      },
+      cancel,
+    });
+
+    await expect(
+      read(new Response(body, { headers: { 'content-type': 'text/event-stream' } }), protocol),
+    ).rejects.toMatchObject({ code: ErrorCode.AI_INVALID_RESPONSE, retryable: false });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(body.locked).toBe(false);
+  });
+
+  it.each(['first', 'middle', 'last'])(
+    'rejects a malformed %s Chat Completions frame',
+    async (position) => {
+      const valid = [
+        'data: {"choices":[{"delta":{"content":"Revenue was "}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"profitable."},"finish_reason":"stop"}]}\n\n',
+      ];
+      const index = position === 'first' ? 0 : position === 'middle' ? 1 : 2;
+      valid.splice(index, 0, 'data: {"choices":[{"delta":{"content":"not "}}]\n\n');
+      await expect(
+        read(stream(valid.join('') + 'data: [DONE]\n\n', true), 'openai-chat-completions'),
+      ).rejects.toMatchObject({ code: ErrorCode.AI_INVALID_RESPONSE, retryable: false });
+    },
+  );
+
+  it('accepts fragmented Chat Completions text, CRLF, comments and empty events', async () => {
+    const source =
+      ': heartbeat\n\nevent: ping\n\n' +
+      'data: {"choices":[{"delta":{"content":"Hello 世界"}}]}\n\n' +
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n' +
+      'data: [DONE]\n\n';
+    expect(
+      await read(stream(source.replace(/\n/g, '\r\n'), true), 'openai-chat-completions'),
+    ).toEqual({
+      content: 'Hello 世界',
+      tokensUsed: 0,
+      finishReason: 'stop',
+    });
+  });
+});
+
 describe('Responses parsing', () => {
   it('decodes fragmented UTF-8 and CRLF, ignores reasoning, and avoids repeated final output', async () => {
     const progress = vi.fn();

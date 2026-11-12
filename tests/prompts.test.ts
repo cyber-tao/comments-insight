@@ -113,6 +113,18 @@ describe('Prompts Utils', () => {
         'Custom introduction\n\n## Analysis Markdown:\nAnalysis\n\n## Top Comments Data:\nComment',
       );
     });
+
+    it.each(LANGUAGES.SUPPORTED)(
+      'includes top comments only once in the $code default',
+      ({ code }) => {
+        const topCommentsData = 'unique-comment-body';
+        const prompt = buildDynamicReportPrompt('Analysis', undefined, {
+          language: code,
+          topCommentsData,
+        });
+        expect(prompt.split(topCommentsData)).toHaveLength(2);
+      },
+    );
   });
 
   describe('localized defaults', () => {
@@ -153,6 +165,19 @@ describe('Prompts Utils', () => {
       const custom = '  Custom {comments_data}  ';
       expect(getAnalysisPromptTemplate(custom, 'pt-PT')).toBe(custom);
       expect(getDynamicReportPromptTemplate(custom, 'zh-TW')).toBe(custom);
+    });
+
+    it('recognizes the persisted legacy English dynamic default without changing edited templates', () => {
+      const legacyDefault = DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE.replace(
+        'each supplied top comment',
+        'each top comment in {top_comments_data}',
+      );
+      expect(getDynamicReportPromptTemplate(legacyDefault, 'zh-CN')).toBe(
+        getDynamicReportPromptTemplate(undefined, 'zh-CN'),
+      );
+      expect(getDynamicReportPromptTemplate(`${legacyDefault}\nCustom addition`, 'zh-CN')).toBe(
+        `${legacyDefault}\nCustom addition`,
+      );
     });
   });
 

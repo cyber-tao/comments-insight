@@ -150,7 +150,7 @@ Generate a modern, visually rich, and responsive standalone single-page HTML rep
    - Every section MUST be thoroughly populated with real content extracted from the Analysis Report and Comments data:
      - \`<section id="overview">\`: Key metrics cards (total comments, overall sentiment %, engagement, core topics) and executive summary text.
      - \`<section id="sentiment">\`: Static SVG or CSS donut/bar chart with percentage breakdown and legend.
-     - \`<section id="comments">\`: MUST pre-render HTML comment cards for each top comment in {top_comments_data} directly into the DOM. Include author name, likes badge, sentiment label, and comment body, grouped by sentiment where useful.
+     - \`<section id="comments">\`: MUST pre-render HTML comment cards for each supplied top comment directly into the DOM. Include author name, likes badge, sentiment label, and comment body, grouped by sentiment where useful.
      - \`<section id="insights">\`: Thematic breakdown cards, positive highlights, user pain points, and perspective analysis.
      - \`<section id="recommendations">\`: Actionable takeaways and strategic advice.
 
@@ -240,7 +240,14 @@ export function getAnalysisPromptTemplate(template?: string, language?: string):
 }
 
 export function getDynamicReportPromptTemplate(template?: string, language?: string): string {
-  return template === undefined || template === DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE
+  // Existing settings persist the original English default as its identity.
+  const legacyDefault = DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE.replace(
+    'each supplied top comment',
+    'each top comment in {top_comments_data}',
+  );
+  return template === undefined ||
+    template === DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE ||
+    template === legacyDefault
     ? getPromptLocale(language).dynamic
     : template;
 }

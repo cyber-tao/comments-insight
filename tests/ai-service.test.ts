@@ -445,7 +445,7 @@ describe('AIService', () => {
       expect(mockFetch).toHaveBeenCalledTimes(3);
     });
 
-    it('should skip malformed SSE frames without aborting the stream', async () => {
+    it('rejects malformed SSE frames without saving partial usage or retrying', async () => {
       mockFetch.mockResolvedValue(
         createStreamingResponse([
           'data: {"choices":[{"delta":{"content":"Hello "},"finish_reason":null}]}\n\n',
@@ -456,10 +456,11 @@ describe('AIService', () => {
       );
 
       const config = mockAIConfig();
-      const result = await aiService.callAI({ prompt: 'Test', config });
-
-      expect(result.content).toBe('Hello world');
-      expect(result.tokensUsed).toBe(10);
+      await expect(aiService.callAI({ prompt: 'Test', config })).rejects.toMatchObject({
+        code: ErrorCode.AI_INVALID_RESPONSE,
+        retryable: false,
+      });
+      expect(mockTokenStatsStore.recordTokenUsage).not.toHaveBeenCalled();
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 

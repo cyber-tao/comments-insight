@@ -445,6 +445,43 @@ describe('analysis handlers', () => {
       },
     );
 
+    it('keeps the saved Markdown when automatic HTML exceeds the context budget', async () => {
+      vi.mocked(context.commentAnalyzer.generateDynamicHtml).mockRejectedValue(
+        new ExtensionError(ErrorCode.INVALID_CONFIG, 'Dynamic report exceeds context', {}, false),
+      );
+      await handleStartAnalysis(
+        {
+          type: 'START_ANALYSIS',
+          payload: { comments: [], metadata: { url: 'https://example.com/budget' } },
+        },
+        context,
+      );
+      const executor = vi.mocked(context.taskManager.setExecutor).mock.calls[0][1];
+      await expect(
+        executor(
+          {
+            id: 'task_analysis_123',
+            type: 'analyze',
+            status: 'running',
+            url: 'https://example.com/budget',
+            platform: 'example.com',
+            startTime: 1000,
+            progress: 0,
+            tokensUsed: 0,
+          },
+          new AbortController().signal,
+        ),
+      ).resolves.toMatchObject({ tokensUsed: 50 });
+      expect(context.historyStore.createHistory).toHaveBeenCalledOnce();
+      expect(context.historyStore.createHistory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          analysis: { markdown: '# Analysis Report', generatedAt: 2000, tokensUsed: 50 },
+        }),
+        expect.any(AbortSignal),
+      );
+      expect(context.historyStore.updateDynamicReport).not.toHaveBeenCalled();
+    });
+
     it('should fail analysis when history target is missing', async () => {
       const localContext = createMockContext({
         historyStore: {

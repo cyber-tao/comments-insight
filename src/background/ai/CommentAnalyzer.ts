@@ -11,6 +11,7 @@ import { createAIError, ErrorCode, ExtensionError } from '../../utils/errors';
 import { AI as AI_CONST, LANGUAGES, TEXT, ANALYSIS_FORMAT } from '@/config/constants';
 import { Tokenizer } from '../../utils/tokenizer';
 import { runWithConcurrencyLimit } from '../../utils/promise';
+import i18n from '@/utils/i18n';
 
 import { PromptBuilder } from './PromptBuilder';
 import { AIService } from '../AIService';
@@ -417,35 +418,59 @@ export class CommentAnalyzer {
     const resolvedLanguage = language || LANGUAGES.DEFAULT;
     const sanitizedMetadata = this.sanitizeAnalysisMetadata(metadata);
 
-    let topCommentsData: string | undefined;
-    if (comments && comments.length > 0) {
-      const topComments = [...comments]
-        .sort((a, b) => (b.likes || 0) - (a.likes || 0))
-        .slice(0, 10);
-      topCommentsData = PromptBuilder.serializeCommentsDense(topComments).text;
+    const systemPrompt =
+      'You are an expert web developer and UI designer. Output ONLY valid, standalone, self-contained static HTML5 without scripts, event handlers, forms, frames, external resources, or markdown fences. If no representative comments are provided, do not invent them.';
+    const inputBudget =
+      config.contextWindowSize -
+      (config.maxOutputTokens || AI_CONST.DEFAULT_MAX_OUTPUT_TOKENS) -
+      AI_CONST.INPUT_TOKEN_BUFFER;
+    const systemTokens = Tokenizer.estimateTokens(systemPrompt);
+    const buildPrompt = (topComments: Comment[]): string =>
+      PromptBuilder.buildDynamicReportPromptWrapper(
+        analysisMarkdown,
+        promptTemplate,
+        {
+          ...sanitizedMetadata,
+          topCommentsData: topComments.length
+            ? PromptBuilder.serializeCommentsDense(topComments).text
+            : undefined,
+        },
+        totalComments,
+        resolvedLanguage,
+      );
+
+    let prompt = buildPrompt([]);
+    if (Tokenizer.estimateTokens(prompt) + systemTokens > inputBudget) {
+      const messageKey = 'errors.dynamicReportContextExceeded';
+      throw createAIError(
+        ErrorCode.INVALID_CONFIG,
+        i18n.t(messageKey, { lng: resolvedLanguage }),
+        { messageKey },
+        false,
+      );
     }
 
-    const prompt = PromptBuilder.buildDynamicReportPromptWrapper(
-      analysisMarkdown,
-      promptTemplate,
-      {
-        ...sanitizedMetadata,
-        topCommentsData,
-      },
-      totalComments,
-      resolvedLanguage,
-    );
+    const topComments = [...(comments || [])]
+      .sort((a, b) => (b.likes || 0) - (a.likes || 0))
+      .slice(0, 10);
+    let includedComments = 0;
+    for (let count = 1; count <= topComments.length; count += 1) {
+      const candidate = buildPrompt(topComments.slice(0, count));
+      // Measure the rendered prompt: custom templates can repeat source placeholders.
+      if (Tokenizer.estimateTokens(candidate) + systemTokens > inputBudget) break;
+      prompt = candidate;
+      includedComments = count;
+    }
 
     Logger.info('[CommentAnalyzer] Generating dynamic HTML report', {
       promptLength: prompt.length,
       language: resolvedLanguage,
-      hasTopComments: !!topCommentsData,
+      hasTopComments: includedComments > 0,
     });
 
     const response = await this.aiService.callAI({
       prompt,
-      systemPrompt:
-        'You are an expert web developer and UI designer. Output ONLY valid, standalone, self-contained static HTML5 without scripts, event handlers, forms, frames, external resources, or markdown fences.',
+      systemPrompt,
       config,
       signal,
       timeout,

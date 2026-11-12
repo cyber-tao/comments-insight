@@ -87,7 +87,7 @@ export const LOCALIZED_PROMPTS = {
 {top_comments_data}
 
 1. 输出以 <!DOCTYPE html> 开头、以 </html> 结尾的有效 HTML5。样式写入 <style>。禁止 <script>、内联事件处理器、表单、框架、外部资源和任何网络依赖。报告须在沙箱 iframe 中完全离线运行。
-2. 纵向排布五个可见且有内容的区块。#overview 放关键指标与摘要。#sentiment 放静态 SVG 或 CSS 图表、占比与图例。#comments 把 {top_comments_data} 中的每条热门评论直接渲染为 HTML 卡片，含作者、点赞、情感标签和正文，适合时按情感分组。#insights 放主题、亮点、痛点与观点。#recommendations 给出可执行的建议。
+2. 纵向排布五个可见且有内容的区块。#overview 放关键指标与摘要。#sentiment 放静态 SVG 或 CSS 图表、占比与图例。#comments 把上述数据中的每条热门评论直接渲染为 HTML 卡片，含作者、点赞、情感标签和正文，适合时按情感分组。#insights 放主题、亮点、痛点与观点。#recommendations 给出可执行的建议。
 3. 顶部固定导航仅使用 #overview、#sentiment、#comments、#insights、#recommendations 锚点，设置平滑滚动。禁止外部链接和 chrome-extension:// 地址。来源网址用纯文本展示。
 4. 使用清晰的排版、渐变和细微阴影，布局采用响应式 Flex 或 Grid。动画和悬停效果只用 CSS。
 5. 所有界面文字、标签、摘要和说明都必须使用{language_name}。
@@ -167,7 +167,7 @@ export const LOCALIZED_PROMPTS = {
 {top_comments_data}
 
 1. 輸出以 <!DOCTYPE html> 開頭、以 </html> 結尾的有效 HTML5。樣式放在 <style>。禁止 <script>、行內事件處理常式、表單、框架、外部資源和網路依賴。報告須能在沙箱 iframe 中完全離線運作。
-2. 由上至下排列五個直接可見且有內容的區塊。#overview 顯示關鍵指標與摘要。#sentiment 顯示靜態 SVG 或 CSS 圖表、比例及圖例。#comments 將 {top_comments_data} 的每則熱門留言預先繪製為 HTML 卡片，包含作者、按讚數、情緒標籤與原文，合適時按情緒分組。#insights 呈現主題、亮點、困難與觀點。#recommendations 提出具體行動。
+2. 由上至下排列五個直接可見且有內容的區塊。#overview 顯示關鍵指標與摘要。#sentiment 顯示靜態 SVG 或 CSS 圖表、比例及圖例。#comments 將上述資料中的每則熱門留言預先繪製為 HTML 卡片，包含作者、按讚數、情緒標籤與原文，合適時按情緒分組。#insights 呈現主題、亮點、困難與觀點。#recommendations 提出具體行動。
 3. 頁首固定導覽只能使用 #overview、#sentiment、#comments、#insights、#recommendations 錨點，並啟用平滑捲動。禁止外部連結與 chrome-extension:// 網址。來源網址以純文字顯示。
 4. 採用易讀字體、漸層和細緻陰影，並使用響應式 Flex 或 Grid。動畫與滑鼠游標效果只用 CSS。
 5. 所有介面文字、標籤、摘要與說明都須使用{language_name}。
@@ -247,7 +247,7 @@ export const LOCALIZED_PROMPTS = {
 {top_comments_data}
 
 1. <!DOCTYPE html> で始まり </html> で終わる有効な HTML5 を出力し、スタイルは <style> 内に記述してください。<script>、インラインイベントハンドラー、フォーム、フレーム、外部リソース、ネットワーク依存の内容は禁止です。サンドボックス化された iframe 内で完全にオフラインで動作させてください。
-2. 内容のある五つのセクションを縦に並べ、常に表示してください。#overview は主要指標と要約、#sentiment は静的 SVG または CSS の図表と割合・凡例、#comments は {top_comments_data} の各コメントを HTML カードにして投稿者・いいね数・感情ラベル・本文を表示し、必要に応じて感情で分類します。#insights は話題・長所・懸念・視点、#recommendations は具体的な提案を記載してください。
+2. 内容のある五つのセクションを縦に並べ、常に表示してください。#overview は主要指標と要約、#sentiment は静的 SVG または CSS の図表と割合・凡例、#comments は上記データの各コメントを HTML カードにして投稿者・いいね数・感情ラベル・本文を表示し、必要に応じて感情で分類します。#insights は話題・長所・懸念・視点、#recommendations は具体的な提案を記載してください。
 3. 上部の固定ナビゲーションでは #overview、#sentiment、#comments、#insights、#recommendations へのアンカーと滑らかなスクロールを使用してください。外部リンクや chrome-extension:// の URL は作らず、参照元の URL はテキストで表示してください。
 4. 読みやすい文字組み、グラデーション、控えめな影、レスポンシブな Flex または Grid を使用してください。アニメーションとホバー効果には CSS のみを使用します。
 5. 画面の文言、ラベル、要約、説明はすべて {language_name} で記載してください。
@@ -327,7 +327,7 @@ export const LOCALIZED_PROMPTS = {
 {top_comments_data}
 
 1. <!DOCTYPE html>로 시작하고 </html>로 끝나는 유효한 HTML5를 출력하세요. 스타일은 <style>에 넣으세요. <script>, 인라인 이벤트 핸들러, 양식, 프레임, 외부 리소스 및 네트워크가 필요한 요소는 금지됩니다. 샌드박스 iframe에서 완전히 오프라인으로 동작해야 합니다.
-2. 내용이 채워진 다섯 섹션을 세로로 배치하고 모두 표시하세요. #overview에는 주요 지표와 요약을, #sentiment에는 정적 SVG 또는 CSS 차트와 비율 및 범례를 넣으세요. #comments에는 {top_comments_data}의 각 댓글을 작성자, 좋아요, 감성 레이블, 본문이 있는 HTML 카드로 미리 렌더링하고 필요하면 감성별로 묶으세요. #insights에는 주제, 장점, 불편 사항, 관점을, #recommendations에는 실행 가능한 제안을 넣으세요.
+2. 내용이 채워진 다섯 섹션을 세로로 배치하고 모두 표시하세요. #overview에는 주요 지표와 요약을, #sentiment에는 정적 SVG 또는 CSS 차트와 비율 및 범례를 넣으세요. #comments에는 위 데이터의 각 댓글을 작성자, 좋아요, 감성 레이블, 본문이 있는 HTML 카드로 미리 렌더링하고 필요하면 감성별로 묶으세요. #insights에는 주제, 장점, 불편 사항, 관점을, #recommendations에는 실행 가능한 제안을 넣으세요.
 3. 상단 고정 탐색은 #overview, #sentiment, #comments, #insights, #recommendations 앵커와 부드러운 스크롤만 사용하세요. 외부 링크나 chrome-extension:// URL은 금지하고 출처 URL은 일반 텍스트로 표시하세요.
 4. 읽기 쉬운 글꼴, 그라데이션, 은은한 그림자, 반응형 Flex 또는 Grid를 사용하세요. 애니메이션과 호버 효과는 CSS로만 구현하세요.
 5. 모든 화면 문구, 레이블, 요약, 설명은 {language_name}로 작성하세요.
@@ -407,7 +407,7 @@ Proposez des actions concrètes à partir de l’analyse.
 {top_comments_data}
 
 1. Produisez du HTML5 valide de <!DOCTYPE html> à </html>. Placez les styles dans <style>. Interdisez <script>, les gestionnaires d’événements intégrés, les formulaires, les cadres, les ressources externes et tout contenu dépendant du réseau. Le rapport doit fonctionner entièrement hors ligne dans un iframe isolé.
-2. Affichez cinq sections remplies et empilées verticalement. #overview présente les indicateurs et le résumé. #sentiment présente un graphique SVG ou CSS statique, les pourcentages et la légende. #comments intègre chaque entrée de {top_comments_data} dans une carte HTML avec auteur, mentions J’aime, sentiment et texte, groupée par sentiment si pertinent. #insights présente les thèmes, points forts, difficultés et perspectives. #recommendations propose des actions concrètes.
+2. Affichez cinq sections remplies et empilées verticalement. #overview présente les indicateurs et le résumé. #sentiment présente un graphique SVG ou CSS statique, les pourcentages et la légende. #comments intègre chaque commentaire fourni ci-dessus dans une carte HTML avec auteur, mentions J’aime, sentiment et texte, groupée par sentiment si pertinent. #insights présente les thèmes, points forts, difficultés et perspectives. #recommendations propose des actions concrètes.
 3. Le menu fixe utilise uniquement les ancres #overview, #sentiment, #comments, #insights et #recommendations avec un défilement fluide. Ne créez aucun lien externe ni URL chrome-extension://. Affichez les URL sources en texte brut.
 4. Utilisez une typographie lisible, des dégradés, des ombres discrètes et une disposition Flex ou Grid adaptative. Réalisez les animations et effets de survol uniquement en CSS.
 5. Rédigez tous les textes d’interface, libellés, résumés et descriptions en {language_name}.
@@ -487,7 +487,7 @@ Proponha ações concretas com base na análise.
 {top_comments_data}
 
 1. Gere HTML5 válido, de <!DOCTYPE html> até </html>. Coloque os estilos em <style>. Não inclua <script>, eventos em linha, formulários, molduras, recursos externos ou conteúdo que dependa da rede. O relatório tem de funcionar inteiramente sem ligação à Internet, num iframe isolado.
-2. Disponha cinco secções preenchidas e visíveis na vertical. #overview apresenta os indicadores e o resumo. #sentiment apresenta um gráfico SVG ou CSS estático com percentagens e legenda. #comments inclui cada comentário de {top_comments_data} num cartão HTML com autor, gostos, etiqueta de sentimento e texto, agrupados por sentimento quando útil. #insights apresenta temas, pontos fortes, dificuldades e perspetivas. #recommendations indica medidas concretas.
+2. Disponha cinco secções preenchidas e visíveis na vertical. #overview apresenta os indicadores e o resumo. #sentiment apresenta um gráfico SVG ou CSS estático com percentagens e legenda. #comments inclui cada comentário fornecido acima num cartão HTML com autor, gostos, etiqueta de sentimento e texto, agrupados por sentimento quando útil. #insights apresenta temas, pontos fortes, dificuldades e perspetivas. #recommendations indica medidas concretas.
 3. A navegação fixa usa apenas as âncoras #overview, #sentiment, #comments, #insights e #recommendations, com deslocamento suave. Não crie ligações externas nem URL chrome-extension://. Mostre os URL de origem como texto simples.
 4. Use tipografia legível, gradientes, sombras discretas e um esquema responsivo em Flex ou Grid. Use apenas CSS para animações e efeitos ao passar o cursor.
 5. Escreva todos os textos da interface, etiquetas, resumos e descrições em {language_name}.
@@ -567,7 +567,7 @@ Propón acciones concretas a partir del análisis.
 {top_comments_data}
 
 1. Genera HTML5 válido, desde <!DOCTYPE html> hasta </html>. Incluye los estilos en <style>. No uses <script>, controladores de eventos en línea, formularios, marcos, recursos externos ni contenido que dependa de la red. El informe debe funcionar completamente sin conexión en un iframe aislado.
-2. Coloca cinco secciones completas y visibles en vertical. #overview incluye métricas y un resumen. #sentiment presenta un gráfico SVG o CSS estático con porcentajes y leyenda. #comments muestra cada entrada de {top_comments_data} en una tarjeta HTML con autor, Me gusta, etiqueta de sentimiento y texto, agrupadas por sentimiento si procede. #insights presenta temas, puntos fuertes, problemas y perspectivas. #recommendations propone medidas concretas.
+2. Coloca cinco secciones completas y visibles en vertical. #overview incluye métricas y un resumen. #sentiment presenta un gráfico SVG o CSS estático con porcentajes y leyenda. #comments muestra cada comentario proporcionado arriba en una tarjeta HTML con autor, Me gusta, etiqueta de sentimiento y texto, agrupadas por sentimiento si procede. #insights presenta temas, puntos fuertes, problemas y perspectivas. #recommendations propone medidas concretas.
 3. La navegación fija solo utiliza las anclas #overview, #sentiment, #comments, #insights y #recommendations, con desplazamiento suave. Evita enlaces externos y URL chrome-extension://. Muestra las URL de origen en texto sin formato.
 4. Utiliza tipografía legible, degradados, sombras discretas y un diseño adaptable con Flex o Grid. Usa solo CSS para las animaciones y los efectos al pasar el cursor.
 5. Redacta todos los textos de la interfaz, las etiquetas, los resúmenes y las descripciones en {language_name}.
