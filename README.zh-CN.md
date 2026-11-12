@@ -49,38 +49,34 @@
 ## 📸 演示截图
 
 <a href="images/screenshots/zh-CN/00-cover.jpg">
-  <img src="images/screenshots/zh-CN/00-cover.jpg" alt="评论洞察商店封面，展示网页报告中的热门话题、情感分布和 HTML 导出按钮" width="100%" />
+  <img src="images/screenshots/zh-CN/00-cover.jpg" alt="看懂大家真正在意什么。从评论里找出喜欢的地方、遇到的问题和最希望改进的地方。" width="100%" />
 </a>
 
-下方演示使用 YOUCAR 仰望 U9 Xtreme 极速测试视频下的部分评论，评论已匿名转述。分析和看板依据原始导出的 AI 报告整理。 [原视频](https://www.youtube.com/watch?v=uxdE0I-VaFc)
+下方用一组虚构的耳机评测评论演示如何归纳反馈、采集回复和回看原始讨论。
 
 <table>
   <tr>
     <td width="50%">
-      <a href="images/screenshots/zh-CN/01-popup.jpg">
-        <img src="images/screenshots/zh-CN/01-popup.jpg" alt="视频页面旁的扩展弹窗，显示评论数、分析状态和查看按钮" />
+      <a href="images/screenshots/zh-CN/01-analysis.jpg">
+        <img src="images/screenshots/zh-CN/01-analysis.jpg" alt="AI 分析归纳示例评论中反复出现的问题和建议" />
       </a>
-      <p align="center"><em>提取评论与回复</em></p>
     </td>
     <td width="50%">
-      <a href="images/screenshots/zh-CN/02-analysis.jpg">
-        <img src="images/screenshots/zh-CN/02-analysis.jpg" alt="分析页显示讨论摘要、热门话题和情感分布表" />
+      <a href="images/screenshots/zh-CN/02-collect.jpg">
+        <img src="images/screenshots/zh-CN/02-collect.jpg" alt="从扩展弹窗收集受支持网页上的评论和回复" />
       </a>
-      <p align="center"><em>查看 AI 分析并导出 Markdown</em></p>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <a href="images/screenshots/zh-CN/03-dashboard.jpg">
-        <img src="images/screenshots/zh-CN/03-dashboard.jpg" alt="网页报告展示讨论中的速度争议和情感分布图" />
+      <a href="images/screenshots/zh-CN/03-comments.jpg">
+        <img src="images/screenshots/zh-CN/03-comments.jpg" alt="在已保存的评论中搜索、排序和展开回复" />
       </a>
-      <p align="center"><em>生成网页报告并导出 HTML</em></p>
     </td>
     <td width="50%">
-      <a href="images/screenshots/zh-CN/04-comments.jpg">
-        <img src="images/screenshots/zh-CN/04-comments.jpg" alt="评论页显示匿名评论和展开的回复，以及搜索、排序和 CSV 导出按钮" />
+      <a href="images/screenshots/zh-CN/04-export.jpg">
+        <img src="images/screenshots/zh-CN/04-export.jpg" alt="将分析结果导出为 Markdown、网页报告导出为 HTML，或将评论原文导出为 CSV" />
       </a>
-      <p align="center"><em>浏览回复并导出 CSV</em></p>
     </td>
   </tr>
 </table>

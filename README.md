@@ -49,38 +49,34 @@ The instructions below cover **v0.10.1**. The Chrome Web Store listing shows the
 ## 📸 Screenshots
 
 <a href="images/screenshots/en-US/00-cover.jpg">
-  <img src="images/screenshots/en-US/00-cover.jpg" alt="Comments Insight generates a visual web report with discussion themes, sentiment, and HTML export" width="100%" />
+  <img src="images/screenshots/en-US/00-cover.jpg" alt="Find what matters in the comments. See what buyers like, where they struggle, and what they want improved." width="100%" />
 </a>
 
-The walkthrough below uses anonymized paraphrases of selected comments on YOUCAR’s Yangwang U9 Xtreme speed-test video. The reports show AI analysis adapted from the original exports. [Source video](https://www.youtube.com/watch?v=uxdE0I-VaFc)
+The screenshots use a fictional headphone review to show how Comments Insight surfaces feedback, collects replies, and lets you revisit the original discussion.
 
 <table>
   <tr>
     <td width="50%">
-      <a href="images/screenshots/en-US/01-popup.jpg">
-        <img src="images/screenshots/en-US/01-popup.jpg" alt="Extension popup showing the current page and comment analysis actions" />
+      <a href="images/screenshots/en-US/01-analysis.jpg">
+        <img src="images/screenshots/en-US/01-analysis.jpg" alt="AI analysis groups the issues that come up repeatedly in the sample comments" />
       </a>
-      <p align="center"><em>Collect comments and replies</em></p>
     </td>
     <td width="50%">
-      <a href="images/screenshots/en-US/02-analysis.jpg">
-        <img src="images/screenshots/en-US/02-analysis.jpg" alt="AI analysis with a summary, discussion themes, and sentiment estimates" />
+      <a href="images/screenshots/en-US/02-collect.jpg">
+        <img src="images/screenshots/en-US/02-collect.jpg" alt="The extension popup captures comments and replies from a supported page" />
       </a>
-      <p align="center"><em>Review the AI analysis and export Markdown</em></p>
     </td>
   </tr>
   <tr>
     <td width="50%">
-      <a href="images/screenshots/en-US/03-dashboard.jpg">
-        <img src="images/screenshots/en-US/03-dashboard.jpg" alt="Visual report showing a sentiment chart and the HTML export button" />
+      <a href="images/screenshots/en-US/03-comments.jpg">
+        <img src="images/screenshots/en-US/03-comments.jpg" alt="Saved comments with search, sorting, and an expanded reply" />
       </a>
-      <p align="center"><em>Generate a web report and export HTML</em></p>
     </td>
     <td width="50%">
-      <a href="images/screenshots/en-US/04-comments.jpg">
-        <img src="images/screenshots/en-US/04-comments.jpg" alt="Searchable comments with an expanded reply and the CSV export button" />
+      <a href="images/screenshots/en-US/04-export.jpg">
+        <img src="images/screenshots/en-US/04-export.jpg" alt="Export the analysis as Markdown, the visual report as HTML, or the comments as CSV" />
       </a>
-      <p align="center"><em>Browse replies and export comments as CSV</em></p>
     </td>
   </tr>
 </table>

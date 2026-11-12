@@ -1,5 +1,13 @@
 # Comments Insight
 
+## Store screenshots
+
+Build the extension with `bun run build`, then run `bun scripts/capture-store-screenshots.js` to render five 1280 × 800 JPEGs per locale. The script uses an isolated Chromium profile and a fictional headphone review. It writes to `build/store-assets/v<version>/` by default. An optional first argument selects a different output directory outside `dist/`.
+
+In the **Store listing** tab, choose a language and upload the five numbered files to **Localized screenshots** in filename order. Use the files at the top level of each locale directory. English and Simplified Chinese previews are also tracked under `images/screenshots/`.
+
+[Chrome Web Store listing and localization instructions](https://developer.chrome.com/docs/webstore/cws-dashboard-listing#localize-screenshots-and-promotional-video)
+
 ## English (`en`)
 
 Extract comments and replies from a webpage, then use your AI service to summarize recurring topics, questions, and audience feedback.
