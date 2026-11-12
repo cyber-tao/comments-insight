@@ -8,6 +8,13 @@ import { AdvancedSettings } from './components/AdvancedSettings';
 import { ConfigSettings } from './components/ConfigSettings';
 import { useTheme } from '@/hooks/useTheme';
 import { useConfirm } from '@/hooks/useConfirm';
+import {
+  BrandInkIcon,
+  DownloadIcon,
+  GlobeIcon,
+  SettingsIcon,
+  UploadIcon,
+} from '@/components/Icons';
 
 type Tab = 'extension' | 'crawling';
 
@@ -35,15 +42,17 @@ const Options: React.FC = () => {
       <>
         <ToastContainer />
         <div
-          className="container mx-auto p-8"
+          className="container mx-auto p-8 max-w-5xl"
           style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
         >
           {loadError ? (
-            <div role="alert">
-              <p className="mb-4">{loadError}</p>
+            <div role="alert" className="theme-card p-6">
+              <p className="mb-4 text-sm" style={{ color: 'var(--accent-danger)' }}>
+                {loadError}
+              </p>
               <button
                 type="button"
-                className="px-4 py-2 rounded-lg theme-button-secondary"
+                className="px-4 py-2 rounded-lg text-sm theme-button-secondary"
                 disabled={loading}
                 onClick={() => void retryLoad()}
               >
@@ -58,45 +67,78 @@ const Options: React.FC = () => {
     );
   }
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'extension', label: t('options.extensionSettings') },
-    { id: 'crawling', label: t('options.crawlingConfigs.title') },
+  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: 'extension', label: t('options.extensionSettings'), icon: <SettingsIcon size={15} /> },
+    { id: 'crawling', label: t('options.crawlingConfigs.title'), icon: <GlobeIcon size={15} /> },
   ];
 
   return (
     <>
       <ToastContainer />
       <div
-        className="container mx-auto p-8 max-w-6xl min-h-screen"
+        className="container mx-auto px-6 py-8 max-w-5xl min-h-screen"
         style={{ backgroundColor: 'var(--bg-secondary)' }}
       >
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold" style={{ color: 'var(--text-primary)' }}>
-            {t('options.title')}
-          </h1>
-        </div>
-
-        <div className="flex border-b mb-6" style={{ borderColor: 'var(--border-primary)' }}>
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`py-2 px-4 font-medium text-sm focus:outline-none transition-colors duration-200 border-b-2 ${
-                activeTab === tab.id
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent hover:border-gray-300'
-              }`}
+        <div
+          className="flex flex-wrap justify-between items-center gap-4 pb-5 mb-6 border-b"
+          style={{ borderColor: 'var(--border-primary)' }}
+        >
+          <div className="flex items-center gap-3">
+            <span
+              className="flex h-10 w-10 items-center justify-center rounded-xl shrink-0"
               style={{
-                color: activeTab === tab.id ? undefined : 'var(--text-tertiary)',
+                backgroundColor: 'var(--accent-primary-soft)',
+                color: 'var(--accent-primary)',
+                border: '1px solid rgba(var(--accent-primary-rgb), 0.2)',
               }}
             >
-              {tab.label}
-            </button>
-          ))}
+              <BrandInkIcon size={20} />
+            </span>
+            <div>
+              <h1
+                className="text-2xl font-bold tracking-tight font-serif-editorial"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                {t('options.title')}
+              </h1>
+            </div>
+          </div>
+
+          <div
+            className="inline-flex p-1 rounded-lg gap-1"
+            style={{
+              backgroundColor: 'var(--bg-tertiary)',
+              border: '1px solid var(--border-primary)',
+            }}
+          >
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className="py-1.5 px-3.5 rounded-md font-medium text-sm focus:outline-none transition-all inline-flex items-center gap-2"
+                style={{
+                  backgroundColor: activeTab === tab.id ? 'var(--bg-card)' : 'transparent',
+                  color: activeTab === tab.id ? 'var(--accent-primary)' : 'var(--text-tertiary)',
+                  boxShadow: activeTab === tab.id ? 'var(--shadow-sm)' : 'none',
+                }}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {hasExternalConflict && (
-          <div role="alert" className="mb-4 p-4 rounded-lg theme-card">
+          <div
+            role="alert"
+            className="mb-5 p-4 rounded-xl text-sm font-medium"
+            style={{
+              backgroundColor: 'var(--accent-warning-soft)',
+              color: 'var(--accent-warning)',
+              border: '1px solid rgba(217, 119, 6, 0.3)',
+            }}
+          >
             {t('options.settingsConflict')}
           </div>
         )}
@@ -105,20 +147,32 @@ const Options: React.FC = () => {
           {activeTab === 'extension' && (
             <div className="space-y-6">
               <section className="theme-card p-6">
-                <h2 className="text-xl font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
-                  {t('options.extensionSettings')}
-                </h2>
-                <div className="flex gap-3">
-                  <label className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm font-medium cursor-pointer transition-colors">
-                    {t('common.import')}
-                    <input type="file" accept=".json" onChange={handleImport} className="hidden" />
-                  </label>
-                  <button
-                    onClick={handleExport}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium transition-colors"
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <h2
+                    className="text-lg font-bold font-serif-editorial"
+                    style={{ color: 'var(--text-primary)' }}
                   >
-                    {t('common.export')}
-                  </button>
+                    {t('options.extensionSettings')}
+                  </h2>
+                  <div className="flex gap-2.5">
+                    <label className="theme-button-secondary px-3.5 py-2 text-xs inline-flex items-center gap-1.5 cursor-pointer">
+                      <UploadIcon size={14} />
+                      <span>{t('common.import')}</span>
+                      <input
+                        type="file"
+                        accept=".json"
+                        onChange={handleImport}
+                        className="hidden"
+                      />
+                    </label>
+                    <button
+                      onClick={handleExport}
+                      className="theme-button-primary px-3.5 py-2 text-xs inline-flex items-center gap-1.5"
+                    >
+                      <DownloadIcon size={14} />
+                      <span>{t('common.export')}</span>
+                    </button>
+                  </div>
                 </div>
               </section>
               <BasicSettings
@@ -146,8 +200,15 @@ const Options: React.FC = () => {
         </div>
 
         {saving && (
-          <div className="fixed bottom-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50">
-            {t('options.saving')}
+          <div
+            className="fixed bottom-5 right-5 px-4 py-2 rounded-full text-xs font-medium shadow-lg z-50 flex items-center gap-2"
+            style={{
+              backgroundColor: 'var(--accent-ink)',
+              color: '#ffffff',
+            }}
+          >
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>{t('options.saving')}</span>
           </div>
         )}
       </div>

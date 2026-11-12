@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
+import { BrandInkIcon, GlobeIcon, HistoryIcon, SearchIcon, TrashIcon } from '@/components/Icons';
 import { type HistoryListEntry } from '../hooks/useHistoryData';
 
 interface HistorySidebarProps {
@@ -39,65 +40,94 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
 }) => {
   const { t } = useTranslation();
 
-  const renderItem = (item: HistoryListEntry): React.ReactElement => (
-    <div
-      key={item.id}
-      onClick={() => onSelectHistoryItem(item)}
-      className="p-4 cursor-pointer transition-all"
-      style={{
-        backgroundColor: selectedHistoryId === item.id ? 'var(--bg-selected)' : 'transparent',
-        borderBottom: '1px solid var(--border-primary)',
-      }}
-    >
-      <div className="flex items-start gap-3 mb-2">
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold truncate mb-1" style={{ color: 'var(--text-primary)' }}>
-            {item.title}
-          </h3>
-          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-            {formatDate(item.extractedAt)}
-          </p>
+  const renderItem = (item: HistoryListEntry): React.ReactElement => {
+    const isSelected = selectedHistoryId === item.id;
+    return (
+      <div
+        key={item.id}
+        onClick={() => onSelectHistoryItem(item)}
+        className="group relative px-5 py-3.5 cursor-pointer transition-colors hover:bg-[var(--bg-hover)]"
+        style={{
+          backgroundColor: isSelected ? 'var(--bg-selected)' : undefined,
+          borderBottom: '1px solid var(--border-primary)',
+          borderLeft: isSelected ? '3px solid var(--accent-primary)' : '3px solid transparent',
+        }}
+      >
+        <div className="flex items-start gap-3 mb-1.5">
+          <div className="flex-1 min-w-0">
+            <h3
+              className="text-sm font-semibold truncate mb-1 leading-snug"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {item.title}
+            </h3>
+            <p className="text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>
+              {formatDate(item.extractedAt)}
+            </p>
+          </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteHistoryItem(item.id);
+            }}
+            className="p-1.5 rounded-md opacity-75 group-hover:opacity-100 hover:bg-[var(--accent-danger-soft)] transition-all"
+            style={{ color: 'var(--accent-danger)' }}
+            aria-label={t('common.delete')}
+            title={t('common.delete')}
+          >
+            <TrashIcon size={14} />
+          </button>
         </div>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDeleteHistoryItem(item.id);
-          }}
-          className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
-          style={{ color: 'var(--accent-danger)' }}
-        >
-          🗑️
-        </button>
+        <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono-code text-[11px]"
+            style={{
+              backgroundColor: 'var(--bg-tertiary)',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            <GlobeIcon size={11} />
+            {item.platform}
+          </span>
+        </div>
       </div>
-      <div className="flex gap-4 text-xs" style={{ color: 'var(--text-muted)' }}>
-        <span className="flex items-center gap-1">🌐 {item.platform}</span>
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div
-      className="w-1/3 flex flex-col"
+      className="w-80 lg:w-96 shrink-0 flex flex-col"
       style={{
         backgroundColor: 'var(--bg-card)',
         borderRight: '1px solid var(--border-primary)',
       }}
     >
       <div className="p-5" style={{ borderBottom: '1px solid var(--border-primary)' }}>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-            {t('history.title')}
-          </h2>
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span
+              className="flex h-8 w-8 items-center justify-center rounded-lg shrink-0"
+              style={{
+                backgroundColor: 'var(--accent-primary-soft)',
+                color: 'var(--accent-primary)',
+              }}
+            >
+              <BrandInkIcon size={18} />
+            </span>
+            <h2
+              className="text-xl font-bold tracking-tight truncate font-serif-editorial"
+              style={{ color: 'var(--text-primary)' }}
+            >
+              {t('history.title')}
+            </h2>
+          </div>
           {history.length > 0 && (
             <button
               onClick={onClearAll}
-              className="px-3 py-1.5 text-sm rounded-lg transition-colors font-medium"
-              style={{
-                backgroundColor: 'var(--accent-danger)',
-                color: 'white',
-              }}
+              className="theme-button-danger px-2.5 py-1.5 text-xs inline-flex items-center gap-1.5 shrink-0"
             >
-              🗑️ {t('history.clearAll')}
+              <TrashIcon size={13} />
+              <span>{t('history.clearAll')}</span>
             </button>
           )}
         </div>
@@ -108,23 +138,24 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
             onChange={(e) => onSearchQueryChange(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && onSearch()}
             placeholder={t('history.searchPlaceholder')}
-            className="flex-1 theme-input"
+            className="flex-1 text-sm theme-input"
             aria-label={t('history.searchAria')}
           />
           <button
             onClick={onSearch}
-            className="px-4 py-2 rounded-lg text-white font-medium transition-all hover:scale-105"
-            style={{ background: 'var(--gradient-primary)' }}
+            className="theme-button-primary px-3.5 py-2 inline-flex items-center justify-center"
+            aria-label={t('history.searchAria')}
+            title={t('history.searchAria')}
           >
-            🔍
+            <SearchIcon size={16} />
           </button>
         </div>
-        <div className="mt-3 flex items-center justify-between text-xs">
+        <div className="mt-3 flex items-center justify-between text-xs tabular-nums">
           <span style={{ color: 'var(--text-muted)' }}>
             {t('history.commentsWithCount', { count: historyTotal })}
           </span>
           {historyTotalPages > 0 && (
-            <span style={{ color: 'var(--text-muted)' }}>
+            <span className="font-mono-code" style={{ color: 'var(--text-muted)' }}>
               {historyPage} / {historyTotalPages}
             </span>
           )}
@@ -133,13 +164,28 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
 
       <div ref={listContainerRef} className="flex-1 overflow-y-auto">
         {loading ? (
-          <div className="p-6 text-center" style={{ color: 'var(--text-muted)' }}>
-            <div className="animate-pulse">⏳ {t('common.loading')}</div>
+          <div
+            className="p-8 flex flex-col items-center justify-center gap-2.5 text-center"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <div
+              className="h-5 w-5 animate-spin rounded-full border-2 border-t-transparent"
+              style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }}
+            />
+            <div className="text-sm">{t('common.loading')}</div>
           </div>
         ) : history.length === 0 ? (
-          <div className="p-6 text-center" style={{ color: 'var(--text-muted)' }}>
-            <p className="text-4xl mb-2">📭</p>
-            <p>{t('history.noHistory')}</p>
+          <div
+            className="p-10 flex flex-col items-center justify-center text-center"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            <div
+              className="mb-3 flex h-12 w-12 items-center justify-center rounded-full"
+              style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}
+            >
+              <HistoryIcon size={22} />
+            </div>
+            <p className="text-sm">{t('history.noHistory')}</p>
           </div>
         ) : (
           history.map(renderItem)
@@ -149,20 +195,22 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
       {historyTotalPages > 1 && (
         <div
           className="p-3 flex items-center justify-between"
-          style={{ borderTop: '1px solid var(--border-primary)' }}
+          style={{
+            borderTop: '1px solid var(--border-primary)',
+            backgroundColor: 'var(--bg-secondary)',
+          }}
         >
           <button
             onClick={() => onHistoryPageChange((current) => Math.max(1, current - 1))}
             disabled={historyPage <= 1 || loading}
-            className="px-3 py-1 rounded text-sm font-medium transition-all disabled:opacity-50"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-            }}
+            className="theme-button-secondary px-3 py-1 text-xs disabled:opacity-50"
           >
             ← {t('common.previous')}
           </button>
-          <span className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>
+          <span
+            className="text-xs font-mono-code font-medium tabular-nums"
+            style={{ color: 'var(--text-muted)' }}
+          >
             {historyPage} / {historyTotalPages}
           </span>
           <button
@@ -170,11 +218,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
               onHistoryPageChange((current) => Math.min(historyTotalPages, current + 1))
             }
             disabled={historyPage >= historyTotalPages || loading}
-            className="px-3 py-1 rounded text-sm font-medium transition-all disabled:opacity-50"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-            }}
+            className="theme-button-secondary px-3 py-1 text-xs disabled:opacity-50"
           >
             {t('common.next')} →
           </button>

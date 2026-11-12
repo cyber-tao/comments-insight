@@ -381,8 +381,11 @@ describe('AIModelSettings', () => {
     ) as HTMLInputElement;
     expect(apiKeyInput.type).toBe('password');
 
-    fireEvent.click(screen.getByRole('button', { name: /👁/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Show API Key/i }));
     expect(apiKeyInput.type).toBe('text');
+
+    fireEvent.click(screen.getByRole('button', { name: /Hide API Key/i }));
+    expect(apiKeyInput.type).toBe('password');
 
     const resetButtons = screen.getAllByRole('button', { name: 'options.resetTemplate' });
     fireEvent.click(resetButtons[0]);

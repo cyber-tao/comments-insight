@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { HISTORY_UI } from '@/config/constants';
 import { Comment } from '@/types';
 import { formatCommentTimestamp } from '@/utils/date-formatter';
+import { CommentsIcon, HeartIcon } from '@/components/Icons';
 
 interface CommentTreeProps {
   comments: Comment[];
@@ -28,7 +29,9 @@ export const CommentTree: React.FC<CommentTreeProps> = ({ comments, depth = 0 })
 
   if (depth >= HISTORY_UI.MAX_COMMENT_DEPTH) {
     return (
-      <div className="ml-4 pl-4 text-xs text-gray-400 italic">{t('history.deepRepliesHidden')}</div>
+      <div className="ml-4 pl-4 text-xs italic" style={{ color: 'var(--text-muted)' }}>
+        {t('history.deepRepliesHidden')}
+      </div>
     );
   }
 
@@ -42,68 +45,75 @@ export const CommentTree: React.FC<CommentTreeProps> = ({ comments, depth = 0 })
         const isExpanded = expandedReplies.has(comment.id);
 
         return (
-          <div key={comment.id} className="mb-4 animate-fade-in">
+          <div key={comment.id} className="mb-3.5 animate-fade-in">
             <div
-              className="p-4 rounded-xl transition-all hover:shadow-md"
+              className="p-4 rounded-xl transition-colors"
               style={{
-                backgroundColor: 'var(--bg-tertiary)',
+                backgroundColor: depth === 0 ? 'var(--bg-card)' : 'var(--bg-tertiary)',
                 border: '1px solid var(--border-primary)',
+                boxShadow: depth === 0 ? 'var(--shadow-sm)' : 'none',
               }}
             >
-              <div className="flex items-center gap-3 mb-3">
+              <div className="flex items-center gap-3 mb-2.5">
                 <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm"
-                  style={{ background: 'var(--gradient-primary)' }}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center font-mono-code font-semibold text-xs shrink-0"
+                  style={{
+                    backgroundColor: 'var(--accent-primary-soft)',
+                    color: 'var(--accent-primary)',
+                    border: '1px solid rgba(var(--accent-primary-rgb), 0.2)',
+                  }}
                 >
                   {comment.username.charAt(0).toUpperCase()}
                 </div>
-                <div className="flex-1">
-                  <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                <div className="flex-1 min-w-0">
+                  <span
+                    className="font-semibold text-sm block truncate"
+                    style={{ color: 'var(--text-primary)' }}
+                  >
                     {comment.username}
                   </span>
                   <div
-                    className="flex items-center gap-3 text-xs"
+                    className="flex items-center gap-3 text-xs tabular-nums mt-0.5"
                     style={{ color: 'var(--text-muted)' }}
                   >
-                    <span>📅 {formatCommentTimestamp(comment.timestamp)}</span>
-                    <span className="flex items-center gap-1">
-                      <span className="text-red-500">❤️</span> {comment.likes}
+                    <span>{formatCommentTimestamp(comment.timestamp)}</span>
+                    <span className="inline-flex items-center gap-1">
+                      <HeartIcon size={12} style={{ color: 'var(--accent-secondary)' }} />
+                      {comment.likes}
                     </span>
                   </div>
                 </div>
                 {hasReplies && (
                   <button
                     onClick={() => toggleReplies(comment.id)}
-                    className="px-3 py-1 rounded-full text-xs font-medium transition-all hover:scale-105"
+                    className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors inline-flex items-center gap-1 tabular-nums"
                     style={{
-                      backgroundColor: isExpanded ? 'var(--accent-primary)' : 'var(--bg-card)',
-                      color: isExpanded ? 'white' : 'var(--text-secondary)',
-                      border: isExpanded ? 'none' : '1px solid var(--border-primary)',
+                      backgroundColor: isExpanded ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+                      color: isExpanded ? '#ffffff' : 'var(--text-secondary)',
+                      border: isExpanded
+                        ? '1px solid transparent'
+                        : '1px solid var(--border-primary)',
                     }}
                   >
-                    {isExpanded ? '▼' : '▶'} 💬{' '}
-                    {comment.replies.length === 1
-                      ? t('history.reply', { count: comment.replies.length })
-                      : t('history.replies', { count: comment.replies.length })}
+                    <span>{isExpanded ? '▼' : '▶'}</span>
+                    <CommentsIcon size={11} />
+                    <span>
+                      {comment.replies.length === 1
+                        ? t('history.reply', { count: comment.replies.length })
+                        : t('history.replies', { count: comment.replies.length })}
+                    </span>
                   </button>
                 )}
               </div>
               <p
-                className="whitespace-pre-wrap leading-relaxed"
+                className="whitespace-pre-wrap text-sm leading-relaxed"
                 style={{ color: 'var(--text-secondary)' }}
               >
                 {comment.content}
               </p>
             </div>
             {hasReplies && isExpanded && (
-              <div className="mt-3">
-                {/* Note: In recursive calls, we don't pass down expandedReplies state,
-                    because the root tree component maintains the full set for all descendants based on ID.
-                    Wait, if CommentTree manages its own state, then nested CommentTree components will have their own state!
-                    This is fine, except the `expandedReplies` ID is flat in the original.
-                    So if we recursively use `<CommentTree comments={comment.replies} depth={depth + 1} />`,
-                    each sub-tree will manage its own expansion state.
-                    This is actually better encapsulation! */}
+              <div className="mt-2.5">
                 <CommentTree comments={comment.replies} depth={depth + 1} />
               </div>
             )}

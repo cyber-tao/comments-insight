@@ -149,16 +149,16 @@ describe('HistorySidebar', () => {
     });
     expect(onSearch).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByText('🔍'));
+    fireEvent.click(screen.getByRole('button', { name: 'history.searchAria' }));
     expect(onSearch).toHaveBeenCalledTimes(2);
 
-    fireEvent.click(screen.getByText('🗑️ history.clearAll'));
+    fireEvent.click(screen.getByText('history.clearAll'));
     expect(onClearAll).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByText('Entry 1'));
     expect(onSelectHistoryItem).toHaveBeenCalledWith(entries[0]);
 
-    fireEvent.click(screen.getAllByText('🗑️')[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'common.delete' })[0]);
     expect(onDeleteHistoryItem).toHaveBeenCalledWith('1');
 
     fireEvent.click(screen.getByText('← common.previous'));
@@ -196,7 +196,7 @@ describe('HistorySidebar', () => {
       />,
     );
 
-    expect(screen.getByText('⏳ common.loading')).toBeTruthy();
+    expect(screen.getByText('common.loading')).toBeTruthy();
 
     rerender(
       <HistorySidebar
@@ -356,7 +356,7 @@ describe('HistoryDetailPanel', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('💬 history.comments'));
+    fireEvent.click(screen.getByText('history.comments'));
     expect(onViewModeChange).toHaveBeenCalledWith('comments');
 
     fireEvent.click(screen.getByText('history.reanalyze'));

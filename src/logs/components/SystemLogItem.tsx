@@ -3,6 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { LOG_LEVEL_LABELS } from '@/config/constants';
 import { SystemLogEntry } from '../hooks/useLogs';
 import { Logger } from '@/utils/logger';
+import {
+  AlertTriangleIcon,
+  CopyIcon,
+  InfoIcon,
+  SearchIcon,
+  TrashIcon,
+  XIcon,
+} from '@/components/Icons';
 
 interface SystemLogItemProps {
   log: SystemLogEntry;
@@ -27,13 +35,19 @@ export const SystemLogItem: React.FC<SystemLogItemProps> = ({ log, onDelete }) =
     timeStyle: 'medium',
   }).format(log.timestamp);
 
-  const levelIcon =
-    {
-      DEBUG: '🔍',
-      INFO: 'ℹ️',
-      WARN: '⚠️',
-      ERROR: '❌',
-    }[log.level] || 'ℹ️';
+  const renderLevelIcon = () => {
+    switch (log.level) {
+      case 'DEBUG':
+        return <SearchIcon size={14} />;
+      case 'WARN':
+        return <AlertTriangleIcon size={14} />;
+      case 'ERROR':
+        return <XIcon size={14} />;
+      case 'INFO':
+      default:
+        return <InfoIcon size={14} />;
+    }
+  };
 
   const levelClass = log.level.toLowerCase();
   const levelLabel = t(LOG_LEVEL_LABELS[log.level]);
@@ -47,7 +61,8 @@ export const SystemLogItem: React.FC<SystemLogItemProps> = ({ log, onDelete }) =
       >
         <div className="log-header">
           <span className="log-type">
-            {levelIcon} {levelLabel}
+            {renderLevelIcon()}
+            <span>{levelLabel}</span>
           </span>
           <span className="log-time">{formattedTime}</span>
         </div>
@@ -103,10 +118,12 @@ export const SystemLogItem: React.FC<SystemLogItemProps> = ({ log, onDelete }) =
                   )
                 }
               >
-                📋 {t('logs.copyLog')}
+                <CopyIcon size={14} />
+                <span>{t('logs.copyLog')}</span>
               </button>
               <button className="btn-danger" onClick={(e) => onDelete(log.key, e)}>
-                🗑️ {t('common.delete')}
+                <TrashIcon size={14} />
+                <span>{t('common.delete')}</span>
               </button>
             </div>
           </div>

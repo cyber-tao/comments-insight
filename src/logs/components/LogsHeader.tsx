@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { DownloadIcon, RefreshIcon, TrashIcon } from '@/components/Icons';
 
 interface LogsHeaderProps {
   onRefresh: () => void;
@@ -31,14 +32,17 @@ export const LogsHeader: React.FC<LogsHeaderProps> = ({
             aria-label={t('logs.searchAria')}
           />
         </div>
-        <button className="btn-primary" onClick={onRefresh}>
-          🔄 {t('logs.refresh')}
+        <button className="btn-secondary" onClick={onRefresh}>
+          <RefreshIcon size={14} />
+          <span>{t('logs.refresh')}</span>
         </button>
         <button className="btn-primary" onClick={onExport}>
-          📥 {t('logs.export')}
+          <DownloadIcon size={14} />
+          <span>{t('logs.export')}</span>
         </button>
         <button className="btn-danger" onClick={onClearAll}>
-          🗑️ {t('logs.clearAll')}
+          <TrashIcon size={14} />
+          <span>{t('logs.clearAll')}</span>
         </button>
       </div>
     </div>

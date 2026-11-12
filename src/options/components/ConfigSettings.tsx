@@ -6,6 +6,7 @@ import { API } from '@/config/constants';
 import { resolveCrawlingConfigLastUpdated } from '@/utils/crawling-config';
 import { crawlingConfigSchema } from '@/utils/storage-validation';
 import { Logger } from '../../utils/logger';
+import { DownloadIcon, RefreshIcon, UploadIcon } from '@/components/Icons';
 import { ConfigList } from './ConfigList';
 import { ConfigImportDialog, ConflictItem, MERGE_FIELDS } from './ConfigImportDialog';
 import { ConfigSyncDialog } from './ConfigSyncDialog';
@@ -376,56 +377,45 @@ export const ConfigSettings: React.FC<Props> = ({
   }
 
   return (
-    <div
-      className="p-6 rounded-lg shadow-sm"
-      style={{
-        backgroundColor: 'var(--bg-card)',
-        border: '1px solid var(--border-primary)',
-      }}
-    >
-      <div className="flex justify-between items-center mb-2">
+    <div className="theme-card p-6">
+      <div className="flex flex-wrap justify-between items-start gap-4 mb-5">
         <div>
-          <h2 className="text-xl font-semibold" style={{ color: 'var(--text-primary)' }}>
+          <h2
+            className="text-lg font-bold font-serif-editorial"
+            style={{ color: 'var(--text-primary)' }}
+          >
             {t('options.crawlingConfigs.title')}
           </h2>
           <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
             {t('options.crawlingConfigs.subtitle')}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setSyncDialogOpen(true)}
             disabled={syncing}
-            className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 text-white"
-            style={{ backgroundColor: '#8b5cf6' }}
+            className="theme-button-secondary px-3.5 py-2 text-xs inline-flex items-center gap-1.5 disabled:opacity-50"
           >
-            {syncing
-              ? t('options.crawlingConfigs.syncing')
-              : t('options.crawlingConfigs.syncRemote')}
+            <RefreshIcon size={14} className={syncing ? 'animate-spin' : ''} />
+            <span>
+              {syncing
+                ? t('options.crawlingConfigs.syncing')
+                : t('options.crawlingConfigs.syncRemote')}
+            </span>
           </button>
-          <label
-            className="px-4 py-2 rounded-md text-sm font-medium cursor-pointer text-white"
-            style={{ backgroundColor: 'var(--accent-secondary)' }}
-          >
-            {t('options.crawlingConfigs.importConfig')}
+          <label className="theme-button-secondary px-3.5 py-2 text-xs inline-flex items-center gap-1.5 cursor-pointer">
+            <UploadIcon size={14} />
+            <span>{t('options.crawlingConfigs.importConfig')}</span>
             <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
           </label>
           <button
             onClick={handleExportSelected}
-            className="px-4 py-2 rounded-md text-sm font-medium text-white"
-            style={{ backgroundColor: 'var(--accent-primary)' }}
+            className="theme-button-secondary px-3.5 py-2 text-xs inline-flex items-center gap-1.5"
           >
-            {t('options.crawlingConfigs.exportConfig')}
+            <DownloadIcon size={14} />
+            <span>{t('options.crawlingConfigs.exportConfig')}</span>
           </button>
-          <button
-            onClick={handleAdd}
-            className="px-4 py-2 border rounded-md text-sm font-medium"
-            style={{
-              backgroundColor: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              borderColor: 'var(--border-primary)',
-            }}
-          >
+          <button onClick={handleAdd} className="theme-button-primary px-3.5 py-2 text-xs">
             {t('options.crawlingConfigs.newConfig')}
           </button>
         </div>

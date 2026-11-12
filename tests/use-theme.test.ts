@@ -71,6 +71,7 @@ describe('useTheme', () => {
     expect(result.current.resolvedTheme).toBe('dark');
     expect(result.current.isDark).toBe(true);
     expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement.style.colorScheme).toBe('dark');
   });
 
   it('tracks system theme changes and allows manual overrides', async () => {
@@ -105,6 +106,7 @@ describe('useTheme', () => {
     expect(result.current.theme).toBe('light');
     expect(result.current.resolvedTheme).toBe('light');
     expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(document.documentElement.style.colorScheme).toBe('light');
   });
 
   it('falls back to default theme when settings load fails', async () => {

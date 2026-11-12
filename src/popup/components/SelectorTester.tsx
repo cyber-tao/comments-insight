@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LIMITS, MESSAGES, STORAGE } from '@/config/constants';
+import { SearchIcon } from '@/components/Icons';
 import type { SelectorRule } from '@/types';
 
 interface SelectorTestResult {
@@ -117,23 +118,27 @@ export const SelectorTester: React.FC = () => {
         borderTop: '1px solid var(--border-primary)',
       }}
     >
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--text-secondary)' }}>
+      <div className="flex items-center justify-between mb-2.5">
+        <h3
+          className="text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          <SearchIcon size={13} />
           {t('popup.selectorTesterTitle')}
         </h3>
       </div>
       <div className="space-y-2">
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           <input
             type="text"
-            className="flex-1 px-2 py-1 rounded text-sm theme-input"
+            className="flex-1 px-2.5 py-1.5 rounded-lg text-xs font-mono-code theme-input"
             placeholder={t('popup.selectorTesterPlaceholder')}
             value={selector}
             onChange={(e) => setSelector(e.target.value)}
             maxLength={LIMITS.SELECTOR_TEST_MAX_QUERY_LENGTH}
           />
           <select
-            className="px-2 py-1 rounded text-sm theme-input"
+            className="px-2 py-1.5 rounded-lg text-xs font-mono-code theme-input"
             value={selectorType}
             onChange={(e) => setSelectorType(e.target.value as SelectorRule['type'])}
           >
@@ -141,7 +146,7 @@ export const SelectorTester: React.FC = () => {
             <option value="xpath">{t('popup.selectorTypeXpath')}</option>
           </select>
           <button
-            className="px-3 py-1 text-sm rounded text-white disabled:opacity-50 transition-colors"
+            className="px-3 py-1.5 text-xs rounded-lg font-medium text-white disabled:opacity-50 transition-colors"
             style={{ backgroundColor: 'var(--accent-primary)' }}
             onClick={handleTest}
             disabled={loading}
@@ -151,13 +156,13 @@ export const SelectorTester: React.FC = () => {
         </div>
 
         {typeof total === 'number' && (
-          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          <div className="text-xs tabular-nums" style={{ color: 'var(--text-tertiary)' }}>
             {t('popup.selectorTesterMatches', { count: total })}
           </div>
         )}
 
         {showTruncated && (
-          <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          <div className="text-xs tabular-nums" style={{ color: 'var(--text-muted)' }}>
             {t('popup.selectorTesterTruncated', { count: LIMITS.SELECTOR_TEST_MAX_RESULTS })}
           </div>
         )}
@@ -176,7 +181,7 @@ export const SelectorTester: React.FC = () => {
 
         {showResults && (
           <ul
-            className="max-h-40 overflow-y-auto rounded text-xs"
+            className="max-h-40 overflow-y-auto rounded-lg text-xs"
             style={{
               backgroundColor: 'var(--bg-tertiary)',
               border: '1px solid var(--border-primary)',
@@ -190,9 +195,9 @@ export const SelectorTester: React.FC = () => {
                 style={{ borderBottom: '1px solid var(--border-primary)' }}
               >
                 <span
-                  className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold"
+                  className="mt-0.5 flex h-5 w-5 items-center justify-center rounded text-[10px] font-mono-code font-semibold tabular-nums shrink-0"
                   style={{
-                    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                    backgroundColor: 'var(--accent-primary-soft)',
                     color: 'var(--accent-primary)',
                   }}
                 >

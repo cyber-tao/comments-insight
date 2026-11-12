@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AiLogEntry } from '../hooks/useLogs';
 import { Logger } from '@/utils/logger';
+import { CopyIcon, DownloadIcon, ReportIcon, TrashIcon } from '@/components/Icons';
 
 interface AiLogItemProps {
   log: AiLogEntry;
@@ -26,7 +27,6 @@ export const AiLogItem: React.FC<AiLogItemProps> = ({ log, onDelete }) => {
     timeStyle: 'medium',
   }).format(log.timestamp);
   const typeLabel = log.type === 'extraction' ? t('logs.aiExtraction') : t('logs.aiAnalysis');
-  const typeIcon = log.type === 'extraction' ? '📥' : '📊';
   const promptLabel = t('logs.promptLength', { count: log.prompt?.length || 0 });
   const responseLabel = t('logs.responseLength', { count: log.response?.length || 0 });
 
@@ -39,7 +39,12 @@ export const AiLogItem: React.FC<AiLogItemProps> = ({ log, onDelete }) => {
       >
         <div className="log-header">
           <span className="log-type">
-            {typeIcon} {typeLabel}
+            {log.type === 'extraction' ? (
+              <DownloadIcon size={14} style={{ color: 'var(--accent-secondary)' }} />
+            ) : (
+              <ReportIcon size={14} style={{ color: 'var(--accent-primary)' }} />
+            )}
+            <span>{typeLabel}</span>
           </span>
           <span className="log-time">{formattedTime}</span>
         </div>
@@ -68,13 +73,16 @@ export const AiLogItem: React.FC<AiLogItemProps> = ({ log, onDelete }) => {
 
             <div className="log-actions">
               <button className="btn-secondary" onClick={(e) => copyToClipboard(log.prompt, e)}>
-                📋 {t('logs.copyPrompt')}
+                <CopyIcon size={14} />
+                <span>{t('logs.copyPrompt')}</span>
               </button>
               <button className="btn-secondary" onClick={(e) => copyToClipboard(log.response, e)}>
-                📋 {t('logs.copyResponse')}
+                <CopyIcon size={14} />
+                <span>{t('logs.copyResponse')}</span>
               </button>
               <button className="btn-danger" onClick={(e) => onDelete(log.key, e)}>
-                🗑️ {t('common.delete')}
+                <TrashIcon size={14} />
+                <span>{t('common.delete')}</span>
               </button>
             </div>
           </div>

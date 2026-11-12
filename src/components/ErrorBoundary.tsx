@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Logger } from '@/utils/logger';
 import i18n from '@/utils/i18n';
+import { AlertTriangleIcon, RefreshIcon } from '@/components/Icons';
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -40,24 +41,29 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
           style={{ backgroundColor: 'var(--bg-secondary)' }}
         >
           <div
-            className="max-w-md w-full p-6 rounded-xl shadow-lg"
+            className="max-w-md w-full p-6 rounded-xl"
             style={{
               backgroundColor: 'var(--bg-card)',
               border: '1px solid var(--border-primary)',
+              boxShadow: 'var(--shadow-md)',
             }}
           >
-            <h2 className="text-xl font-bold mb-4" style={{ color: 'var(--accent-danger)' }}>
-              {i18n.t('errors.renderFailed')}
-            </h2>
-            <p className="mb-4" style={{ color: 'var(--text-secondary)' }}>
+            <div className="flex items-center gap-2.5 mb-3">
+              <AlertTriangleIcon size={20} style={{ color: 'var(--accent-danger)' }} />
+              <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+                {i18n.t('errors.renderFailed')}
+              </h2>
+            </div>
+            <p className="mb-4 text-sm leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
               {i18n.t('errors.renderRecovery')}
             </p>
             {this.state.error && (
               <pre
-                className="p-3 rounded text-sm overflow-auto max-h-40"
+                className="p-3 rounded-lg text-xs overflow-auto max-h-40 font-mono-code"
                 style={{
                   backgroundColor: 'var(--bg-tertiary)',
-                  color: 'var(--text-muted)',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid var(--border-primary)',
                 }}
               >
                 {this.state.error.message}
@@ -65,9 +71,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
             )}
             <button
               onClick={() => window.location.reload()}
-              className="mt-4 px-4 py-2 rounded-lg text-white font-medium transition-all hover:scale-105"
-              style={{ background: 'var(--gradient-primary)' }}
+              className="mt-4 theme-button-primary inline-flex items-center gap-2 text-sm"
             >
+              <RefreshIcon size={15} />
               {i18n.t('common.reloadPage')}
             </button>
           </div>

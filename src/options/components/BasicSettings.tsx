@@ -5,6 +5,7 @@ import { LANGUAGES, UI_LIMITS, THEME } from '@/config/constants';
 import { Settings, SettingsPatch } from '@/types';
 import { changeLanguage } from '@/utils/i18n';
 import { parseFiniteIntegerInput } from '@/utils/number';
+import { MonitorIcon, MoonIcon, SunIcon } from '@/components/Icons';
 
 interface BasicSettingsProps {
   settings: Settings;
@@ -37,7 +38,10 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
 
   return (
     <section className="mb-8 theme-card p-6">
-      <h2 className="text-xl font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
+      <h2
+        className="text-lg font-bold mb-4 font-serif-editorial"
+        style={{ color: 'var(--text-primary)' }}
+      >
         {t('options.basicSettings')}
       </h2>
 
@@ -52,7 +56,7 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
           type="number"
           value={settings.maxComments}
           onChange={handleMaxCommentsChange}
-          className="w-full theme-input"
+          className="w-full theme-input tabular-nums"
           min={UI_LIMITS.MAX_COMMENTS_MIN}
           max={UI_LIMITS.MAX_COMMENTS_MAX}
         />
@@ -82,46 +86,57 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
         </select>
       </div>
 
-      <div className="mb-4">
+      <div className="mb-5">
         <label
           className="block text-sm font-medium mb-2"
           style={{ color: 'var(--text-secondary)' }}
         >
           {t('options.theme')}
         </label>
-        <div className="flex gap-2">
-          {THEME.OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => handleThemeChange(option.value as 'light' | 'dark' | 'system')}
-              className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                settings.theme === option.value
-                  ? 'bg-blue-500 text-white shadow-md'
-                  : 'theme-button-secondary'
-              }`}
-            >
-              {option.value === 'light' && '☀️ '}
-              {option.value === 'dark' && '🌙 '}
-              {option.value === 'system' && '💻 '}
-              {t(option.labelKey)}
-            </button>
-          ))}
+        <div
+          className="grid grid-cols-3 gap-2 p-1 rounded-xl"
+          style={{
+            backgroundColor: 'var(--bg-tertiary)',
+            border: '1px solid var(--border-primary)',
+          }}
+        >
+          {THEME.OPTIONS.map((option) => {
+            const isActive = settings.theme === option.value;
+            return (
+              <button
+                key={option.value}
+                onClick={() => handleThemeChange(option.value as 'light' | 'dark' | 'system')}
+                className="px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2"
+                style={{
+                  backgroundColor: isActive ? 'var(--bg-card)' : 'transparent',
+                  color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                  boxShadow: isActive ? 'var(--shadow-sm)' : 'none',
+                  border: isActive ? '1px solid var(--border-primary)' : '1px solid transparent',
+                }}
+              >
+                {option.value === 'light' && <SunIcon size={15} />}
+                {option.value === 'dark' && <MoonIcon size={15} />}
+                {option.value === 'system' && <MonitorIcon size={15} />}
+                <span>{t(option.labelKey)}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="mb-4 flex items-start gap-2">
+      <div className="mb-4 flex items-start gap-2.5">
         <input
           type="checkbox"
           id="normalizeTimestamps"
           checked={settings.normalizeTimestamps}
           onChange={(e) => onSettingsChange({ normalizeTimestamps: e.target.checked })}
-          className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
+          className="mt-1 h-4 w-4 rounded"
           style={{ borderColor: 'var(--border-primary)' }}
         />
         <div>
           <label
             htmlFor="normalizeTimestamps"
-            className="text-sm font-medium"
+            className="text-sm font-medium cursor-pointer"
             style={{ color: 'var(--text-primary)' }}
           >
             {t('options.normalizeTimestamps')}
@@ -132,19 +147,19 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
         </div>
       </div>
 
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2.5">
         <input
           type="checkbox"
           id="exportPostContentInMarkdown"
           checked={settings.exportPostContentInMarkdown}
           onChange={(e) => onSettingsChange({ exportPostContentInMarkdown: e.target.checked })}
-          className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
+          className="mt-1 h-4 w-4 rounded"
           style={{ borderColor: 'var(--border-primary)' }}
         />
         <div>
           <label
             htmlFor="exportPostContentInMarkdown"
-            className="text-sm font-medium"
+            className="text-sm font-medium cursor-pointer"
             style={{ color: 'var(--text-primary)' }}
           >
             {t('options.exportPostContentInMarkdown')}

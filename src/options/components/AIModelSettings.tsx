@@ -13,6 +13,7 @@ import { ExtensionAPI } from '@/utils/extension-api';
 import { ErrorCode, ExtensionError } from '@/utils/error-types';
 import { parseFiniteIntegerInput, parseFiniteNumberInput } from '@/utils/number';
 import { normalizeAiApiUrl } from '@/utils/url';
+import { EyeIcon, EyeOffIcon, RefreshIcon, SparklesIcon } from '@/components/Icons';
 import { SearchableModelSelect } from './SearchableModelSelect';
 
 interface AIModelSettingsProps {
@@ -168,7 +169,10 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
   return (
     <>
       <section className="mb-8 theme-card p-6">
-        <h2 className="text-xl font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
+        <h2
+          className="text-lg font-bold mb-4 font-serif-editorial"
+          style={{ color: 'var(--text-primary)' }}
+        >
           {t('options.aiModel')}
         </h2>
 
@@ -187,7 +191,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 aiModel: { apiUrl: e.target.value },
               })
             }
-            className="w-full theme-input"
+            className="w-full theme-input font-mono-code text-sm"
             placeholder={API.EXAMPLE_COMPLETIONS_URL}
           />
         </div>
@@ -208,15 +212,17 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   aiModel: { apiKey: e.target.value },
                 })
               }
-              className="flex-1 theme-input"
+              className="flex-1 theme-input font-mono-code text-sm"
               placeholder={t('options.apiKeyPlaceholder')}
             />
             <button
               type="button"
               onClick={() => setShowApiKey(!showApiKey)}
-              className="px-3 py-2 rounded-lg theme-button-secondary"
+              className="px-3 py-2 rounded-lg theme-button-secondary inline-flex items-center justify-center"
+              aria-label={showApiKey ? 'Hide API Key' : 'Show API Key'}
+              title={showApiKey ? 'Hide API Key' : 'Show API Key'}
             >
-              {showApiKey ? '🙈' : '👁️'}
+              {showApiKey ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
             </button>
           </div>
           <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
@@ -242,7 +248,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
               type="text"
               value={settings.aiModel.model}
               onChange={(e) => handleModelChange(e.target.value)}
-              className="w-full theme-input"
+              className="w-full theme-input font-mono-code text-sm"
               placeholder={t('options.modelPlaceholder')}
             />
           )}
@@ -275,7 +281,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   },
                 });
               }}
-              className="w-full theme-input"
+              className="w-full theme-input tabular-nums"
               min={AI.MIN_CONTEXT_WINDOW}
             />
           </div>
@@ -300,7 +306,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   },
                 });
               }}
-              className="w-full theme-input"
+              className="w-full theme-input tabular-nums"
               min={AI.MIN_OUTPUT_TOKENS}
               max={maxAllowedOutputTokens}
             />
@@ -330,7 +336,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   },
                 });
               }}
-              className="w-full theme-input"
+              className="w-full theme-input tabular-nums"
               min={UI_LIMITS.TEMPERATURE_MIN}
               max={UI_LIMITS.TEMPERATURE_MAX}
             />
@@ -357,31 +363,43 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                   },
                 });
               }}
-              className="w-full theme-input"
+              className="w-full theme-input tabular-nums"
               min={UI_LIMITS.TOP_P_MIN}
               max={UI_LIMITS.TOP_P_MAX}
             />
           </div>
         </div>
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-5 flex gap-2.5">
           <button
             type="button"
             onClick={handleFetchModels}
             disabled={loadingModels || testingModel}
-            className="px-4 py-2 rounded-lg text-white font-medium transition-all disabled:opacity-50"
-            style={{ backgroundColor: '#8b5cf6' }}
+            className="theme-button-secondary px-4 py-2 text-sm inline-flex items-center gap-2 disabled:opacity-50"
           >
-            {loadingModels ? t('common.loading') : '🔄 ' + t('options.fetchModels')}
+            {loadingModels ? (
+              t('common.loading')
+            ) : (
+              <>
+                <RefreshIcon size={15} />
+                <span>{t('options.fetchModels')}</span>
+              </>
+            )}
           </button>
           <button
             type="button"
             onClick={handleTestModel}
             disabled={testingModel || loadingModels}
-            className="px-4 py-2 rounded-lg text-white font-medium transition-all disabled:opacity-50"
-            style={{ backgroundColor: 'var(--accent-secondary)' }}
+            className="theme-button-accent px-4 py-2 text-sm inline-flex items-center gap-2 disabled:opacity-50"
           >
-            {testingModel ? t('options.testing') : '🧪 ' + t('options.testModel')}
+            {testingModel ? (
+              t('options.testing')
+            ) : (
+              <>
+                <SparklesIcon size={15} />
+                <span>{t('options.testModel')}</span>
+              </>
+            )}
           </button>
         </div>
       </section>
@@ -407,7 +425,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           <textarea
             value={getAnalysisPromptTemplate(settings.analyzerPromptTemplate, settings.language)}
             onChange={(e) => onSettingsChange({ analyzerPromptTemplate: e.target.value })}
-            className="w-full theme-input font-mono text-sm"
+            className="w-full theme-input font-mono-code text-xs leading-relaxed"
             rows={UI_LIMITS.PROMPT_TEXTAREA_ROWS}
           />
 
@@ -415,7 +433,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             <button
               type="button"
               onClick={() => setShowPlaceholders(!showPlaceholders)}
-              className="text-sm theme-link flex items-center gap-1"
+              className="text-xs font-medium theme-link flex items-center gap-1"
             >
               <span>{showPlaceholders ? '▼' : '▶'}</span>
               <span>{t('options.availablePlaceholders')}</span>
@@ -466,19 +484,19 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
         </div>
 
         <div className="mt-8 pt-6 border-t border-[var(--border-primary)]">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between gap-4 mb-4">
             <div>
               <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
                 {t('options.generateDynamicReport', '动态分析网页生成')}
               </h3>
-              <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
+              <p className="text-sm mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
                 {t(
                   'options.generateDynamicReportDesc',
                   '分析完成后，通过独立的第二次 LLM API 调用生成响应式可视化 HTML 看板；脚本和外部资源会在沙箱渲染前被移除。',
                 )}
               </p>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
               <input
                 type="checkbox"
                 checked={settings.generateDynamicReport !== false}
@@ -489,7 +507,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 }
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-600"></div>
+              <div className="w-11 h-6 bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--accent-primary)] peer-checked:border-[var(--accent-primary)]"></div>
             </label>
           </div>
 
@@ -524,7 +542,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                     dynamicReportPromptTemplate: e.target.value,
                   })
                 }
-                className="w-full theme-input font-mono text-sm"
+                className="w-full theme-input font-mono-code text-xs leading-relaxed"
                 rows={UI_LIMITS.PROMPT_TEXTAREA_ROWS}
               />
 
@@ -532,7 +550,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowDynamicPlaceholders(!showDynamicPlaceholders)}
-                  className="text-sm theme-link flex items-center gap-1"
+                  className="text-xs font-medium theme-link flex items-center gap-1"
                 >
                   <span>{showDynamicPlaceholders ? '▼' : '▶'}</span>
                   <span>{t('options.availablePlaceholders')}</span>
@@ -612,9 +630,9 @@ interface PlaceholderItemProps {
 const PlaceholderItem: React.FC<PlaceholderItemProps> = ({ code, required, t, descKey }) => (
   <div>
     <code
-      className="text-sm font-mono px-2 py-1 rounded"
+      className="text-xs font-mono-code px-2 py-0.5 rounded"
       style={{
-        backgroundColor: required ? 'rgba(59, 130, 246, 0.2)' : 'rgba(16, 185, 129, 0.2)',
+        backgroundColor: required ? 'var(--accent-primary-soft)' : 'var(--accent-secondary-soft)',
         color: required ? 'var(--accent-primary)' : 'var(--accent-secondary)',
       }}
     >
@@ -625,7 +643,7 @@ const PlaceholderItem: React.FC<PlaceholderItemProps> = ({ code, required, t, de
         *{t('options.required')}
       </span>
     )}
-    <p className="text-sm mt-1" style={{ color: 'var(--text-tertiary)' }}>
+    <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
       {t(descKey)}
     </p>
   </div>

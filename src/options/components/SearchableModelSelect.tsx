@@ -113,10 +113,10 @@ export const SearchableModelSelect: React.FC<SearchableModelSelectProps> = ({
           {text.slice(0, idx)}
           <mark
             style={{
-              backgroundColor: 'rgba(59, 130, 246, 0.3)',
-              color: 'inherit',
+              backgroundColor: 'var(--accent-primary-soft)',
+              color: 'var(--accent-primary)',
               borderRadius: '2px',
-              padding: '0 1px',
+              padding: '0 2px',
             }}
           >
             {text.slice(idx, idx + searchTerm.length)}

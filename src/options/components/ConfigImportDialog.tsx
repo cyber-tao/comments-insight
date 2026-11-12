@@ -172,10 +172,13 @@ export const ConfigImportDialog: React.FC<ConfigImportDialogProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-[1px]">
       <div
-        className="rounded-lg shadow-lg w-full max-w-5xl p-6"
-        style={{ backgroundColor: 'var(--bg-card)' }}
+        className="rounded-xl shadow-lg w-full max-w-5xl p-6"
+        style={{
+          backgroundColor: 'var(--bg-card)',
+          border: '1px solid var(--border-primary)',
+        }}
       >
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -437,16 +440,13 @@ export const ConfigImportDialog: React.FC<ConfigImportDialogProps> = ({
             )}
           </div>
         )}
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm rounded bg-gray-100 text-gray-700 hover:bg-gray-200"
-          >
+        <div className="mt-5 flex justify-end gap-2.5">
+          <button onClick={onClose} className="theme-button-secondary px-4 py-2 text-sm">
             {t('common.cancel')}
           </button>
           <button
             onClick={() => onApply(importConflicts)}
-            className="px-4 py-2 text-sm rounded bg-green-600 text-white hover:bg-green-700"
+            className="theme-button-primary px-4 py-2 text-sm disabled:opacity-50"
             disabled={!!importError || !importHasChanges}
           >
             {t('options.crawlingConfigs.importApply')}

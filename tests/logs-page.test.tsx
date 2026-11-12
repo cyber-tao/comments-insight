@@ -293,10 +293,8 @@ describe('Logs Page', () => {
       render(<Logs />);
       await loadedLogs();
       if (kind === 'system') fireEvent.click(screen.getByText('logs.filterSystem (1)'));
-      fireEvent.click(
-        screen.getByText(kind === 'ai' ? '📊 logs.aiAnalysis' : 'system error message'),
-      );
-      fireEvent.click(screen.getByRole('button', { name: '🗑️ common.delete' }));
+      fireEvent.click(screen.getByText(kind === 'ai' ? 'logs.aiAnalysis' : 'system error message'));
+      fireEvent.click(screen.getByRole('button', { name: 'common.delete' }));
       const key = kind === 'ai' ? 'ai_log_2' : 'log_sys_1';
 
       await waitFor(() => expect(storageRemove).toHaveBeenCalledExactlyOnceWith([key]));
@@ -349,13 +347,13 @@ describe('Logs Page', () => {
       if (kind === 'system') fireEvent.click(screen.getByText('logs.filterSystem (1)'));
       if (operation === 'delete') {
         fireEvent.click(
-          screen.getByText(kind === 'ai' ? '📊 logs.aiAnalysis' : 'system error message'),
+          screen.getByText(kind === 'ai' ? 'logs.aiAnalysis' : 'system error message'),
         );
       }
       const action =
         operation === 'clear'
           ? screen.getByRole('button', { name: /logs.clearAll/ })
-          : screen.getByRole('button', { name: '🗑️ common.delete' });
+          : screen.getByRole('button', { name: 'common.delete' });
       await act(async () => {
         fireEvent.click(action);
         await removalStarted.promise;
@@ -513,10 +511,10 @@ describe('Logs Page', () => {
 
     // Expand
     fireEvent.click(screen.getAllByText('system error message')[0]);
-    expect(screen.getByText('📋 logs.copyLog')).toBeTruthy();
+    expect(screen.getByText('logs.copyLog')).toBeTruthy();
 
     // Collapse
     fireEvent.click(screen.getAllByText('system error message')[0]);
-    expect(screen.queryByText('📋 logs.copyLog')).toBeNull();
+    expect(screen.queryByText('logs.copyLog')).toBeNull();
   });
 });

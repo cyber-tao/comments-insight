@@ -68,13 +68,13 @@ export const TaskProgress: React.FC<TaskProgressProps> = ({ task }) => {
   const getStatusColor = () => {
     switch (task.status) {
       case 'running':
-        return 'bg-blue-500';
+        return 'var(--accent-primary)';
       case 'completed':
-        return 'bg-green-500';
+        return 'var(--accent-success)';
       case 'failed':
-        return 'bg-red-500';
+        return 'var(--accent-danger)';
       default:
-        return 'bg-gray-500';
+        return 'var(--text-muted)';
     }
   };
 
@@ -102,22 +102,45 @@ export const TaskProgress: React.FC<TaskProgressProps> = ({ task }) => {
         : t('popup.generatingConfig');
 
   return (
-    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent"></div>
-        <span className="text-sm font-medium text-blue-700">{taskLabel}</span>
+    <div
+      className="p-3.5 rounded-xl"
+      style={{
+        backgroundColor: 'var(--bg-card)',
+        border: '1px solid var(--border-primary)',
+        boxShadow: 'var(--shadow-sm)',
+      }}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <div
+          className="animate-spin rounded-full h-4 w-4 border-2 border-t-transparent"
+          style={{
+            borderColor: 'var(--accent-primary)',
+            borderTopColor: 'transparent',
+          }}
+        />
+        <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          {taskLabel}
+        </span>
       </div>
-      <div className="text-xs text-blue-600 mb-2">{getProgressMessage()}</div>
+      <div className="text-xs mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+        {getProgressMessage()}
+      </div>
       {estimatedTime > 0 && (
-        <div className="text-xs text-blue-500 mb-2">
+        <div className="text-xs mb-2 tabular-nums" style={{ color: 'var(--text-tertiary)' }}>
           {t('popup.estimatedTime')}: {formatTimeRemaining(estimatedTime)}
         </div>
       )}
-      <div className="w-full bg-blue-200 rounded-full h-2">
+      <div
+        className="w-full rounded-full h-1.5 overflow-hidden"
+        style={{ backgroundColor: 'var(--bg-tertiary)' }}
+      >
         <div
-          className={`h-2 rounded-full transition-all duration-300 ${getStatusColor()}`}
-          style={{ width: `${Math.max(task.progress, UI_LIMITS.MIN_PROGRESS_WIDTH_PERCENT)}%` }}
-        ></div>
+          className="h-1.5 rounded-full transition-all duration-300"
+          style={{
+            width: `${Math.max(task.progress, UI_LIMITS.MIN_PROGRESS_WIDTH_PERCENT)}%`,
+            backgroundColor: getStatusColor(),
+          }}
+        />
       </div>
     </div>
   );

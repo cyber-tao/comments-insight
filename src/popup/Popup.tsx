@@ -125,8 +125,15 @@ const Popup: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="w-96 p-6" style={{ background: 'var(--gradient-primary)' }}>
-        <div className="text-center text-white">{t('common.loading')}</div>
+      <div
+        className="w-96 p-8 flex flex-col items-center justify-center gap-3"
+        style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
+      >
+        <div
+          className="h-5 w-5 animate-spin rounded-full border-2 border-t-transparent"
+          style={{ borderColor: 'var(--accent-primary)', borderTopColor: 'transparent' }}
+        />
+        <div className="text-sm font-medium">{t('common.loading')}</div>
       </div>
     );
   }

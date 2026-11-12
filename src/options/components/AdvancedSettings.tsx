@@ -45,7 +45,10 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
 
   return (
     <section className="mb-8 theme-card p-6">
-      <h2 className="text-xl font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
+      <h2
+        className="text-lg font-bold mb-4 font-serif-editorial"
+        style={{ color: 'var(--text-primary)' }}
+      >
         {t('options.advancedSettings')}
       </h2>
       <div className="space-y-8 animate-fade-in">
@@ -68,14 +71,14 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                 aiTimeout: aiTimeoutSeconds * TIMEOUT.MS_PER_SEC,
               });
             }}
-            className="w-full theme-input"
+            className="w-full theme-input tabular-nums"
             min={TIMEOUT.MIN_AI_SECONDS}
             max={TIMEOUT.MAX_AI_SECONDS}
           />
         </div>
 
         <div>
-          <h3 className="text-md font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+          <h3 className="text-base font-semibold mb-1.5" style={{ color: 'var(--text-primary)' }}>
             {t('options.domAnalysisConfig')}
           </h3>
           <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
@@ -89,7 +92,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                 style={{ color: 'var(--text-secondary)' }}
               >
                 {t('options.initialDepth')}
-                <span className="text-xs ml-2" style={{ color: 'var(--text-muted)' }}>
+                <span className="text-xs ml-2 tabular-nums" style={{ color: 'var(--text-muted)' }}>
                   {t('options.recommended')}: {DOM_ANALYSIS_DEFAULTS.initialDepth}
                 </span>
               </label>
@@ -109,7 +112,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                     },
                   });
                 }}
-                className="w-full theme-input"
+                className="w-full theme-input tabular-nums"
                 min={UI_LIMITS.INITIAL_DEPTH_MIN}
                 max={UI_LIMITS.INITIAL_DEPTH_MAX}
               />
@@ -124,7 +127,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                 style={{ color: 'var(--text-secondary)' }}
               >
                 {t('options.expandDepth')}
-                <span className="text-xs ml-2" style={{ color: 'var(--text-muted)' }}>
+                <span className="text-xs ml-2 tabular-nums" style={{ color: 'var(--text-muted)' }}>
                   {t('options.recommended')}: {DOM_ANALYSIS_DEFAULTS.expandDepth}
                 </span>
               </label>
@@ -142,7 +145,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                     },
                   });
                 }}
-                className="w-full theme-input"
+                className="w-full theme-input tabular-nums"
                 min={UI_LIMITS.EXPAND_DEPTH_MIN}
                 max={UI_LIMITS.EXPAND_DEPTH_MAX}
               />
@@ -157,7 +160,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                 style={{ color: 'var(--text-secondary)' }}
               >
                 {t('options.maxDepth')}
-                <span className="text-xs ml-2" style={{ color: 'var(--text-muted)' }}>
+                <span className="text-xs ml-2 tabular-nums" style={{ color: 'var(--text-muted)' }}>
                   {t('options.recommended')}: {DOM_ANALYSIS_DEFAULTS.maxDepth}
                 </span>
               </label>
@@ -175,7 +178,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                     },
                   });
                 }}
-                className="w-full theme-input"
+                className="w-full theme-input tabular-nums"
                 min={UI_LIMITS.MAX_DEPTH_MIN}
                 max={UI_LIMITS.MAX_DEPTH_MAX}
               />
@@ -187,18 +190,18 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
         </div>
 
         <div>
-          <div className="mb-4 flex items-center">
+          <div className="mb-2 flex items-center">
             <input
               type="checkbox"
               id="developerMode"
               checked={settings.developerMode || false}
               onChange={(e) => onSettingsChange({ developerMode: e.target.checked })}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
+              className="h-4 w-4 rounded"
               style={{ borderColor: 'var(--border-primary)' }}
             />
             <label
               htmlFor="developerMode"
-              className="ml-2 block text-sm"
+              className="ml-2 block text-sm font-medium cursor-pointer"
               style={{ color: 'var(--text-primary)' }}
             >
               {t('options.developerMode')}
@@ -210,7 +213,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
 
           {settings.developerMode && (
             <div
-              className="ml-6 mt-4 p-4 rounded-md border"
+              className="ml-6 mt-4 p-4 rounded-xl border"
               style={{
                 borderColor: 'var(--border-primary)',
                 backgroundColor: 'var(--bg-secondary)',

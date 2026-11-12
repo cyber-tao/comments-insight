@@ -222,9 +222,9 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
 
         <h4 className="font-medium flex items-center gap-2 mt-4">
           <span
-            className="w-6 h-6 rounded-full flex items-center justify-center text-xs"
+            className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono-code font-semibold"
             style={{
-              backgroundColor: 'rgba(59, 130, 246, 0.2)',
+              backgroundColor: 'var(--accent-primary-soft)',
               color: 'var(--accent-primary)',
             }}
           >
@@ -272,10 +272,10 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
         <div className="flex items-center justify-between">
           <h4 className="font-medium flex items-center gap-2">
             <span
-              className="w-6 h-6 rounded-full flex items-center justify-center text-xs"
+              className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono-code font-semibold"
               style={{
-                backgroundColor: 'rgba(99, 102, 241, 0.2)',
-                color: 'var(--accent-secondary)', // Using secondary or indigo-like color
+                backgroundColor: 'var(--accent-secondary-soft)',
+                color: 'var(--accent-secondary)',
               }}
             >
               2
@@ -365,10 +365,10 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
       >
         <h4 className="font-medium flex items-center gap-2">
           <span
-            className="w-6 h-6 rounded-full flex items-center justify-center text-xs"
+            className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono-code font-semibold"
             style={{
-              backgroundColor: 'rgba(16, 185, 129, 0.2)',
-              color: 'var(--accent-secondary)',
+              backgroundColor: 'var(--accent-primary-soft)',
+              color: 'var(--accent-primary)',
             }}
           >
             3
@@ -397,10 +397,10 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
       >
         <h4 className="font-medium flex items-center gap-2">
           <span
-            className="w-6 h-6 rounded-full flex items-center justify-center text-xs"
+            className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-mono-code font-semibold"
             style={{
-              backgroundColor: 'rgba(16, 185, 129, 0.2)',
-              color: 'var(--accent-secondary)',
+              backgroundColor: 'var(--accent-primary-soft)',
+              color: 'var(--accent-primary)',
             }}
           >
             4
