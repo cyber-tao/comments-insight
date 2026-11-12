@@ -81,3 +81,32 @@ testmd/
 .kiro/
 .qoder/
 .trae/
+
+# Local development records and diagnostics
+/.local/
+/docs/project-review.md
+/scripts/view-ai-logs.js
+
+# Superseded screenshots
+/images/screenshots/analysis.jpg
+/images/screenshots/options-1.jpg
+/images/screenshots/options-2.jpg
+/images/screenshots/options-3.jpg
+/images/screenshots/popup.jpg
+
+# Local Chrome Web Store production materials
+/docs/chrome-web-store-disclosure.md
+/docs/chrome-web-store-listing.md
+/scripts/capture-store-ui.js
+/scripts/capture-store-screenshots.js
+/scripts/store-screenshot-copy.js
+/scripts/store-screenshot-layout.js
+/scripts/store-youtube-example.js
+/scripts/resize-icons.ps1
+/images/screenshots/assets/platforms/bilibili.png
+/images/screenshots/assets/platforms/reddit.png
+/images/screenshots/assets/platforms/tiktok.png
+/images/screenshots/assets/platforms/x.png
+/images/screenshots/assets/platforms/xiaohongshu.png
+/images/screenshots/assets/platforms/youtube.png
+/images/banners/banner-440x280.jpg

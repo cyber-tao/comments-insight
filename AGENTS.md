@@ -37,7 +37,7 @@ Recent history follows Conventional Commits with optional scopes, for example `f
 
 ## Release & Versioning
 
-Keep the extension version in `package.json` and `src/manifest.json` synchronized; `bun run version:check` also validates a `vX.Y.Z` release tag when running on a tag ref. Tags trigger `.github/workflows/release.yml`, which verifies coverage and browser E2E, builds the extension, packages `dist/extension.zip`, uses the pinned `crx3` dependency under Node 22 to generate an ephemerally signed side-load CRX, and creates the GitHub Release. Do not commit packaged artifacts from `dist/` unless a release task explicitly requires them. Before a Web Store submission, reconcile the external Dashboard with `docs/chrome-web-store-disclosure.md`; repository changes cannot update Dashboard answers.
+Keep the extension version in `package.json` and `src/manifest.json` synchronized; `bun run version:check` also validates a `vX.Y.Z` release tag when running on a tag ref. Tags trigger `.github/workflows/release.yml`, which verifies coverage and browser E2E, builds the extension, packages `dist/extension.zip`, uses the pinned `crx3` dependency under Node 22 to generate an ephemerally signed side-load CRX, and creates the GitHub Release. Do not commit packaged artifacts from `dist/` unless a release task explicitly requires them. Before a Web Store submission, reconcile the Dashboard's data-use disclosures with the extension's actual behavior and the public privacy policies in `PRIVACY.md` and `PRIVACY.zh-CN.md`.
 
 ## Security & Configuration Tips
 

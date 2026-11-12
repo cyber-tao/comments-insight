@@ -88,7 +88,7 @@ The screenshots follow the discussion on YOUCAR’s Yangwang U9 Xtreme speed-tes
   - **Scalable Processing**: Automatically batches large comment sets with concurrency control (up to 3 concurrent requests) to handle long threads efficiently.
   - **Streaming Responses**: Streams Chat Completions, OpenAI Responses, and Anthropic Messages output, keeps long requests alive with activity-based timeouts, and shows live receiving progress in Popup and History actions.
   - **Thought Filtering**: Supports reasoning models (like DeepSeek) by automatically stripping `<think>` tags from output for clean reports.
-  - **Invalid Output Guard**: Empty model responses are rejected and retried instead of being stored as successful blank reports.
+  - **Invalid Output Guard**: Empty model responses are rejected and retried. Malformed or incomplete streams fail instead of being stored as successful reports.
   - Comprehensive reports including Sentiment Distribution, Hot Comments, Top Discussed, and Interaction Analysis.
   - **Dynamic Visual Reports** (enabled by default): generates a visual HTML dashboard through a second model call, strips scripts, forms, frames, event handlers, and external URLs, then renders the static result in a network-blocked sandbox.
   - The default analysis and report prompts follow the selected language. You can edit either template or reset it to the default.
@@ -99,7 +99,7 @@ The screenshots follow the discussion on YOUCAR’s Yangwang U9 Xtreme speed-tes
   - **Token Tracking**: Locally records token usage stats for better cost management.
   - IndexedDB history storage with metadata-only paging and search for fast browsing.
   - Sanitized AI/system logs with local inspection tools for debugging.
-  - Searchable history with filtering and sorting (by Time, Likes, Replies).
+  - Search saved records by title or URL; search within a record's comments and sort them by time, likes, or reply count.
 - 🌐 **Languages.** English, Simplified Chinese, Traditional Chinese, Japanese, Korean, French, European Portuguese, and Spanish. Choose a language in Options.
 - 🎨 **Appearance.** Choose **Light** with warm paper tones, **Dark** with charcoal tones, or **System** to follow your device setting. Find the controls under **Options → Extension Settings → Basic Settings → Theme**.
 - 🛠️ **Developer Mode**: Toggle advanced features like AI Logs and Selector Testing tools.
@@ -213,7 +213,7 @@ The extension keeps one active configuration. Existing configurations retain Cha
 - **i18n**: i18next 25.6 + react-i18next 16.5
 - **Markdown**: react-markdown 10.1 + remark-gfm 4.0
 - **Storage**: Dexie 4.4 backed by IndexedDB
-- **Testing**: Vitest 4.1 with unit and [E2E tests](docs/e2e-testing.md) (Puppeteer 24.42)
+- **Testing**: Vitest 4.1 with unit and [E2E tests](docs/e2e-testing.md) (Puppeteer 25.17)
 - **Code Quality**: ESLint 9.39 + Prettier 3.6
 
 ## 🛠️ Commands

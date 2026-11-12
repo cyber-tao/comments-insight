@@ -16,7 +16,7 @@ The repository provides two Puppeteer scripts:
 - `bunx puppeteer browsers install chrome` (Chrome for Testing; Chromium or Edge 116+ also work)
 - `bun run build` before each browser run
 
-`scripts/browser-locator.js` resolves the browser: it prefers any Chrome for Testing build in the Puppeteer cache, then Chromium and Edge, and only then branded Chrome. Official Chrome builds 137 and newer ignore `--load-extension`, so the extension would silently fail to load there. Set `PUPPETEER_EXECUTABLE_PATH` or `CHROME_BIN` to choose a browser explicitly; both scripts fail with actionable guidance when no usable browser exists.
+`scripts/browser-locator.js` resolves the browser: it checks `PUPPETEER_EXECUTABLE_PATH` first, then Chrome for Testing builds in the Puppeteer cache (the pinned build first), Chromium, Edge, `CHROME_BIN`, and finally branded Chrome. Official Chrome builds 137 and newer ignore `--load-extension`, so the extension would silently fail to load there. Use `PUPPETEER_EXECUTABLE_PATH` to override a cached or installed browser; `CHROME_BIN` is a fallback. Both scripts fail with actionable guidance when no candidate executable exists.
 
 ## Deterministic local suite
 
@@ -36,9 +36,11 @@ The suite starts a local HTTP page containing a fixed comment fixture, creates a
 4. model-provided Markdown images become alt text, raw HTML and JavaScript links stay inert, and ordinary text links remain user-operated; all HTTP(S) requests from the report page are intercepted and any attempted automatic request fails the test;
 5. Logs and Popup render without page errors; a real background diagnostic is persisted through the local writer, and clearing indexed/orphaned logs preserves settings, token usage, and the log-level setting;
 6. the sandbox renders safe static report content while removing scripts, event handlers, external image URLs, and frames;
-7. a real `START_EXTRACTION` request creates a `TaskManager` task, dispatches `RUN_EXTRACTION` to the content script, extracts the fixture comments, and persists a readable history record;
+7. a real `START_EXTRACTION` request creates a `TaskManager` task, dispatches `RUN_EXTRACTION` to the content script on a strict-CSP fixture after same-document navigation, expands a reply through the bundled YouTube rules, and persists a readable history record;
 8. local mock Chat Completions, Responses, and Anthropic Messages servers exercise model discovery, connection testing, and analysis persistence through the production message handlers, including Anthropic model pagination and rejection of incomplete Responses output or malformed Chat Completions data without retries or partial report persistence;
-9. the AI settings UI applies all five provider presets, clears credentials and models on endpoint changes, switches protocols, and accepts a manually entered model after fetching the available models.
+9. the AI settings UI applies all five provider presets, clears credentials and models on endpoint changes, switches protocols, and accepts a manually entered model after fetching the available models;
+10. AI requests reject 307/308 redirects without forwarding the body to the second origin, and gateway credential echoes are redacted from returned errors and persisted logs;
+11. cold browser restarts restore each of the eight saved languages and display its localized Options page title.
 
 The final extraction assertion reads the persisted record through `GET_HISTORY_BY_URL`; it does not use a webpage test hook and does not accept an empty page or an unmodified sandbox document as success.
 
@@ -57,7 +59,7 @@ bunx puppeteer browsers install chrome
 xvfb-run -a bun run test:e2e
 ```
 
-The suite launches in headful mode because extension service workers and extension pages must behave as they do in a normal browser session. Linux runners therefore need Xvfb or another display server.
+CI runs the suite in its default headful mode to exercise a normal browser session. Linux runners therefore need Xvfb or another display server; local headless runs can use `COMMENTS_INSIGHT_E2E_HEADLESS=1` as described above.
 
 ## Optional live YouTube test
 
@@ -74,7 +76,7 @@ This test can invoke a real AI provider and is intentionally not part of CI.
 | `COMMENTS_INSIGHT_MAX_COMMENTS`    | Maximum comments to extract                                      | `20`                                          |
 | `COMMENTS_INSIGHT_TEST_TIMEOUT_MS` | Overall timeout                                                  | `180000`                                      |
 | `PUPPETEER_EXECUTABLE_PATH`        | Explicit Chrome/Chromium/Edge executable                         | auto-detected                                 |
-| `CHROME_BIN`                       | Alternative explicit browser executable                          | auto-detected                                 |
+| `CHROME_BIN`                       | Browser fallback after the cache, Chromium, and Edge             | auto-detected                                 |
 
 Run:
 
@@ -93,6 +95,6 @@ No webpage-to-content-script test hook is exposed; both browser scripts enter th
 
 - Rebuild before testing; Puppeteer loads files from `dist/`, not directly from `src/`.
 - If the service worker is not found, confirm that the browser allows unpacked extensions and that no enterprise policy disables them.
-- If launch fails or the service worker never appears, run `bunx puppeteer browsers install chrome`, or point `PUPPETEER_EXECUTABLE_PATH` / `CHROME_BIN` to Chrome for Testing, Chromium, or Edge rather than branded Chrome 137+. A branded-Chrome or Edge launcher stub can exit immediately when another instance of that browser is already running.
+- If launch fails or the service worker never appears, run `bunx puppeteer browsers install chrome`, or set `PUPPETEER_EXECUTABLE_PATH` to Chrome for Testing, Chromium, or Edge rather than branded Chrome 137+. A branded-Chrome or Edge launcher stub can exit immediately when another instance of that browser is already running.
 - Inspect page and service-worker console output for task errors. The deterministic suite fails on page errors, failed tasks, missing comments, missing history, or sandbox sanitization regressions.
 - Use mocked `chrome.storage`, IndexedDB, and extension APIs for isolated unit tests; reserve browser E2E for cross-context wiring and browser behavior.
