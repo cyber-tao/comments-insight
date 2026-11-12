@@ -1,5 +1,5 @@
 {
-  "extensionName": { "message": "Comments Insight" },
+  "extensionName": { "message": "Comments Insight: Find User Needs in Comments Across Sites" },
   "extensionDescription": {
     "message": "Collect comments from social media posts and use your configured AI model to analyze them."
   }

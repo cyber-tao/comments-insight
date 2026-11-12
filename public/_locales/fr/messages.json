@@ -1,5 +1,7 @@
 {
-  "extensionName": { "message": "Comments Insight - Analyse de commentaires" },
+  "extensionName": {
+    "message": "Comments Insight - Cernez les besoins dans les commentaires de divers sites"
+  },
   "extensionDescription": {
     "message": "Collectez les commentaires des réseaux sociaux et analysez-les avec le modèle d’IA de votre choix."
   }

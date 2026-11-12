@@ -1,5 +1,5 @@
 {
-  "extensionName": { "message": "Comments Insight - 评论洞察" },
+  "extensionName": { "message": "Comments Insight：从多平台评论中发现用户需求" },
   "extensionDescription": {
     "message": "采集社交媒体帖子的评论，并使用你配置的 AI 模型分析评论。"
   }

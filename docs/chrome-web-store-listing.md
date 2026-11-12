@@ -1,5 +1,11 @@
 # Comments Insight
 
+## Store title and small promo tile
+
+The localized item title comes from `extensionName` in `public/_locales/*/messages.json`. A title change takes effect with a new extension package after review.
+
+Upload [the 440 × 280 small promo tile](../images/banners/banner-440x280.jpg) under **Store listing → Graphic assets → Small promo tile**. The same tile is used across languages on store discovery pages. The six platform logos identify the built-in extraction rules.
+
 ## Store screenshots
 
 Run `bun scripts/capture-store-screenshots.js` to render five 1280 × 800 JPEGs per locale in an isolated Chromium profile. The script reads the approved YouTube example from `build/store-preview-v0.10.0-video/` and writes to `build/store-assets/v<version>-youtube/`. The first optional argument sets the output directory outside `dist/`. The second points to a different copy of the approved source directory.

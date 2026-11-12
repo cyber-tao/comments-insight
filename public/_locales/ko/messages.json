@@ -1,5 +1,7 @@
 {
-  "extensionName": { "message": "Comments Insight - 댓글 분석" },
+  "extensionName": {
+    "message": "Comments Insight - 여러 사이트의 댓글에서 사용자가 원하는 것 찾기"
+  },
   "extensionDescription": {
     "message": "소셜 미디어 게시물의 댓글을 수집하고 설정한 AI 모델로 분석하세요."
   }

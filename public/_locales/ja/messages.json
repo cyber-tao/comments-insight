@@ -1,5 +1,7 @@
 {
-  "extensionName": { "message": "Comments Insight - コメント分析" },
+  "extensionName": {
+    "message": "Comments Insight - 複数サイトのコメントからユーザーのニーズを発見"
+  },
   "extensionDescription": {
     "message": "SNSの投稿からコメントを収集し、設定したAIモデルで分析できます。"
   }
