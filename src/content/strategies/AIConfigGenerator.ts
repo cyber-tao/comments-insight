@@ -1,6 +1,6 @@
 import { Logger } from '../../utils/logger';
 import { ErrorCode, ExtensionError } from '@/utils/error-types';
-import { CrawlingConfig, Settings } from '../../types';
+import { CrawlingConfig, FieldSelector, ReplyConfig, SelectorRule, Settings } from '../../types';
 import {
   EXTRACTION_PROGRESS,
   CONFIG_GENERATION_PROGRESS,
@@ -263,7 +263,18 @@ export class AIConfigGenerator {
       includeText: true,
       maxNodes: DOM.SIMPLIFY_MAX_NODES,
     });
-    const deepDomStr = simplifier.nodeToString(deepSimplified);
+    let deepDomStr = simplifier.nodeToString(deepSimplified);
+    if (deepSimplified.truncated) {
+      const replySample = this.extractTruncatedReplySample(
+        sectionElement,
+        simplifier,
+        domConfig.maxDepth,
+        deepDomStr,
+      );
+      if (replySample) {
+        deepDomStr += `\n\n<!-- Additional Reply Structure Sample -->\n${replySample}`;
+      }
+    }
 
     const prompt =
       PROMPT_GENERATE_CRAWLING_CONFIG +
@@ -331,6 +342,15 @@ export class AIConfigGenerator {
           'Generated configuration cannot extract username and content from the same comment',
         );
       }
+
+      this.normalizeConfigInPlace(config, items);
+      if (!config.replies) {
+        const detectedReplies = this.detectRepliesFallback(config, items);
+        if (detectedReplies) {
+          config.replies = detectedReplies;
+        }
+      }
+
       Logger.info(
         `[AIConfigGenerator] Self-correction passed: Found ${items.length} items using AI generated selector.`,
       );
@@ -372,5 +392,307 @@ export class AIConfigGenerator {
     }
 
     return null;
+  }
+
+  private extractTruncatedReplySample(
+    sectionElement: Element,
+    simplifier: DOMSimplifier,
+    maxDepth: number,
+    existingDomStr: string,
+  ): string | null {
+    try {
+      const hintEl = sectionElement.querySelector(
+        '[class*="repl" i], [id*="repl" i], [data-testid*="repl" i], [aria-label*="repl" i]',
+      );
+      if (!hintEl) {
+        return null;
+      }
+
+      const targetEl =
+        hintEl.closest('article, li, [role="article"], [class*="comment"]') ||
+        hintEl.parentElement ||
+        hintEl;
+      if (!sectionElement.contains(targetEl) || targetEl === sectionElement) {
+        return null;
+      }
+
+      const simplified = simplifier.simplifyElement(targetEl, {
+        maxDepth: Math.min(maxDepth, 12),
+        includeText: true,
+        maxNodes: 300,
+      });
+      const sampleStr = simplifier.nodeToString(simplified);
+      if (!sampleStr || existingDomStr.includes(sampleStr)) {
+        return null;
+      }
+      return sampleStr;
+    } catch {
+      return null;
+    }
+  }
+
+  private isValidRule(rule: unknown): rule is SelectorRule {
+    return Boolean(
+      rule &&
+      typeof rule === 'object' &&
+      typeof (rule as SelectorRule).selector === 'string' &&
+      (rule as SelectorRule).selector.trim().length > 0,
+    );
+  }
+
+  private normalizeRule(rule: SelectorRule): SelectorRule {
+    return {
+      selector: rule.selector.trim(),
+      type: rule.type === 'xpath' ? 'xpath' : 'css',
+    };
+  }
+
+  private sanitizeFieldSelectors(fields: FieldSelector[]): FieldSelector[] {
+    const cleaned: FieldSelector[] = [];
+    for (const field of fields) {
+      if (!field || typeof field.name !== 'string' || !field.name.trim()) continue;
+      if (!this.isValidRule(field.rule)) continue;
+      const sanitized: FieldSelector = {
+        name: field.name.trim(),
+        rule: this.normalizeRule(field.rule),
+      };
+      if (typeof field.attribute === 'string' && field.attribute.trim()) {
+        sanitized.attribute = field.attribute.trim();
+      }
+      cleaned.push(sanitized);
+    }
+    return cleaned;
+  }
+
+  private cloneFieldSelectors(fields: FieldSelector[]): FieldSelector[] {
+    return fields.map((field) => ({
+      name: field.name,
+      rule: { ...field.rule },
+      ...(field.attribute ? { attribute: field.attribute } : {}),
+    }));
+  }
+
+  private normalizeConfigInPlace(config: CrawlingConfig, items: Element[]): void {
+    config.fields = this.sanitizeFieldSelectors(config.fields);
+
+    if (!this.isValidRule(config.videoTime)) {
+      delete config.videoTime;
+    } else {
+      config.videoTime = this.normalizeRule(config.videoTime);
+    }
+
+    if (!this.isValidRule(config.postContent)) {
+      delete config.postContent;
+    } else {
+      config.postContent = this.normalizeRule(config.postContent);
+    }
+
+    if (config.replies == null) {
+      delete config.replies;
+      return;
+    }
+
+    if (typeof config.replies !== 'object') {
+      delete config.replies;
+      return;
+    }
+
+    const replies = config.replies;
+    if (!this.isValidRule(replies.expandBtn)) {
+      delete replies.expandBtn;
+    } else {
+      replies.expandBtn = this.normalizeRule(replies.expandBtn);
+    }
+
+    const cleanedFields = Array.isArray(replies.fields)
+      ? this.sanitizeFieldSelectors(replies.fields)
+      : [];
+    replies.fields =
+      cleanedFields.length > 0 ? cleanedFields : this.cloneFieldSelectors(config.fields);
+
+    // Ensure required comment fields exist in reply fields when main comment fields define them.
+    for (const requiredName of ['username', 'content'] as const) {
+      if (!replies.fields.some((f) => f.name === requiredName)) {
+        const fallbackField = config.fields.find((f) => f.name === requiredName);
+        if (fallbackField) {
+          replies.fields.push({
+            name: fallbackField.name,
+            rule: { ...fallbackField.rule },
+            ...(fallbackField.attribute ? { attribute: fallbackField.attribute } : {}),
+          });
+        }
+      }
+    }
+
+    if (!this.isValidRule(replies.item)) {
+      if (
+        this.isValidRule(replies.container) &&
+        this.hasValidReplyMatches(items, replies.container, config.item, replies.fields)
+      ) {
+        replies.item = { ...config.item };
+      } else {
+        delete config.replies;
+        return;
+      }
+    } else {
+      replies.item = this.normalizeRule(replies.item);
+    }
+
+    if (!this.isValidRule(replies.container)) {
+      if (this.hasValidReplyMatches(items, replies.item, replies.item, replies.fields)) {
+        replies.container = { ...replies.item };
+      } else {
+        delete config.replies;
+        return;
+      }
+    } else {
+      replies.container = this.normalizeRule(replies.container);
+      // Repair container selector when nested replies are matched directly by item selector
+      // while the AI-supplied container selector fails on the live DOM.
+      const hasExpandBtn =
+        Boolean(replies.expandBtn) &&
+        items.some((parent) => findElementsByRule(parent, replies.expandBtn).length > 0);
+      if (
+        !hasExpandBtn &&
+        !this.hasValidReplyMatches(items, replies.container, replies.item, replies.fields) &&
+        this.hasValidReplyMatches(items, replies.item, replies.item, replies.fields)
+      ) {
+        replies.container = { ...replies.item };
+      }
+    }
+
+    if (replies.fields.length === 0) {
+      delete config.replies;
+    }
+  }
+
+  private hasValidReplyMatches(
+    items: Element[],
+    containerRule: SelectorRule,
+    itemRule: SelectorRule,
+    fields: FieldSelector[],
+  ): boolean {
+    const usernameField = fields.find((f) => f.name === 'username');
+    const contentField = fields.find((f) => f.name === 'content');
+    if (!usernameField || !contentField) {
+      return false;
+    }
+
+    try {
+      for (const parentItem of items) {
+        const directItemMatches = new Set(findElementsByRule(parentItem, itemRule));
+        for (const container of findElementsByRule(parentItem, containerRule)) {
+          const candidates = directItemMatches.has(container)
+            ? [container, ...findElementsByRule(container, itemRule)]
+            : findElementsByRule(container, itemRule);
+          for (const candidate of candidates) {
+            if (candidate === parentItem) continue;
+            if (readField(candidate, usernameField) && readField(candidate, contentField)) {
+              return true;
+            }
+          }
+        }
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  }
+
+  private detectExpandButtonRule(items: Element[]): SelectorRule | undefined {
+    const candidates = [
+      '.more-replies',
+      '.show-replies',
+      '.view-replies',
+      'button[class*="repl" i]',
+      'a[class*="repl" i]',
+      '[class*="more-repl" i]',
+      '[class*="view-repl" i]',
+      '[class*="show-repl" i]',
+      'button[aria-label*="repl" i]',
+    ];
+
+    for (const selector of candidates) {
+      const rule: SelectorRule = { selector, type: 'css' };
+      try {
+        const matched = items.some((parent) =>
+          findElementsByRule(parent, rule).some((el) => {
+            const text = `${el.textContent || ''} ${el.getAttribute('aria-label') || ''}`.trim();
+            return /repl|回复/i.test(text);
+          }),
+        );
+        if (matched) {
+          return rule;
+        }
+      } catch {
+        // Ignore invalid selector on edge DOM
+      }
+    }
+    return undefined;
+  }
+
+  private detectRepliesFallback(config: CrawlingConfig, items: Element[]): ReplyConfig | undefined {
+    const expandBtn = this.detectExpandButtonRule(items);
+
+    // 1. Nested/recursive comment items reusing the top-level item selector
+    if (this.hasValidReplyMatches(items, config.item, config.item, config.fields)) {
+      Logger.info('[AIConfigGenerator] Detected nested comment replies via fallback heuristic');
+      return {
+        container: { ...config.item },
+        item: { ...config.item },
+        fields: this.cloneFieldSelectors(config.fields),
+        ...(expandBtn ? { expandBtn } : {}),
+      };
+    }
+
+    // 2. Dedicated reply container & reply item structures inside top-level comments
+    const containerSelectors = [
+      '.replies',
+      '.reply-list',
+      '.comment-replies',
+      '[data-testid*="repl" i]',
+      '[class*="replies"]',
+      '[class*="reply-list"]',
+      '[class*="sub-comment"]',
+      '[class*="subcomment"]',
+      '[class*="child-comment"]',
+      '[class*="nested-comment"]',
+    ];
+    const itemSelectors = [
+      config.item.selector,
+      '.reply-item',
+      '.reply',
+      '[class*="reply-item"]',
+      '[class*="sub-comment-item"]',
+      '[class*="reply"]',
+      '[class*="comment"]',
+      '[role="article"]',
+      'article',
+      'li',
+    ];
+
+    for (const containerSelector of containerSelectors) {
+      const containerRule: SelectorRule = { selector: containerSelector, type: 'css' };
+      for (const itemSelector of itemSelectors) {
+        const itemRule: SelectorRule = {
+          selector: itemSelector,
+          type: itemSelector === config.item.selector ? config.item.type : 'css',
+        };
+        if (this.hasValidReplyMatches(items, containerRule, itemRule, config.fields)) {
+          Logger.info('[AIConfigGenerator] Detected dedicated reply container via fallback', {
+            container: containerRule.selector,
+            item: itemRule.selector,
+          });
+          return {
+            container: containerRule,
+            item: itemRule,
+            fields: this.cloneFieldSelectors(config.fields),
+            ...(expandBtn ? { expandBtn } : {}),
+          };
+        }
+      }
+    }
+
+    return undefined;
   }
 }

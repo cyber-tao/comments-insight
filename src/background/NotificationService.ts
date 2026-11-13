@@ -3,14 +3,22 @@ import { Logger } from '@/utils/logger';
 import { generateUniqueId } from '@/utils/id-generator';
 import i18n from '@/utils/i18n';
 
+export interface NotificationTarget {
+  historyId?: string;
+  historyTab?: 'comments' | 'analysis' | 'dynamic';
+  configDomain?: string;
+}
+
 export class NotificationService {
   async showTaskCompleted(
     taskType: 'extract' | 'analyze' | 'config',
     title: string,
     commentsCount?: number,
+    target?: NotificationTarget,
   ): Promise<void> {
     try {
-      const notificationId = generateUniqueId('task_completed');
+      const targetPath = this.buildTargetPath(taskType, target);
+      const notificationId = `${generateUniqueId('task_completed')}::${targetPath}`;
       const options = {
         type: 'basic' as const,
         iconUrl: ICONS.ICON_48,
@@ -52,21 +60,62 @@ export class NotificationService {
     }
   }
 
+  private buildTargetPath(
+    taskType: 'extract' | 'analyze' | 'config',
+    target?: NotificationTarget,
+  ): string {
+    if (taskType === 'config') {
+      const params = new URLSearchParams({ tab: 'crawling' });
+      const domain = target?.configDomain?.trim();
+      if (domain) {
+        params.set('domain', domain);
+      }
+      return `${PATHS.OPTIONS_PAGE}?${params.toString()}`;
+    }
+
+    const params = new URLSearchParams();
+    const historyId = target?.historyId?.trim();
+    if (historyId) {
+      params.set('id', historyId);
+    }
+    if (target?.historyTab) {
+      params.set('tab', target.historyTab);
+    } else if (historyId) {
+      params.set('tab', taskType === 'extract' ? 'comments' : 'analysis');
+    }
+    const query = params.toString();
+    return query ? `${PATHS.HISTORY_PAGE}?${query}` : PATHS.HISTORY_PAGE;
+  }
+
+  private resolveTargetPath(notificationId: string): string {
+    const separatorIndex = notificationId.indexOf('::');
+    if (separatorIndex === -1) {
+      return PATHS.HISTORY_PAGE;
+    }
+    const targetPath = notificationId.slice(separatorIndex + 2);
+    if (targetPath.startsWith(PATHS.HISTORY_PAGE) || targetPath.startsWith(PATHS.OPTIONS_PAGE)) {
+      return targetPath;
+    }
+    return PATHS.HISTORY_PAGE;
+  }
+
+  private openTaskCompletedTarget(notificationId: string): void {
+    chrome.tabs.create({
+      url: chrome.runtime.getURL(this.resolveTargetPath(notificationId)),
+    });
+  }
+
   setupNotificationHandlers(): void {
     chrome.notifications.onClicked.addListener((notificationId) => {
       if (notificationId.startsWith('task_completed_')) {
-        chrome.tabs.create({
-          url: chrome.runtime.getURL(PATHS.HISTORY_PAGE),
-        });
+        this.openTaskCompletedTarget(notificationId);
       }
       chrome.notifications.clear(notificationId);
     });
 
     chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
-      if (buttonIndex === 0) {
-        chrome.tabs.create({
-          url: chrome.runtime.getURL(PATHS.HISTORY_PAGE),
-        });
+      if (buttonIndex === 0 && notificationId.startsWith('task_completed_')) {
+        this.openTaskCompletedTarget(notificationId);
       }
       chrome.notifications.clear(notificationId);
     });

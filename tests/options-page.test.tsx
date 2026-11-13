@@ -34,7 +34,9 @@ vi.mock('../src/options/components/AdvancedSettings', () => ({
 }));
 
 vi.mock('../src/options/components/ConfigSettings', () => ({
-  ConfigSettings: () => <div>config-settings</div>,
+  ConfigSettings: ({ initialDomain }: { initialDomain?: string | null }) => (
+    <div>{initialDomain ? `config-settings:${initialDomain}` : 'config-settings'}</div>
+  ),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -66,6 +68,7 @@ function createSettingsState(overrides: Partial<ReturnType<typeof useSettingsMoc
 describe('Options', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.history.replaceState(null, '', '/');
     useSettingsMock.mockReturnValue(createSettingsState());
     useThemeMock.mockReturnValue({ setTheme: vi.fn() });
   });
@@ -135,5 +138,13 @@ describe('Options', () => {
 
     expect(screen.getByText('config-settings')).toBeTruthy();
     expect(screen.getByText('options.saving')).toBeTruthy();
+  });
+
+  it('opens crawling tab and forwards domain query param on deep link', () => {
+    window.history.replaceState(null, '', '/?tab=crawling&domain=example.com');
+
+    render(<Options />);
+
+    expect(screen.getByText('config-settings:example.com')).toBeTruthy();
   });
 });

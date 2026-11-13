@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettings } from './hooks/useSettings';
 import { BasicSettings } from './components/BasicSettings';
@@ -11,6 +11,19 @@ import { useConfirm } from '@/hooks/useConfirm';
 import { BrandIcon, DownloadIcon, GlobeIcon, SettingsIcon, UploadIcon } from '@/components/Icons';
 
 type Tab = 'extension' | 'crawling';
+
+function getInitialOptionsRoute(): { tab: Tab; domain: string | null } {
+  if (typeof window === 'undefined') {
+    return { tab: 'extension', domain: null };
+  }
+  const params = new URLSearchParams(window.location.search);
+  const rawTab = params.get('tab');
+  const rawDomain = params.get('domain')?.trim() || null;
+  if (rawTab === 'crawling' || (rawDomain && rawTab !== 'extension')) {
+    return { tab: 'crawling', domain: rawDomain };
+  }
+  return { tab: 'extension', domain: rawDomain };
+}
 
 const Options: React.FC = () => {
   const { t } = useTranslation();
@@ -27,7 +40,8 @@ const Options: React.FC = () => {
     toast,
     ToastContainer,
   } = useSettings();
-  const [activeTab, setActiveTab] = useState<Tab>('extension');
+  const initialRoute = useMemo(() => getInitialOptionsRoute(), []);
+  const [activeTab, setActiveTab] = useState<Tab>(initialRoute.tab);
   const { setTheme } = useTheme();
   const { confirm, ConfirmHost } = useConfirm();
 
@@ -180,6 +194,7 @@ const Options: React.FC = () => {
               onSettingsChange={handleSettingsChange}
               showToast={toast.showToast}
               confirm={confirm}
+              initialDomain={initialRoute.domain}
             />
           )}
         </div>

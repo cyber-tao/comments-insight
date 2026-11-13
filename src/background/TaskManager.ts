@@ -24,6 +24,12 @@ export interface TaskResult {
   commentsCount?: number;
   /** Preferred title for notifications */
   title?: string;
+  /** History item ID created or updated by the task */
+  historyId?: string;
+  /** History view tab to open when viewing task results */
+  historyTab?: 'comments' | 'analysis' | 'dynamic';
+  /** Domain of generated crawling config to open in Options */
+  configDomain?: string;
 }
 
 /**
@@ -417,7 +423,18 @@ export class TaskManager {
     });
 
     const notificationTitle = result?.title?.trim() || task.url;
-    this.notificationService.showTaskCompleted(task.type, notificationTitle, result?.commentsCount);
+    const configDomain =
+      result?.configDomain ?? (task.type === 'config' ? task.platform : undefined);
+    this.notificationService.showTaskCompleted(
+      task.type,
+      notificationTitle,
+      result?.commentsCount,
+      {
+        historyId: result?.historyId,
+        historyTab: result?.historyTab,
+        configDomain,
+      },
+    );
 
     if (this.currentTaskId === taskId) {
       this.currentTaskId = null;

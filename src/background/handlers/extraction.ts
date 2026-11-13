@@ -183,6 +183,8 @@ export async function handleExtractionCompleted(
       tokensUsed: 0,
       commentsCount: normalizedComments.length,
       title: postInfo?.title || postInfo?.url,
+      historyId: historyItem.id,
+      historyTab: 'comments',
     });
   } else {
     context.taskManager.failTask(

@@ -274,6 +274,123 @@ describe('AIConfigGenerator.generateIntelligentConfig', () => {
       code: ErrorCode.DOM_ANALYSIS_FAILED,
     });
   });
+
+  it('normalizes AI-generated replies config and repairs missing reply fields and empty expandBtn', async () => {
+    document.body.innerHTML = `
+      <section id="comments">
+        <article class="comment-item">
+          <span class="username">Alice</span>
+          <p class="content">Top comment</p>
+          <div class="replies">
+            <div class="reply-item">
+              <span class="username">Bob</span>
+              <p class="content">Nice reply</p>
+            </div>
+          </div>
+        </article>
+      </section>
+    `;
+
+    const config = createConfig();
+    config.replies = {
+      container: { selector: '.replies', type: 'css' },
+      item: { selector: '.reply-item', type: 'css' },
+      fields: [],
+      expandBtn: { selector: '   ', type: 'css' },
+    };
+    aiServiceMock.callAI.mockResolvedValueOnce({ config: {} }).mockResolvedValueOnce({ config });
+
+    const result = await createConfigGenerator().generateIntelligentConfig(
+      window.location.hostname,
+      { maxDepth: 8 },
+      100,
+      undefined,
+      '#comments',
+    );
+
+    expect(result?.replies).toEqual({
+      container: { selector: '.replies', type: 'css' },
+      item: { selector: '.reply-item', type: 'css' },
+      fields: [
+        { name: 'username', rule: { selector: '.username', type: 'css' } },
+        { name: 'content', rule: { selector: '.content', type: 'css' } },
+      ],
+    });
+  });
+
+  it('detects nested recursive replies via live-DOM fallback when AI omits replies', async () => {
+    document.body.innerHTML = `
+      <section id="comments">
+        <article class="comment-item">
+          <span class="username">Alice</span>
+          <p class="content">Parent comment</p>
+          <article class="comment-item">
+            <span class="username">Bob</span>
+            <p class="content">Nested reply</p>
+          </article>
+        </article>
+      </section>
+    `;
+
+    const config = createConfig();
+    aiServiceMock.callAI.mockResolvedValueOnce({ config: {} }).mockResolvedValueOnce({ config });
+
+    const result = await createConfigGenerator().generateIntelligentConfig(
+      window.location.hostname,
+      { maxDepth: 8 },
+      100,
+      undefined,
+      '#comments',
+    );
+
+    expect(result?.replies).toEqual({
+      container: { selector: '.comment-item', type: 'css' },
+      item: { selector: '.comment-item', type: 'css' },
+      fields: [
+        { name: 'username', rule: { selector: '.username', type: 'css' } },
+        { name: 'content', rule: { selector: '.content', type: 'css' } },
+      ],
+    });
+  });
+
+  it('detects dedicated reply container and expand button via live-DOM fallback when AI omits replies', async () => {
+    document.body.innerHTML = `
+      <section id="comments">
+        <article class="comment-item">
+          <span class="username">Alice</span>
+          <p class="content">Parent comment</p>
+          <button class="show-replies">View 2 replies</button>
+          <div class="replies">
+            <div class="reply-item">
+              <span class="username">Charlie</span>
+              <p class="content">Child reply</p>
+            </div>
+          </div>
+        </article>
+      </section>
+    `;
+
+    const config = createConfig();
+    aiServiceMock.callAI.mockResolvedValueOnce({ config: {} }).mockResolvedValueOnce({ config });
+
+    const result = await createConfigGenerator().generateIntelligentConfig(
+      window.location.hostname,
+      { maxDepth: 8 },
+      100,
+      undefined,
+      '#comments',
+    );
+
+    expect(result?.replies).toEqual({
+      container: { selector: '.replies', type: 'css' },
+      item: { selector: '.reply-item', type: 'css' },
+      fields: [
+        { name: 'username', rule: { selector: '.username', type: 'css' } },
+        { name: 'content', rule: { selector: '.content', type: 'css' } },
+      ],
+      expandBtn: { selector: '.show-replies', type: 'css' },
+    });
+  });
 });
 
 describe('AIStrategy execution', () => {

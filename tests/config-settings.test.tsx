@@ -343,4 +343,24 @@ describe('ConfigSettings', () => {
       }),
     );
   });
+
+  it('auto-opens matching config editor from initialDomain and cleans url domain param', () => {
+    window.history.replaceState(null, '', '/?tab=crawling&domain=example.com');
+    try {
+      render(
+        <ConfigSettings
+          settings={createSettings([createConfig({ domain: 'example.com', siteName: 'Example' })])}
+          onSettingsChange={vi.fn()}
+          showToast={showToast}
+          confirm={vi.fn(async () => true)}
+          initialDomain="example.com"
+        />,
+      );
+
+      expect(screen.getByText('editor:example.com')).toBeTruthy();
+      expect(window.location.search).toBe('?tab=crawling');
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
+  });
 });

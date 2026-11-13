@@ -78,7 +78,14 @@ export async function handleConfigGenerationCompleted(
   }
 
   if (success) {
-    context.taskManager.completeTask(taskId, { tokensUsed: 0, commentsCount: 0 });
+    const configDomain =
+      (task.platform && task.platform !== TEXT.UNKNOWN ? task.platform : undefined) ||
+      (task.url ? getDomain(task.url) : undefined);
+    context.taskManager.completeTask(taskId, {
+      tokensUsed: 0,
+      commentsCount: 0,
+      ...(configDomain ? { configDomain } : {}),
+    });
   } else {
     context.taskManager.failTask(
       taskId,

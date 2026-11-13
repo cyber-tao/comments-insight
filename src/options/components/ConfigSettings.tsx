@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Settings, CrawlingConfig, FieldSelector } from '../../types';
 import { useTranslation } from 'react-i18next';
 import { CrawlingConfigEditor } from './CrawlingConfigEditor';
@@ -6,6 +6,7 @@ import { API } from '@/config/constants';
 import { resolveCrawlingConfigLastUpdated } from '@/utils/crawling-config';
 import { crawlingConfigSchema } from '@/utils/storage-validation';
 import { Logger } from '../../utils/logger';
+import { matchesDomain } from '@/utils/url';
 import { DownloadIcon, RefreshIcon, UploadIcon } from '@/components/Icons';
 import { ConfigList } from './ConfigList';
 import { ConfigImportDialog, ConflictItem, MERGE_FIELDS } from './ConfigImportDialog';
@@ -18,6 +19,7 @@ interface Props {
   onSettingsChange: (newSettings: Partial<Settings>) => void;
   showToast: (message: string, type?: 'info' | 'success' | 'error' | 'warning') => void;
   confirm: ConfirmFunction;
+  initialDomain?: string | null;
 }
 
 type ExportableCrawlingConfig = Omit<CrawlingConfig, 'fieldValidation'>;
@@ -46,10 +48,12 @@ export const ConfigSettings: React.FC<Props> = ({
   onSettingsChange,
   showToast,
   confirm,
+  initialDomain,
 }) => {
   const { t } = useTranslation();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempConfig, setTempConfig] = useState<CrawlingConfig | null>(null);
+  const appliedInitialDomainRef = useRef<string | null>(null);
   const [exportSelection, setExportSelection] = useState<Record<string, boolean>>({});
   const [exportError, setExportError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -96,6 +100,33 @@ export const ConfigSettings: React.FC<Props> = ({
     setTempConfig({ ...config });
     setEditingId(config.id);
   };
+
+  useEffect(() => {
+    const normalizedTarget = initialDomain?.trim().toLowerCase();
+    if (!normalizedTarget || appliedInitialDomainRef.current === normalizedTarget) {
+      return;
+    }
+
+    const exactMatch = configs.find((config) => config.domain.toLowerCase() === normalizedTarget);
+    const domainMatch =
+      exactMatch ??
+      configs.find((config) => matchesDomain(normalizedTarget, config.domain.toLowerCase()));
+
+    if (!domainMatch) {
+      return;
+    }
+
+    appliedInitialDomainRef.current = normalizedTarget;
+    handleEdit(domainMatch);
+
+    if (typeof window !== 'undefined' && window.history?.replaceState) {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('domain')) {
+        url.searchParams.delete('domain');
+        window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+      }
+    }
+  }, [configs, initialDomain]);
 
   const handleDelete = async (id: string) => {
     const confirmed = await confirm({

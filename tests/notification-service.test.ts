@@ -209,5 +209,49 @@ describe('NotificationService', () => {
       expect(mockTabsCreate).not.toHaveBeenCalled();
       expect(mockNotificationClear).toHaveBeenCalledWith('task_completed_123');
     });
+
+    it.each([
+      {
+        name: 'config notification opens crawling options for the generated domain',
+        taskType: 'config' as const,
+        target: { configDomain: 'example.com' },
+        expectedSuffix: 'src/options/index.html?tab=crawling&domain=example.com',
+      },
+      {
+        name: 'extract notification opens the extracted item on comments tab',
+        taskType: 'extract' as const,
+        target: { historyId: 'history_1', historyTab: 'comments' as const },
+        expectedSuffix: 'src/history/index.html?id=history_1&tab=comments',
+      },
+      {
+        name: 'analyze notification opens the analyzed item on analysis tab',
+        taskType: 'analyze' as const,
+        target: { historyId: 'history_2', historyTab: 'analysis' as const },
+        expectedSuffix: 'src/history/index.html?id=history_2&tab=analysis',
+      },
+      {
+        name: 'dynamic report notification opens the item on dynamic tab',
+        taskType: 'analyze' as const,
+        target: { historyId: 'history_3', historyTab: 'dynamic' as const },
+        expectedSuffix: 'src/history/index.html?id=history_3&tab=dynamic',
+      },
+    ])('$name', async ({ taskType, target, expectedSuffix }) => {
+      await notificationService.showTaskCompleted(taskType, 'Test Post', 5, target);
+      const createdId = mockNotificationCreate.mock.calls[0][0] as string;
+
+      notificationService.setupNotificationHandlers();
+      const clickHandler = mockOnClicked.addListener.mock.calls[0][0];
+      const buttonHandler = mockOnButtonClicked.addListener.mock.calls[0][0];
+
+      clickHandler(createdId);
+      buttonHandler(createdId, 0);
+
+      expect(mockTabsCreate).toHaveBeenNthCalledWith(1, {
+        url: `chrome-extension://id/${expectedSuffix}`,
+      });
+      expect(mockTabsCreate).toHaveBeenNthCalledWith(2, {
+        url: `chrome-extension://id/${expectedSuffix}`,
+      });
+    });
   });
 });

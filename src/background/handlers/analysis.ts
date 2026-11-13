@@ -241,6 +241,8 @@ export async function handleStartAnalysis(
         tokensUsed,
         commentsCount: comments.length,
         title,
+        historyId: savedHistoryId,
+        historyTab: 'analysis' as const,
       };
     } catch (error) {
       return deadline.rethrow(error);
@@ -370,6 +372,8 @@ export async function handleGenerateDynamicReport(
       return {
         tokensUsed: dynamicResult.tokensUsed,
         title: historyItem.title,
+        historyId,
+        historyTab: 'dynamic' as const,
       };
     } catch (error) {
       return deadline.rethrow(error);

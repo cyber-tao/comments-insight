@@ -111,6 +111,34 @@ describe('config-generation handler', () => {
       });
     });
 
+    it('should include configDomain on completion when task has platform or url', async () => {
+      vi.mocked(context.taskManager.getTask).mockReturnValue({
+        id: 'task_config_123',
+        type: 'config',
+        status: 'running',
+        url: 'https://news.example.com/item/1',
+        platform: 'news.example.com',
+        progress: 60,
+        startTime: Date.now(),
+        tokensUsed: 0,
+      });
+
+      const result = await handleConfigGenerationCompleted(
+        {
+          type: 'CONFIG_GENERATION_COMPLETED',
+          payload: { taskId: 'task_config_123', success: true },
+        },
+        context,
+      );
+
+      expect(result).toEqual({ success: true });
+      expect(context.taskManager.completeTask).toHaveBeenCalledWith('task_config_123', {
+        tokensUsed: 0,
+        commentsCount: 0,
+        configDomain: 'news.example.com',
+      });
+    });
+
     it('should fail task on error', async () => {
       const message = {
         type: 'CONFIG_GENERATION_COMPLETED' as const,

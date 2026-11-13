@@ -463,7 +463,11 @@ describe('analysis handlers', () => {
           },
           new AbortController().signal,
         ),
-      ).resolves.toMatchObject({ tokensUsed: 50 });
+      ).resolves.toMatchObject({
+        tokensUsed: 50,
+        historyId: expect.any(String),
+        historyTab: 'analysis',
+      });
       expect(context.historyStore.createHistory).toHaveBeenCalledOnce();
       expect(context.historyStore.createHistory).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -757,6 +761,11 @@ describe('analysis handlers', () => {
       // Execute the task executor
       const taskResult = await executorFn({ id: 'task_dynamic_123' }, new AbortController().signal);
       expect(taskResult.tokensUsed).toBe(50);
+      expect(taskResult).toMatchObject({
+        tokensUsed: 50,
+        historyId: 'hist_1',
+        historyTab: 'dynamic',
+      });
       expect(localContext.historyStore.updateDynamicReport).toHaveBeenCalledWith(
         mockHistoryItem.id,
         {

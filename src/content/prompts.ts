@@ -65,9 +65,10 @@ interface FieldSelector {
 }
 
 interface ReplyConfig {
-  container: SelectorRule; // The wrapper around ALL replies for a single comment
-  item: SelectorRule;      // The selector for an INDIVIDUAL reply item
-  fields: FieldSelector[]; // Same fields as main comment
+  container: SelectorRule; // Wrapper inside a parent comment holding its replies (use parent comment/reply list container if replies nest directly)
+  item: SelectorRule;      // Selector for an INDIVIDUAL reply item within replies.container
+  fields: FieldSelector[]; // REQUIRED complete FieldSelector[] array for reply items (include username, content, and timestamp/likes if present)
+  expandBtn?: SelectorRule;// Optional: button/link inside a comment that expands collapsed replies (omit if none exists)
 }
 
 interface CrawlingConfig {
@@ -75,7 +76,7 @@ interface CrawlingConfig {
   container: SelectorRule; // The wrapper around ALL comments (the main list)
   item: SelectorRule;      // The selector for an INDIVIDUAL comment item
   fields: FieldSelector[]; // Fields to extract
-  replies?: ReplyConfig;   // Optional: if replies are detected
+  replies?: ReplyConfig;   // REQUIRED whenever reply items, nested comments, reply lists, or reply-expand buttons exist in the DOM
 }
 \`\`\`
 
@@ -86,8 +87,12 @@ interface CrawlingConfig {
     *   Data Attributes: \`[data-testid="comment"]\`, \`[data-role="author"]\`
     *   ARIA Roles: \`[role="article"]\`, \`[aria-label="Comment"]\`
     *   Semantic Tags: \`article\`, \`time\`, \`h3\`
-3.  **Replies Toggle**: Look for elements that expand replies, often buttons or links with text "View X replies", "Show replies", "More replies".
-    *   Selector examples: \`.more-replies\`, \`#more-replies-sub-thread\`, \`button[aria-label*="replies"]\`.
+3.  **Replies & Nested Comments (\`replies\`)**:
+    *   Inspect comment items carefully for nested sub-comments, reply threads/lists, or "View X replies" / "Show replies" / "More replies" / "展开回复" buttons.
+    *   Whenever ANY reply structure or reply-expand trigger exists, populate \`replies\` with non-empty \`container.selector\`, \`item.selector\`, and a full \`fields\` array (even if reply items share the same markup/selectors as top-level comments).
+    *   \`replies.container\` and \`replies.expandBtn\` are queried relative to a parent comment item; \`replies.item\` is queried relative to \`replies.container\`.
+    *   If no collapsed-reply toggle button exists, omit \`expandBtn\` completely (do NOT emit empty selectors or \`null\`).
+    *   Selector examples for \`expandBtn\`: \`.more-replies\`, \`#more-replies-sub-thread\`, \`button[aria-label*="replies"]\`.
 4.  **Use Hierarchy**: If a stable class is not available, use structural paths relative to the parent.
     *   *Bad*: \`.div > .span > .text\`
     *   *Good*: \`article > header > a.author\`

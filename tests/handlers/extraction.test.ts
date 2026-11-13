@@ -686,7 +686,12 @@ describe('extraction handlers', () => {
       );
       expect(context.taskManager.completeTask).toHaveBeenCalledWith(
         'task_123',
-        expect.objectContaining({ commentsCount: 0, title: 'No Comments' }),
+        expect.objectContaining({
+          commentsCount: 0,
+          title: 'No Comments',
+          historyId: expect.stringMatching(/^history_/),
+          historyTab: 'comments',
+        }),
       );
     });
 
