@@ -2,8 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   buildAnalysisPrompt,
   buildDynamicReportPrompt,
-  validatePromptTemplate,
-  getAvailablePlaceholders,
   getAnalysisPromptTemplate,
   getDynamicReportPromptTemplate,
   DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
@@ -139,7 +137,6 @@ describe('Prompts Utils', () => {
         );
         expect(getAnalysisPromptTemplate(undefined, code)).toBe(analysis);
         expect(getDynamicReportPromptTemplate(undefined, code)).toBe(dynamic);
-        expect(validatePromptTemplate(analysis)).toBe(true);
         expect(tokens(analysis)).toEqual(tokens(DEFAULT_ANALYSIS_PROMPT_TEMPLATE));
         expect(tokens(dynamic)).toEqual(tokens(DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE));
         expect(dynamic).toContain('<!DOCTYPE html>');
@@ -210,37 +207,6 @@ describe('Prompts Utils', () => {
       expect(extracted).toContain('<!DOCTYPE html>');
       expect(extracted).toContain('Dashboard');
       expect(extracted).not.toContain('<think>');
-    });
-  });
-
-  describe('validatePromptTemplate', () => {
-    it('should return true for valid template', () => {
-      const validTemplate = 'Analyze this: {comments_data} with valid length... ' + 'a'.repeat(50);
-      expect(validatePromptTemplate(validTemplate)).toBe(true);
-    });
-
-    it('should return false if {comments_data} is missing', () => {
-      const invalidTemplate = 'No data placeholder here... ' + 'a'.repeat(50);
-      expect(validatePromptTemplate(invalidTemplate)).toBe(false);
-    });
-
-    it('should return false if template is too short', () => {
-      const shortTemplate = 'Too short {comments_data}';
-      expect(validatePromptTemplate(shortTemplate)).toBe(false);
-    });
-
-    it('should return false if template is too long', () => {
-      const longTemplate = '{comments_data}' + 'a'.repeat(10001);
-      expect(validatePromptTemplate(longTemplate)).toBe(false);
-    });
-  });
-
-  describe('getAvailablePlaceholders', () => {
-    it('should return list of placeholders', () => {
-      const placeholders = getAvailablePlaceholders();
-      expect(placeholders.length).toBeGreaterThan(0);
-      expect(placeholders.some((p) => p.key === '{comments_data}')).toBe(true);
-      expect(placeholders.some((p) => p.key === '{platform}')).toBe(true);
     });
   });
 });

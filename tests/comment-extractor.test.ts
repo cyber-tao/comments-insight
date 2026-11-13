@@ -1,23 +1,32 @@
-import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CommentExtractor } from '../src/content/CommentExtractor';
+import { MESSAGES } from '../src/config/constants';
+import type { PageController } from '../src/content/PageController';
+import type { CrawlingConfig } from '../src/types';
 import { mockComment, mockComments } from './fixtures';
 
-// Mock chrome
-beforeAll(() => {
-  (global as unknown as { chrome: unknown }).chrome = {
-    runtime: {
-      sendMessage: vi.fn((msg, callback) => {
-        if (callback) callback({ settings: {} });
-      }),
-    },
-  };
-});
+const {
+  sendMessageMock,
+  mockAIExecute,
+  mockAICleanup,
+  mockConfiguredExecute,
+  mockConfiguredCleanup,
+} = vi.hoisted(() => ({
+  sendMessageMock: vi.fn(),
+  mockAIExecute: vi.fn(),
+  mockAICleanup: vi.fn(),
+  mockConfiguredExecute: vi.fn(),
+  mockConfiguredCleanup: vi.fn(),
+}));
 
-afterAll(() => {
-  delete (global as unknown as { chrome?: unknown }).chrome;
-});
+vi.mock('../src/utils/chrome-message', () => ({
+  sendMessage: sendMessageMock,
+}));
 
-// Mock Logger
+vi.mock('../src/utils/url', () => ({
+  getCurrentHostname: vi.fn().mockReturnValue('youtube.com'),
+}));
+
 vi.mock('../src/utils/logger', () => ({
   Logger: {
     info: vi.fn(),
@@ -27,48 +36,80 @@ vi.mock('../src/utils/logger', () => ({
   },
 }));
 
-// Mock AIStrategy
-const mockExecute = vi.fn();
-const mockCleanup = vi.fn();
-
 vi.mock('../src/content/strategies/AIStrategy', () => ({
   AIStrategy: class MockAIStrategy {
-    execute = mockExecute;
-    cleanup = mockCleanup;
+    execute = mockAIExecute;
+    cleanup = mockAICleanup;
   },
 }));
 
-// Mock PageController
-const mockPageController = {
-  getPageInfo: vi.fn(),
-  scrollToLoadMore: vi.fn(),
-  expandReplies: vi.fn(),
-};
+vi.mock('../src/content/strategies/ConfiguredStrategy', () => ({
+  ConfiguredStrategy: class MockConfiguredStrategy {
+    execute = mockConfiguredExecute;
+    cleanup = mockConfiguredCleanup;
+  },
+}));
+
+const mockPageController = {} as unknown as PageController;
 
 describe('CommentExtractor', () => {
   let extractor: CommentExtractor;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    extractor = new CommentExtractor(
-      mockPageController as unknown as ConstructorParameters<typeof CommentExtractor>[0],
-    );
+    sendMessageMock.mockResolvedValue({ config: null });
+    extractor = new CommentExtractor(mockPageController);
   });
 
   describe('extractWithAI', () => {
-    it('should extract comments using AI strategy', async () => {
+    it('should extract comments using AI strategy when no config matches', async () => {
       const comments = mockComments(5);
-      mockExecute.mockResolvedValue(comments);
+      mockAIExecute.mockResolvedValue(comments);
 
       const result = await extractor.extractWithAI(10, 'YouTube');
 
-      expect(mockExecute).toHaveBeenCalled();
+      expect(sendMessageMock).toHaveBeenCalledWith({
+        type: MESSAGES.GET_CRAWLING_CONFIG,
+        payload: { domain: 'youtube.com' },
+      });
+      expect(mockAIExecute).toHaveBeenCalled();
+      expect(mockConfiguredExecute).not.toHaveBeenCalled();
       expect(result).toHaveLength(5);
+    });
+
+    it('should use ConfiguredStrategy when a domain crawling config exists and clamp progress', async () => {
+      const config = { id: 'yt-1', domain: 'youtube.com' } as unknown as CrawlingConfig;
+      sendMessageMock.mockResolvedValue({ config });
+      mockConfiguredExecute.mockImplementation(
+        async (
+          _target: number,
+          _platform: string,
+          onProgress?: (
+            progress: number,
+            stage: string,
+            message: string,
+            current: number,
+            total: number,
+          ) => void,
+        ) => {
+          onProgress?.(60, 'extracting', 'extracting', 12, 14);
+          return mockComments(3);
+        },
+      );
+      const onProgress = vi.fn();
+
+      const result = await extractor.extractWithAI(10, 'YouTube', onProgress);
+
+      expect(mockConfiguredExecute).toHaveBeenCalled();
+      expect(mockAIExecute).not.toHaveBeenCalled();
+      expect(onProgress).toHaveBeenCalledWith(60, 'extracting', 'extracting', 10, 10);
+      expect(mockConfiguredCleanup).toHaveBeenCalledOnce();
+      expect(result).toHaveLength(3);
     });
 
     it('should call progress callback during extraction', async () => {
       const comments = mockComments(3);
-      mockExecute.mockResolvedValue(comments);
+      mockAIExecute.mockResolvedValue(comments);
       const onProgress = vi.fn();
 
       await extractor.extractWithAI(10, 'YouTube', onProgress);
@@ -80,7 +121,7 @@ describe('CommentExtractor', () => {
 
     it('should limit comments to maxComments', async () => {
       const comments = mockComments(20);
-      mockExecute.mockResolvedValue(comments);
+      mockAIExecute.mockResolvedValue(comments);
 
       const result = await extractor.extractWithAI(5, 'YouTube');
 
@@ -89,19 +130,19 @@ describe('CommentExtractor', () => {
 
     it('should cleanup strategy after extraction', async () => {
       const comments = mockComments(3);
-      mockExecute.mockResolvedValue(comments);
+      mockAIExecute.mockResolvedValue(comments);
 
       await extractor.extractWithAI(10, 'YouTube');
 
-      expect(mockCleanup).toHaveBeenCalled();
+      expect(mockAICleanup).toHaveBeenCalled();
     });
 
     it('should cleanup strategy even if extraction fails', async () => {
-      mockExecute.mockRejectedValue(new Error('Extraction failed'));
+      mockAIExecute.mockRejectedValue(new Error('Extraction failed'));
 
       await expect(extractor.extractWithAI(10, 'YouTube')).rejects.toThrow('Extraction failed');
 
-      expect(mockCleanup).toHaveBeenCalled();
+      expect(mockAICleanup).toHaveBeenCalled();
     });
 
     it('should set platform on all comments', async () => {
@@ -109,7 +150,7 @@ describe('CommentExtractor', () => {
         mockComment({ platform: undefined }),
         mockComment({ platform: 'OtherPlatform' }),
       ];
-      mockExecute.mockResolvedValue(comments);
+      mockAIExecute.mockResolvedValue(comments);
 
       const result = await extractor.extractWithAI(10, 'YouTube');
 
@@ -124,7 +165,7 @@ describe('CommentExtractor', () => {
         mockComment({ content: '' }),
         mockComment({ content: '   ' }),
       ];
-      mockExecute.mockResolvedValue(comments);
+      mockAIExecute.mockResolvedValue(comments);
 
       const result = await extractor.extractWithAI(10, 'YouTube');
 
@@ -138,7 +179,7 @@ describe('CommentExtractor', () => {
         mockComment({ username: '' }),
         mockComment({ username: '   ' }),
       ];
-      mockExecute.mockResolvedValue(comments);
+      mockAIExecute.mockResolvedValue(comments);
 
       const result = await extractor.extractWithAI(10, 'YouTube');
 
@@ -148,7 +189,7 @@ describe('CommentExtractor', () => {
 
     it('should backfill missing timestamps with the unknown placeholder', async () => {
       const comments = [mockComment({ timestamp: '' }), mockComment({ timestamp: '2h ago' })];
-      mockExecute.mockResolvedValue(comments);
+      mockAIExecute.mockResolvedValue(comments);
 
       const result = await extractor.extractWithAI(10, 'YouTube');
 
@@ -163,7 +204,7 @@ describe('CommentExtractor', () => {
         mockComment({ likes: -5 }),
         mockComment({ likes: 0 }),
       ];
-      mockExecute.mockResolvedValue(comments);
+      mockAIExecute.mockResolvedValue(comments);
 
       const result = await extractor.extractWithAI(10, 'YouTube');
 
@@ -177,7 +218,7 @@ describe('CommentExtractor', () => {
         mockComment({ replies: [] }),
         mockComment({ replies: [mockComment()] }),
       ];
-      mockExecute.mockResolvedValue(comments);
+      mockAIExecute.mockResolvedValue(comments);
 
       const result = await extractor.extractWithAI(10, 'YouTube');
 
@@ -186,7 +227,7 @@ describe('CommentExtractor', () => {
 
     it('should handle null likes', async () => {
       const comments = [mockComment({ likes: null as unknown as number })];
-      mockExecute.mockResolvedValue(comments);
+      mockAIExecute.mockResolvedValue(comments);
 
       const result = await extractor.extractWithAI(10, 'YouTube');
 

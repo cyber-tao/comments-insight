@@ -119,12 +119,6 @@ describe('Export Utils', () => {
       comments: [],
       analysis: {
         markdown: '# Analysis',
-        summary: {
-          totalComments: 10,
-          sentimentDistribution: { positive: 5, negative: 3, neutral: 2 },
-          hotComments: [],
-          keyInsights: [],
-        },
         tokensUsed: 100,
         generatedAt: Date.now(),
       },
@@ -157,12 +151,6 @@ describe('Export Utils', () => {
       analysis: {
         markdown: '# Analysis',
         dynamicHtml: '<!DOCTYPE html><html><body><h1>Dashboard</h1></body></html>',
-        summary: {
-          totalComments: 10,
-          sentimentDistribution: { positive: 5, negative: 3, neutral: 2 },
-          hotComments: [],
-          keyInsights: [],
-        },
         tokensUsed: 100,
         generatedAt: Date.now(),
       },

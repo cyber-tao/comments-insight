@@ -19,7 +19,7 @@ let commentExtractor: CommentExtractor | null = null;
 
 export function getTools(): ContentTools {
   if (!domAnalyzer) domAnalyzer = new DOMAnalyzer();
-  if (!pageController) pageController = new PageController(domAnalyzer);
+  if (!pageController) pageController = new PageController();
   if (!commentExtractor) commentExtractor = new CommentExtractor(pageController);
   return { domAnalyzer, pageController, commentExtractor };
 }

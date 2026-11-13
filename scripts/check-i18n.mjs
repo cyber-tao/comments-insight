@@ -71,15 +71,18 @@ const errors = [];
 
 // --- Check 1: every referenced key exists in the base locale ---------------
 const base = flattenMessages(baseLocale);
+const allReferencedKeys = new Set();
 
 for (const filePath of walk(SRC_DIR)) {
   const content = readFileSync(filePath, 'utf8');
   const referenced = new Set();
   for (const match of content.matchAll(T_CALL_PATTERN)) {
     referenced.add(match[2]);
+    allReferencedKeys.add(match[2]);
   }
   for (const match of content.matchAll(KEY_LITERAL_PATTERN)) {
     referenced.add(match[2]);
+    allReferencedKeys.add(match[2]);
   }
   for (const key of referenced) {
     if (!base.has(key)) {
@@ -87,6 +90,12 @@ for (const filePath of walk(SRC_DIR)) {
         `${filePath.replace(ROOT + '\\', '').replaceAll('\\', '/')}: i18n key "${key}" not found in ${BASE_LOCALE}.json`,
       );
     }
+  }
+}
+
+for (const key of base.keys()) {
+  if (!allReferencedKeys.has(key)) {
+    errors.push(`${BASE_LOCALE}.json: unused i18n key "${key}"`);
   }
 }
 

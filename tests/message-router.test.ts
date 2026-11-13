@@ -56,7 +56,6 @@ vi.mock('../src/background/handlers/settings', () => ({
   handleCacheSelector: vi.fn().mockResolvedValue({ success: true }),
   handleGetCrawlingConfig: vi.fn().mockResolvedValue({ config: null }),
   handleSaveCrawlingConfig: vi.fn().mockResolvedValue({ success: true }),
-  handleSyncCrawlingConfigs: vi.fn().mockResolvedValue({ success: true }),
   handleUpdateFieldValidation: vi.fn().mockResolvedValue({ success: true }),
 }));
 

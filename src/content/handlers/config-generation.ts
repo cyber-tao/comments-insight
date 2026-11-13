@@ -4,7 +4,6 @@ import { globalExtractionState } from '../extractionState';
 import { PageController } from '../PageController';
 import { AIStrategy } from '../strategies/AIStrategy';
 import { ConfigGenerationResponse } from '@/types/messages';
-import { getTools } from './tools';
 import { sendCancelledCompletion, sendTaskFailure } from './extraction';
 import { ErrorCode, ExtensionError, toExtensionErrorPayload } from '@/utils/error-types';
 import { checkSourcePage, isSameSourcePage, sourcePageChangedError } from '@/utils/source-page';
@@ -32,8 +31,7 @@ export async function handleStartConfigGeneration(
   }
 
   try {
-    const { domAnalyzer } = getTools();
-    const localPageController = new PageController(domAnalyzer);
+    const localPageController = new PageController();
     const strategy = new AIStrategy(localPageController);
 
     try {

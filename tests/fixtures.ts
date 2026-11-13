@@ -1,5 +1,4 @@
-import { Comment, HistoryItem, Task, Settings, AIConfig } from '../src/types';
-import { AI, LANGUAGES, RETRY, THEME } from '../src/config/constants';
+import { Comment, AIConfig } from '../src/types';
 
 export const mockComment = (overrides: Partial<Comment> = {}): Comment => ({
   id: `comment_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
@@ -22,29 +21,6 @@ export const mockComments = (count: number, overrides: Partial<Comment> = {}): C
     }),
   );
 
-export const mockHistoryItem = (overrides: Partial<HistoryItem> = {}): HistoryItem => ({
-  id: `history_${Date.now()}`,
-  url: 'https://example.com/post/123',
-  title: 'Test Post Title',
-  platform: 'Generic',
-  extractedAt: Date.now(),
-  commentsCount: 10,
-  comments: mockComments(10),
-  ...overrides,
-});
-
-export const mockTask = (overrides: Partial<Task> = {}): Task => ({
-  id: `task_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
-  type: 'extract',
-  status: 'pending',
-  url: 'https://example.com/post/123',
-  platform: 'Generic',
-  progress: 0,
-  startTime: Date.now(),
-  tokensUsed: 0,
-  ...overrides,
-});
-
 export const mockAIConfig = (overrides: Partial<AIConfig> = {}): AIConfig => ({
   protocol: 'openai-chat-completions',
   apiUrl: 'https://api.openai.com/v1',
@@ -53,91 +29,4 @@ export const mockAIConfig = (overrides: Partial<AIConfig> = {}): AIConfig => ({
   contextWindowSize: 128000,
   maxOutputTokens: 4000,
   ...overrides,
-});
-
-export const mockSettings = (overrides: Partial<Settings> = {}): Settings => {
-  const defaults: Settings = {
-    maxComments: 100,
-    aiTimeout: AI.DEFAULT_TIMEOUT,
-    language: LANGUAGES.DEFAULT,
-    theme: THEME.DEFAULT,
-    normalizeTimestamps: false,
-    exportPostContentInMarkdown: false,
-    aiModel: mockAIConfig(),
-    analyzerPromptTemplate: '',
-    selectorRetryAttempts: RETRY.SELECTOR_ATTEMPTS,
-    selectorCache: [],
-    crawlingConfigs: [],
-    disabledDefaultConfigDomains: [],
-    domAnalysisConfig: {
-      initialDepth: 3,
-      expandDepth: 2,
-      maxDepth: 10,
-    },
-    developerMode: false,
-  };
-  return { ...defaults, ...overrides } as Settings;
-};
-
-export const mockDomStructure = (): string =>
-  `
-<div class="comments-container">
-  <div class="comment" data-id="1">
-    <span class="author">User 1</span>
-    <p class="content">First comment content</p>
-    <span class="likes">10 likes</span>
-    <span class="time">2 hours ago</span>
-  </div>
-  <div class="comment" data-id="2">
-    <span class="author">User 2</span>
-    <p class="content">Second comment content</p>
-    <span class="likes">5 likes</span>
-    <span class="time">1 hour ago</span>
-    <div class="replies">
-      <div class="reply" data-id="2-1">
-        <span class="author">User 3</span>
-        <p class="content">Reply to second comment</p>
-      </div>
-    </div>
-  </div>
-</div>
-`.trim();
-
-export const mockApiResponse = (content: string): { content: string; tokensUsed: number } => ({
-  content,
-  tokensUsed: Math.floor(content.length / 4),
-});
-
-export const mockAnalysisResult = () => ({
-  markdown: 'Test analysis summary',
-  summary: {
-    totalComments: 10,
-    sentimentDistribution: {
-      positive: 6,
-      neutral: 3,
-      negative: 1,
-    },
-    hotComments: [],
-    keyInsights: ['Insight 1', 'Insight 2'],
-  },
-  tokensUsed: 500,
-  generatedAt: Date.now(),
-});
-
-export const mockScraperConfig = () => ({
-  name: 'Test Scraper',
-  urlPattern: 'example.com/*',
-  selectors: {
-    container: '.comments-container',
-    comment: '.comment',
-    author: '.author',
-    content: '.content',
-    likes: '.likes',
-    timestamp: '.time',
-  },
-  structure: {
-    hasReplies: true,
-    repliesNested: true,
-    needsExpand: false,
-  },
 });

@@ -119,14 +119,6 @@ describe('analysis handlers', () => {
     it('should forward AI stream progress to detailed task progress', async () => {
       const analysisResult = {
         markdown: '# Analysis Report',
-        summary: {
-          totalComments: 1,
-          sentimentDistribution: { positive: 0, neutral: 100, negative: 0 },
-          topKeywords: [],
-          keyInsights: [],
-          hotComments: [],
-          engagement: { totalLikes: 0, averageLikes: 0, topLikedComment: null },
-        },
         tokensUsed: 5,
         generatedAt: Date.now(),
       };

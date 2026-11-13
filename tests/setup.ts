@@ -1,18 +1,13 @@
-import 'fake-indexeddb/auto';
-import { beforeEach } from 'vitest';
-import { container } from '../src/background/ServiceContainer';
-
 // Fail fast on unhandled rejections so tests don't silently pass with hidden async errors.
-process.on('unhandledRejection', (reason) => {
-  if (reason instanceof Error) {
-    throw reason;
-  }
-  throw new Error(String(reason));
-});
+const UNHANDLED_REJECTION_INSTALLED = '__commentsInsightUnhandledRejectionInstalled';
+const globalFlags = globalThis as unknown as Record<symbol | string, boolean | undefined>;
 
-// Reset the global service container before each test so suites that touch
-// ServiceContainer-backed services start from a clean slate. This prevents
-// fake-indexeddb instances and TaskManager state from bleeding across tests.
-beforeEach(() => {
-  container.resetAll();
-});
+if (!globalFlags[UNHANDLED_REJECTION_INSTALLED]) {
+  globalFlags[UNHANDLED_REJECTION_INSTALLED] = true;
+  process.on('unhandledRejection', (reason) => {
+    if (reason instanceof Error) {
+      throw reason;
+    }
+    throw new Error(String(reason));
+  });
+}

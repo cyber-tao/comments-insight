@@ -14,7 +14,7 @@
     "preview": "vite preview",
     "package": "bun run build && bun scripts/package.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit",
-    "lint": "eslint . && node scripts/check-i18n.mjs",
+    "lint": "eslint --max-warnings 0 . && node scripts/check-i18n.mjs",
     "i18n:check": "node scripts/check-i18n.mjs",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"**/*.{ts,tsx,js,json,md,css,html}\"",

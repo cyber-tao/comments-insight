@@ -392,35 +392,3 @@ export function createAIError(
     ([ErrorCode.AI_TIMEOUT, ErrorCode.AI_RATE_LIMIT].includes(code) ? true : undefined);
   return new ExtensionError(code, message, details, retryDecision);
 }
-
-/**
- * Create a storage error
- */
-export function createStorageError(
-  message: string,
-  details?: Record<string, unknown>,
-): ExtensionError {
-  return new ExtensionError(ErrorCode.STORAGE_ERROR, message, details, false);
-}
-
-/**
- * Create a configuration error
- */
-export function createConfigError(
-  code: ErrorCode,
-  message: string,
-  details?: Record<string, unknown>,
-): ExtensionError {
-  return new ExtensionError(code, message, details, false);
-}
-
-/**
- * Create an extraction error
- */
-export function createExtractionError(
-  code: ErrorCode,
-  message: string,
-  details?: Record<string, unknown>,
-): ExtensionError {
-  return new ExtensionError(code, message, details, false);
-}

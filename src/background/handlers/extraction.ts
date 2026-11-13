@@ -4,14 +4,8 @@ import { Logger } from '@/utils/logger';
 import { ExtensionError, ErrorCode } from '@/utils/errors';
 import i18n from '@/utils/i18n';
 import { isSameSourcePage } from '@/utils/source-page';
-import {
-  MESSAGES,
-  EXTRACTION_DEFAULTS,
-  DATE_TIME,
-  ANALYSIS_FORMAT,
-  TIMEOUT,
-  TEXT,
-} from '@/config/constants';
+import { MESSAGES, EXTRACTION_DEFAULTS, ANALYSIS_FORMAT, TIMEOUT, TEXT } from '@/config/constants';
+import { DataNormalizer } from '@/background/ai/DataNormalizer';
 import { getDomain } from '@/utils/url';
 import { generateUniqueId } from '@/utils/id-generator';
 import { resolveTabId } from '@/utils/chrome-message';
@@ -118,13 +112,7 @@ export async function handleExtractionCompleted(
           current: 0,
           total: totalCount,
         });
-        const pad = (value: number) => value.toString().padStart(DATE_TIME.PAD_LENGTH, '0');
-        const now = new Date();
-        const referenceTime = `${now.getFullYear()}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${pad(
-          now.getMonth() + DATE_TIME.MONTH_OFFSET,
-        )}${DATE_TIME.DISPLAY_DATE_SEPARATOR}${pad(now.getDate())}T${pad(
-          now.getHours(),
-        )}${DATE_TIME.DISPLAY_TIME_SEPARATOR}${pad(now.getMinutes())}`;
+        const referenceTime = DataNormalizer.formatLocalIsoMinute(new Date());
         normalizedComments = await context.timestampNormalizer.normalizeCommentTimestamps(
           rawComments,
           settings.aiModel,

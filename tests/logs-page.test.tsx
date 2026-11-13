@@ -2,7 +2,6 @@
  * @vitest-environment jsdom
  */
 
-import React from 'react';
 import { act, render, renderHook, screen, waitFor, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Logs from '../src/logs/Logs';
@@ -96,6 +95,12 @@ async function handleLogMessage(message: Message): Promise<{ success: true }> {
     throw new Error(`Unexpected logs-page message: ${message.type}`);
   }
   return { success: true };
+}
+
+async function flushMicrotasks(iterations = 4): Promise<void> {
+  for (let i = 0; i < iterations; i += 1) {
+    await Promise.resolve();
+  }
 }
 
 async function loadedLogs() {
@@ -215,8 +220,11 @@ describe('Logs Page', () => {
     await loadedLogs();
 
     fireEvent.click(screen.getByRole('button', { name: /logs.clearAll/ }));
+    await act(async () => {
+      await flushMicrotasks();
+    });
 
-    await waitFor(() => expect(storageRemove).toHaveBeenCalledOnce());
+    expect(storageRemove).toHaveBeenCalledOnce();
     expect(runtimeSendMessage).toHaveBeenCalledExactlyOnceWith(
       { type: MESSAGES.CLEAR_LOGS, payload: { kind: 'all' } },
       expect.any(Function),
@@ -297,7 +305,10 @@ describe('Logs Page', () => {
       fireEvent.click(screen.getByRole('button', { name: 'common.delete' }));
       const key = kind === 'ai' ? 'ai_log_2' : 'log_sys_1';
 
-      await waitFor(() => expect(storageRemove).toHaveBeenCalledExactlyOnceWith([key]));
+      await act(async () => {
+        await flushMicrotasks();
+      });
+      expect(storageRemove).toHaveBeenCalledExactlyOnceWith([key]);
       expect(runtimeSendMessage).toHaveBeenCalledExactlyOnceWith(
         { type: MESSAGES.DELETE_LOG, payload: { key, kind } },
         expect.any(Function),

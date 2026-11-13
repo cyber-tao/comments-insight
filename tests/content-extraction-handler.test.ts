@@ -57,11 +57,26 @@ function makeComment(id: string): Comment {
   };
 }
 
-function setExtractor(behavior: (signal: AbortSignal) => Promise<Comment[]>) {
+type ExtractorProgressCb = (
+  progress: number,
+  message: string,
+  stage?: string,
+  current?: number,
+  total?: number,
+) => void;
+
+function setExtractor(
+  behavior: (signal: AbortSignal, onProgress?: ExtractorProgressCb) => Promise<Comment[]>,
+) {
   (getTools as ReturnType<typeof vi.fn>).mockReturnValue({
     commentExtractor: {
-      extractWithAI: vi.fn((_max: number, _platform: string, _cb: unknown, signal: AbortSignal) =>
-        behavior(signal),
+      extractWithAI: vi.fn(
+        (
+          _max: number,
+          _platform: string,
+          cb: ExtractorProgressCb | undefined,
+          signal: AbortSignal,
+        ) => behavior(signal, cb),
       ),
     },
   });
@@ -216,7 +231,10 @@ describe('content extraction handler', () => {
   });
 
   it('forwards extraction progress for the active task only', async () => {
-    setExtractor(async () => [makeComment('c1')] as Comment[]);
+    setExtractor(async (_signal, onProgress) => {
+      onProgress?.(50, 'Extracting', 'extracting', 5, 10);
+      return [makeComment('c1')] as Comment[];
+    });
     const callsBefore = sendMessageMock.mock.calls.length;
 
     await handleStartExtraction({ taskId: 'task-progress', maxComments: 1 }, vi.fn(), undefined);
@@ -224,12 +242,24 @@ describe('content extraction handler', () => {
     const progressCalls = sendMessageMock.mock.calls
       .slice(callsBefore)
       .filter(([message]) => message?.type === MESSAGES.EXTRACTION_PROGRESS);
-    // The mocked extractor never calls the progress callback, but the
-    // completion path must still fire.
     const completionCalls = sendMessageMock.mock.calls
       .slice(callsBefore)
       .filter(([message]) => message?.type === MESSAGES.EXTRACTION_COMPLETED);
     expect(completionCalls).toHaveLength(1);
-    expect(progressCalls).toHaveLength(0);
+    expect(progressCalls).toEqual([
+      [
+        {
+          type: MESSAGES.EXTRACTION_PROGRESS,
+          payload: {
+            taskId: 'task-progress',
+            progress: 50,
+            message: 'Extracting',
+            stage: 'extracting',
+            current: 5,
+            total: 10,
+          },
+        },
+      ],
+    ]);
   });
 });

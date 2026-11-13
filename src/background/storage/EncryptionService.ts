@@ -65,13 +65,6 @@ export class EncryptionService {
     });
   }
 
-  async enableEncryption(passphrase: string): Promise<void> {
-    const { salt } = await this.getOrCreateKeyMaterial();
-    const keyMaterial = await this.importKeyMaterial(passphrase);
-    this.encryptionKey = await this.deriveKey(keyMaterial, salt);
-    this.encryptionEnabled = true;
-  }
-
   disableEncryption(): void {
     this.encryptionKey = undefined;
     this.encryptionEnabled = false;

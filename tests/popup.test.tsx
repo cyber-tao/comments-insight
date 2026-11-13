@@ -2,7 +2,6 @@
  * @vitest-environment jsdom
  */
 
-import * as React from 'react';
 import { render, fireEvent, screen, waitFor, act } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Popup from '../src/popup/Popup';

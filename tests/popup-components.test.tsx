@@ -2,12 +2,14 @@
  * @vitest-environment jsdom
  */
 
-import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ActionButtons } from '../src/popup/components/ActionButtons';
-import { TaskProgress } from '../src/popup/components/TaskProgress';
+import { Header } from '../src/popup/components/Header';
 import { PageStatus } from '../src/popup/components/PageStatus';
-import { PATHS } from '../src/config/constants';
+import { SelectorTester } from '../src/popup/components/SelectorTester';
+import { TaskProgress } from '../src/popup/components/TaskProgress';
+import { LIMITS, MESSAGES, PATHS, STORAGE } from '../src/config/constants';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -334,6 +336,10 @@ describe('PageStatus', () => {
     vi.setSystemTime(new Date('2026-03-06T12:00:00Z'));
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('renders invalid page and extracted or analyzed metadata', () => {
     const { rerender } = render(
       <PageStatus
@@ -364,5 +370,145 @@ describe('PageStatus', () => {
     expect(screen.getByText('42')).toBeTruthy();
     expect(screen.getByText('2popup.minutesAgo')).toBeTruthy();
     expect(screen.getByText('2popup.hoursAgo')).toBeTruthy();
+  });
+});
+
+describe('Header', () => {
+  it('renders version badge, model pill, developer logs toggle, and settings button', () => {
+    const onOpenSettings = vi.fn();
+    const onOpenLogs = vi.fn();
+
+    const { rerender } = render(
+      <Header
+        version="0.4.6"
+        aiModelName="gpt-4o-mini"
+        developerMode={false}
+        onOpenSettings={onOpenSettings}
+        onOpenLogs={onOpenLogs}
+      />,
+    );
+
+    expect(screen.getByText('popup.title')).toBeTruthy();
+    expect(screen.getByText('popup.version 0.4.6')).toBeTruthy();
+    expect(screen.getByText('gpt-4o-mini')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'popup.viewLogs' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'popup.settings' }));
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <Header
+        version="0.4.6"
+        aiModelName="gpt-4o-mini"
+        developerMode={true}
+        onOpenSettings={onOpenSettings}
+        onOpenLogs={onOpenLogs}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'popup.viewLogs' }));
+    expect(onOpenLogs).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SelectorTester', () => {
+  const storageGet = vi.fn();
+  const storageSet = vi.fn();
+  const storageRemove = vi.fn();
+  const sendMessage = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storageGet.mockResolvedValue({});
+    storageSet.mockResolvedValue(undefined);
+    storageRemove.mockResolvedValue(undefined);
+    vi.stubGlobal('chrome', {
+      storage: {
+        local: {
+          get: storageGet,
+          set: storageSet,
+          remove: storageRemove,
+        },
+      },
+      runtime: {
+        sendMessage,
+      },
+    });
+  });
+
+  it('hydrates stored state and clears storage when submitted empty', async () => {
+    storageGet.mockResolvedValue({
+      [STORAGE.SELECTOR_TESTER_STATE_KEY]: {
+        selector: '.comment',
+        selectorType: 'xpath',
+        results: ['Saved item'],
+        total: 1,
+      },
+    });
+
+    render(<SelectorTester />);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('.comment')).toBeTruthy();
+    });
+    expect(screen.getByText('Saved item')).toBeTruthy();
+
+    fireEvent.change(screen.getByPlaceholderText('popup.selectorTesterPlaceholder'), {
+      target: { value: '   ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'popup.selectorTesterButton' }));
+
+    await waitFor(() => {
+      expect(storageRemove).toHaveBeenCalledWith(STORAGE.SELECTOR_TESTER_STATE_KEY);
+    });
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('runs selector test and renders match count, items, truncation notice, and errors', async () => {
+    render(<SelectorTester />);
+
+    await waitFor(() => {
+      expect(storageGet).toHaveBeenCalledWith(STORAGE.SELECTOR_TESTER_STATE_KEY);
+    });
+
+    fireEvent.change(screen.getByPlaceholderText('popup.selectorTesterPlaceholder'), {
+      target: { value: '.comment-item' },
+    });
+    sendMessage.mockResolvedValueOnce({
+      success: true,
+      total: LIMITS.SELECTOR_TEST_MAX_RESULTS + 2,
+      items: ['First match', ''],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'popup.selectorTesterButton' }));
+
+    await waitFor(() => {
+      expect(sendMessage).toHaveBeenCalledWith({
+        type: MESSAGES.TEST_SELECTOR,
+        payload: { selector: '.comment-item', selectorType: 'css' },
+      });
+    });
+
+    expect(screen.getByText('First match')).toBeTruthy();
+    expect(screen.getByText('popup.selectorTesterEmptyItem')).toBeTruthy();
+    expect(screen.getByText('popup.selectorTesterMatches')).toBeTruthy();
+    expect(screen.getByText('popup.selectorTesterTruncated')).toBeTruthy();
+
+    sendMessage.mockResolvedValueOnce({
+      success: false,
+      error: 'Invalid selector syntax',
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'popup.selectorTesterButton' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Invalid selector syntax')).toBeTruthy();
+    });
+
+    sendMessage.mockRejectedValueOnce(new Error('Tab closed'));
+    fireEvent.click(screen.getByRole('button', { name: 'popup.selectorTesterButton' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Tab closed')).toBeTruthy();
+    });
   });
 });

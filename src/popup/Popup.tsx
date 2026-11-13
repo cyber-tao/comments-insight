@@ -1,10 +1,10 @@
 import * as React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PATHS } from '@/config/constants';
 import { Logger } from '@/utils/logger';
 import { changeLanguage } from '@/utils/i18n';
 import { ExtensionAPI } from '@/utils/extension-api';
+import { NavigationService } from './utils/navigation';
 import { useTask } from './hooks/useTask';
 import { usePageInfo } from './hooks/usePageInfo';
 import { useTheme } from '@/hooks/useTheme';
@@ -125,18 +125,15 @@ const Popup: React.FC = () => {
   };
 
   const handleOpenHistory = () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL(PATHS.HISTORY_PAGE) });
-    window.close();
+    NavigationService.openHistoryPage();
   };
 
   const handleOpenSettings = () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL(PATHS.OPTIONS_PAGE) });
-    window.close();
+    NavigationService.openOptionsPage();
   };
 
   const handleOpenLogs = () => {
-    chrome.tabs.create({ url: chrome.runtime.getURL(PATHS.LOGS_PAGE) });
-    window.close();
+    NavigationService.openLogsPage();
   };
 
   if (loading) {

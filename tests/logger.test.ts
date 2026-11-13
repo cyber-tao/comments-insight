@@ -209,48 +209,4 @@ describe('Logger', () => {
       expect(mockStorageRemove).not.toHaveBeenCalled();
     },
   );
-
-  describe('storage operations', () => {
-    it('should get logs', async () => {
-      const mockLogs = {
-        log_system_info_1: { level: 'INFO', timestamp: 1000, message: 'Log 1' },
-        log_system_error_2: { level: 'ERROR', timestamp: 2000, message: 'Log 2' },
-        other_key: 'value',
-      };
-
-      mockStorageGet.mockImplementation((keys) => {
-        if (keys === 'system_log_index') {
-          return Promise.resolve({
-            system_log_index: ['log_system_info_1', 'log_system_error_2'],
-          });
-        }
-        return Promise.resolve({
-          log_system_info_1: mockLogs.log_system_info_1,
-          log_system_error_2: mockLogs.log_system_error_2,
-        });
-      });
-
-      const logs = await Logger.getLogs();
-
-      expect(logs).toHaveLength(2);
-      expect(logs[0].message).toBe('Log 2'); // Sorted by timestamp descending
-    });
-
-    it('should clear logs', async () => {
-      mockStorageGet.mockImplementation((keys) => {
-        if (keys === 'system_log_index') {
-          return Promise.resolve({ system_log_index: ['log_system_1', 'log_system_2'] });
-        }
-        return Promise.resolve({});
-      });
-
-      await Logger.clearLogs();
-
-      expect(mockSendMessage).toHaveBeenCalledWith({
-        type: 'CLEAR_LOGS',
-        payload: { kind: 'system' },
-      });
-      expect(mockStorageRemove).not.toHaveBeenCalled();
-    });
-  });
 });

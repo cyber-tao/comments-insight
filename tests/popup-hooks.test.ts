@@ -87,12 +87,6 @@ function createHistoryItem(overrides: Partial<HistoryItem> = {}): HistoryItem {
     comments: createComments(),
     analysis: {
       markdown: '# Analysis',
-      summary: {
-        totalComments: 1,
-        sentimentDistribution: { positive: 1, neutral: 0, negative: 0 },
-        hotComments: [],
-        keyInsights: ['alpha'],
-      },
       tokensUsed: 10,
       generatedAt: 1700000000000,
     },

@@ -5,7 +5,6 @@
  * - Multiple log levels (DEBUG, INFO, WARN, ERROR)
  * - Environment-aware logging (development vs production)
  * - Optional storage persistence for debugging
- * - Log filtering and export capabilities
  *
  * @example
  * ```typescript
@@ -68,29 +67,6 @@ export interface LoggerConfig {
 }
 
 /**
- * Filter options for querying stored logs.
- */
-export interface LogFilter {
-  /** Filter by single level */
-  level?: LogLevel;
-  /** Filter by multiple levels */
-  levels?: LogLevel[];
-  /** Filter logs after this timestamp */
-  startTime?: number;
-  /** Filter logs before this timestamp */
-  endTime?: number;
-  /** Filter by context string */
-  context?: string;
-  /** Search in message text */
-  search?: string;
-  /** Maximum number of results */
-  limit?: number;
-}
-
-/** Supported export formats for logs */
-export type ExportFormat = 'json' | 'csv' | 'text';
-
-/**
  * Static logger class for application-wide logging.
  *
  * The logger automatically adjusts behavior based on environment:
@@ -99,17 +75,10 @@ export type ExportFormat = 'json' | 'csv' | 'text';
  *
  * @example
  * ```typescript
- * // Basic logging
  * Logger.debug('[Module] Debug message');
  * Logger.info('[Module] Info message', { key: 'value' });
  * Logger.warn('[Module] Warning message');
  * Logger.error('[Module] Error message', { error });
- *
- * // Query stored logs
- * const logs = await Logger.getLogs({ level: LogLevel.ERROR, limit: 10 });
- *
- * // Export logs
- * const json = await Logger.exportLogs('json');
  * ```
  */
 export class Logger {
@@ -346,149 +315,6 @@ export class Logger {
     } catch (error) {
       console.error('[Logger] Storage error:', sanitizeLogText(String(error)));
     }
-  }
-
-  private static async getSystemLogIndex(): Promise<string[]> {
-    try {
-      const result = await chrome.storage.local.get(STORAGE.SYSTEM_LOG_INDEX_KEY);
-      const index = result[STORAGE.SYSTEM_LOG_INDEX_KEY] as string[] | undefined;
-      return Array.isArray(index) ? index : [];
-    } catch {
-      return [];
-    }
-  }
-
-  static async getLogs(level?: LogLevel, limit?: number): Promise<LogEntry[]> {
-    return this.getLogsFiltered({ level, limit });
-  }
-
-  static async getLogsFiltered(filter: LogFilter = {}): Promise<LogEntry[]> {
-    try {
-      const index = await this.getSystemLogIndex();
-      if (index.length === 0) return [];
-
-      const storage = await chrome.storage.local.get(index);
-      let logs = Object.values(storage)
-        .map((value) => value as LogEntry)
-        .sort((a, b) => b.timestamp - a.timestamp);
-
-      if (filter.level) {
-        logs = logs.filter((log) => log.level === filter.level);
-      }
-
-      if (filter.levels && filter.levels.length > 0) {
-        logs = logs.filter((log) => filter.levels!.includes(log.level));
-      }
-
-      if (filter.startTime) {
-        logs = logs.filter((log) => log.timestamp >= filter.startTime!);
-      }
-
-      if (filter.endTime) {
-        logs = logs.filter((log) => log.timestamp <= filter.endTime!);
-      }
-
-      if (filter.context) {
-        logs = logs.filter((log) => log.context?.includes(filter.context!));
-      }
-
-      if (filter.search) {
-        const searchLower = filter.search.toLowerCase();
-        logs = logs.filter(
-          (log) =>
-            log.message.toLowerCase().includes(searchLower) ||
-            JSON.stringify(log.data || {})
-              .toLowerCase()
-              .includes(searchLower),
-        );
-      }
-
-      if (filter.limit) {
-        logs = logs.slice(0, filter.limit);
-      }
-
-      return logs;
-    } catch (error) {
-      console.error('[Logger] Failed to get logs:', error);
-      return [];
-    }
-  }
-
-  static async clearLogs(): Promise<void> {
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: MESSAGES.CLEAR_LOGS,
-        payload: { kind: 'system' },
-      });
-      if (response?.error) throw new Error('Failed to clear system logs');
-    } catch (error) {
-      console.error('[Logger] Failed to clear logs:', error);
-      throw error;
-    }
-  }
-
-  static async exportLogs(filter?: LogFilter, format: ExportFormat = 'json'): Promise<string> {
-    const logs = await this.getLogsFiltered(filter || {});
-
-    switch (format) {
-      case 'csv':
-        return this.formatLogsAsCsv(logs);
-      case 'text':
-        return this.formatLogsAsText(logs);
-      case 'json':
-      default:
-        return JSON.stringify(logs, null, 2);
-    }
-  }
-
-  private static formatLogsAsCsv(logs: LogEntry[]): string {
-    const headers = ['timestamp', 'level', 'context', 'message', 'data'];
-    const rows = logs.map((log) => [
-      new Date(log.timestamp).toISOString(),
-      log.level,
-      log.context || '',
-      `"${(log.message || '').replace(/"/g, '""')}"`,
-      `"${JSON.stringify(log.data || {}).replace(/"/g, '""')}"`,
-    ]);
-    return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
-  }
-
-  private static formatLogsAsText(logs: LogEntry[]): string {
-    return logs
-      .map((log) => {
-        const time = new Date(log.timestamp).toISOString();
-        const ctx = log.context ? `[${log.context}] ` : '';
-        const data = log.data ? ` | ${JSON.stringify(log.data)}` : '';
-        return `[${time}] [${log.level}] ${ctx}${log.message}${data}`;
-      })
-      .join('\n');
-  }
-
-  static async getLogStats(): Promise<{
-    total: number;
-    byLevel: Record<LogLevel, number>;
-    oldestTimestamp: number;
-    newestTimestamp: number;
-  }> {
-    const logs = await this.getLogs();
-
-    const stats = {
-      total: logs.length,
-      byLevel: {
-        [LogLevel.DEBUG]: 0,
-        [LogLevel.INFO]: 0,
-        [LogLevel.WARN]: 0,
-        [LogLevel.ERROR]: 0,
-      },
-      oldestTimestamp: logs.length > 0 ? logs[logs.length - 1].timestamp : 0,
-      newestTimestamp: logs.length > 0 ? logs[0].timestamp : 0,
-    };
-
-    logs.forEach((log) => {
-      stats.byLevel[log.level]++;
-    });
-
-    return stats;
   }
 }
 

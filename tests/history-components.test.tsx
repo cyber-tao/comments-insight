@@ -76,12 +76,6 @@ function createHistoryItem(overrides: Partial<HistoryItem> = {}): HistoryItem {
     postContent: 'Post content',
     analysis: {
       markdown: '# Analysis Title',
-      summary: {
-        totalComments: 2,
-        sentimentDistribution: { positive: 1, neutral: 1, negative: 0 },
-        hotComments: [],
-        keyInsights: ['alpha'],
-      },
       tokensUsed: 10,
       generatedAt: 1700000000000,
     },
@@ -674,12 +668,6 @@ describe('HistoryDetailPanel', () => {
         dynamicHtml: '<html><body><h1>Dashboard</h1></body></html>',
         tokensUsed: 100,
         generatedAt: 123,
-        summary: {
-          totalComments: 1,
-          sentimentDistribution: { positive: 100, negative: 0, neutral: 0 },
-          hotComments: [],
-          keyInsights: [],
-        },
       },
     });
 

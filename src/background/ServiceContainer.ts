@@ -68,31 +68,11 @@ class ServiceContainer {
     const defaults = this.getDefaults();
     return { ...defaults, ...this.services } as ServiceInstances;
   }
-
-  set<K extends keyof ServiceInstances>(key: K, instance: ServiceInstances[K]): void {
-    this.services[key] = instance;
-  }
-
-  reset(): void {
-    this.services = {};
-  }
-
-  resetAll(): void {
-    this.services = {};
-    this.defaultServices = null;
-  }
 }
 
 export const container = new ServiceContainer();
 
-export const getAIService = () => container.get('aiService');
-export const getCommentAnalyzer = () => container.get('commentAnalyzer');
-export const getTimestampNormalizer = () => container.get('timestampNormalizer');
 export const getTaskManager = () => container.get('taskManager');
 export const getNotificationService = () => container.get('notificationService');
 export const getSettingsStore = () => container.get('settingsStore');
-export const getHistoryStore = () => container.get('historyStore');
-export const getEncryptionService = () => container.get('encryptionService');
 export const getLogStore = () => container.get('logStore');
-export const getTokenStatsStore = () => container.get('tokenStatsStore');
-export const getCrawlingConfigStore = () => container.get('crawlingConfigStore');

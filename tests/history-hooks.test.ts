@@ -75,16 +75,18 @@ function createHistoryItem(id: string, title: string = HISTORY_TITLE): HistoryIt
     ],
     analysis: {
       markdown: '# Analysis',
-      summary: {
-        totalComments: 1,
-        sentimentDistribution: { positive: 1, neutral: 0, negative: 0 },
-        hotComments: [],
-        keyInsights: ['keyword'],
-      },
       tokensUsed: 10,
       generatedAt: 1700000000000,
     },
   };
+}
+
+async function flushMount(): Promise<void> {
+  await act(async () => {
+    for (let i = 0; i < 4; i += 1) {
+      await Promise.resolve();
+    }
+  });
 }
 
 function renderHistoryData() {
@@ -149,12 +151,11 @@ describe('history hooks', () => {
       }),
     );
 
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-      expect(result.current.history).toHaveLength(2);
-      expect(result.current.selectedHistoryId).toBe(HISTORY_ID);
-      expect(result.current.selectedItem?.id).toBe(HISTORY_ID);
-    });
+    await flushMount();
+    expect(result.current.loading).toBe(false);
+    expect(result.current.history).toHaveLength(2);
+    expect(result.current.selectedHistoryId).toBe(HISTORY_ID);
+    expect(result.current.selectedItem?.id).toBe(HISTORY_ID);
 
     expect(extensionApiMock.getHistoryMetadataPage).toHaveBeenCalledWith(
       0,
@@ -179,9 +180,8 @@ describe('history hooks', () => {
       }),
     );
 
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
+    await flushMount();
+    expect(result.current.loading).toBe(false);
 
     await act(async () => {
       await result.current.handleSelectHistoryItem(createHistoryListEntry(HISTORY_ID));
@@ -218,9 +218,8 @@ describe('history hooks', () => {
       }),
     );
 
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
+    await flushMount();
+    expect(result.current.loading).toBe(false);
 
     await act(async () => {
       await result.current.handleSelectHistoryItem(createHistoryListEntry(HISTORY_ID));
@@ -235,7 +234,8 @@ describe('history hooks', () => {
   it('exposes initial list failure and retries the same query', async () => {
     extensionApiMock.getHistoryMetadataPage.mockRejectedValueOnce(new Error('Read failed'));
     const { result } = renderHistoryData();
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await flushMount();
+    expect(result.current.loading).toBe(false);
     expect(result.current.loadError).toBe(true);
     expect(result.current.history).toEqual([]);
     await act(async () => {
@@ -254,7 +254,8 @@ describe('history hooks', () => {
     'retains rows and selection after %s failure and retries',
     async (kind) => {
       const { result } = renderHistoryData();
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await flushMount();
+      expect(result.current.loading).toBe(false);
       await act(async () => {
         await result.current.handleSelectHistoryItem(createHistoryListEntry(HISTORY_ID));
       });
@@ -287,7 +288,8 @@ describe('history hooks', () => {
 
   it('keeps loaded rows and selection when refresh fails', async () => {
     const { result } = renderHistoryData();
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await flushMount();
+    expect(result.current.loading).toBe(false);
     await act(async () => {
       await result.current.handleSelectHistoryItem(createHistoryListEntry(HISTORY_ID));
     });
@@ -304,7 +306,8 @@ describe('history hooks', () => {
     'ignores stale list %s after history is cleared',
     async (completion) => {
       const { result } = renderHistoryData();
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await flushMount();
+      expect(result.current.loading).toBe(false);
       const lateRead = deferred<{
         entries: ReturnType<typeof createHistoryListEntry>[];
         total: number;
@@ -341,7 +344,8 @@ describe('history hooks', () => {
     'keeps an in-flight search current when %s is attempted on retained rows',
     async (kind) => {
       const { result } = renderHistoryData();
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await flushMount();
+      expect(result.current.loading).toBe(false);
       const pendingSearch = deferred<{
         entries: ReturnType<typeof createHistoryListEntry>[];
         total: number;
@@ -383,7 +387,8 @@ describe('history hooks', () => {
     'blocks %s immediately when a refresh starts before React rerenders',
     async (kind) => {
       const { result } = renderHistoryData();
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await flushMount();
+      expect(result.current.loading).toBe(false);
       const actions = result.current;
       await act(async () => {
         const refresh = actions.retryLoadHistory();
@@ -400,7 +405,8 @@ describe('history hooks', () => {
 
   it('ignores an older read failure after a newer refresh succeeds', async () => {
     const { result } = renderHistoryData();
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await flushMount();
+    expect(result.current.loading).toBe(false);
     const lateRead = deferred<never>();
     extensionApiMock.getHistoryMetadataPage.mockReturnValueOnce(lateRead.promise);
     let request!: Promise<void>;

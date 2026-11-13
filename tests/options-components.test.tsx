@@ -2,10 +2,11 @@
  * @vitest-environment jsdom
  */
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { CrawlingConfigEditor } from '../src/options/components/CrawlingConfigEditor';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { STORAGE } from '../src/config/constants';
 import { BasicSettings } from '../src/options/components/BasicSettings';
 import { AdvancedSettings } from '../src/options/components/AdvancedSettings';
 import type { CrawlingConfig, Settings } from '../src/types';
@@ -182,24 +183,48 @@ describe('CrawlingConfigEditor optional reply selector', () => {
 });
 
 describe('AdvancedSettings', () => {
+  const storageGetMock = vi.fn();
+  const storageSetMock = vi.fn();
+
   beforeEach(() => {
     vi.clearAllMocks();
+    storageGetMock.mockResolvedValue({ [STORAGE.LOG_LEVEL_KEY]: 'DEBUG' });
+    storageSetMock.mockResolvedValue(undefined);
+    vi.stubGlobal('chrome', {
+      storage: {
+        local: {
+          get: storageGetMock,
+          set: storageSetMock,
+        },
+      },
+      runtime: {
+        sendMessage: vi.fn().mockResolvedValue({ success: true }),
+      },
+    });
   });
 
-  it('updates timeout, dom analysis config, and developer mode', async () => {
-    // mock settings getter for this test if needed
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      vi.spyOn(chrome.storage.local, 'get').mockImplementation(() =>
-        Promise.resolve({
-          LOG_LEVEL_KEY: 'DEBUG',
-        } as Record<string, string>),
-      );
-    }
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
-    const settings = createSettings();
+  it('updates timeout, dom analysis config, developer mode, and log output level', async () => {
+    const settings = createSettings({ developerMode: true });
     const onSettingsChange = vi.fn();
 
     render(<AdvancedSettings settings={settings} onSettingsChange={onSettingsChange} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(storageGetMock).toHaveBeenCalledWith(STORAGE.LOG_LEVEL_KEY);
+    const logSelect = screen.getByRole('combobox') as HTMLSelectElement;
+    expect(logSelect.value).toBe('DEBUG');
+
+    await act(async () => {
+      fireEvent.change(logSelect, { target: { value: 'WARN' } });
+      await Promise.resolve();
+    });
+    expect(storageSetMock).toHaveBeenCalledWith({ [STORAGE.LOG_LEVEL_KEY]: 'WARN' });
 
     const numericInputs = screen.getAllByRole('spinbutton');
     fireEvent.change(numericInputs[0], { target: { value: '180' } });
@@ -239,27 +264,21 @@ describe('AdvancedSettings', () => {
     fireEvent.click(screen.getByLabelText('options.developerMode'));
     expect(onSettingsChange).toHaveBeenCalledWith(
       expect.objectContaining({
-        developerMode: true,
+        developerMode: false,
       }),
     );
   });
 
   it('falls back to default dom analysis values when config is missing', async () => {
-    // mock settings getter for this test if needed
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      vi.spyOn(chrome.storage.local, 'get').mockImplementation(() =>
-        Promise.resolve({
-          LOG_LEVEL_KEY: 'DEBUG',
-        } as Record<string, string>),
-      );
-    }
-
     const settings = createSettings({
       domAnalysisConfig: undefined as unknown as Settings['domAnalysisConfig'],
     });
     const onSettingsChange = vi.fn();
 
     render(<AdvancedSettings settings={settings} onSettingsChange={onSettingsChange} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     fireEvent.change(screen.getByDisplayValue('5'), { target: { value: '6' } });
     expect(onSettingsChange).toHaveBeenCalledWith(
@@ -272,19 +291,13 @@ describe('AdvancedSettings', () => {
   });
 
   it('ignores invalid advanced numeric input', async () => {
-    // mock settings getter for this test if needed
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      vi.spyOn(chrome.storage.local, 'get').mockImplementation(() =>
-        Promise.resolve({
-          LOG_LEVEL_KEY: 'DEBUG',
-        } as Record<string, string>),
-      );
-    }
-
     const settings = createSettings();
     const onSettingsChange = vi.fn();
 
     render(<AdvancedSettings settings={settings} onSettingsChange={onSettingsChange} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     for (const input of screen.getAllByRole('spinbutton')) {
       fireEvent.change(input, { target: { value: '' } });

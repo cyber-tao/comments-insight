@@ -8,7 +8,7 @@ import globals from 'globals';
 
 export default tseslint.config(
   {
-    ignores: ['dist/', 'build/', 'node_modules/'],
+    ignores: ['dist/', 'build/', 'node_modules/', 'coverage/', '.local/'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -73,7 +73,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/src/config/constants.ts', '**/tests/dom-query.test.ts'],
+    files: ['**/tests/dom-query.test.ts'],
     rules: {
       'no-useless-escape': 'off',
     },

@@ -21,13 +21,15 @@ vi.stubGlobal('chrome', {
   },
 });
 
+const loggerMock = vi.hoisted(() => ({
+  info: vi.fn(),
+  debug: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
 vi.mock('../src/utils/logger', () => ({
-  Logger: {
-    info: vi.fn(),
-    debug: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
+  Logger: loggerMock,
 }));
 
 const mockNotificationService = {
@@ -378,24 +380,17 @@ describe('TaskManager', () => {
     });
 
     it('should warn when task update notifications fail unexpectedly', async () => {
-      const loggerModule =
-        await vi.importActual<typeof import('../src/utils/logger')>('../src/utils/logger');
-      const warnSpy = vi.spyOn(loggerModule.Logger, 'warn').mockImplementation(() => undefined);
       mockSendMessage.mockRejectedValueOnce(new Error('unexpected failure'));
 
-      try {
-        const taskId = taskManager.createTask('extract', 'https://example.com', 'Generic');
-        await taskManager.startTask(taskId);
+      const taskId = taskManager.createTask('extract', 'https://example.com', 'Generic');
+      await taskManager.startTask(taskId);
 
-        await vi.waitFor(() => {
-          expect(warnSpy).toHaveBeenCalledWith('[TaskManager] Failed to notify task update', {
-            taskId: expect.stringMatching(/^task_/),
-            error: 'unexpected failure',
-          });
+      await vi.waitFor(() => {
+        expect(loggerMock.warn).toHaveBeenCalledWith('[TaskManager] Failed to notify task update', {
+          taskId: expect.stringMatching(/^task_/),
+          error: 'unexpected failure',
         });
-      } finally {
-        warnSpy.mockRestore();
-      }
+      });
     });
   });
 
@@ -680,11 +675,7 @@ describe('TaskManager', () => {
       },
     );
 
-    it('logs the extraction timeout in the task failure line', async ({ onTestFinished }) => {
-      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-      onTestFinished(() => {
-        consoleError.mockRestore();
-      });
+    it('logs the extraction timeout in the task failure line', async () => {
       const taskId = taskManager.createTask('extract', 'https://example.com', 'Generic');
       const message = 'Extraction timed out waiting for completion signal';
       taskManager.setExecutor(
@@ -693,9 +684,8 @@ describe('TaskManager', () => {
       );
 
       await vi.waitFor(() => expect(taskManager.getTask(taskId)?.status).toBe('failed'));
-      expect(consoleError).toHaveBeenCalledExactlyOnceWith(
-        expect.stringContaining(`[TaskManager] Task failed: ${taskId}: ${message}`),
-        '',
+      expect(loggerMock.error).toHaveBeenCalledExactlyOnceWith(
+        `[TaskManager] Task failed: ${taskId}: ${message}`,
       );
     });
 

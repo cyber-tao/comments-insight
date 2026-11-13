@@ -1,5 +1,4 @@
-import { DOMAnalyzer } from './DOMAnalyzer';
-import { TIMING, SCROLL, CLICK, TIMEOUT, TEXT } from '@/config/constants';
+import { TIMING, SCROLL, TEXT } from '@/config/constants';
 import { isExtractionActive } from './extractionState';
 import { Logger } from '../utils/logger';
 import { ErrorCode, ExtensionError } from '@/utils/error-types';
@@ -15,11 +14,9 @@ function hasContentMutation(mutations: MutationRecord[]): boolean {
 }
 
 /**
- * PageController handles page interactions like scrolling and clicking
+ * PageController handles page interactions like scrolling and waiting for DOM updates
  */
 export class PageController {
-  constructor(private domAnalyzer?: DOMAnalyzer) {}
-
   /**
    * Scroll to bottom smoothly to trigger lazy loading
    */
@@ -190,137 +187,5 @@ export class PageController {
     } finally {
       observer.disconnect();
     }
-  }
-
-  /**
-   * Scroll to load more content
-   * @param maxScrolls - Maximum number of scrolls
-   */
-  async scrollToLoadMore(
-    maxScrolls: number = SCROLL.DEFAULT_MAX_SCROLLS,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    let scrollCount = 0;
-    const startTime = Date.now();
-
-    while (scrollCount < maxScrolls) {
-      checkAborted(signal, false);
-      if (!isExtractionActive()) return;
-      if (Date.now() - startTime > SCROLL.MAX_SCROLL_TIMEOUT_MS) {
-        Logger.warn('[PageController] scrollToLoadMore timed out');
-        break;
-      }
-
-      const previousHeight = document.documentElement.scrollHeight;
-
-      window.scrollTo(0, document.documentElement.scrollHeight);
-
-      await abortableDelay(TIMING.PAGE_INIT_DELAY_MS, signal, false);
-
-      const newHeight = document.documentElement.scrollHeight;
-
-      if (newHeight === previousHeight) {
-        Logger.info('[PageController] No more content to load');
-        break;
-      }
-
-      scrollCount++;
-    }
-    if (scrollCount > 0) {
-      Logger.info('[PageController] Finished scrolling', { scrollCount });
-    }
-  }
-
-  /**
-   * Expand collapsed replies (supports Shadow DOM)
-   * @param selector - Selector for expand buttons
-   */
-  async expandReplies(selector: string, signal?: AbortSignal): Promise<void> {
-    // Use Shadow DOM-aware query if available
-    const buttons = this.domAnalyzer
-      ? this.domAnalyzer.querySelectorAllDeep(document, selector)
-      : Array.from(document.querySelectorAll(selector));
-
-    Logger.info('[PageController] Found expand buttons', { count: buttons.length });
-
-    for (const button of buttons) {
-      checkAborted(signal, false);
-      if (!isExtractionActive()) return;
-      try {
-        (button as HTMLElement).click();
-        await abortableDelay(TIMING.SCROLL_BASE_DELAY_MS, signal, false);
-      } catch (error) {
-        if (error instanceof ExtensionError && error.code === ErrorCode.TASK_CANCELLED) {
-          throw error;
-        }
-        // Expected: some expand buttons may not be clickable
-      }
-    }
-  }
-
-  /**
-   * Click "load more" buttons
-   * @param selector - Selector for load more buttons
-   */
-  async clickLoadMore(selector: string, signal?: AbortSignal): Promise<void> {
-    let clickCount = 0;
-    const maxClicks = CLICK.LOAD_MORE_MAX;
-
-    while (clickCount < maxClicks) {
-      checkAborted(signal, false);
-      if (!isExtractionActive()) return;
-      const button = document.querySelector(selector) as HTMLElement;
-
-      if (!button || !button.offsetParent) {
-        // Button not found or not visible
-        break;
-      }
-
-      try {
-        button.click();
-        await abortableDelay(TIMING.AI_RETRY_DELAY_MS, signal, false);
-        clickCount++;
-      } catch (error) {
-        if (error instanceof ExtensionError && error.code === ErrorCode.TASK_CANCELLED) {
-          throw error;
-        }
-        Logger.warn('[PageController] Failed to click load more', { error });
-        break;
-      }
-    }
-    if (clickCount > 0) {
-      Logger.info('[PageController] Clicked load more buttons', { count: clickCount });
-    }
-  }
-
-  /**
-   * Wait for element to appear (supports Shadow DOM)
-   * @param selector - CSS selector
-   * @param timeout - Timeout in milliseconds
-   * @returns Element or null
-   */
-  async waitForElement(
-    selector: string,
-    timeout: number = TIMEOUT.WAIT_ELEMENT_MS,
-    signal?: AbortSignal,
-  ): Promise<Element | null> {
-    const startTime = Date.now();
-
-    while (Date.now() - startTime < timeout) {
-      checkAborted(signal, false);
-      if (!isExtractionActive()) return null;
-      // Use Shadow DOM-aware query if available
-      const element = this.domAnalyzer
-        ? this.domAnalyzer.querySelectorAllDeep(document, selector)[0]
-        : document.querySelector(selector);
-
-      if (element) {
-        return element;
-      }
-      await abortableDelay(TIMING.MICRO_WAIT_MS, signal, false);
-    }
-
-    Logger.warn('[PageController] Element not found', { selector });
-    return null;
   }
 }
