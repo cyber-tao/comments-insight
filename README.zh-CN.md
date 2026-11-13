@@ -14,7 +14,7 @@
 
 </div>
 
-**v0.12.0** 新增任务通知直达链接、AI 回复抓取配置生成、K 单位 Token 预设、可编辑 API 地址与流式连通性测试，并优化历史记录布局。Chrome 网上应用店页面会显示当前可安装的版本。 [GitHub v0.12.0 发布页](https://github.com/cyber-tao/comments-insight/releases/tag/v0.12.0)
+**v0.12.1** 新增任务通知直达链接、AI 回复抓取配置生成、K 单位 Token 预设、可编辑 API 地址与流式连通性测试，并优化历史记录布局。Chrome 网上应用店页面会显示当前可安装的版本。 [GitHub v0.12.1 发布页](https://github.com/cyber-tao/comments-insight/releases/tag/v0.12.1)
 
 ## 📚 目录
 
@@ -160,7 +160,7 @@ Comments Insight 需要 Chrome 116 或更高版本。在商店页面点击 **添
 
 ### 从 GitHub 发布页安装
 
-1. 在 [v0.12.0 发布页](https://github.com/cyber-tao/comments-insight/releases/tag/v0.12.0)下载并解压 `extension.zip`。
+1. 在 [v0.12.1 发布页](https://github.com/cyber-tao/comments-insight/releases/tag/v0.12.1)下载并解压 `extension.zip`。
 2. 打开 `chrome://extensions`，启用 **开发者模式**。
 3. 点击 **加载已解压的扩展程序**，选择包含 `manifest.json` 的解压目录。将扩展固定到工具栏后，即可从工具栏打开弹窗。
 

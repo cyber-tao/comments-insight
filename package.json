@@ -1,6 +1,6 @@
 {
   "name": "comments-insight",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "AI-powered comment extraction and analysis Chrome extension",
   "type": "module",
   "packageManager": "bun@1.4.4",
