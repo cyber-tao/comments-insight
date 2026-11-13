@@ -626,7 +626,7 @@ describe('useSettings', () => {
     );
   });
 
-  it('discards a key entered for the old endpoint in the same debounce batch when the URL changes', async () => {
+  it('preserves pending key and existing model when the URL changes in the same debounce batch', async () => {
     const { result } = renderHook(() => useSettings());
     await act(async () => {
       await flushMicrotasks();
@@ -635,14 +635,14 @@ describe('useSettings', () => {
       result.current.handleSettingsChange({ aiModel: { apiKey: 'old-endpoint-pending-key' } });
       result.current.handleSettingsChange({ aiModel: { apiUrl: 'https://second.example/v1' } });
     });
-    expect(result.current.settings?.aiModel.apiKey).toBe('');
-    expect(result.current.settings?.aiModel.model).toBe('');
+    expect(result.current.settings?.aiModel.apiKey).toBe('old-endpoint-pending-key');
+    expect(result.current.settings?.aiModel.model).toBe('gpt-4o-mini');
     expect(result.current.settings?.aiModel.maxOutputTokens).toBe(4096);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
     });
     expect(extensionApiMock.saveSettings).toHaveBeenCalledWith(
-      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: '', model: '' } },
+      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: 'old-endpoint-pending-key' } },
       undefined,
       'https://api.example.com',
       'openai-chat-completions',
@@ -710,7 +710,7 @@ describe('useSettings', () => {
     );
   });
 
-  it('accepts a new key entered after the endpoint changed but keeps the source CAS endpoint', async () => {
+  it('accepts a new key entered after the endpoint changed while keeping the existing model and source CAS endpoint', async () => {
     const { result } = renderHook(() => useSettings());
     await act(async () => {
       await flushMicrotasks();
@@ -723,7 +723,7 @@ describe('useSettings', () => {
       await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
     });
     expect(extensionApiMock.saveSettings).toHaveBeenCalledWith(
-      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: 'new-endpoint-key', model: '' } },
+      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: 'new-endpoint-key' } },
       undefined,
       'https://api.example.com',
       'openai-chat-completions',
@@ -780,7 +780,7 @@ describe('useSettings', () => {
     });
     expect(extensionApiMock.saveSettings).toHaveBeenNthCalledWith(
       1,
-      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: '', model: '' } },
+      { aiModel: { apiUrl: 'https://second.example/v1' } },
       undefined,
       'https://api.example.com',
       'openai-chat-completions',
@@ -794,7 +794,7 @@ describe('useSettings', () => {
     );
   });
 
-  it('does not merge a failed old-key save into a pending new endpoint patch', async () => {
+  it('retains a failed old-key edit when merged into a pending new endpoint patch', async () => {
     let rejectSave!: (reason: Error) => void;
     extensionApiMock.saveSettings.mockReturnValueOnce(
       new Promise((_resolve, reject) => {
@@ -820,7 +820,7 @@ describe('useSettings', () => {
       await vi.advanceTimersByTimeAsync(TIMING.DEBOUNCE_SAVE_MS);
     });
     expect(extensionApiMock.saveSettings).toHaveBeenLastCalledWith(
-      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: '', model: '' } },
+      { aiModel: { apiUrl: 'https://second.example/v1', apiKey: 'old-key' } },
       undefined,
       'https://api.example.com',
       'openai-chat-completions',

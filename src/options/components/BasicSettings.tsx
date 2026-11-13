@@ -70,7 +70,7 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
           {t('options.language')}
         </label>
         <select
-          value={settings.language}
+          value={settings.language || LANGUAGES.DEFAULT}
           onChange={(e) => {
             const newLang = e.target.value;
             onSettingsChange({ language: newLang });
@@ -78,6 +78,7 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
           }}
           className="w-full theme-input"
         >
+          <option value={LANGUAGES.SYSTEM}>{t('options.themeSystem')}</option>
           {LANGUAGES.SUPPORTED.map((lang) => (
             <option key={lang.code} value={lang.code}>
               {lang.name}

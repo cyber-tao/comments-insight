@@ -76,6 +76,7 @@ export async function handleTestModel(
       config: config,
       timeout: settings.aiTimeout,
       redactResponse: true,
+      onStreamProgress: () => {},
     });
 
     if (response && response.content) {

@@ -412,7 +412,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
 
       <div className="flex-1 overflow-y-auto p-6">
         {viewMode === 'analysis' ? (
-          <div className="animate-fade-in max-w-4xl mx-auto">
+          <div className="animate-fade-in max-w-7xl mx-auto w-full">
             <div className="mb-5 flex justify-between items-center gap-3 flex-wrap">
               <h3
                 className="text-lg font-bold font-serif-editorial"
@@ -663,7 +663,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
             )}
           </div>
         ) : (
-          <div className="animate-fade-in max-w-4xl mx-auto">
+          <div className="animate-fade-in max-w-7xl mx-auto w-full">
             <div className="mb-5 flex justify-between items-center">
               <h3
                 className="text-lg font-bold font-serif-editorial tabular-nums"

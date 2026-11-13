@@ -8,7 +8,6 @@ import { changeLanguage } from '@/utils/i18n';
 import { useToast } from '@/hooks/useToast';
 import { Logger } from '@/utils/logger';
 import { ExtensionAPI } from '@/utils/extension-api';
-import { normalizeAiApiUrl } from '@/utils/url';
 
 function mergePatch(previous: SettingsPatch, next: SettingsPatch): SettingsPatch {
   return {
@@ -19,10 +18,6 @@ function mergePatch(previous: SettingsPatch, next: SettingsPatch): SettingsPatch
       ? { domAnalysisConfig: { ...previous.domAnalysisConfig, ...next.domAnalysisConfig } }
       : {}),
   };
-}
-
-function endpointIdentity(value: string): string {
-  return normalizeAiApiUrl(value) ?? value.trim();
 }
 
 export function useSettings() {
@@ -233,18 +228,6 @@ export function useSettings() {
       disabledDefaultConfigDomains: _disabled,
       ...patch
     } = newSettings;
-    if (
-      patch.aiModel?.apiUrl !== undefined &&
-      endpointIdentity(patch.aiModel.apiUrl) !==
-        endpointIdentity(settingsRef.current.aiModel.apiUrl)
-    ) {
-      // A queued key was entered for the previous endpoint, even if it shares this debounce batch.
-      patch.aiModel = {
-        ...patch.aiModel,
-        apiKey: patch.aiModel.apiKey ?? '',
-        model: patch.aiModel.model ?? '',
-      };
-    }
     isUserChangeRef.current = true;
     changeRevisionRef.current += 1;
     pendingPatchRef.current = mergePatch(pendingPatchRef.current, patch);

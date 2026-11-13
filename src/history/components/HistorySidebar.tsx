@@ -112,7 +112,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
 
   return (
     <div
-      className="w-80 lg:w-96 shrink-0 flex flex-col"
+      className="w-72 lg:w-80 shrink-0 flex flex-col"
       style={{
         backgroundColor: 'var(--bg-card)',
         borderRight: '1px solid var(--border-primary)',

@@ -50,6 +50,36 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
     AI.MIN_OUTPUT_TOKENS,
     settings.aiModel.contextWindowSize - AI.INPUT_TOKEN_BUFFER - AI.MIN_AVAILABLE_TOKENS,
   );
+  const tokensToK = (tokens: number): number => Math.max(1, Math.round(tokens / AI.TOKENS_PER_K));
+  const minContextWindowK = tokensToK(AI.MIN_CONTEXT_WINDOW);
+  const currentContextWindowK = tokensToK(
+    settings.aiModel.contextWindowSize || AI.DEFAULT_CONTEXT_WINDOW,
+  );
+  const currentMaxOutputK = tokensToK(maxOutputTokens);
+  const maxAllowedOutputK = Math.max(1, Math.floor(maxAllowedOutputTokens / AI.TOKENS_PER_K));
+
+  const updateContextWindowK = (valK: number) => {
+    const contextWindowSize = Math.max(1, valK) * AI.TOKENS_PER_K;
+    const maxAllowed = Math.max(
+      AI.MIN_OUTPUT_TOKENS,
+      contextWindowSize - AI.INPUT_TOKEN_BUFFER - AI.MIN_AVAILABLE_TOKENS,
+    );
+    onSettingsChange({
+      aiModel: {
+        contextWindowSize,
+        maxOutputTokens: Math.min(maxOutputTokens, maxAllowed),
+      },
+    });
+  };
+
+  const updateMaxOutputK = (valK: number) => {
+    const requestedTokens = Math.max(AI.MIN_OUTPUT_TOKENS, valK * AI.TOKENS_PER_K);
+    onSettingsChange({
+      aiModel: {
+        maxOutputTokens: Math.min(requestedTokens, maxAllowedOutputTokens),
+      },
+    });
+  };
 
   const configRef = useRef(settings.aiModel);
   configRef.current = settings.aiModel;
@@ -86,7 +116,6 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
       aiModel: {
         apiUrl: preset.apiUrl,
         protocol: preset.protocol,
-        ...(normalizeAiApiUrl(preset.apiUrl) !== endpoint ? { apiKey: '', model: '' } : {}),
       },
     });
   };
@@ -337,26 +366,37 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             </label>
             <input
               type="number"
-              value={settings.aiModel.contextWindowSize}
+              value={currentContextWindowK}
               onChange={(e) => {
-                const contextWindowSize = parseFiniteIntegerInput(e.target.value);
-                if (contextWindowSize === null) {
+                const parsedK = parseFiniteIntegerInput(e.target.value);
+                if (parsedK === null) {
                   return;
                 }
-                const maxAllowed = Math.max(
-                  AI.MIN_OUTPUT_TOKENS,
-                  contextWindowSize - AI.INPUT_TOKEN_BUFFER - AI.MIN_AVAILABLE_TOKENS,
-                );
-                onSettingsChange({
-                  aiModel: {
-                    contextWindowSize,
-                    maxOutputTokens: Math.min(maxOutputTokens, maxAllowed),
-                  },
-                });
+                updateContextWindowK(parsedK);
               }}
               className="w-full theme-input tabular-nums"
-              min={AI.MIN_CONTEXT_WINDOW}
+              min={minContextWindowK}
+              step={1}
             />
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {AI.CONTEXT_WINDOW_PRESETS_K.map((presetK) => {
+                const isActive = currentContextWindowK === presetK;
+                return (
+                  <button
+                    key={presetK}
+                    type="button"
+                    onClick={() => updateContextWindowK(presetK)}
+                    className={`px-2 py-0.5 text-xs font-medium rounded-md border transition-colors ${
+                      isActive
+                        ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border-teal-300 dark:border-teal-700'
+                        : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    {presetK}K
+                  </button>
+                );
+              })}
+            </div>
           </div>
           <div>
             <label
@@ -367,22 +407,40 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             </label>
             <input
               type="number"
-              value={maxOutputTokens}
+              value={currentMaxOutputK}
               onChange={(e) => {
-                const parsedMaxOutputTokens = parseFiniteIntegerInput(e.target.value);
-                if (parsedMaxOutputTokens === null) {
+                const parsedK = parseFiniteIntegerInput(e.target.value);
+                if (parsedK === null) {
                   return;
                 }
-                onSettingsChange({
-                  aiModel: {
-                    maxOutputTokens: Math.min(parsedMaxOutputTokens, maxAllowedOutputTokens),
-                  },
-                });
+                updateMaxOutputK(parsedK);
               }}
               className="w-full theme-input tabular-nums"
               min={AI.MIN_OUTPUT_TOKENS}
-              max={maxAllowedOutputTokens}
+              max={maxAllowedOutputK}
+              step={1}
             />
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {AI.MAX_OUTPUT_TOKENS_PRESETS_K.map((presetK) => {
+                const isActive = currentMaxOutputK === presetK;
+                const isDisabled = presetK * AI.TOKENS_PER_K > maxAllowedOutputTokens;
+                return (
+                  <button
+                    key={presetK}
+                    type="button"
+                    disabled={isDisabled}
+                    onClick={() => updateMaxOutputK(presetK)}
+                    className={`px-2 py-0.5 text-xs font-medium rounded-md border transition-colors ${
+                      isActive
+                        ? 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border-teal-300 dark:border-teal-700'
+                        : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    } disabled:opacity-40 disabled:cursor-not-allowed`}
+                  >
+                    {presetK}K
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 

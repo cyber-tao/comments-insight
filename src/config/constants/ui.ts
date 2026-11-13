@@ -5,26 +5,29 @@ export const THEME = {
   DARK: 'dark' as const,
   SYSTEM: 'system' as const,
   OPTIONS: [
+    { value: 'system', labelKey: 'options.themeSystem' },
     { value: 'light', labelKey: 'options.themeLight' },
     { value: 'dark', labelKey: 'options.themeDark' },
-    { value: 'system', labelKey: 'options.themeSystem' },
   ] as const,
   DEFAULT: 'system' as const,
   STORAGE_KEY: 'theme' as const,
 };
 
 export type LocaleCode = keyof typeof locales;
+export type LanguageSetting = LocaleCode | 'system';
 
 export const LANGUAGES = {
+  /** System language sentinel */
+  SYSTEM: 'system' as const,
   /** Supported languages with display names */
   SUPPORTED: (Object.keys(locales) as LocaleCode[]).map((code) => ({ code, ...locales[code] })),
-  /** Default language code */
-  DEFAULT: 'en-US' as const,
+  /** Default language setting */
+  DEFAULT: 'system' as const,
   /** Fallback language when detection fails */
   FALLBACK: 'en-US' as const,
 };
 
-export function resolveLocale(value?: string): LocaleCode {
+function matchSupportedLocale(value?: string): LocaleCode {
   const tag = value?.trim().toLowerCase().replace(/_/g, '-');
   const exactMatch = LANGUAGES.SUPPORTED.find(({ code }) => code.toLowerCase() === tag);
   if (exactMatch) return exactMatch.code;
@@ -38,6 +41,39 @@ export function resolveLocale(value?: string): LocaleCode {
     LANGUAGES.SUPPORTED.find(({ code }) => code.split('-')[0] === language)?.code ??
     LANGUAGES.FALLBACK
   );
+}
+
+function getSystemLocaleString(): string | undefined {
+  if (typeof navigator !== 'undefined' && navigator.language) {
+    return navigator.language;
+  }
+  if (typeof chrome !== 'undefined' && chrome.i18n?.getUILanguage) {
+    return chrome.i18n.getUILanguage();
+  }
+  return undefined;
+}
+
+export function resolveLocale(value?: string): LocaleCode {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return LANGUAGES.FALLBACK;
+  }
+  if (trimmed.toLowerCase() === LANGUAGES.SYSTEM) {
+    const systemLocale = getSystemLocaleString();
+    if (!systemLocale || systemLocale.trim().toLowerCase() === LANGUAGES.SYSTEM) {
+      return LANGUAGES.FALLBACK;
+    }
+    return matchSupportedLocale(systemLocale);
+  }
+  return matchSupportedLocale(trimmed);
+}
+
+export function normalizeLanguageSetting(value?: string): LanguageSetting {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed.toLowerCase() === LANGUAGES.SYSTEM) {
+    return LANGUAGES.SYSTEM;
+  }
+  return matchSupportedLocale(trimmed);
 }
 
 export const UI_LIMITS = {

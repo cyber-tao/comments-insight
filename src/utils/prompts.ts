@@ -229,7 +229,7 @@ const ENGLISH_PROMPTS = {
 
 function getPromptLocale(language?: string) {
   const locale = resolveLocale(language);
-  return locale === LANGUAGES.DEFAULT ? ENGLISH_PROMPTS : LOCALIZED_PROMPTS[locale];
+  return locale === LANGUAGES.FALLBACK ? ENGLISH_PROMPTS : LOCALIZED_PROMPTS[locale];
 }
 
 // The original English values also identify defaults in existing settings and exports.

@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LANGUAGES, resolveLocale } from '../src/config/constants/ui';
+import { LANGUAGES, normalizeLanguageSetting, resolveLocale } from '../src/config/constants/ui';
 
 describe('i18n configuration', () => {
   beforeEach(() => {
@@ -26,6 +26,14 @@ describe('i18n configuration', () => {
     ['unavailable-locale', 'en-US'],
   ])('resolves %s to %s', (input, expected) => {
     expect(resolveLocale(input)).toBe(expected);
+  });
+
+  it('resolves system language using navigator.language and preserves system setting on normalization', () => {
+    vi.stubGlobal('navigator', { language: 'zh-CN' });
+    expect(resolveLocale('system')).toBe('zh-CN');
+    expect(normalizeLanguageSetting('system')).toBe('system');
+    expect(normalizeLanguageSetting('')).toBe('system');
+    expect(normalizeLanguageSetting('zh-HK')).toBe('zh-TW');
   });
 
   it('loads the complete catalog for each supported locale', async () => {

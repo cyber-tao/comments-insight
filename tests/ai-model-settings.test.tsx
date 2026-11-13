@@ -111,21 +111,25 @@ describe('AIModelSettings', () => {
     ['deepseek', 'https://api.deepseek.com', 'openai-chat-completions'],
     ['openrouter', 'https://openrouter.ai/api/v1', 'openai-chat-completions'],
   ])(
-    'applies the %s preset and clears credentials and model for the new endpoint',
+    'applies the %s preset while preserving existing credentials and model',
     (id, apiUrl, protocol) => {
       const { onSettingsChange } = renderComponent();
       fireEvent.change(screen.getByLabelText('options.providerPreset'), { target: { value: id } });
       expect(onSettingsChange).toHaveBeenCalledExactlyOnceWith({
-        aiModel: { apiUrl, protocol, apiKey: '', model: '' },
+        aiModel: { apiUrl, protocol },
       });
       expect((screen.getByLabelText('options.apiUrl') as HTMLInputElement).value).toBe(apiUrl);
       expect((screen.getByLabelText('options.apiProtocol') as HTMLSelectElement).value).toBe(
         protocol,
       );
-      expect((screen.getByLabelText('options.apiKey') as HTMLInputElement).value).toBe('');
-      expect((screen.getByLabelText('options.model') as HTMLInputElement).value).toBe('');
-      expect(screen.getByDisplayValue('200000')).toBeTruthy();
-      expect(screen.getByDisplayValue('4096')).toBeTruthy();
+      expect((screen.getByLabelText('options.apiKey') as HTMLInputElement).value).toBe(
+        'secret-key',
+      );
+      expect((screen.getByLabelText('options.model') as HTMLInputElement).value).toBe(
+        'gpt-4o-mini',
+      );
+      expect(screen.getByDisplayValue('200')).toBeTruthy();
+      expect(screen.getByDisplayValue('4')).toBeTruthy();
       expect(screen.queryByText('options.temperature')).toBeNull();
       expect(screen.queryByText('options.topP')).toBeNull();
       expect(extensionApiMock.getAvailableModels).not.toHaveBeenCalled();
@@ -580,7 +584,7 @@ describe('AIModelSettings', () => {
     expect(screen.getByText('options.placeholder_post_content')).toBeTruthy();
   });
 
-  it('ignores invalid numeric model input and uses the configured default token value', () => {
+  it('ignores invalid numeric model input and uses the configured default token value in K', () => {
     const settings = createSettings({
       aiModel: {
         apiUrl: 'https://api.example.com/v1',
@@ -594,12 +598,53 @@ describe('AIModelSettings', () => {
     const { onSettingsChange } = renderComponent(settings);
     const numericInputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
 
-    expect(numericInputs[1].value).toBe(String(AI.DEFAULT_MAX_OUTPUT_TOKENS));
+    expect(numericInputs[0].value).toBe('200');
+    expect(numericInputs[1].value).toBe(String(AI.DEFAULT_MAX_OUTPUT_TOKENS / AI.TOKENS_PER_K));
 
     for (const input of numericInputs) {
       fireEvent.change(input, { target: { value: '' } });
     }
 
     expect(onSettingsChange).not.toHaveBeenCalled();
+  });
+
+  it('edits context window and max output tokens in K units and supports quick preset buttons', () => {
+    const { onSettingsChange } = renderComponent();
+    const numericInputs = screen.getAllByRole('spinbutton') as HTMLInputElement[];
+
+    fireEvent.change(numericInputs[0], { target: { value: '128' } });
+    expect(onSettingsChange).toHaveBeenLastCalledWith({
+      aiModel: {
+        contextWindowSize: 128000,
+        maxOutputTokens: 4096,
+      },
+    });
+
+    fireEvent.change(numericInputs[1], { target: { value: '8' } });
+    expect(onSettingsChange).toHaveBeenLastCalledWith({
+      aiModel: {
+        maxOutputTokens: 8000,
+      },
+    });
+
+    fireEvent.click(screen.getAllByRole('button', { name: '64K' })[0]);
+    expect(onSettingsChange).toHaveBeenLastCalledWith({
+      aiModel: {
+        contextWindowSize: 64000,
+        maxOutputTokens: 8000,
+      },
+    });
+
+    // When context window is 64K, max allowed output is 61000, so 64K and 128K output presets are disabled
+    const presetButtons64K = screen.getAllByRole('button', { name: '64K' }) as HTMLButtonElement[];
+    expect(presetButtons64K[1].disabled).toBe(true);
+    expect((screen.getByRole('button', { name: '16K' }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: '16K' }));
+    expect(onSettingsChange).toHaveBeenLastCalledWith({
+      aiModel: {
+        maxOutputTokens: 16000,
+      },
+    });
   });
 });

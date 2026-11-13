@@ -20,16 +20,20 @@ function tokens(value: unknown): number {
 }
 
 export function buildAIHeaders(protocol: AIProtocol, apiKey: string): Record<string, string> {
+  const baseHeaders = {
+    Accept: 'text/event-stream, application/json',
+    'Content-Type': 'application/json',
+  };
   if (protocol === 'anthropic-messages') {
     return {
-      'Content-Type': 'application/json',
+      ...baseHeaders,
       'anthropic-version': '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true',
       ...(apiKey ? { 'x-api-key': apiKey } : {}),
     };
   }
   return {
-    'Content-Type': 'application/json',
+    ...baseHeaders,
     ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
   };
 }
@@ -267,7 +271,7 @@ export async function readAIResponse(
   onProgress?: (progress: AIStreamProgress) => void,
 ): Promise<AIResponse> {
   const state = new ResponseAccumulator(protocol, apiKey, onProgress);
-  if (!response.body || response.headers?.get('content-type')?.includes('application/json')) {
+  if (!response.body) {
     state.consumeJSON(await response.json());
     return state.result();
   }
@@ -300,8 +304,19 @@ export async function readAIResponse(
 
   const consumeLine = (line: string): void => {
     if (line === '') dispatch();
-    else if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^ /, ''));
-    else if (line.startsWith('event:')) eventName = line.slice(6).trim();
+    else if (line.startsWith('data:')) {
+      const chunk = line.slice(5).replace(/^ /, '');
+      if (
+        dataLines.length > 0 &&
+        ((chunk.trim() === '[DONE]' && protocol === 'openai-chat-completions') ||
+          (dataLines.length === 1 &&
+            dataLines[0].trimStart().startsWith('{') &&
+            dataLines[0].trimEnd().endsWith('}')))
+      ) {
+        dispatch();
+      }
+      dataLines.push(chunk);
+    } else if (line.startsWith('event:')) eventName = line.slice(6).trim();
   };
 
   const drain = (flush = false): void => {

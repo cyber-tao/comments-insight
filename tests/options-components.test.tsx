@@ -116,6 +116,16 @@ describe('BasicSettings', () => {
     );
   });
 
+  it('renders system as the first language option and selects it when configured', () => {
+    const settings = createSettings({ language: 'system' });
+    render(<BasicSettings settings={settings} onSettingsChange={vi.fn()} />);
+
+    const select = screen.getByRole('combobox') as HTMLSelectElement;
+    expect(select.value).toBe('system');
+    expect((select.options[0] as HTMLOptionElement).value).toBe('system');
+    expect((select.options[0] as HTMLOptionElement).textContent).toBe('options.themeSystem');
+  });
+
   it('ignores invalid max comments input', () => {
     const settings = createSettings();
     const onSettingsChange = vi.fn();

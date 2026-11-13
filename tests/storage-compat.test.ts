@@ -676,7 +676,13 @@ describe('SettingsStore crawling config persistence', () => {
 });
 
 describe('SettingsStore language compatibility', () => {
-  it('normalizes existing and imported locale codes while preserving custom templates', async () => {
+  it('preserves system language default and normalizes existing and imported locale codes while preserving custom templates', async () => {
+    const emptyStorage = useInMemorySettingsStorage({});
+    const defaultStore = new SettingsStore(createEncryptionServiceMock());
+    expect((await defaultStore.getSettings()).language).toBe('system');
+    await defaultStore.saveSettings({ language: 'system' });
+    expect(emptyStorage.read()).toMatchObject({ language: 'system' });
+
     const template = '  Custom {comments_data}  ';
     const storage = useInMemorySettingsStorage({
       language: 'zh_Hant_HK',
@@ -763,7 +769,7 @@ describe('SettingsStore endpoint-bound credential patches', () => {
     expect(outcomes.map((outcome) => outcome.status)).toEqual(['fulfilled', 'rejected']);
     expect((storage.read() as Settings).aiModel).toMatchObject({
       apiUrl: secondEndpoint,
-      apiKey: '',
+      apiKey: 'enc:first-key',
     });
   });
 
@@ -822,13 +828,13 @@ describe('SettingsStore endpoint-bound credential patches', () => {
     expect((storage.read() as Settings).aiModel.apiKey).toBe('enc:replacement');
   });
 
-  it('clears the key when a URL is removed and accepts an explicit key for a new endpoint', async () => {
+  it('preserves the key when editing the URL and accepts an explicit key for a new endpoint', async () => {
     const storage = useInMemorySettingsStorage({
       aiModel: { ...DEFAULT_SETTINGS.aiModel, apiUrl: firstEndpoint, apiKey: 'enc:first-key' },
     });
     const store = new SettingsStore(encryption());
     await store.saveSettings({ aiModel: { apiUrl: '' } }, undefined, firstEndpoint);
-    expect((storage.read() as Settings).aiModel.apiKey).toBe('');
+    expect((storage.read() as Settings).aiModel.apiKey).toBe('enc:first-key');
     await store.saveSettings(
       { aiModel: { apiUrl: secondEndpoint, apiKey: 'second-key' } },
       undefined,

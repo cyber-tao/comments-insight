@@ -77,6 +77,7 @@ describe('AI protocol requests', () => {
       max_tokens: 456,
     });
     expect(buildAIHeaders(config.protocol, 'secret-key')).toEqual({
+      Accept: 'text/event-stream, application/json',
       'Content-Type': 'application/json',
       'x-api-key': 'secret-key',
       'anthropic-version': '2023-06-01',
@@ -330,6 +331,30 @@ describe('Anthropic parsing', () => {
       code: ErrorCode.API_ERROR,
       message: 'Overloaded [redacted]',
       retryable: true,
+    });
+  });
+
+  it('auto-detects SSE streams even when Content-Type is application/json and handles single-newline frames', async () => {
+    const encoder = new TextEncoder();
+    const sseBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            'data: {"choices":[{"delta":{"content":"OK"}}]}\n' +
+              'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"total_tokens":5}}\n' +
+              'data: [DONE]\n',
+          ),
+        );
+        controller.close();
+      },
+    });
+    const response = new Response(sseBody, {
+      headers: { 'content-type': 'application/json' },
+    });
+    expect(await read(response, 'openai-chat-completions')).toEqual({
+      content: 'OK',
+      tokensUsed: 5,
+      finishReason: 'stop',
     });
   });
 });

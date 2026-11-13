@@ -17,7 +17,7 @@ import {
   DOM_ANALYSIS_DEFAULTS,
 } from '@/config/constants';
 import DEFAULT_CRAWLING_RULES from '@/config/default_rules.json';
-import { resolveLocale } from '@/config/constants/ui';
+import { normalizeLanguageSetting } from '@/config/constants/ui';
 import {
   DEFAULT_ANALYSIS_PROMPT_TEMPLATE,
   DEFAULT_DYNAMIC_REPORT_PROMPT_TEMPLATE,
@@ -243,7 +243,7 @@ export class SettingsStore {
       typeof stored.dynamicReportPromptTemplate === 'string'
         ? stored.dynamicReportPromptTemplate
         : DEFAULT_SETTINGS.dynamicReportPromptTemplate;
-    merged.language = resolveLocale(stored.language);
+    merged.language = normalizeLanguageSetting(stored.language);
     merged.theme =
       stored.theme === 'light' || stored.theme === 'dark' || stored.theme === 'system'
         ? stored.theme
@@ -397,20 +397,11 @@ export class SettingsStore {
         extractorModel?: AIConfig;
         analyzerModel?: AIConfig;
       };
-      updatedSettings.language = resolveLocale(updatedSettings.language);
+      updatedSettings.language = normalizeLanguageSetting(updatedSettings.language);
       updatedSettings.aiModel = {
         ...currentModel,
         ...(sanitizedSettings.aiModel || {}),
       };
-      if (
-        sanitizedSettings.aiModel?.apiUrl !== undefined &&
-        (normalizeAiApiUrl(updatedSettings.aiModel.apiUrl) ??
-          updatedSettings.aiModel.apiUrl.trim()) !==
-          (normalizeAiApiUrl(currentModel.apiUrl) ?? currentModel.apiUrl.trim()) &&
-        sanitizedSettings.aiModel.apiKey === undefined
-      ) {
-        updatedSettings.aiModel.apiKey = '';
-      }
 
       updatedSettings.domAnalysisConfig = {
         ...currentSettings.domAnalysisConfig,
