@@ -559,7 +559,11 @@ async function verifyAiSettingsUi(page, origin, requests) {
       ['openrouter', 'https://openrouter.ai/api/v1', 'openai-chat-completions'],
     ]) {
       await page.select('#ai-provider-preset', provider);
-      await waitForSaved({ apiUrl, protocol, apiKey: '', model: '' });
+      await waitForSaved({ apiUrl, protocol, model: 'mock-model' });
+      assert(
+        await page.$eval('#ai-api-key', (input) => input.value.length > 0),
+        'Choosing a preset discarded the existing API key',
+      );
       assert(
         await page.$eval('#ai-protocol', (input, expected) => input.value === expected, protocol),
         'Preset protocol was not rendered',
@@ -577,9 +581,13 @@ async function verifyAiSettingsUi(page, origin, requests) {
     await page.keyboard.press('KeyA');
     await page.keyboard.up('Control');
     await page.type('#ai-api-url', localUrl);
-    await waitForSaved({ apiUrl: localUrl });
+    await waitForSaved({ apiUrl: localUrl, model: 'mock-model' });
     await page.click('#ai-fetch-models');
     await page.waitForSelector('#ai-model[role="combobox"]');
+    await page.click('#ai-model', { clickCount: 3 });
+    await page.keyboard.down('Control');
+    await page.keyboard.press('KeyA');
+    await page.keyboard.up('Control');
     await page.type('#ai-model', 'manual-model');
     await page.keyboard.press('Enter');
     await waitForSaved({ model: 'manual-model' });
