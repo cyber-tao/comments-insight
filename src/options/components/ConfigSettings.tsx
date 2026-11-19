@@ -435,7 +435,7 @@ export const ConfigSettings: React.FC<Props> = ({
             </span>
           </button>
           <label className="theme-button-secondary px-3.5 py-2 text-xs inline-flex items-center gap-1.5 cursor-pointer">
-            <UploadIcon size={14} />
+            <DownloadIcon size={14} />
             <span>{t('options.crawlingConfigs.importConfig')}</span>
             <input type="file" accept=".json" onChange={handleImportFile} className="hidden" />
           </label>
@@ -443,7 +443,7 @@ export const ConfigSettings: React.FC<Props> = ({
             onClick={handleExportSelected}
             className="theme-button-secondary px-3.5 py-2 text-xs inline-flex items-center gap-1.5"
           >
-            <DownloadIcon size={14} />
+            <UploadIcon size={14} />
             <span>{t('options.crawlingConfigs.exportConfig')}</span>
           </button>
           <button onClick={handleAdd} className="theme-button-primary px-3.5 py-2 text-xs">

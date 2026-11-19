@@ -159,7 +159,7 @@ const Options: React.FC = () => {
                   </h2>
                   <div className="flex gap-2.5">
                     <label className="theme-button-secondary px-3.5 py-2 text-xs inline-flex items-center gap-1.5 cursor-pointer">
-                      <UploadIcon size={14} />
+                      <DownloadIcon size={14} />
                       <span>{t('common.import')}</span>
                       <input
                         type="file"
@@ -173,7 +173,7 @@ const Options: React.FC = () => {
                       onClick={handleExport}
                       className="theme-button-primary px-3.5 py-2 text-xs inline-flex items-center gap-1.5"
                     >
-                      <DownloadIcon size={14} />
+                      <UploadIcon size={14} />
                       <span>{t('common.export')}</span>
                     </button>
                   </div>

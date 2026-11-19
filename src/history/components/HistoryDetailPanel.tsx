@@ -13,13 +13,13 @@ import { formatTaskProgressMessage } from '@/utils/task-progress-display';
 import {
   AlertTriangleIcon,
   CommentsIcon,
-  DownloadIcon,
   GlobeIcon,
   InteractiveIcon,
   RefreshIcon,
   ReportIcon,
   SearchIcon,
   SparklesIcon,
+  UploadIcon,
 } from '@/components/Icons';
 import { CommentTree } from './CommentTree';
 import { DynamicReportViewer } from './DynamicReportViewer';
@@ -274,7 +274,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
               className="theme-button-primary px-3.5 py-1.5 text-sm flex items-center gap-1.5"
               title={t('history.exportHtmlTooltip')}
             >
-              <DownloadIcon size={15} />
+              <UploadIcon size={15} />
               <span>{t('history.exportHtml')}</span>
             </button>
           </div>
@@ -476,7 +476,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                     className="theme-button-primary px-3.5 py-2 text-xs flex items-center gap-1.5"
                     title={t('history.exportMarkdownTooltip')}
                   >
-                    <DownloadIcon size={14} />
+                    <UploadIcon size={14} />
                     <span>{t('history.exportMarkdown')}</span>
                   </button>
                 )}
@@ -583,7 +583,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                       className="theme-button-primary px-3.5 py-2 text-xs flex items-center gap-1.5"
                       title={t('history.exportHtmlTooltip')}
                     >
-                      <DownloadIcon size={14} />
+                      <UploadIcon size={14} />
                       <span>{t('history.exportHtml')}</span>
                     </button>
                   </>
@@ -683,7 +683,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                 className="theme-button-primary px-3.5 py-2 text-xs flex items-center gap-1.5"
                 title={t('history.exportCsvTooltip')}
               >
-                <DownloadIcon size={14} />
+                <UploadIcon size={14} />
                 <span>{t('history.exportCsv')}</span>
               </button>
             </div>
