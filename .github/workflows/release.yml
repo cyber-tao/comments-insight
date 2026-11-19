@@ -4,16 +4,37 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Submit uploaded package for Chrome Web Store review (false = draft upload only)'
+        type: boolean
+        default: false
+      publish_type:
+        description: 'Chrome Web Store publish type'
+        type: choice
+        default: DEFAULT_PUBLISH
+        options:
+          - DEFAULT_PUBLISH
+          - STAGED_PUBLISH
+      deploy_percentage:
+        description: 'Optional initial rollout percentage (1-100)'
+        type: string
+        default: ''
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   build-and-release:
     name: Build and Release
     runs-on: ubuntu-latest
     env:
-      HAS_CHROME_SECRETS: ${{ secrets.CHROME_EXTENSION_ID != '' && secrets.CHROME_CLIENT_ID != '' && secrets.CHROME_CLIENT_SECRET != '' && secrets.CHROME_REFRESH_TOKEN != '' }}
+      HAS_CWS_TARGETS: ${{ secrets.CHROME_PUBLISHER_ID != '' && secrets.CHROME_EXTENSION_ID != '' }}
+      HAS_CWS_OIDC: ${{ secrets.CHROME_WORKLOAD_IDENTITY_PROVIDER != '' && secrets.CHROME_SERVICE_ACCOUNT != '' }}
+      HAS_CWS_SA_KEY: ${{ secrets.CHROME_SERVICE_ACCOUNT_KEY != '' }}
+      HAS_CWS_OAUTH: ${{ secrets.CHROME_CLIENT_ID != '' && secrets.CHROME_CLIENT_SECRET != '' && secrets.CHROME_REFRESH_TOKEN != '' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -62,12 +83,14 @@ jobs:
         run: xvfb-run -a bun run test:e2e
 
       - name: Generate CRX
+        if: startsWith(github.ref, 'refs/tags/v')
         run: node node_modules/crx3/bin/crx3.js dist -o "comments-insight-${{ github.ref_name }}.crx"
 
       - name: Package ZIP
         run: bun scripts/package.js
 
       - name: Build Changelog
+        if: startsWith(github.ref, 'refs/tags/v')
         id: build_changelog
         uses: mikepenz/release-changelog-builder-action@v6
         with:
@@ -119,6 +142,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           body: ${{ steps.build_changelog.outputs.changelog }}
@@ -130,13 +154,41 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload to Chrome Web Store
-        if: env.HAS_CHROME_SECRETS == 'true'
-        uses: mnao305/chrome-extension-upload@v5.0.0
+      - name: Authenticate to Google Cloud (CWS OIDC)
+        id: cws_oidc
+        if: env.HAS_CWS_TARGETS == 'true' && env.HAS_CWS_OIDC == 'true'
+        uses: google-github-actions/auth@v2
         with:
-          file-path: dist/extension.zip
-          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
-          client-id: ${{ secrets.CHROME_CLIENT_ID }}
-          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
-          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
-          publish: true
+          workload_identity_provider: ${{ secrets.CHROME_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.CHROME_SERVICE_ACCOUNT }}
+          token_format: access_token
+          access_token_scopes: https://www.googleapis.com/auth/chromewebstore
+
+      - name: Upload to Chrome Web Store (API v2)
+        if: env.HAS_CWS_TARGETS == 'true' && (env.HAS_CWS_OIDC == 'true' || env.HAS_CWS_SA_KEY == 'true' || env.HAS_CWS_OAUTH == 'true')
+        env:
+          CHROME_PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_ACCESS_TOKEN: ${{ steps.cws_oidc.outputs.access_token }}
+          CHROME_SERVICE_ACCOUNT_KEY: ${{ secrets.CHROME_SERVICE_ACCOUNT_KEY }}
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          CWS_PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish == true }}
+          CWS_PUBLISH_TYPE: ${{ inputs.publish_type }}
+          CWS_DEPLOY_PERCENTAGE: ${{ inputs.deploy_percentage }}
+        run: |
+          node scripts/publish-cws.mjs --file dist/extension.zip | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Warn when Chrome Web Store secrets are missing
+        if: env.HAS_CWS_TARGETS != 'true' || (env.HAS_CWS_OIDC != 'true' && env.HAS_CWS_SA_KEY != 'true' && env.HAS_CWS_OAUTH != 'true')
+        run: |
+          echo "::warning::Chrome Web Store upload skipped: missing required repository secrets."
+          {
+            echo "## Chrome Web Store Upload Skipped"
+            echo ""
+            echo "Configure \`CHROME_PUBLISHER_ID\` and \`CHROME_EXTENSION_ID\`, plus one authentication method:"
+            echo "- Recommended: Google Cloud OIDC (\`CHROME_WORKLOAD_IDENTITY_PROVIDER\` + \`CHROME_SERVICE_ACCOUNT\`)"
+            echo "- Service Account JSON key: \`CHROME_SERVICE_ACCOUNT_KEY\`"
+            echo "- OAuth2 fallback: \`CHROME_CLIENT_ID\` + \`CHROME_CLIENT_SECRET\` + \`CHROME_REFRESH_TOKEN\`"
+          } >> "$GITHUB_STEP_SUMMARY"
