@@ -16,8 +16,21 @@ const zipModifiedTime = new Date('1980-01-01T00:00:00Z');
 // would expose internals, and the packaged archive itself must not be nested.
 const excludedExtensions = new Set(['.map']);
 const excludedFiles = new Set([outputFileName]);
+const forbiddenZipPatterns = [
+  /(^|\/)\.git(\/|$)/,
+  /(^|\/)node_modules(\/|$)/,
+  /(^|\/)\.env($|\.)/,
+  /(^|\/)CHROMEWEBSTORE\.md$/i,
+  /(^|\/)README(\.[^/]+)?\.md$/i,
+  /(^|\/)\.DS_Store$/,
+  /(^|\/)Thumbs\.db$/i,
+];
+const maxPackageSizeBytes = 50 * 1024 * 1024;
 
 function shouldIncludeFile(relativePath) {
+  if (forbiddenZipPatterns.some((pattern) => pattern.test(relativePath))) {
+    throw new Error(`Forbidden file detected in build output: ${relativePath}`);
+  }
   if (excludedFiles.has(relativePath)) {
     return false;
   }
@@ -70,10 +83,25 @@ for (const { chromeLocale } of Object.values(locales)) {
   }
 }
 
+for (const iconPath of Object.values(packageManifest.icons ?? {})) {
+  if (typeof iconPath !== 'string' || !files[iconPath]) {
+    throw new Error(`Build is missing manifest icon: ${String(iconPath)}`);
+  }
+}
+for (const iconPath of Object.values(packageManifest.action?.default_icon ?? {})) {
+  if (typeof iconPath !== 'string' || !files[iconPath]) {
+    throw new Error(`Build is missing action default_icon: ${String(iconPath)}`);
+  }
+}
+
 const archive = zipSync(files, {
   level: zipCompressionLevel,
   mtime: zipModifiedTime,
 });
+
+if (archive.byteLength <= 0 || archive.byteLength >= maxPackageSizeBytes) {
+  throw new Error(`Unexpected extension archive size: ${archive.byteLength} bytes`);
+}
 
 await fs.writeFile(outputPath, archive);
 console.log(`Extension packaged: ${archive.byteLength} total bytes`);

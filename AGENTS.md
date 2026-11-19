@@ -37,7 +37,12 @@ Recent history follows Conventional Commits with optional scopes, for example `f
 
 ## Release & Versioning
 
-Keep the extension version in `package.json` and `src/manifest.json` synchronized; `bun run version:check` also validates a `vX.Y.Z` release tag when running on a tag ref. Tags trigger `.github/workflows/release.yml`, which verifies coverage and browser E2E, builds the extension, packages `dist/extension.zip`, uses the pinned `crx3` dependency under Node 22 to generate an ephemerally signed side-load CRX, and creates the GitHub Release. Do not commit packaged artifacts from `dist/` unless a release task explicitly requires them. Before a Web Store submission, reconcile the Dashboard's data-use disclosures with the extension's actual behavior and the public privacy policies in `PRIVACY.md` and `PRIVACY.zh-CN.md`.
+Keep the extension version in `package.json` and `src/manifest.json` synchronized; `bun run version:check` also validates a `vX.Y.Z` release tag when running on a tag ref. Tags trigger `.github/workflows/release.yml`, which verifies coverage and browser E2E, builds the extension, packages `dist/extension.zip`, uses the pinned `crx3` dependency under Node 22 to generate an ephemerally signed side-load CRX, creates the GitHub Release, and uploads `dist/extension.zip` via the Chrome Web Store API v2 script (`scripts/publish-cws.mjs`, configured with `CHROME_PUBLISHER_ID`, `CHROME_EXTENSION_ID`, and Service Account/OIDC credentials). Do not commit packaged artifacts from `dist/` unless a release task explicitly requires them.
+
+### Chrome Web Store & Browser Support Maintenance
+
+- **CHROMEWEBSTORE.md**: Whenever creating or making changes to this Chrome extension that affect user-facing behavior, manifest permissions, privacy disclosures, store graphics, or releases, create or update root `CHROMEWEBSTORE.md` following the `chrome-extensions` skill format. Before a Web Store submission, reconcile the Developer Dashboard's data-use disclosures with `CHROMEWEBSTORE.md`, `PRIVACY.md`, and `PRIVACY.zh-CN.md`.
+- **Browser Support**: `minimum_chrome_version` is `116`. Features natively available in Chrome 116+ (such as ES2023 array copying methods, native `<dialog>`, the Popover API, and `content-visibility`) require no polyfills. Newer web platform features (such as `<dialog closedby>`, `scheduler.yield()`, `scrollbar-color`, and the native Sanitizer API) must be feature-detected with lightweight fallbacks or treated as progressive enhancement.
 
 ## Security & Configuration Tips
 
