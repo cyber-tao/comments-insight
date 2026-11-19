@@ -76,6 +76,33 @@ describe('misc handlers - content script injection', () => {
     expect(mockExecuteScript).not.toHaveBeenCalled();
   });
 
+  it('should inject the bundled content script on demand when manifest omits static content_scripts', async () => {
+    vi.stubGlobal('chrome', {
+      tabs: {
+        sendMessage: mockSendMessage,
+        query: mockQuery,
+        get: mockTabsGet,
+      },
+      scripting: {
+        executeScript: mockExecuteScript,
+      },
+      runtime: {
+        getManifest: () => ({}),
+      },
+    });
+
+    const res = await handleEnsureContentScript(
+      { type: 'ENSURE_CONTENT_SCRIPT' } as Extract<Message, { type: 'ENSURE_CONTENT_SCRIPT' }>,
+      createMockHandlerContext(),
+    );
+
+    expect(res.success).toBe(true);
+    expect(mockExecuteScript).toHaveBeenCalledWith({
+      target: { tabId: 1 },
+      files: ['content-script.js'],
+    });
+  });
+
   it('should short-circuit on restricted URLs without retrying injection', async () => {
     mockTabsGet.mockResolvedValueOnce({ id: 1, url: 'chrome://extensions' });
 

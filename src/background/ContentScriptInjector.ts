@@ -73,14 +73,8 @@ export async function ensureContentScriptInjected(
   const contentScript =
     files.find((filePath) => filePath === SCRIPTS.CONTENT_MAIN) ||
     files.find((f) => f.includes('content')) ||
-    files[0];
-
-  if (!contentScript) {
-    throw new ExtensionError(
-      ErrorCode.EXTRACTION_FAILED,
-      'Content script entry not found in manifest',
-    );
-  }
+    files[0] ||
+    SCRIPTS.CONTENT_BUNDLE;
 
   try {
     await chrome.scripting.executeScript({

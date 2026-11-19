@@ -66,7 +66,7 @@ describe('ActionButtons', () => {
     vi.clearAllMocks();
   });
 
-  it('routes extract flow based on page status and opens history when already extracted', () => {
+  it('routes extract flow based on page status and opens history when already extracted', async () => {
     const onExtract = vi.fn();
     const onGenerateConfig = vi.fn();
 
@@ -119,7 +119,9 @@ describe('ActionButtons', () => {
     expect(chrome.tabs.create).toHaveBeenCalledWith({
       url: `chrome-extension://${PATHS.HISTORY_PAGE}?id=history-1&tab=comments`,
     });
-    expect(windowCloseMock).toHaveBeenCalledOnce();
+    await waitFor(() => {
+      expect(windowCloseMock).toHaveBeenCalledOnce();
+    });
   });
 
   it('handles analyze flow, active task progress, cancel, and history action', () => {

@@ -1,22 +1,29 @@
 import { PATHS } from '@/config/constants';
+import { Logger } from '@/utils/logger';
+
+async function openExtensionPage(path: string): Promise<void> {
+  try {
+    await chrome.tabs.create({ url: chrome.runtime.getURL(path) });
+    window.close();
+  } catch (error) {
+    Logger.error('[NavigationService] Failed to open extension page', { path, error });
+  }
+}
 
 export const NavigationService = {
-  openHistoryPage(historyId?: string, tab: 'comments' | 'analysis' = 'comments'): void {
+  openHistoryPage(historyId?: string, tab: 'comments' | 'analysis' = 'comments'): Promise<void> {
     let url = PATHS.HISTORY_PAGE;
     if (historyId) {
       url += `?id=${historyId}&tab=${tab}`;
     }
-    chrome.tabs.create({ url: chrome.runtime.getURL(url) });
-    window.close();
+    return openExtensionPage(url);
   },
 
-  openOptionsPage(): void {
-    chrome.tabs.create({ url: chrome.runtime.getURL(PATHS.OPTIONS_PAGE) });
-    window.close();
+  openOptionsPage(): Promise<void> {
+    return openExtensionPage(PATHS.OPTIONS_PAGE);
   },
 
-  openLogsPage(): void {
-    chrome.tabs.create({ url: chrome.runtime.getURL(PATHS.LOGS_PAGE) });
-    window.close();
+  openLogsPage(): Promise<void> {
+    return openExtensionPage(PATHS.LOGS_PAGE);
   },
 };

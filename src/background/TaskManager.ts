@@ -699,58 +699,67 @@ export class TaskManager {
     // Cancellation must own the signal before persistence can yield.
     const controller = new AbortController();
     this.registerAbortController(nextTaskId, controller);
-    this.startTask(nextTaskId)
-      .then(async () => {
-        const task = this.tasks.get(nextTaskId);
-        if (!task || task.status !== 'running' || controller.signal.aborted) {
-          return;
-        }
+    void this.executeQueuedTask(nextTaskId, executor, controller);
+  }
 
-        const stopKeepingWorkerAlive =
-          task.type === 'analyze' ? this.keepWorkerAlive(controller.signal) : undefined;
-        try {
-          const result = await executor(task, controller.signal);
-          const latest = this.tasks.get(nextTaskId);
-          if (!latest || latest.status !== 'running') {
-            return;
-          }
-          this.completeTask(nextTaskId, result || {});
-        } catch (error) {
-          const latest = this.tasks.get(nextTaskId);
-          if (!latest || latest.status !== 'running') {
-            return;
-          }
-          Logger.debug(`[TaskManager] Executor failed for task ${nextTaskId}`, { error });
-          const messageKey =
-            error instanceof ExtensionError ? error.details?.messageKey : undefined;
-          this.failTask(
-            nextTaskId,
-            typeof messageKey === 'string' && i18n.exists(messageKey)
-              ? i18n.t(messageKey)
-              : error instanceof Error
-                ? error.message
-                : String(error),
-          );
-        } finally {
-          stopKeepingWorkerAlive?.();
-        }
-      })
-      .catch((error) => {
+  private async executeQueuedTask(
+    nextTaskId: string,
+    executor: TaskExecutor,
+    controller: AbortController,
+  ): Promise<void> {
+    try {
+      try {
+        await this.startTask(nextTaskId);
+      } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         Logger.error(`[TaskManager] Failed to start task ${nextTaskId}: ${message}`);
         this.failTask(nextTaskId, message);
-      })
-      .finally(() => {
-        this.executors.delete(nextTaskId);
-        this.clearAbortController(nextTaskId);
-        if (this.currentTaskId === nextTaskId) {
-          this.currentTaskId = null;
+        return;
+      }
+
+      const task = this.tasks.get(nextTaskId);
+      if (!task || task.status !== 'running' || controller.signal.aborted) {
+        return;
+      }
+
+      const stopKeepingWorkerAlive =
+        task.type === 'analyze' ? this.keepWorkerAlive(controller.signal) : undefined;
+      try {
+        const result = await executor(task, controller.signal);
+        const latest = this.tasks.get(nextTaskId);
+        if (!latest || latest.status !== 'running') {
+          return;
         }
-        if (this.executingTaskId === nextTaskId) {
-          this.executingTaskId = null;
+        this.completeTask(nextTaskId, result || {});
+      } catch (error) {
+        const latest = this.tasks.get(nextTaskId);
+        if (!latest || latest.status !== 'running') {
+          return;
         }
-        this.processQueue();
-      });
+        Logger.debug(`[TaskManager] Executor failed for task ${nextTaskId}`, { error });
+        const messageKey = error instanceof ExtensionError ? error.details?.messageKey : undefined;
+        this.failTask(
+          nextTaskId,
+          typeof messageKey === 'string' && i18n.exists(messageKey)
+            ? i18n.t(messageKey)
+            : error instanceof Error
+              ? error.message
+              : String(error),
+        );
+      } finally {
+        stopKeepingWorkerAlive?.();
+      }
+    } finally {
+      this.executors.delete(nextTaskId);
+      this.clearAbortController(nextTaskId);
+      if (this.currentTaskId === nextTaskId) {
+        this.currentTaskId = null;
+      }
+      if (this.executingTaskId === nextTaskId) {
+        this.executingTaskId = null;
+      }
+      this.processQueue();
+    }
   }
 
   private keepWorkerAlive(signal: AbortSignal): () => void {

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LIMITS, MESSAGES, STORAGE } from '@/config/constants';
 import { SearchIcon } from '@/components/Icons';
+import { Logger } from '@/utils/logger';
 import type { SelectorRule } from '@/types';
 
 interface SelectorTestResult {
@@ -53,7 +54,7 @@ export const SelectorTester: React.FC = () => {
       }
     };
 
-    loadState();
+    void loadState();
   }, []);
 
   useEffect(() => {
@@ -64,7 +65,15 @@ export const SelectorTester: React.FC = () => {
       results,
       total,
     };
-    chrome.storage.local.set({ [STORAGE.SELECTOR_TESTER_STATE_KEY]: payload });
+    void (async () => {
+      try {
+        await chrome.storage.local.set({ [STORAGE.SELECTOR_TESTER_STATE_KEY]: payload });
+      } catch (storageError) {
+        Logger.debug('[SelectorTester] Failed to persist selector tester state', {
+          error: storageError,
+        });
+      }
+    })();
   }, [hydrated, selector, selectorType, results, total]);
 
   const handleTest = async () => {

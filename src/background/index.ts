@@ -21,11 +21,13 @@ Logger.info('Comments Insight Service Worker loaded');
 
 // Migration: remove legacy plaintext AI key persisted under chrome.storage.local
 // The verified config now lives only in AIService memory; see AIService.rememberVerifiedConfig.
-chrome.storage.local
-  .remove(STORAGE.LAST_VERIFIED_AI_MODEL_KEY)
-  .catch((error) =>
-    Logger.warn('[Background] Failed to clear legacy verified AI model key', { error }),
-  );
+void (async () => {
+  try {
+    await chrome.storage.local.remove(STORAGE.LAST_VERIFIED_AI_MODEL_KEY);
+  } catch (error) {
+    Logger.warn('[Background] Failed to clear legacy verified AI model key', { error });
+  }
+})();
 
 const initPromise = (async () => {
   await new DataMigrator().migrate();
@@ -59,15 +61,15 @@ const messageRouter = new MessageRouter(container.getAll(), { readyPromise: init
 
 // Listen for extension installation
 chrome.runtime.onInstalled.addListener(() => {
-  Logger.info('Comments Insight Extension installed');
-  getSettingsStore()
-    .getSettings()
-    .then((settings) => {
+  void (async () => {
+    try {
+      Logger.info('Comments Insight Extension installed');
+      const settings = await getSettingsStore().getSettings();
       Logger.debug('Settings initialized', { settings });
-    })
-    .catch((error) => {
+    } catch (error) {
       Logger.error('[Background] Failed to initialize settings on install', { error });
-    });
+    }
+  })();
 });
 
 // Listen for long-lived port connections
@@ -75,9 +77,13 @@ chrome.runtime.onConnect.addListener((port) => {
   if (port.name === 'ai-bridge') {
     Logger.debug('[Background] AI Bridge Port connected');
     port.onMessage.addListener((message) => {
-      messageRouter.handlePortMessage(port, message).catch((err) => {
-        Logger.error('[Background] Port message handling error', { error: err });
-      });
+      void (async () => {
+        try {
+          await messageRouter.handlePortMessage(port, message);
+        } catch (err) {
+          Logger.error('[Background] Port message handling error', { error: err });
+        }
+      })();
     });
   }
 });
@@ -87,9 +93,13 @@ chrome.runtime.onMessage.addListener((message: Message, sender, sendResponse) =>
   if (!isLogMessageType(message?.type)) {
     Logger.debug('Message received', { message });
   }
-  messageRouter
-    .handleMessage(message, sender)
-    .then((response) => sendResponse(response))
-    .catch((error) => sendResponse({ error: toExtensionErrorPayload(error) }));
+  void (async () => {
+    try {
+      const response = await messageRouter.handleMessage(message, sender);
+      sendResponse(response);
+    } catch (error) {
+      sendResponse({ error: toExtensionErrorPayload(error) });
+    }
+  })();
   return true;
 });

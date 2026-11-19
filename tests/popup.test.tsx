@@ -282,7 +282,9 @@ describe('Popup', () => {
       url: `chrome-extension://${PATHS.LOGS_PAGE}`,
     });
 
-    expect(windowCloseMock).toHaveBeenCalledTimes(3);
+    await waitFor(() => {
+      expect(windowCloseMock).toHaveBeenCalledTimes(3);
+    });
   });
 
   it('surfaces analysis start failures as a toast instead of failing silently', async () => {

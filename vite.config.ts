@@ -7,14 +7,12 @@ import path from 'path';
 const alias = { '@': path.resolve(__dirname, 'src') };
 
 function bundleContentScript(): CrxPlugin {
-  const [contentScript] = manifest.content_scripts;
-
   return {
     name: 'comments-insight:bundle-content-script',
     apply: 'build',
     enforce: 'post',
     transformCrxManifest(output) {
-      // Skip CRXJS's module loader so Chrome can inject the bundled script directly.
+      // Skip CRXJS's module loader so Chrome injects the self-contained IIFE on demand.
       delete output.content_scripts;
       return output;
     },
@@ -29,7 +27,7 @@ function bundleContentScript(): CrxPlugin {
           write: false,
           target: `chrome${manifest.minimum_chrome_version}`,
           lib: {
-            entry: contentScript.js[0],
+            entry: 'src/content/index.ts',
             name: 'CommentsInsightContentScript',
             formats: ['iife'],
           },
@@ -47,12 +45,12 @@ function bundleContentScript(): CrxPlugin {
       ) {
         throw new Error('The content script must bundle into one self-contained JavaScript file');
       }
-      const reference = this.emitFile({
+      this.emitFile({
         type: 'asset',
-        name: 'content-script.js',
+        fileName: 'content-script.js',
         source: chunk.code,
       });
-      output.content_scripts = [{ ...contentScript, js: [this.getFileName(reference)] }];
+      delete output.content_scripts;
       return output;
     },
   };

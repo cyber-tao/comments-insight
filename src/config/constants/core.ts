@@ -124,4 +124,5 @@ export const MESSAGES = {
 
 export const SCRIPTS = {
   CONTENT_MAIN: 'src/content/index.ts',
+  CONTENT_BUNDLE: 'content-script.js',
 };

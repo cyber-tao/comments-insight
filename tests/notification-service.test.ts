@@ -39,7 +39,6 @@ describe('NotificationService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
     notificationService = new NotificationService();
   });
 
@@ -62,6 +61,7 @@ describe('NotificationService', () => {
           expect(mockNotificationCreate).toHaveBeenCalledWith(
             expect.any(String),
             expect.objectContaining({
+              iconUrl: 'chrome-extension://id/icons/icon-48.png',
               title: catalog.common.appName,
               message: expected,
               buttons: [
@@ -83,8 +83,9 @@ describe('NotificationService', () => {
         expect.stringContaining('task_completed_'),
         expect.objectContaining({
           type: 'basic',
+          iconUrl: 'chrome-extension://id/icons/icon-48.png',
           title: expect.any(String),
-          requireInteraction: true,
+          requireInteraction: false,
         }),
       );
     });
@@ -96,7 +97,8 @@ describe('NotificationService', () => {
         expect.stringContaining('task_completed_'),
         expect.objectContaining({
           type: 'basic',
-          requireInteraction: true,
+          iconUrl: 'chrome-extension://id/icons/icon-48.png',
+          requireInteraction: false,
         }),
       );
     });
@@ -107,8 +109,9 @@ describe('NotificationService', () => {
       expect(mockNotificationCreate).toHaveBeenCalledWith(
         expect.stringContaining('task_completed_'),
         expect.objectContaining({
+          iconUrl: 'chrome-extension://id/icons/icon-48.png',
           message: expect.any(String),
-          requireInteraction: true,
+          requireInteraction: false,
         }),
       );
     });
@@ -124,14 +127,6 @@ describe('NotificationService', () => {
         }),
       );
     });
-
-    it('should auto-clear notification after timeout', async () => {
-      await notificationService.showTaskCompleted('extract', 'Test', 5);
-
-      vi.advanceTimersByTime(10000);
-
-      expect(mockNotificationClear).toHaveBeenCalled();
-    });
   });
 
   describe('showTaskFailed', () => {
@@ -141,6 +136,7 @@ describe('NotificationService', () => {
       expect(mockNotificationCreate).toHaveBeenCalledWith(
         expect.stringContaining('task_failed_'),
         expect.objectContaining({
+          iconUrl: 'chrome-extension://id/icons/icon-48.png',
           requireInteraction: false,
         }),
       );
@@ -252,6 +248,23 @@ describe('NotificationService', () => {
       expect(mockTabsCreate).toHaveBeenNthCalledWith(2, {
         url: `chrome-extension://id/${expectedSuffix}`,
       });
+    });
+
+    it('catches tab creation and notification clear rejections cleanly', async () => {
+      mockTabsCreate.mockRejectedValueOnce(new Error('No window'));
+      mockNotificationClear.mockRejectedValueOnce(new Error('Already closed'));
+
+      notificationService.setupNotificationHandlers();
+      const clickHandler = mockOnClicked.addListener.mock.calls[0][0];
+
+      clickHandler('task_completed_err::src/history/index.html');
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mockTabsCreate).toHaveBeenCalledOnce();
+      expect(mockNotificationClear).toHaveBeenCalledWith(
+        'task_completed_err::src/history/index.html',
+      );
     });
   });
 });

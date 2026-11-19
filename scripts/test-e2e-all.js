@@ -641,10 +641,19 @@ function containsDynamicImport(node) {
 
 function verifyContentScriptBundle() {
   const manifest = JSON.parse(fs.readFileSync(path.join(extensionPath, 'manifest.json'), 'utf8'));
-  const scripts = manifest.content_scripts?.flatMap((entry) => entry.js ?? []) ?? [];
-  assert(scripts.length === 1, 'The built manifest must inject one self-contained content script');
+  const staticScripts = manifest.content_scripts?.flatMap((entry) => entry.js ?? []) ?? [];
+  assert(
+    staticScripts.length === 0,
+    'The built manifest must not passively inject static content_scripts on every page',
+  );
+  assert(
+    !manifest.permissions?.includes('activeTab'),
+    'The built manifest must not request redundant activeTab permission',
+  );
 
-  const [script] = scripts;
+  const script = 'content-script.js';
+  const scriptPath = path.join(extensionPath, script);
+  assert(fs.existsSync(scriptPath), `Missing on-demand content script bundle: ${script}`);
   const publicResources =
     manifest.web_accessible_resources?.flatMap((entry) => entry.resources) ?? [];
   const scriptIsPublic = publicResources.some((resource) => {
@@ -653,11 +662,11 @@ function verifyContentScriptBundle() {
   });
   assert(!scriptIsPublic, `The manifest exposes the content script ${script} to web pages`);
 
-  const code = fs.readFileSync(path.join(extensionPath, script), 'utf8');
+  const code = fs.readFileSync(scriptPath, 'utf8');
   const source = ts.createSourceFile(script, code, ts.ScriptTarget.Latest, false, ts.ScriptKind.JS);
   assert(
     !ts.isExternalModule(source) && !containsDynamicImport(source),
-    `The manifest content script ${script} loads modules instead of being self-contained`,
+    `The content script ${script} loads modules instead of being self-contained`,
   );
 }
 
@@ -1475,7 +1484,7 @@ async function runAllAutomatedTests() {
 
     const initialPageUrl = `${mockPageUrl}?before-navigation`;
     console.log(`  Navigating to mock test page: ${initialPageUrl}`);
-    await contentPage.goto(initialPageUrl, { waitUntil: 'domcontentloaded' });
+    await contentPage.goto(initialPageUrl, { waitUntil: 'load' });
     await controlPage.goto(`chrome-extension://${extensionId}/src/options/index.html`, {
       waitUntil: 'domcontentloaded',
     });
@@ -1486,18 +1495,42 @@ async function runAllAutomatedTests() {
       return tabs.find((tab) => tab.url === targetUrl)?.id;
     }, initialPageUrl);
     assert(typeof tabId === 'number', 'Failed to resolve mock content tab id');
-    await controlPage.waitForFunction(
-      async (sourceTabId) => {
-        try {
-          const response = await chrome.tabs.sendMessage(sourceTabId, { type: 'PING' });
-          return response?.status === 'ok';
-        } catch {
-          return false;
-        }
-      },
-      { timeout: 5000 },
-      tabId,
+
+    const passivePingSucceeded = await controlPage.evaluate(async (sourceTabId) => {
+      try {
+        const response = await chrome.tabs.sendMessage(sourceTabId, { type: 'PING' });
+        return response?.status === 'ok';
+      } catch {
+        return false;
+      }
+    }, tabId);
+    assert(
+      passivePingSucceeded === false,
+      'Content script was passively injected before any extension trigger',
     );
+    recordPass(
+      'ContentScript',
+      'Verified no passive content script is injected before user action',
+    );
+
+    const ensureResponse = await sendExtensionMessage(controlPage, {
+      type: 'ENSURE_CONTENT_SCRIPT',
+      payload: { tabId },
+    });
+    assert(
+      ensureResponse?.success === true,
+      'Failed to inject content script via ENSURE_CONTENT_SCRIPT',
+    );
+
+    const injectedPingSucceeded = await controlPage.evaluate(async (sourceTabId) => {
+      try {
+        const response = await chrome.tabs.sendMessage(sourceTabId, { type: 'PING' });
+        return response?.status === 'ok';
+      } catch {
+        return false;
+      }
+    }, tabId);
+    assert(injectedPingSucceeded === true, 'Injected content script did not respond to PING');
     await contentPage.evaluate((url) => history.pushState(null, '', url), mockPageUrl);
 
     const startResponse = await sendExtensionMessage(controlPage, {
@@ -1551,6 +1584,38 @@ async function runAllAutomatedTests() {
 
     await verifyAiRequestPrivacy(controlPage);
     recordPass('AI Privacy', 'Rejected 307/308 in Chrome and redacted a gateway credential echo');
+
+    const coldPage = await browser.newPage();
+    const coldUrl = `${mockPageUrl}?cold-inject`;
+    await coldPage.goto(coldUrl, { waitUntil: 'load' });
+    const coldTabId = await controlPage.evaluate(async (targetUrl) => {
+      const tabs = await chrome.tabs.query({});
+      return tabs.find((tab) => tab.url === targetUrl)?.id;
+    }, coldUrl);
+    assert(typeof coldTabId === 'number', 'Failed to resolve cold injection tab id');
+    const coldPassivePing = await controlPage.evaluate(async (sourceTabId) => {
+      try {
+        const response = await chrome.tabs.sendMessage(sourceTabId, { type: 'PING' });
+        return response?.status === 'ok';
+      } catch {
+        return false;
+      }
+    }, coldTabId);
+    assert(coldPassivePing === false, 'Cold tab had passive content script before trigger');
+    const selectorResult = await sendExtensionMessage(controlPage, {
+      type: 'TEST_SELECTOR',
+      payload: {
+        tabId: coldTabId,
+        selector: 'ytd-comment-thread-renderer',
+        selectorType: 'css',
+      },
+    });
+    assert(
+      selectorResult?.success === true && selectorResult?.total === 3,
+      `Expected on-demand selector test to match 3 threads, got ${JSON.stringify(selectorResult)}`,
+    );
+    await coldPage.close();
+    recordPass('ContentScript', 'Injected content script on demand for cold tab selector testing');
 
     await controlPage.close();
     await contentPage.close();

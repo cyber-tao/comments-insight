@@ -27,14 +27,28 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
   const [logLevel, setLogLevel] = useState<LogLevel>(LogLevel.INFO);
 
   useEffect(() => {
-    if (typeof chrome !== 'undefined' && chrome.storage) {
-      chrome.storage.local.get(STORAGE.LOG_LEVEL_KEY).then((stored) => {
+    let cancelled = false;
+    const loadLogLevel = async () => {
+      if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+        return;
+      }
+      try {
+        const stored = await chrome.storage.local.get(STORAGE.LOG_LEVEL_KEY);
+        if (cancelled) {
+          return;
+        }
         const val = stored[STORAGE.LOG_LEVEL_KEY] as string | undefined;
         if (val && (LOG_LEVELS as readonly string[]).includes(val)) {
           setLogLevel(val as LogLevel);
         }
-      });
-    }
+      } catch (error) {
+        Logger.debug('[AdvancedSettings] Failed to read log level', { error });
+      }
+    };
+    void loadLogLevel();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleLogLevelChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {

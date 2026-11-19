@@ -93,6 +93,9 @@ for (const iconPath of Object.values(packageManifest.action?.default_icon ?? {})
     throw new Error(`Build is missing action default_icon: ${String(iconPath)}`);
   }
 }
+if (!files['content-script.js']) {
+  throw new Error('Build is missing content-script.js');
+}
 
 const archive = zipSync(files, {
   level: zipCompressionLevel,

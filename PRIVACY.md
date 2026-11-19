@@ -17,7 +17,7 @@ Comments Insight is a browser extension that extracts comments from webpages and
 
 When the user starts extraction, configuration generation, or analysis, the extension may process the current page URL, title, post content, comment text, usernames, timestamps, likes, replies, and simplified portions of the page DOM. This data is used only to provide the requested extraction, selector generation, analysis, and report features.
 
-The extension does not send browsing history to the developer or build a developer-operated browsing profile. Its content script is available on HTTP and HTTPS pages so the user can run the extension on supported websites and can therefore access the current page URL. Normal feature records are created after user action. If Developer Mode is enabled, detailed AI prompts and responses may also be stored in local logs after credential sanitization; those logs can contain page DOM, post text, usernames, and comments. None of this data is used for advertising or profiling.
+The extension does not send browsing history to the developer or build a developer-operated browsing profile. Its content script is injected on demand only after the user initiates comment extraction, rule generation, or selector testing on the active tab, and can access the current page URL for those actions. Normal feature records are created after user action. If Developer Mode is enabled, detailed AI prompts and responses may also be stored in local logs after credential sanitization; those logs can contain page DOM, post text, usernames, and comments. None of this data is used for advertising or profiling.
 
 ### AI configuration and credentials
 
@@ -78,7 +78,7 @@ Users can:
 ## Permissions
 
 - `storage` and `unlimitedStorage` store settings, task state, logs, and extracted history.
-- `activeTab`, `tabs`, `scripting`, and HTTP/HTTPS host access let the user run extraction on webpages and allow the background service worker to communicate with the content script.
+- `tabs`, `scripting`, and HTTP/HTTPS host access let the user run extraction on webpages on demand and allow the background service worker to inject and communicate with the content script.
 - `notifications` reports completion or failure of user-started background tasks.
 
 These permissions are used only for the extension's user-facing functionality.

@@ -1,4 +1,4 @@
-import { ICONS, PATHS, LIMITS, TIMING, NOTIFICATION_KEYS } from '@/config/constants';
+import { ICONS, PATHS, LIMITS, NOTIFICATION_KEYS } from '@/config/constants';
 import { Logger } from '@/utils/logger';
 import { generateUniqueId } from '@/utils/id-generator';
 import i18n from '@/utils/i18n';
@@ -21,23 +21,17 @@ export class NotificationService {
       const notificationId = `${generateUniqueId('task_completed')}::${targetPath}`;
       const options = {
         type: 'basic' as const,
-        iconUrl: ICONS.ICON_48,
+        iconUrl: chrome.runtime.getURL(ICONS.ICON_48),
         title: i18n.t('common.appName'),
         message: this.getCompletionMessage(taskType, title, commentsCount),
         buttons: [
           { title: i18n.t('notification.viewResults', { defaultValue: 'View Results' }) },
           { title: i18n.t('notification.dismiss', { defaultValue: 'Dismiss' }) },
         ],
-        requireInteraction: true,
+        requireInteraction: false,
       };
 
       await chrome.notifications.create(notificationId, options);
-
-      setTimeout(() => {
-        chrome.notifications.clear(notificationId).catch((e) => {
-          Logger.debug('[NotificationService] clear failed', { error: e });
-        });
-      }, TIMING.NOTIFICATION_AUTOCLEAR_MS);
     } catch (error) {
       Logger.error('[NotificationService] Failed to show notification', { error });
     }
@@ -48,7 +42,7 @@ export class NotificationService {
       const notificationId = generateUniqueId('task_failed');
       const options = {
         type: 'basic' as const,
-        iconUrl: ICONS.ICON_48,
+        iconUrl: chrome.runtime.getURL(ICONS.ICON_48),
         title: i18n.t('common.appName'),
         message: this.getFailureMessage(taskType, error),
         requireInteraction: false,
@@ -99,25 +93,43 @@ export class NotificationService {
     return PATHS.HISTORY_PAGE;
   }
 
-  private openTaskCompletedTarget(notificationId: string): void {
-    chrome.tabs.create({
-      url: chrome.runtime.getURL(this.resolveTargetPath(notificationId)),
-    });
+  private async openTaskCompletedTarget(notificationId: string): Promise<void> {
+    try {
+      await chrome.tabs.create({
+        url: chrome.runtime.getURL(this.resolveTargetPath(notificationId)),
+      });
+    } catch (error) {
+      Logger.warn('[NotificationService] Failed to open notification target', {
+        notificationId,
+        error,
+      });
+    }
+  }
+
+  private async clearNotification(notificationId: string): Promise<void> {
+    try {
+      await chrome.notifications.clear(notificationId);
+    } catch (error) {
+      Logger.debug('[NotificationService] Failed to clear notification', {
+        notificationId,
+        error,
+      });
+    }
   }
 
   setupNotificationHandlers(): void {
     chrome.notifications.onClicked.addListener((notificationId) => {
       if (notificationId.startsWith('task_completed_')) {
-        this.openTaskCompletedTarget(notificationId);
+        void this.openTaskCompletedTarget(notificationId);
       }
-      chrome.notifications.clear(notificationId);
+      void this.clearNotification(notificationId);
     });
 
     chrome.notifications.onButtonClicked.addListener((notificationId, buttonIndex) => {
       if (buttonIndex === 0 && notificationId.startsWith('task_completed_')) {
-        this.openTaskCompletedTarget(notificationId);
+        void this.openTaskCompletedTarget(notificationId);
       }
-      chrome.notifications.clear(notificationId);
+      void this.clearNotification(notificationId);
     });
   }
 
