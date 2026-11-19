@@ -12,6 +12,7 @@
     "next": "下一页",
     "close": "关闭",
     "reloadPage": "重新加载页面",
+    "notifications": "通知",
     "pageTitle": "{{pageName}} – {{appName}}"
   },
   "popup": {
@@ -103,6 +104,8 @@
     "apiProtocol": "API 协议",
     "apiUrl": "API URL",
     "apiKey": "API密钥",
+    "showApiKey": "显示 API 密钥",
+    "hideApiKey": "隐藏 API 密钥",
     "model": "模型",
     "contextWindowSize": "上下文长度 (K)",
     "maxOutputTokens": "最大输出 Token 数 (K)",
@@ -183,6 +186,8 @@
       "syncDialogSourceUrl": "配置来源",
       "syncDialogConfirm": "开始同步",
       "syncSuccessWithCount": "同步成功！新增 {{added}} 项，更新 {{updated}} 项。",
+      "conflictFieldCount": "{{count}} 个字段",
+      "conflictFieldsCount": "{{count}} 个字段",
       "noConfigs": "暂无配置。当您访问新站点时，扩展将自动生成配置。",
       "updated": "更新于",
       "exportSelectAtLeastOne": "请至少选择一项配置导出。",

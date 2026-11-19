@@ -12,6 +12,7 @@
     "next": "Siguiente",
     "close": "Cerrar",
     "reloadPage": "Recargar la página",
+    "notifications": "Notificaciones",
     "pageTitle": "{{pageName}} – {{appName}}"
   },
   "popup": {
@@ -103,6 +104,8 @@
     "apiProtocol": "Protocolo de API",
     "apiUrl": "URL de API",
     "apiKey": "Clave API",
+    "showApiKey": "Mostrar clave API",
+    "hideApiKey": "Ocultar clave API",
     "model": "Modelo",
     "contextWindowSize": "Longitud de contexto (K)",
     "maxOutputTokens": "Tokens de salida máx (K)",
@@ -241,6 +244,8 @@
       "syncDialogSourceUrl": "URL de origen",
       "syncDialogConfirm": "Sincronizar ahora",
       "syncSuccessWithCount": "¡Sincronización exitosa! {{added}} añadidas, {{updated}} actualizadas.",
+      "conflictFieldCount": "{{count}} campo",
+      "conflictFieldsCount": "{{count}} campos",
       "matched": "Coincidencia encontrada",
       "notMatched": "Sin coincidencias",
       "selectorExample": ".class o #id",

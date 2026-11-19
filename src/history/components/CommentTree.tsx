@@ -40,12 +40,13 @@ export const CommentTree: React.FC<CommentTreeProps> = ({ comments, depth = 0 })
       className={`${depth > 0 ? 'ml-4 pl-4' : ''}`}
       style={depth > 0 ? { borderLeft: '2px solid var(--border-primary)' } : {}}
     >
-      {comments.map((comment) => {
+      {comments.map((comment, index) => {
         const hasReplies = comment.replies && comment.replies.length > 0;
         const isExpanded = expandedReplies.has(comment.id);
+        const deferClass = depth === 0 && index >= 8 ? ' comment-item-deferred' : '';
 
         return (
-          <div key={comment.id} className="mb-3.5 animate-fade-in">
+          <div key={comment.id} className={`mb-3.5 animate-fade-in${deferClass}`}>
             <div
               className="p-4 rounded-xl transition-colors"
               style={{
@@ -85,6 +86,8 @@ export const CommentTree: React.FC<CommentTreeProps> = ({ comments, depth = 0 })
                 </div>
                 {hasReplies && (
                   <button
+                    type="button"
+                    aria-expanded={isExpanded}
                     onClick={() => toggleReplies(comment.id)}
                     className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors inline-flex items-center gap-1 tabular-nums"
                     style={{

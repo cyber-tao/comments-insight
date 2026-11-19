@@ -20,7 +20,7 @@ export const Header: React.FC<HeaderProps> = ({
   const { t } = useTranslation();
 
   return (
-    <div
+    <header
       className="px-4 py-3.5"
       style={{
         backgroundColor: 'var(--bg-card)',
@@ -68,6 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center gap-1 shrink-0">
           {developerMode && (
             <button
+              type="button"
               onClick={onOpenLogs}
               className="p-1.5 rounded-lg transition-colors border border-transparent hover:border-[var(--border-primary)] hover:bg-[var(--bg-hover)]"
               style={{ color: 'var(--text-secondary)' }}
@@ -91,6 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
             </svg>
           </a>
           <button
+            type="button"
             onClick={onOpenSettings}
             className="p-1.5 rounded-lg transition-colors border border-transparent hover:border-[var(--border-primary)] hover:bg-[var(--bg-hover)]"
             style={{ color: 'var(--text-secondary)' }}
@@ -101,6 +103,6 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </header>
   );
 };

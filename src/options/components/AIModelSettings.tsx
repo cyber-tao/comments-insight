@@ -318,8 +318,8 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
               type="button"
               onClick={() => setShowApiKey(!showApiKey)}
               className="px-3 py-2 rounded-lg theme-button-secondary inline-flex items-center justify-center"
-              aria-label={showApiKey ? 'Hide API Key' : 'Show API Key'}
-              title={showApiKey ? 'Hide API Key' : 'Show API Key'}
+              aria-label={showApiKey ? t('options.hideApiKey') : t('options.showApiKey')}
+              title={showApiKey ? t('options.hideApiKey') : t('options.showApiKey')}
             >
               {showApiKey ? <EyeOffIcon size={16} /> : <EyeIcon size={16} />}
             </button>
@@ -359,12 +359,14 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
             <label
+              htmlFor="ai-context-window"
               className="block text-sm font-medium mb-2"
               style={{ color: 'var(--text-secondary)' }}
             >
               {t('options.contextWindowSize')}
             </label>
             <input
+              id="ai-context-window"
               type="number"
               value={currentContextWindowK}
               onChange={(e) => {
@@ -400,12 +402,14 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           </div>
           <div>
             <label
+              htmlFor="ai-max-output-tokens"
               className="block text-sm font-medium mb-2"
               style={{ color: 'var(--text-secondary)' }}
             >
               {t('options.maxOutputTokens')}
             </label>
             <input
+              id="ai-max-output-tokens"
               type="number"
               value={currentMaxOutputK}
               onChange={(e) => {
@@ -483,7 +487,11 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
       <section className="mb-8 theme-card p-6">
         <div className="mb-4">
           <div className="flex justify-between items-center mb-2">
-            <label className="block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+            <label
+              htmlFor="ai-analysis-prompt"
+              className="block text-sm font-medium"
+              style={{ color: 'var(--text-secondary)' }}
+            >
               {t('options.promptTemplate')}
             </label>
             <button
@@ -499,6 +507,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             </button>
           </div>
           <textarea
+            id="ai-analysis-prompt"
             value={getAnalysisPromptTemplate(settings.analyzerPromptTemplate, settings.language)}
             onChange={(e) => onSettingsChange({ analyzerPromptTemplate: e.target.value })}
             className="w-full theme-input font-mono-code text-xs leading-relaxed"
@@ -508,6 +517,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
           <div className="mt-2">
             <button
               type="button"
+              aria-expanded={showPlaceholders}
               onClick={() => setShowPlaceholders(!showPlaceholders)}
               className="text-xs font-medium theme-link flex items-center gap-1"
             >
@@ -562,7 +572,11 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
         <div className="mt-8 pt-6 border-t border-[var(--border-primary)]">
           <div className="flex items-center justify-between gap-4 mb-4">
             <div>
-              <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+              <h3
+                id="ai-dynamic-report-label"
+                className="text-base font-semibold"
+                style={{ color: 'var(--text-primary)' }}
+              >
                 {t('options.generateDynamicReport', '动态分析网页生成')}
               </h3>
               <p className="text-sm mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
@@ -572,8 +586,13 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 )}
               </p>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+            <label
+              htmlFor="ai-dynamic-report-enabled"
+              className="relative inline-flex items-center cursor-pointer shrink-0"
+            >
               <input
+                id="ai-dynamic-report-enabled"
+                aria-labelledby="ai-dynamic-report-label"
                 type="checkbox"
                 checked={settings.generateDynamicReport !== false}
                 onChange={(e) =>
@@ -583,7 +602,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 }
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--accent-primary)] peer-checked:border-[var(--accent-primary)]"></div>
+              <div className="w-11 h-6 bg-[var(--bg-tertiary)] border border-[var(--border-secondary)] peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--border-focus)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--accent-primary)] peer-checked:border-[var(--accent-primary)]"></div>
             </label>
           </div>
 
@@ -591,6 +610,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
             <div className="mt-4">
               <div className="flex justify-between items-center mb-2">
                 <label
+                  htmlFor="ai-dynamic-report-prompt"
                   className="block text-sm font-medium"
                   style={{ color: 'var(--text-secondary)' }}
                 >
@@ -609,6 +629,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
                 </button>
               </div>
               <textarea
+                id="ai-dynamic-report-prompt"
                 value={getDynamicReportPromptTemplate(
                   settings.dynamicReportPromptTemplate,
                   settings.language,
@@ -625,6 +646,7 @@ export const AIModelSettings: React.FC<AIModelSettingsProps> = ({
               <div className="mt-2">
                 <button
                   type="button"
+                  aria-expanded={showDynamicPlaceholders}
                   onClick={() => setShowDynamicPlaceholders(!showDynamicPlaceholders)}
                   className="text-xs font-medium theme-link flex items-center gap-1"
                 >

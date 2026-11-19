@@ -32,15 +32,15 @@ export const LogsHeader: React.FC<LogsHeaderProps> = ({
             aria-label={t('logs.searchAria')}
           />
         </div>
-        <button className="btn-secondary" onClick={onRefresh}>
+        <button type="button" className="btn-secondary" onClick={onRefresh}>
           <RefreshIcon size={14} />
           <span>{t('logs.refresh')}</span>
         </button>
-        <button className="btn-primary" onClick={onExport}>
+        <button type="button" className="btn-primary" onClick={onExport}>
           <DownloadIcon size={14} />
           <span>{t('logs.export')}</span>
         </button>
-        <button className="btn-danger" onClick={onClearAll}>
+        <button type="button" className="btn-danger" onClick={onClearAll}>
           <TrashIcon size={14} />
           <span>{t('logs.clearAll')}</span>
         </button>

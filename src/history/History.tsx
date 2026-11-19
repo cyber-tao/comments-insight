@@ -27,7 +27,8 @@ const History: React.FC = () => {
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const resetListScroll = useCallback(() => {}, []);
 
-  useTheme();
+  const themeState = useTheme();
+  const resolvedTheme = themeState?.resolvedTheme;
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -99,9 +100,7 @@ const History: React.FC = () => {
 
   const sortComments = useCallback(
     (comments: Comment[]): Comment[] => {
-      const sorted = [...comments];
-
-      sorted.sort((a, b) => {
+      const sorted = comments.toSorted((a, b) => {
         switch (sortBy) {
           case 'time':
             return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
@@ -181,6 +180,7 @@ const History: React.FC = () => {
           selectedItemError={selectedItemError}
           selectedItemLoading={selectedItemLoading}
           viewMode={viewMode}
+          resolvedTheme={resolvedTheme}
           exportPostContentInMarkdown={exportPostContentInMarkdown}
           commentSearchTerm={commentSearchTerm}
           sortBy={sortBy}
@@ -262,12 +262,13 @@ const History: React.FC = () => {
         formatDate={formatDate}
       />
 
-      <div className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col min-w-0">
         <HistoryDetailPanel
           selectedItem={selectedItem}
           selectedItemError={selectedItemError}
           selectedItemLoading={selectedItemLoading}
           viewMode={viewMode}
+          resolvedTheme={resolvedTheme}
           exportPostContentInMarkdown={exportPostContentInMarkdown}
           commentSearchTerm={commentSearchTerm}
           sortBy={sortBy}
@@ -301,7 +302,7 @@ const History: React.FC = () => {
           onCurrentPageChange={setCurrentPage}
           formatDate={formatDate}
         />
-      </div>
+      </main>
       <ConfirmHost />
     </div>
   );

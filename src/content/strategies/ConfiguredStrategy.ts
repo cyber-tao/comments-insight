@@ -22,6 +22,7 @@ import {
 } from '@/config/constants';
 import { sendMessage } from '@/utils/chrome-message';
 import { findElementByRule, findElementsByRule, readField } from '../utils/selector-rule';
+import { createYieldBudget } from '../utils/yield';
 import { generateCommentHash } from '@/utils/comment-hash';
 import { checkAborted, abortableDelay } from '../utils/abort';
 
@@ -80,6 +81,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
 
     this.validationRecorded = false;
     this.recordFieldValidation(container);
+    const yieldBudget = createYieldBudget();
 
     while (allComments.length < maxComments) {
       checkAborted(signal);
@@ -97,6 +99,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
         // The caller already includes its validation buffer in this target.
         if (allComments.length >= maxComments) break;
         checkAborted(signal);
+        await yieldBudget.yieldIfNeeded(signal);
 
         // Use matched elements rather than CSS closest() so XPath and shadow
         // descendants have the same nearest-parent ownership.

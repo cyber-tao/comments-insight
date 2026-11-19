@@ -137,9 +137,16 @@ describe('HistorySidebar', () => {
     });
     expect(onSearchQueryChange).toHaveBeenCalledWith('updated');
 
-    fireEvent.keyPress(screen.getByPlaceholderText('history.searchPlaceholder'), {
+    fireEvent.keyDown(screen.getByPlaceholderText('history.searchPlaceholder'), {
       key: 'Enter',
-      charCode: 13,
+      code: 'Enter',
+      isComposing: true,
+    });
+    expect(onSearch).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(screen.getByPlaceholderText('history.searchPlaceholder'), {
+      key: 'Enter',
+      code: 'Enter',
     });
     expect(onSearch).toHaveBeenCalledTimes(1);
 
@@ -733,6 +740,7 @@ describe('HistoryDetailPanel', () => {
         type: 'RENDER_REPORT',
         html: selectedItem.analysis?.dynamicHtml,
         locale: 'zh-CN',
+        theme: 'light',
         errorTitle: 'history.reportRenderFailed',
         errorMessage: 'history.reportRenderRecovery',
       },

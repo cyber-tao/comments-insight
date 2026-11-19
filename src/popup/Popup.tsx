@@ -160,18 +160,20 @@ const Popup: React.FC = () => {
         onOpenSettings={handleOpenSettings}
         onOpenLogs={handleOpenLogs}
       />
-      <PageStatus pageInfo={pageInfo} pageStatus={pageStatus} />
-      <ActionButtons
-        pageInfo={pageInfo}
-        pageStatus={pageStatus}
-        currentTask={currentTask}
-        onExtract={handleExtractComments}
-        onGenerateConfig={handleGenerateConfig}
-        onAnalyze={handleAnalyzeComments}
-        onCancel={cancelTask}
-        onOpenHistory={handleOpenHistory}
-      />
-      {developerMode && <SelectorTester />}
+      <main>
+        <PageStatus pageInfo={pageInfo} pageStatus={pageStatus} />
+        <ActionButtons
+          pageInfo={pageInfo}
+          pageStatus={pageStatus}
+          currentTask={currentTask}
+          onExtract={handleExtractComments}
+          onGenerateConfig={handleGenerateConfig}
+          onAnalyze={handleAnalyzeComments}
+          onCancel={cancelTask}
+          onOpenHistory={handleOpenHistory}
+        />
+        {developerMode && <SelectorTester />}
+      </main>
       <toast.ToastContainer />
     </div>
   );

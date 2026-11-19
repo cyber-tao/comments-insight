@@ -155,7 +155,7 @@ export const SearchableModelSelect: React.FC<SearchableModelSelectProps> = ({
       }}
     >
       <div
-        className="flex items-center theme-input cursor-pointer"
+        className="flex items-center theme-input cursor-pointer focus-within:border-[var(--border-focus)] focus-within:ring-2 focus-within:ring-[rgba(var(--accent-primary-rgb),0.25)]"
         onClick={() => {
           setIsOpen(true);
           inputRef.current?.focus();

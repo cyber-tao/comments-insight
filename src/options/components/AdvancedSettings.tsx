@@ -68,12 +68,14 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
       <div className="space-y-8 animate-fade-in">
         <div>
           <label
+            htmlFor="ai-timeout"
             className="block text-sm font-medium mb-2"
             style={{ color: 'var(--text-secondary)' }}
           >
             {t('options.aiTimeout')}
           </label>
           <input
+            id="ai-timeout"
             type="number"
             value={(settings.aiTimeout || AI.DEFAULT_TIMEOUT) / TIMEOUT.MS_PER_SEC}
             onChange={(e) => {
@@ -102,6 +104,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
           <div className="space-y-4">
             <div>
               <label
+                htmlFor="dom-initial-depth"
                 className="block text-sm font-medium mb-2"
                 style={{ color: 'var(--text-secondary)' }}
               >
@@ -111,6 +114,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                 </span>
               </label>
               <input
+                id="dom-initial-depth"
                 type="number"
                 value={
                   settings.domAnalysisConfig?.initialDepth || DOM_ANALYSIS_DEFAULTS.initialDepth
@@ -137,6 +141,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
 
             <div>
               <label
+                htmlFor="dom-expand-depth"
                 className="block text-sm font-medium mb-2"
                 style={{ color: 'var(--text-secondary)' }}
               >
@@ -146,6 +151,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                 </span>
               </label>
               <input
+                id="dom-expand-depth"
                 type="number"
                 value={settings.domAnalysisConfig?.expandDepth || DOM_ANALYSIS_DEFAULTS.expandDepth}
                 onChange={(e) => {
@@ -170,6 +176,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
 
             <div>
               <label
+                htmlFor="dom-max-depth"
                 className="block text-sm font-medium mb-2"
                 style={{ color: 'var(--text-secondary)' }}
               >
@@ -179,6 +186,7 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
                 </span>
               </label>
               <input
+                id="dom-max-depth"
                 type="number"
                 value={settings.domAnalysisConfig?.maxDepth || DOM_ANALYSIS_DEFAULTS.maxDepth}
                 onChange={(e) => {
@@ -234,12 +242,14 @@ export const AdvancedSettings: React.FC<AdvancedSettingsProps> = ({
               }}
             >
               <label
+                htmlFor="log-output-level"
                 className="block text-sm font-medium mb-2"
                 style={{ color: 'var(--text-secondary)' }}
               >
                 {t('options.outputLevel', 'Log Output Level')}
               </label>
               <select
+                id="log-output-level"
                 value={logLevel}
                 onChange={handleLogLevelChange}
                 className="w-full theme-input"

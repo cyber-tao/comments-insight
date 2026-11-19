@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 interface DynamicReportViewerProps {
   html: string;
   title?: string;
+  resolvedTheme?: 'light' | 'dark';
   className?: string;
   style?: React.CSSProperties;
 }
@@ -12,6 +13,7 @@ interface DynamicReportViewerProps {
 export const DynamicReportViewer: React.FC<DynamicReportViewerProps> = ({
   html,
   title,
+  resolvedTheme,
   className,
   style,
 }) => {
@@ -20,12 +22,34 @@ export const DynamicReportViewer: React.FC<DynamicReportViewerProps> = ({
   const locale = i18n?.resolvedLanguage;
   const errorTitle = t('history.reportRenderFailed');
   const errorMessage = t('history.reportRenderRecovery');
+  const effectiveTheme: 'light' | 'dark' =
+    resolvedTheme ??
+    (typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
+      ? 'dark'
+      : 'light');
+  const themeRef = useRef(effectiveTheme);
+  themeRef.current = effectiveTheme;
+
   const postHtml = useCallback(() => {
     iframeRef.current?.contentWindow?.postMessage(
-      { type: 'RENDER_REPORT', html, locale, errorTitle, errorMessage },
+      {
+        type: 'RENDER_REPORT',
+        html,
+        locale,
+        theme: themeRef.current,
+        errorTitle,
+        errorMessage,
+      },
       '*',
     );
   }, [html, locale, errorTitle, errorMessage]);
+
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: 'SET_THEME', theme: effectiveTheme },
+      '*',
+    );
+  }, [effectiveTheme]);
 
   useEffect(() => {
     const iframe = iframeRef.current;

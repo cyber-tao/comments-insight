@@ -49,7 +49,7 @@ async function flushMicrotasks(iterations = 4): Promise<void> {
 describe('useTheme', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.remove('dark', 'light');
   });
 
   it('loads saved dark theme and updates document state', async () => {
@@ -71,6 +71,7 @@ describe('useTheme', () => {
     expect(result.current.resolvedTheme).toBe('dark');
     expect(result.current.isDark).toBe(true);
     expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement.classList.contains('light')).toBe(false);
     expect(document.documentElement.style.colorScheme).toBe('dark');
   });
 
@@ -91,6 +92,7 @@ describe('useTheme', () => {
     expect(result.current.theme).toBe('system');
     expect(result.current.resolvedTheme).toBe('light');
     expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(document.documentElement.classList.contains('light')).toBe(true);
 
     act(() => {
       matchMedia.setMatches(true);
@@ -98,6 +100,7 @@ describe('useTheme', () => {
 
     expect(result.current.resolvedTheme).toBe('dark');
     expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement.classList.contains('light')).toBe(false);
 
     act(() => {
       result.current.setTheme('light');
@@ -106,6 +109,7 @@ describe('useTheme', () => {
     expect(result.current.theme).toBe('light');
     expect(result.current.resolvedTheme).toBe('light');
     expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(document.documentElement.classList.contains('light')).toBe(true);
     expect(document.documentElement.style.colorScheme).toBe('light');
   });
 

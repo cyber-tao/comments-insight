@@ -53,8 +53,8 @@
     box-shadow 0.15s ease;
 }
 
-.search-input:focus {
-  outline: none;
+.search-input:focus-visible {
+  outline: 2px solid transparent;
   border-color: var(--border-focus);
   box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.15);
 }
@@ -118,9 +118,10 @@
   cursor: pointer;
 }
 
-.select-input:focus {
-  outline: none;
+.select-input:focus-visible {
+  outline: 2px solid transparent;
   border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.15);
 }
 
 .logs-stats-bar {
@@ -151,6 +152,11 @@
 
 .log-item-wrapper {
   border-bottom: 1px solid var(--border-primary);
+}
+
+.log-item-wrapper:nth-child(n + 15) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto none auto 72px;
 }
 
 .log-item-wrapper:last-child {

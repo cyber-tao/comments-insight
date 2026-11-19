@@ -176,4 +176,33 @@ describe('sandbox report renderer', () => {
       'Safe template content',
     );
   });
+
+  it('transfers sanitized nodes via importNode and syncs parent theme', () => {
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.classList.remove('dark');
+    document.documentElement.style.colorScheme = '';
+
+    dispatchSandboxMessage({
+      type: 'RENDER_REPORT',
+      html: '<article id="node-transfer">First pass</article>',
+      theme: 'dark',
+    });
+
+    expect(document.documentElement.dataset.theme).toBe('dark');
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    expect(document.documentElement.style.colorScheme).toBe('dark');
+    expect(getReportRoot().querySelector('#node-transfer')?.textContent).toBe('First pass');
+
+    dispatchSandboxMessage({ type: 'SET_THEME', theme: 'light' });
+    expect(document.documentElement.dataset.theme).toBe('light');
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(document.documentElement.style.colorScheme).toBe('light');
+    // Preserves already rendered DOM on theme-only updates
+    expect(getReportRoot().querySelector('#node-transfer')?.textContent).toBe('First pass');
+
+    // Invalid theme values or non-parent sources are ignored
+    dispatchSandboxMessage({ type: 'SET_THEME', theme: 'high-contrast' });
+    dispatchSandboxMessage({ type: 'SET_THEME', theme: 'dark' }, null);
+    expect(document.documentElement.dataset.theme).toBe('light');
+  });
 });

@@ -12,6 +12,7 @@
     "next": "Seguinte",
     "close": "Fechar",
     "reloadPage": "Recarregar a página",
+    "notifications": "Notificações",
     "pageTitle": "{{pageName}} – {{appName}}"
   },
   "popup": {
@@ -103,6 +104,8 @@
     "apiProtocol": "Protocolo da API",
     "apiUrl": "URL da API",
     "apiKey": "Chave da API",
+    "showApiKey": "Mostrar chave API",
+    "hideApiKey": "Ocultar chave API",
     "model": "Modelo",
     "contextWindowSize": "Tamanho da janela de contexto (K)",
     "maxOutputTokens": "Máximo de tokens de saída (K)",
@@ -183,6 +186,8 @@
       "syncDialogSourceUrl": "URL de origem",
       "syncDialogConfirm": "Sincronizar agora",
       "syncSuccessWithCount": "Sincronização concluída. Regras adicionadas: {{added}}. Atualizadas: {{updated}}.",
+      "conflictFieldCount": "{{count}} campo",
+      "conflictFieldsCount": "{{count}} campos",
       "noConfigs": "Não foram encontradas regras de extração. A extensão pode gerar regras quando utiliza a extração num site.",
       "updated": "Atualizado",
       "exportSelectAtLeastOne": "Selecione pelo menos uma configuração para exportar.",

@@ -12,6 +12,7 @@
     "next": "Next",
     "close": "Close",
     "reloadPage": "Reload page",
+    "notifications": "Notifications",
     "pageTitle": "{{pageName}} – {{appName}}"
   },
   "popup": {
@@ -103,6 +104,8 @@
     "apiProtocol": "API protocol",
     "apiUrl": "API URL",
     "apiKey": "API Key",
+    "showApiKey": "Show API Key",
+    "hideApiKey": "Hide API Key",
     "model": "Model",
     "contextWindowSize": "Context Length (K)",
     "maxOutputTokens": "Max Output Tokens (K)",
@@ -183,6 +186,8 @@
       "syncDialogSourceUrl": "Source URL",
       "syncDialogConfirm": "Sync Now",
       "syncSuccessWithCount": "Synced successfully! Added {{added}}, updated {{updated}} configs.",
+      "conflictFieldCount": "{{count}} field",
+      "conflictFieldsCount": "{{count}} fields",
       "noConfigs": "No configurations found. The extension will generate them automatically as you visit sites.",
       "updated": "Updated",
       "exportSelectAtLeastOne": "Select at least one config to export.",

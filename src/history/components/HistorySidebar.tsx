@@ -111,7 +111,8 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
   };
 
   return (
-    <div
+    <aside
+      aria-label={t('history.title')}
       className="w-72 lg:w-80 shrink-0 flex flex-col"
       style={{
         backgroundColor: 'var(--bg-card)',
@@ -131,6 +132,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           </div>
           {history.length > 0 && (
             <button
+              type="button"
               onClick={onClearAll}
               disabled={loading || operationPending}
               className="theme-button-danger px-2.5 py-1.5 text-xs inline-flex items-center gap-1.5 shrink-0"
@@ -146,12 +148,17 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
             value={searchQuery}
             disabled={operationPending}
             onChange={(e) => onSearchQueryChange(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && onSearch()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+                onSearch();
+              }
+            }}
             placeholder={t('history.searchPlaceholder')}
             className="flex-1 text-sm theme-input"
             aria-label={t('history.searchAria')}
           />
           <button
+            type="button"
             onClick={onSearch}
             disabled={operationPending}
             className="theme-button-primary px-3.5 py-2 inline-flex items-center justify-center"
@@ -249,6 +256,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           }}
         >
           <button
+            type="button"
             onClick={() => onHistoryPageChange((current) => Math.max(1, current - 1))}
             disabled={historyPage <= 1 || loading || operationPending}
             className="theme-button-secondary px-3 py-1 text-xs disabled:opacity-50"
@@ -262,6 +270,7 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
             {historyPage} / {historyTotalPages}
           </span>
           <button
+            type="button"
             onClick={() =>
               onHistoryPageChange((current) => Math.min(historyTotalPages, current + 1))
             }
@@ -272,6 +281,6 @@ export const HistorySidebar: React.FC<HistorySidebarProps> = ({
           </button>
         </div>
       )}
-    </div>
+    </aside>
   );
 };

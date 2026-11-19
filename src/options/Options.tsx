@@ -87,7 +87,7 @@ const Options: React.FC = () => {
         className="container mx-auto px-6 py-8 max-w-5xl min-h-screen"
         style={{ backgroundColor: 'var(--bg-secondary)' }}
       >
-        <div
+        <header
           className="flex flex-wrap justify-between items-center gap-4 pb-5 mb-6 border-b"
           style={{ borderColor: 'var(--border-primary)' }}
         >
@@ -104,6 +104,7 @@ const Options: React.FC = () => {
           </div>
 
           <div
+            role="tablist"
             className="inline-flex p-1 rounded-lg gap-1"
             style={{
               backgroundColor: 'var(--bg-tertiary)',
@@ -113,8 +114,11 @@ const Options: React.FC = () => {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className="py-1.5 px-3.5 rounded-md font-medium text-sm focus:outline-none transition-all inline-flex items-center gap-2"
+                className="py-1.5 px-3.5 rounded-md font-medium text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--border-focus)] transition-all inline-flex items-center gap-2"
                 style={{
                   backgroundColor: activeTab === tab.id ? 'var(--bg-card)' : 'transparent',
                   color: activeTab === tab.id ? 'var(--accent-primary)' : 'var(--text-tertiary)',
@@ -126,7 +130,7 @@ const Options: React.FC = () => {
               </button>
             ))}
           </div>
-        </div>
+        </header>
 
         {hasExternalConflict && (
           <div
@@ -142,7 +146,7 @@ const Options: React.FC = () => {
           </div>
         )}
 
-        <div className="animate-fade-in">
+        <main className="animate-fade-in">
           {activeTab === 'extension' && (
             <div className="space-y-6">
               <section className="theme-card p-6">
@@ -165,6 +169,7 @@ const Options: React.FC = () => {
                       />
                     </label>
                     <button
+                      type="button"
                       onClick={handleExport}
                       className="theme-button-primary px-3.5 py-2 text-xs inline-flex items-center gap-1.5"
                     >
@@ -197,7 +202,7 @@ const Options: React.FC = () => {
               initialDomain={initialRoute.domain}
             />
           )}
-        </div>
+        </main>
 
         {saving && (
           <div

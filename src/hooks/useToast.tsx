@@ -1,4 +1,6 @@
-import { useState, useCallback, useRef } from 'react';
+import * as React from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { useTranslation } from 'react-i18next';
 import Toast, { ToastType } from '../components/Toast';
 import { LIMITS } from '@/config/constants';
 
@@ -9,8 +11,18 @@ interface ToastMessage {
 }
 
 export const useToast = () => {
+  const { t } = useTranslation();
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const nextIdRef = useRef(0);
+  const toastsRef = useRef<ToastMessage[]>(toasts);
+  toastsRef.current = toasts;
+  const listenersRef = useRef(new Set<() => void>());
+  const tRef = useRef(t);
+  tRef.current = t;
+
+  useEffect(() => {
+    listenersRef.current.forEach((listener) => listener());
+  }, [toasts]);
 
   const showToast = useCallback((message: string, type: ToastType = 'info') => {
     const id = nextIdRef.current;
@@ -27,30 +39,63 @@ export const useToast = () => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
-  const ToastContainer = useCallback(
-    () => (
-      <>
-        {toasts.map((toast, index) => (
-          <div
-            key={toast.id}
-            style={{
-              position: 'fixed',
-              top: `${16 + index * 80}px`,
-              right: '16px',
-              zIndex: 9999,
-            }}
-          >
+  const ToastContainer = useMemo(() => {
+    const subscribe = (listener: () => void) => {
+      listenersRef.current.add(listener);
+      return () => {
+        listenersRef.current.delete(listener);
+      };
+    };
+    const getSnapshot = () => toastsRef.current;
+
+    const ToastRegion: React.FC = () => {
+      const activeToasts = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+      const containerRef = useRef<HTMLDivElement | null>(null);
+      const open = activeToasts.length > 0;
+
+      useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        const supportsPopover =
+          typeof container.showPopover === 'function' &&
+          typeof container.hidePopover === 'function';
+        if (supportsPopover) {
+          container.setAttribute('popover', 'manual');
+          try {
+            if (open) {
+              container.showPopover();
+            } else {
+              container.hidePopover();
+            }
+          } catch {
+            // Ignore already-open / already-closed states or detached nodes
+          }
+        }
+      }, [open]);
+
+      return (
+        <div
+          ref={containerRef}
+          role="region"
+          aria-label={tRef.current('common.notifications')}
+          data-open={open ? 'true' : 'false'}
+          className="toast-popover-region"
+        >
+          {activeToasts.map((toast) => (
             <Toast
+              key={toast.id}
               message={toast.message}
               type={toast.type}
               onClose={() => removeToast(toast.id)}
             />
-          </div>
-        ))}
-      </>
-    ),
-    [toasts, removeToast],
-  );
+          ))}
+        </div>
+      );
+    };
+
+    return ToastRegion;
+  }, [removeToast]);
 
   return {
     showToast,

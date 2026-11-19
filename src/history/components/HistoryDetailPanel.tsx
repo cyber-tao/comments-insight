@@ -29,6 +29,7 @@ interface HistoryDetailPanelProps {
   selectedItemError: string | null;
   selectedItemLoading: boolean;
   viewMode: 'analysis' | 'dynamic' | 'comments';
+  resolvedTheme?: 'light' | 'dark';
   exportPostContentInMarkdown: boolean;
   commentSearchTerm: string;
   sortBy: 'time' | 'likes' | 'replies';
@@ -61,6 +62,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
   selectedItemError,
   selectedItemLoading,
   viewMode,
+  resolvedTheme,
   exportPostContentInMarkdown,
   commentSearchTerm,
   sortBy,
@@ -222,7 +224,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
         className="flex flex-col h-screen w-screen overflow-hidden"
         style={{ backgroundColor: 'var(--bg-secondary)' }}
       >
-        <div
+        <header
           className="p-3 px-6 flex items-center justify-between border-b shadow-sm z-10 flex-shrink-0"
           style={{
             backgroundColor: 'var(--bg-card)',
@@ -231,6 +233,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
         >
           <div className="flex items-center gap-3 min-w-0">
             <button
+              type="button"
               onClick={handleExitFullscreen}
               className="theme-button-secondary px-3 py-1.5 text-sm flex items-center gap-1.5"
               title={t('history.backToHistory')}
@@ -248,6 +251,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
           <div className="flex items-center gap-2 flex-shrink-0">
             {hasAnalysis && (
               <button
+                type="button"
                 onClick={onGenerateDynamicReport}
                 disabled={isGeneratingDynamic || isReanalyzing}
                 className="theme-button-secondary px-3.5 py-1.5 text-sm flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
@@ -265,6 +269,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
               </button>
             )}
             <button
+              type="button"
               onClick={() => exportAnalysisAsHTML(selectedItem)}
               className="theme-button-primary px-3.5 py-1.5 text-sm flex items-center gap-1.5"
               title={t('history.exportHtmlTooltip')}
@@ -273,16 +278,17 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
               <span>{t('history.exportHtml')}</span>
             </button>
           </div>
-        </div>
+        </header>
 
         {dynamicErrorAlert}
 
-        <div className="flex-1 w-full h-full overflow-hidden">
+        <main className="flex-1 w-full h-full overflow-hidden">
           <DynamicReportViewer
             title={selectedItem.title}
             html={selectedItem.analysis?.dynamicHtml || ''}
+            resolvedTheme={resolvedTheme}
           />
-        </div>
+        </main>
       </div>
     );
   }
@@ -599,6 +605,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                 <DynamicReportViewer
                   title={selectedItem.title}
                   html={selectedItem.analysis?.dynamicHtml || ''}
+                  resolvedTheme={resolvedTheme}
                   style={{ minHeight: '600px' }}
                 />
               </div>

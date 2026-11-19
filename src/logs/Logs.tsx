@@ -106,15 +106,21 @@ export default function Logs() {
 
   return (
     <div className="logs-container">
-      <div className="logs-header-section">
-        <div className="logs-tabs">
+      <header className="logs-header-section">
+        <div role="tablist" className="logs-tabs">
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'ai'}
             className={`tab-btn ${activeTab === 'ai' ? 'active' : ''}`}
             onClick={() => setActiveTab('ai')}
           >
             {t('logs.filterAI')} ({aiLogs.length})
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'system'}
             className={`tab-btn ${activeTab === 'system' ? 'active' : ''}`}
             onClick={() => setActiveTab('system')}
           >
@@ -129,7 +135,7 @@ export default function Logs() {
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
         />
-      </div>
+      </header>
 
       {activeTab === 'system' && (
         <div className="logs-filters">
@@ -169,7 +175,7 @@ export default function Logs() {
         </div>
       )}
 
-      <div className="log-list">
+      <main className="log-list">
         {loading ? (
           <div className="empty-state">{t('logs.loading')}</div>
         ) : activeTab === 'ai' ? (
@@ -185,7 +191,7 @@ export default function Logs() {
             <SystemLogItem key={log.key} log={log} onDelete={handleDeleteLog} />
           ))
         )}
-      </div>
+      </main>
 
       <ConfirmHost />
     </div>

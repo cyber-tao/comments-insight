@@ -179,13 +179,13 @@ async function verifyHistoryErrorFeedback(page, expectedTotal) {
     page.waitForFunction(
       (text) =>
         document.querySelector('[role="alert"]')?.textContent.includes(text) &&
-        !document.querySelector('[role="dialog"]'),
+        !document.querySelector('dialog[open]'),
       {},
       message,
     );
   const confirmOperation = async () => {
-    await page.waitForSelector('[role="dialog"]', { visible: true });
-    await page.click('[role="dialog"] button:last-child');
+    await page.waitForSelector('dialog[open]', { visible: true });
+    await page.click('dialog[open] button:last-child');
   };
   await page.evaluate(() => {
     const original = chrome.runtime.sendMessage;
@@ -261,7 +261,7 @@ async function verifyHistoryErrorFeedback(page, expectedTotal) {
         throw new Error('Unselected history record cannot be deleted');
       button.click();
     });
-    await page.waitForSelector('[role="dialog"]', { visible: true });
+    await page.waitForSelector('dialog[open]', { visible: true });
     assert(
       JSON.stringify(await snapshot()) === JSON.stringify(beforeMutation),
       'Delete button also selected another record',
@@ -601,7 +601,9 @@ async function verifyAiSettingsUi(page, origin, requests) {
     if (screenshotDir) {
       await page.select('#ai-provider-preset', 'openai');
       await waitForSaved({ apiUrl: 'https://api.openai.com/v1', protocol: 'openai-responses' });
-      await page.waitForSelector('[role="alert"]', { hidden: true, timeout: 10000 });
+      await page.waitForFunction(() => !document.querySelector('[role="alert"], [role="status"]'), {
+        timeout: 10000,
+      });
       fs.mkdirSync(screenshotDir, { recursive: true });
       await page.setViewport({ width: 1280, height: 1000 });
       await page.$eval('#ai-provider-preset', (element) =>

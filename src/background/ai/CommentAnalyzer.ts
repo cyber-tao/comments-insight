@@ -450,8 +450,8 @@ export class CommentAnalyzer {
       );
     }
 
-    const topComments = [...(comments || [])]
-      .sort((a, b) => (b.likes || 0) - (a.likes || 0))
+    const topComments = (comments || [])
+      .toSorted((a, b) => (b.likes || 0) - (a.likes || 0))
       .slice(0, 10);
     let includedComments = 0;
     for (let count = 1; count <= topComments.length; count += 1) {

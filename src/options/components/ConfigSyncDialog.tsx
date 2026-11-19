@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { API } from '@/config/constants';
+import { ModalDialog } from '@/components/ModalDialog';
 
 interface ConfigSyncDialogProps {
   isOpen: boolean;
@@ -14,19 +15,18 @@ export const ConfigSyncDialog: React.FC<ConfigSyncDialogProps> = ({
   onConfirm,
 }) => {
   const { t } = useTranslation();
-
-  if (!isOpen) return null;
+  const titleId = React.useId();
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-[1px]">
-      <div
-        className="rounded-xl shadow-lg w-full max-w-md p-6"
-        style={{
-          backgroundColor: 'var(--bg-card)',
-          border: '1px solid var(--border-primary)',
-        }}
-      >
+    <ModalDialog
+      open={isOpen}
+      onClose={onClose}
+      ariaLabelledBy={titleId}
+      className="w-full max-w-md"
+    >
+      <div className="p-6">
         <h3
+          id={titleId}
           className="text-lg font-bold mb-3 font-serif-editorial"
           style={{ color: 'var(--text-primary)' }}
         >
@@ -57,14 +57,22 @@ export const ConfigSyncDialog: React.FC<ConfigSyncDialogProps> = ({
           </div>
         </div>
         <div className="flex justify-end gap-2.5">
-          <button onClick={onClose} className="px-4 py-2 text-sm theme-button-secondary">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm theme-button-secondary"
+          >
             {t('common.cancel')}
           </button>
-          <button onClick={onConfirm} className="px-4 py-2 text-sm theme-button-primary">
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="px-4 py-2 text-sm theme-button-primary"
+          >
             {t('options.crawlingConfigs.syncDialogConfirm')}
           </button>
         </div>
       </div>
-    </div>
+    </ModalDialog>
   );
 };

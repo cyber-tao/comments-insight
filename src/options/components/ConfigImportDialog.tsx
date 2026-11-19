@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { CrawlingConfig, FieldSelector, SelectorRule } from '../../types';
+import { ModalDialog } from '@/components/ModalDialog';
 
 export type MergeChoice = 'current' | 'incoming';
 export type MergeField =
@@ -73,6 +74,7 @@ export const ConfigImportDialog: React.FC<ConfigImportDialogProps> = ({
   onAllConflictsChange,
 }) => {
   const { t } = useTranslation();
+  const titleId = React.useId();
 
   if (!isOpen) return null;
 
@@ -172,17 +174,20 @@ export const ConfigImportDialog: React.FC<ConfigImportDialogProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 backdrop-blur-[1px]">
-      <div
-        className="rounded-xl shadow-lg w-full max-w-5xl p-6"
-        style={{
-          backgroundColor: 'var(--bg-card)',
-          border: '1px solid var(--border-primary)',
-        }}
-      >
-        <div className="flex items-center justify-between mb-4">
+    <ModalDialog
+      open={true}
+      onClose={onClose}
+      ariaLabelledBy={titleId}
+      className="w-full max-w-5xl overflow-hidden"
+    >
+      <div className="p-6 max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between mb-4 shrink-0">
           <div>
-            <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+            <h3
+              id={titleId}
+              className="text-lg font-semibold"
+              style={{ color: 'var(--text-primary)' }}
+            >
               {isRemoteSync
                 ? t('options.crawlingConfigs.syncPreviewTitle')
                 : t('options.crawlingConfigs.importTitle')}
@@ -194,6 +199,7 @@ export const ConfigImportDialog: React.FC<ConfigImportDialogProps> = ({
             )}
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="hover:opacity-80 transition-opacity"
             style={{ color: 'var(--text-muted)' }}
@@ -203,17 +209,17 @@ export const ConfigImportDialog: React.FC<ConfigImportDialogProps> = ({
           </button>
         </div>
         {importError && (
-          <div className="text-sm mb-3" style={{ color: 'var(--accent-danger)' }}>
+          <div className="text-sm mb-3 shrink-0" style={{ color: 'var(--accent-danger)' }}>
             {importError}
           </div>
         )}
         {!importError && importConflicts.length === 0 && importAdditions.length === 0 && (
-          <div className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>
+          <div className="text-sm mb-4 shrink-0" style={{ color: 'var(--text-muted)' }}>
             {t('options.crawlingConfigs.importEmpty')}
           </div>
         )}
         {!importError && (importConflicts.length > 0 || importAdditions.length > 0) && (
-          <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
+          <div className="space-y-4 flex-1 overflow-y-auto pr-1">
             {importAdditions.length > 0 && (
               <div className="border rounded p-4" style={{ borderColor: 'var(--border-primary)' }}>
                 <div
@@ -319,8 +325,13 @@ export const ConfigImportDialog: React.FC<ConfigImportDialogProps> = ({
                           {conflict.existing.domain}
                         </span>
                         <span className="ml-2 text-xs" style={{ color: 'var(--text-muted)' }}>
-                          ({conflict.diffFields.length}{' '}
-                          {conflict.diffFields.length === 1 ? 'field' : 'fields'})
+                          (
+                          {conflict.diffFields.length === 1
+                            ? t('options.crawlingConfigs.conflictFieldCount', { count: 1 })
+                            : t('options.crawlingConfigs.conflictFieldsCount', {
+                                count: conflict.diffFields.length,
+                              })}
+                          )
                         </span>
                       </div>
                       {conflict.diffFields.length === 0 && (
@@ -440,11 +451,16 @@ export const ConfigImportDialog: React.FC<ConfigImportDialogProps> = ({
             )}
           </div>
         )}
-        <div className="mt-5 flex justify-end gap-2.5">
-          <button onClick={onClose} className="theme-button-secondary px-4 py-2 text-sm">
+        <div className="mt-5 flex justify-end gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="theme-button-secondary px-4 py-2 text-sm"
+          >
             {t('common.cancel')}
           </button>
           <button
+            type="button"
             onClick={() => onApply(importConflicts)}
             className="theme-button-primary px-4 py-2 text-sm disabled:opacity-50"
             disabled={!!importError || !importHasChanges}
@@ -453,6 +469,6 @@ export const ConfigImportDialog: React.FC<ConfigImportDialogProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </ModalDialog>
   );
 };

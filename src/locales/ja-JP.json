@@ -12,6 +12,7 @@
     "next": "次へ",
     "close": "閉じる",
     "reloadPage": "ページを再読み込み",
+    "notifications": "通知",
     "pageTitle": "{{pageName}} – {{appName}}"
   },
   "popup": {
@@ -103,6 +104,8 @@
     "apiProtocol": "API プロトコル",
     "apiUrl": "API URL",
     "apiKey": "APIキー",
+    "showApiKey": "API キーを表示",
+    "hideApiKey": "API キーを隠す",
     "model": "モデル",
     "contextWindowSize": "コンテキスト長 (K)",
     "maxOutputTokens": "最大出力トークン数 (K)",
@@ -241,6 +244,8 @@
       "syncDialogSourceUrl": "ソースURL",
       "syncDialogConfirm": "同期する",
       "syncSuccessWithCount": "同期成功！{{added}}件追加、{{updated}}件更新しました。",
+      "conflictFieldCount": "{{count}} 件のフィールド",
+      "conflictFieldsCount": "{{count}} 件のフィールド",
       "matched": "一致",
       "notMatched": "一致なし",
       "selectorExample": ".class または #id",

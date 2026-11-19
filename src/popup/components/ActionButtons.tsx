@@ -126,6 +126,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
       {pageInfo && (
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={handleExtractClick}
             disabled={isExtractionFlowActive}
             aria-disabled={isExtractionFlowActive}
@@ -182,6 +183,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
           </button>
           {isExtractionFlowActive && currentTask && (
             <button
+              type="button"
               onClick={() => onCancel(currentTask.id)}
               className="theme-button-danger px-3 py-2.5 flex items-center justify-center"
               aria-label={t('task.cancel')}
@@ -196,6 +198,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
       {/* Analyze Comments button */}
       <div className="flex gap-2">
         <button
+          type="button"
           onClick={handleAnalyzeClick}
           disabled={!pageStatus.extracted || isAnalyzeActive}
           aria-disabled={!pageStatus.extracted || isAnalyzeActive}
@@ -259,6 +262,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
         </button>
         {isAnalyzeActive && currentTask && (
           <button
+            type="button"
             onClick={() => onCancel(currentTask.id)}
             className="theme-button-danger px-3 py-2.5 flex items-center justify-center"
             aria-label={t('task.cancel')}
@@ -285,6 +289,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
 
       {/* View History button */}
       <button
+        type="button"
         onClick={onOpenHistory}
         className="w-full py-2.5 px-4 text-sm theme-button-secondary flex items-center justify-center gap-2"
       >

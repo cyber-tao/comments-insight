@@ -51,12 +51,19 @@ const URL_ATTRIBUTES = new Set([
   'xlink:href',
 ]);
 
+function applySandboxTheme(theme: unknown): void {
+  if (theme !== 'light' && theme !== 'dark') return;
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+  document.documentElement.style.colorScheme = theme;
+}
+
 function cleanPreviousReport(): void {
   const previousStyles = document.head.querySelectorAll('style[data-dynamic-report]');
   previousStyles.forEach((style) => style.remove());
   const reportRoot = document.getElementById('report-root');
   if (reportRoot) {
-    reportRoot.innerHTML = '';
+    reportRoot.replaceChildren();
   }
 }
 
@@ -200,10 +207,13 @@ function renderReport(rawHtml: string, errorTitle: string, errorMessage: string)
       styleTag.remove();
     });
 
-    // 2. Inject body content into report-root
+    // 2. Transfer sanitized DOM nodes directly into report-root (avoiding re-serialization mXSS)
     const reportRoot = document.getElementById('report-root');
     if (reportRoot) {
-      reportRoot.innerHTML = doc.body.innerHTML;
+      const importedNodes = Array.from(doc.body.childNodes, (node) =>
+        document.importNode(node, true),
+      );
+      reportRoot.replaceChildren(...importedNodes);
     }
   } catch (error) {
     console.error('[Sandbox] Failed to render report:', error);
@@ -216,13 +226,17 @@ setupLinkInterceptors();
 
 // Listen for messages from parent window
 window.addEventListener('message', (event: MessageEvent) => {
-  if (
-    event.source === window.parent &&
-    event.data?.type === 'RENDER_REPORT' &&
-    typeof event.data.html === 'string'
-  ) {
-    const { html, locale, errorTitle, errorMessage } = event.data;
+  if (event.source !== window.parent) return;
+
+  if (event.data?.type === 'SET_THEME') {
+    applySandboxTheme(event.data.theme);
+    return;
+  }
+
+  if (event.data?.type === 'RENDER_REPORT' && typeof event.data.html === 'string') {
+    const { html, locale, theme, errorTitle, errorMessage } = event.data;
     if (typeof locale === 'string') document.documentElement.lang = locale;
+    applySandboxTheme(theme);
     renderReport(
       html,
       typeof errorTitle === 'string' ? errorTitle : 'Report could not be displayed',

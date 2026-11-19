@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
+import { ModalDialog } from './ModalDialog';
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -13,10 +14,9 @@ export interface ConfirmDialogProps {
 }
 
 /**
- * Lightweight, dependency-free confirm dialog. Replaces `window.confirm`,
- * which is synchronous, blocks the renderer, and ignores the application's
- * theme/i18n. Renders an accessible modal with focus on the confirm button
- * and supports Escape to dismiss.
+ * Lightweight, dependency-free confirm dialog backed by a native top-layer `<dialog>`.
+ * Focuses the cancel button by default for destructive actions (preventing accidental
+ * Enter/Space confirmation) and the confirm button otherwise.
  */
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   open,
@@ -29,48 +29,39 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onCancel,
 }) => {
   const { t } = useTranslation();
+  const titleId = React.useId();
   const confirmButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const cancelButtonRef = React.useRef<HTMLButtonElement | null>(null);
 
   React.useEffect(() => {
     if (!open) {
       return;
     }
-    confirmButtonRef.current?.focus();
-    const handleKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
-        onCancel();
-      }
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [open, onCancel]);
-
-  if (!open) {
-    return null;
-  }
+    if (destructive) {
+      cancelButtonRef.current?.focus();
+    } else {
+      confirmButtonRef.current?.focus();
+    }
+  }, [open, destructive]);
 
   const confirmText = confirmLabel ?? t('common.confirm');
   const cancelText = cancelLabel ?? t('common.cancel');
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={title ?? confirmText}
-      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/45 backdrop-blur-[1px]"
-      onClick={onCancel}
+    <ModalDialog
+      open={open}
+      onClose={onCancel}
+      ariaLabel={title ? undefined : confirmText}
+      ariaLabelledBy={title ? titleId : undefined}
+      className="w-[90%] max-w-sm animate-fade-in"
     >
-      <div
-        className="rounded-xl p-5 max-w-sm w-[90%] mx-4 animate-fade-in"
-        style={{
-          backgroundColor: 'var(--bg-card)',
-          border: '1px solid var(--border-primary)',
-          boxShadow: 'var(--shadow-lg)',
-        }}
-        onClick={(event) => event.stopPropagation()}
-      >
+      <div className="p-5">
         {title && (
-          <h2 className="text-base font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+          <h2
+            id={titleId}
+            className="text-base font-semibold mb-2"
+            style={{ color: 'var(--text-primary)' }}
+          >
             {title}
           </h2>
         )}
@@ -82,6 +73,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         </p>
         <div className="mt-5 flex justify-end gap-2.5">
           <button
+            ref={cancelButtonRef}
             type="button"
             onClick={onCancel}
             className="theme-button-secondary px-3.5 py-1.5 text-sm"
@@ -109,7 +101,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </ModalDialog>
   );
 };
 
