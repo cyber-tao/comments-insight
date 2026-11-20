@@ -378,7 +378,8 @@ https://github.com/cyber-tao/comments-insight/blob/master/PRIVACY.md
 
 | Version | Date       | Changes                                                                                                                                                   | Status                 |
 | ------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| 0.12.1  | 2026-11-19 | Deep-linked notifications, reply rule generation, API v2 auto-publish setup, on-demand injection, native `<dialog>`, accessibility & modern web hardening | Draft                  |
+| 0.13.0  | 2026-11-20 | On-demand content script injection, native `<dialog>`, accessibility and sandbox hardening, Chrome Web Store API v2 publishing                            | Release tag            |
+| 0.12.1  | 2026-11-13 | GitHub follow-up to the 0.12.0 feature release; store package was not submitted                                                                           | Released on GitHub     |
 | 0.12.0  | 2026-11-18 | Deep-linked task notifications, AI-generated reply crawling configs, K-unit token presets, editable API URLs with streaming connection tests              | Released on GitHub     |
 | 0.11.1  | 2026-11-13 | Dependency security fixes, pagination/search race fixes, streaming frame hardening, and full a11y/error recovery improvements                             | Released on GitHub     |
 | 0.7.0   | Prior      | Earlier Chrome Web Store published baseline                                                                                                               | Published (Superseded) |
@@ -387,7 +388,7 @@ https://github.com/cyber-tao/comments-insight/blob/master/PRIVACY.md
 
 ### Known Issues / Limitations
 
-1. **Dashboard Privacy Tab Sync Required**: Historical public store listing (`0.7.0`) previously showed "does not collect user data". Before submitting `0.12.1+`, update the Developer Dashboard **Privacy practices** tab using the 9-category matrix above so it matches `PRIVACY.md` and current runtime behavior.
+1. **Dashboard Privacy Tab Sync Required**: Historical public store listing (`0.7.0`) previously showed "does not collect user data". Before submitting `0.13.0+`, update the Developer Dashboard **Privacy practices** tab using the 9-category matrix above so it matches `PRIVACY.md` and current runtime behavior.
 2. **Platform Logos in Promotional Artwork**: `banner-440x280.jpg`, `banner-1400x560.jpg`, and cover screenshots display platform icons solely to indicate built-in extraction rules (`youtube.com`, `bilibili.com`, `reddit.com`, `x.com`, `tiktok.com`, `xiaohongshu.com`). Monitor during review in case Google requests trademark clarification.
 3. **Automated Publishing**: `.github/workflows/release.yml` uses Chrome Web Store API v2 via `scripts/publish-cws.mjs` (Service Account / OIDC / OAuth2). First-time setup requires registering the Service Account email in Developer Dashboard → Account and setting `CHROME_PUBLISHER_ID` and `CHROME_EXTENSION_ID` secrets.
 
