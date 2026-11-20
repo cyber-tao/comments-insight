@@ -14,8 +14,6 @@
 
 </div>
 
-**v0.13.1** 改为仅在任务需要时注入内容脚本，对话框改用原生 dialog，并加强无障碍、报告沙箱与后台任务处理。Chrome 网上应用店页面会显示当前可安装的版本。 [GitHub v0.13.1 发布页](https://github.com/cyber-tao/comments-insight/releases/tag/v0.13.1)
-
 ## 📚 目录
 
 - [评论洞察 (Comments Insight)](#评论洞察-comments-insight)
@@ -156,11 +154,11 @@ vitest.config.ts        # 测试配置
 
 **[📦 从 Chrome 网上应用店安装 →](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap)**
 
-Comments Insight 需要 Chrome 116 或更高版本。在商店页面点击 **添加至 Chrome**，即可安装商店当前提供的版本。
+Comments Insight 需要 Chrome 116 或更高版本。在商店页面点击 **添加至 Chrome** 即可安装扩展。
 
 ### 从 GitHub 发布页安装
 
-1. 在 [v0.13.1 发布页](https://github.com/cyber-tao/comments-insight/releases/tag/v0.13.1)下载并解压 `extension.zip`。
+1. 在 [GitHub 最新发布页](https://github.com/cyber-tao/comments-insight/releases/latest) 下载并解压 `extension.zip`。
 2. 打开 `chrome://extensions`，启用 **开发者模式**。
 3. 点击 **加载已解压的扩展程序**，选择包含 `manifest.json` 的解压目录。将扩展固定到工具栏后，即可从工具栏打开弹窗。
 

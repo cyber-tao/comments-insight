@@ -14,8 +14,6 @@ Extract comments and replies from supported webpages. Use your configured AI ser
 
 </div>
 
-**v0.13.1** injects content scripts only when a task needs them, uses native dialogs, and hardens accessibility, report sandboxing, and background task handling. The Chrome Web Store listing shows the version it currently distributes. [GitHub release v0.13.1](https://github.com/cyber-tao/comments-insight/releases/tag/v0.13.1)
-
 ## 📚 Table of Contents
 
 - [Comments Insight](#comments-insight)
@@ -156,11 +154,11 @@ vitest.config.ts        # Test config
 
 **[📦 Install from Chrome Web Store →](https://chromewebstore.google.com/detail/comments-insight/dabladpkeglokmgppgicnbnajlipgfap)**
 
-Comments Insight requires Chrome 116 or later. Choose **Add to Chrome** on the store listing to install the version currently available there.
+Comments Insight requires Chrome 116 or later. Choose **Add to Chrome** on the store listing to install the extension.
 
 ### Install the GitHub Release
 
-1. Download `extension.zip` from the [v0.13.1 release](https://github.com/cyber-tao/comments-insight/releases/tag/v0.13.1) and extract it.
+1. Download `extension.zip` from the [latest GitHub release](https://github.com/cyber-tao/comments-insight/releases/latest) and extract it.
 2. Open `chrome://extensions` and enable **Developer mode**.
 3. Click **Load unpacked** and select the extracted folder containing `manifest.json`. Pin the extension to open the popup from the toolbar.
 
