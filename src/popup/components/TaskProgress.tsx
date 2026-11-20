@@ -19,6 +19,8 @@ export const TaskProgress: React.FC<TaskProgressProps> = ({ task }) => {
       scrolling: 'popup.progressScrolling',
       expanding: 'popup.progressExpanding',
       validating: 'popup.progressValidating',
+      normalizing: 'popup.progressNormalizing',
+      generating: 'popup.generatingDynamicReport',
       complete: 'popup.progressComplete',
     };
     const key = stageKeys[stage] || 'popup.extracting';
@@ -135,7 +137,7 @@ export const TaskProgress: React.FC<TaskProgressProps> = ({ task }) => {
         style={{ backgroundColor: 'var(--bg-tertiary)' }}
       >
         <div
-          className="h-1.5 rounded-full transition-all duration-300"
+          className="h-1.5 rounded-full transition-all duration-150"
           style={{
             width: `${Math.max(task.progress, UI_LIMITS.MIN_PROGRESS_WIDTH_PERCENT)}%`,
             backgroundColor: getStatusColor(),

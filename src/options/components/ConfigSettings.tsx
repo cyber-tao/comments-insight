@@ -204,6 +204,9 @@ export const ConfigSettings: React.FC<Props> = ({
           case 'item':
             merged.item = conflict.incoming.item;
             break;
+          case 'loadMoreBtn':
+            merged.loadMoreBtn = conflict.incoming.loadMoreBtn;
+            break;
           case 'fieldUsername':
             merged.fields = updateFieldInArray(
               merged.fields,
@@ -352,6 +355,7 @@ export const ConfigSettings: React.FC<Props> = ({
     if (tempConfig) {
       const result = crawlingConfigSchema.safeParse({
         ...tempConfig,
+        loadMoreBtn: tempConfig.loadMoreBtn?.selector.trim() ? tempConfig.loadMoreBtn : undefined,
         ...(tempConfig.replies
           ? {
               replies: {

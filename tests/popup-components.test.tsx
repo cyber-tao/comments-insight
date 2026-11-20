@@ -168,6 +168,32 @@ describe('ActionButtons', () => {
     fireEvent.click(screen.getAllByRole('button')[1]);
     expect(onCancel).toHaveBeenCalledWith('task-1');
 
+    rerender(
+      <ActionButtons
+        pageInfo={{ url: 'https://example.com', title: 'Example', domain: 'example.com' }}
+        pageStatus={{ extracted: false, analyzed: false, hasConfig: true }}
+        currentTask={{
+          id: 'task-1b',
+          type: 'extract',
+          status: 'running',
+          progress: 22,
+          detailedProgress: {
+            stage: 'extracting',
+            current: 17,
+            total: 100,
+            estimatedTimeRemaining: 12,
+          },
+        }}
+        onExtract={vi.fn()}
+        onGenerateConfig={vi.fn()}
+        onAnalyze={onAnalyze}
+        onCancel={onCancel}
+        onOpenHistory={onOpenHistory}
+      />,
+    );
+
+    expect(screen.getByText('popup.progressExtracting 17/100')).toBeTruthy();
+
     fireEvent.click(screen.getByText('popup.viewHistory'));
     expect(onOpenHistory).toHaveBeenCalledOnce();
 

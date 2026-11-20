@@ -247,6 +247,14 @@ export const CrawlingConfigEditor: React.FC<Props> = ({ config, onChange, onCanc
             onChange={handleItemChange}
             validationStatus={fv?.['item']}
           />
+          <SelectorInput
+            label={t('options.crawlingConfigs.loadMoreBtn')}
+            rule={config.loadMoreBtn || { selector: '', type: 'css' }}
+            onChange={(r) =>
+              onChange({ ...config, loadMoreBtn: r.selector.trim() ? r : undefined })
+            }
+            validationStatus={fv?.['loadMoreBtn']}
+          />
 
           <div className="mt-4">
             <label

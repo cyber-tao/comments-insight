@@ -9,6 +9,7 @@ import { DataNormalizer } from '@/background/ai/DataNormalizer';
 import { getDomain } from '@/utils/url';
 import { generateUniqueId } from '@/utils/id-generator';
 import { resolveTabId } from '@/utils/chrome-message';
+import { countComments } from '@/utils/comment-tree';
 import { isTaskSource, resolveRunningCompletionTask, runSourceTask } from './utils/task-completion';
 
 interface StartExtractionResponse {
@@ -27,7 +28,7 @@ export async function handleStartExtraction(
   message: Extract<Message, { type: 'START_EXTRACTION' }>,
   context: HandlerContext,
 ): Promise<StartExtractionResponse> {
-  const { url, maxComments, tabId: payloadTabId } = message.payload || {};
+  const { url, maxComments, maxReplyDepth, tabId: payloadTabId } = message.payload || {};
 
   if (!url) {
     throw new ExtensionError(ErrorCode.VALIDATION_ERROR, 'URL is required');
@@ -36,9 +37,18 @@ export async function handleStartExtraction(
   const domain = getDomain(url) || TEXT.UNKNOWN;
 
   let finalMaxComments = maxComments;
-  if (!finalMaxComments) {
+  let finalMaxReplyDepth = maxReplyDepth;
+  if (!finalMaxComments || finalMaxReplyDepth === undefined) {
     const settings = await context.settingsStore.getSettings();
-    finalMaxComments = settings.maxComments || EXTRACTION_DEFAULTS.MAX_COMMENTS;
+    if (!finalMaxComments) {
+      finalMaxComments = settings.maxComments || EXTRACTION_DEFAULTS.MAX_COMMENTS;
+    }
+    if (finalMaxReplyDepth === undefined) {
+      finalMaxReplyDepth =
+        typeof settings.maxReplyDepth === 'number'
+          ? settings.maxReplyDepth
+          : EXTRACTION_DEFAULTS.MAX_REPLY_DEPTH;
+    }
   }
 
   const tabId = await resolveTabId(payloadTabId, context.sender?.tab?.id);
@@ -46,8 +56,9 @@ export async function handleStartExtraction(
     throw new ExtensionError(ErrorCode.EXTRACTION_FAILED, 'No tab ID available');
   }
 
-  Logger.info('[ExtractionHandler] Starting extraction with maxComments', {
+  Logger.info('[ExtractionHandler] Starting extraction with limits', {
     maxComments: finalMaxComments,
+    maxReplyDepth: finalMaxReplyDepth,
   });
 
   const taskId = context.taskManager.createTask('extract', url, domain, finalMaxComments, tabId);
@@ -59,7 +70,12 @@ export async function handleStartExtraction(
       context,
       {
         type: MESSAGES.RUN_EXTRACTION,
-        payload: { taskId: task.id, maxComments: finalMaxComments, expectedUrl: task.url },
+        payload: {
+          taskId: task.id,
+          maxComments: finalMaxComments,
+          maxReplyDepth: finalMaxReplyDepth,
+          expectedUrl: task.url,
+        },
       },
       {
         timeoutMs: TIMEOUT.EXTRACTION_TASK_COMPLETION_MS,
@@ -106,7 +122,8 @@ export async function handleExtractionCompleted(
         return { success: false };
       }
       if (settings.normalizeTimestamps && rawComments.length > 0) {
-        const totalCount = rawComments.length + (postInfo?.videoTime ? 1 : 0);
+        const rawCommentsTotal = countComments(rawComments);
+        const totalCount = rawCommentsTotal + (postInfo?.videoTime ? 1 : 0);
         context.taskManager.updateDetailedProgress(taskId, {
           stage: 'normalizing',
           current: 0,
@@ -119,6 +136,15 @@ export async function handleExtractionCompleted(
           referenceTime,
           settings.aiTimeout,
           taskSignal,
+          (completed) => {
+            if (!taskSignal?.aborted && task.status === 'running') {
+              context.taskManager.updateDetailedProgress(taskId, {
+                stage: 'normalizing',
+                current: completed,
+                total: totalCount,
+              });
+            }
+          },
         );
         if (taskSignal?.aborted || task.status !== 'running') {
           return { success: false };
@@ -149,6 +175,7 @@ export async function handleExtractionCompleted(
       return { success: false };
     }
 
+    const totalCommentsCount = countComments(normalizedComments);
     const historyItem = {
       id: generateUniqueId('history'),
       url: postInfo?.url || task.url,
@@ -157,7 +184,7 @@ export async function handleExtractionCompleted(
       videoTime: normalizedPostTime,
       postContent: postInfo?.postContent,
       extractedAt: Date.now(),
-      commentsCount: normalizedComments.length,
+      commentsCount: totalCommentsCount,
       comments: normalizedComments,
     };
     try {
@@ -181,7 +208,7 @@ export async function handleExtractionCompleted(
 
     context.taskManager.completeTask(taskId, {
       tokensUsed: 0,
-      commentsCount: normalizedComments.length,
+      commentsCount: totalCommentsCount,
       title: postInfo?.title || postInfo?.url,
       historyId: historyItem.id,
       historyTab: 'comments',
@@ -219,7 +246,7 @@ export async function handleExtractionProgress(
         stage,
         current,
         total,
-        stageMessage: progressMessage,
+        stageMessage: progressMessage || undefined,
       });
     } else if (typeof progress === 'number') {
       context.taskManager.updateTaskProgress(taskId, progress, progressMessage || '');

@@ -74,6 +74,7 @@ vi.mock('react-i18next', () => ({
 function createSettings(): Settings {
   return {
     maxComments: 100,
+    maxReplyDepth: 10,
     aiModel: {
       apiUrl: 'https://api.example.com',
       apiKey: 'test-key',

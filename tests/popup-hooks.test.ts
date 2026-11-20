@@ -4,7 +4,7 @@
 
 import { renderHook, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ERROR_KEYS, RETRY, TIMING } from '../src/config/constants';
+import { ERROR_KEYS, MESSAGES, RETRY, TIMING } from '../src/config/constants';
 import { useTask } from '../src/popup/hooks/useTask';
 import { usePageInfo } from '../src/popup/hooks/usePageInfo';
 import type { Comment, HistoryItem, Task } from '../src/types';
@@ -34,6 +34,20 @@ const loggerMock = vi.hoisted(() => ({
   warn: vi.fn(),
 }));
 const tabsQueryMock = vi.hoisted(() => vi.fn());
+const runtimeListeners = vi.hoisted(
+  () => [] as Array<(message: unknown, sender?: unknown, sendResponse?: unknown) => void>,
+);
+const runtimeAddListenerMock = vi.hoisted(() =>
+  vi.fn((listener: (message: unknown) => void) => {
+    runtimeListeners.push(listener);
+  }),
+);
+const runtimeRemoveListenerMock = vi.hoisted(() =>
+  vi.fn((listener: (message: unknown) => void) => {
+    const idx = runtimeListeners.indexOf(listener);
+    if (idx !== -1) runtimeListeners.splice(idx, 1);
+  }),
+);
 
 vi.mock('../src/utils/extension-api', () => ({
   ExtensionAPI: extensionApiMock,
@@ -46,6 +60,12 @@ vi.mock('../src/utils/logger', () => ({
 vi.stubGlobal('chrome', {
   tabs: {
     query: tabsQueryMock,
+  },
+  runtime: {
+    onMessage: {
+      addListener: runtimeAddListenerMock,
+      removeListener: runtimeRemoveListenerMock,
+    },
   },
 });
 
@@ -97,6 +117,7 @@ function createHistoryItem(overrides: Partial<HistoryItem> = {}): HistoryItem {
 describe('popup hooks', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    runtimeListeners.length = 0;
     vi.useRealTimers();
     tabsQueryMock.mockResolvedValue([
       { id: TAB_ID, url: PAGE_URL, title: PAGE_TITLE } as chrome.tabs.Tab,
@@ -496,6 +517,96 @@ describe('popup hooks', () => {
     });
 
     expect(result.current.currentTask).toBeNull();
+  });
+
+  it('useTask updates extraction progress immediately from pushed TASK_UPDATE messages', async () => {
+    vi.useFakeTimers();
+    const onStatusRefresh = vi.fn().mockResolvedValue(undefined);
+    const onTaskComplete = vi.fn();
+
+    extensionApiMock.getTaskStatus.mockResolvedValue(
+      createTask({
+        id: TASK_ID,
+        type: 'extract',
+        status: 'running',
+        progress: 5,
+        detailedProgress: {
+          stage: 'extracting',
+          current: 0,
+          total: 100,
+          estimatedTimeRemaining: -1,
+        },
+      }),
+    );
+
+    const { result } = renderHook(() => useTask({ onStatusRefresh, onTaskComplete }));
+
+    await act(async () => {
+      await result.current.startExtraction(PAGE_URL);
+      await Promise.resolve();
+    });
+
+    expect(runtimeListeners.length).toBe(1);
+    expect(result.current.currentTask?.detailedProgress?.current).toBe(0);
+
+    // Push per-comment progress updates without advancing the 1000ms poll timer
+    await act(async () => {
+      runtimeListeners[0]({
+        type: MESSAGES.TASK_UPDATE,
+        payload: createTask({
+          id: TASK_ID,
+          type: 'extract',
+          status: 'running',
+          progress: 6,
+          detailedProgress: {
+            stage: 'extracting',
+            current: 1,
+            total: 100,
+            estimatedTimeRemaining: 20,
+          },
+        }),
+      });
+    });
+
+    expect(result.current.currentTask?.detailedProgress?.current).toBe(1);
+    expect(result.current.currentTask?.progress).toBe(6);
+
+    await act(async () => {
+      runtimeListeners[0]({
+        type: MESSAGES.TASK_UPDATE,
+        payload: createTask({
+          id: TASK_ID,
+          type: 'extract',
+          status: 'running',
+          progress: 7,
+          detailedProgress: {
+            stage: 'extracting',
+            current: 2,
+            total: 100,
+            estimatedTimeRemaining: 19,
+          },
+        }),
+      });
+    });
+
+    expect(result.current.currentTask?.detailedProgress?.current).toBe(2);
+    expect(extensionApiMock.getTaskStatus).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      runtimeListeners[0]({
+        type: MESSAGES.TASK_UPDATE,
+        payload: createTask({
+          id: TASK_ID,
+          type: 'extract',
+          status: 'completed',
+          progress: 100,
+        }),
+      });
+      await Promise.resolve();
+    });
+
+    expect(onStatusRefresh).toHaveBeenCalledOnce();
+    expect(onTaskComplete).toHaveBeenCalledOnce();
   });
 
   it('usePageInfo loads page info and preserves config status in page state', async () => {

@@ -36,6 +36,17 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
     [onSettingsChange],
   );
 
+  const handleMaxReplyDepthChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const maxReplyDepth = parseFiniteIntegerInput(e.target.value);
+      if (maxReplyDepth === null) {
+        return;
+      }
+      onSettingsChange({ maxReplyDepth });
+    },
+    [onSettingsChange],
+  );
+
   return (
     <section className="mb-8 theme-card p-6">
       <h2
@@ -47,12 +58,14 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
 
       <div className="mb-4">
         <label
+          htmlFor="maxComments"
           className="block text-sm font-medium mb-2"
           style={{ color: 'var(--text-secondary)' }}
         >
           {t('options.maxComments')}
         </label>
         <input
+          id="maxComments"
           type="number"
           value={settings.maxComments}
           onChange={handleMaxCommentsChange}
@@ -60,6 +73,34 @@ export const BasicSettings: React.FC<BasicSettingsProps> = ({
           min={UI_LIMITS.MAX_COMMENTS_MIN}
           max={UI_LIMITS.MAX_COMMENTS_MAX}
         />
+        <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+          {t('options.maxCommentsHint')}
+        </p>
+      </div>
+
+      <div className="mb-4">
+        <label
+          htmlFor="maxReplyDepth"
+          className="block text-sm font-medium mb-2"
+          style={{ color: 'var(--text-secondary)' }}
+        >
+          {t('options.maxReplyDepth')}
+        </label>
+        <input
+          id="maxReplyDepth"
+          type="number"
+          value={settings.maxReplyDepth}
+          onChange={handleMaxReplyDepthChange}
+          className="w-full theme-input tabular-nums"
+          min={UI_LIMITS.MAX_REPLY_DEPTH_MIN}
+          max={UI_LIMITS.MAX_REPLY_DEPTH_MAX}
+        />
+        <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+          {t('options.maxReplyDepthHint', {
+            min: UI_LIMITS.MAX_REPLY_DEPTH_MIN,
+            max: UI_LIMITS.MAX_REPLY_DEPTH_MAX,
+          })}
+        </p>
       </div>
 
       <div className="mb-4">

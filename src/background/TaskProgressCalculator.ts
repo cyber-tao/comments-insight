@@ -54,7 +54,12 @@ export const TaskProgressCalculator = {
               : RANGES.SCROLLING.START + stageProgress * RANGES.SCROLLING.RANGE;
           break;
         case 'expanding':
-          progressPercent = RANGES.EXPANDING.START + stageProgress * RANGES.EXPANDING.RANGE;
+          // Reply expansion interleaves with extraction on the same item
+          // counter; sharing the extracting range prevents sudden jumps to 85%.
+          progressPercent =
+            taskType === 'extract'
+              ? RANGES.EXTRACTING.START + stageProgress * RANGES.EXTRACTING.RANGE
+              : RANGES.EXPANDING.START + stageProgress * RANGES.EXPANDING.RANGE;
           break;
         case 'validating':
           progressPercent = RANGES.VALIDATING.START + stageProgress * RANGES.VALIDATING.RANGE;

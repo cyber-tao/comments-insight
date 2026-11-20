@@ -13,6 +13,7 @@ import type {
 } from '@/types';
 import { Logger } from '@/utils/logger';
 import { AI, ANALYSIS_FORMAT, RETRY, TIMEOUT, UI_LIMITS } from '@/config/constants';
+import { countComments } from '@/utils/comment-tree';
 
 // MV3 extension pages prohibit eval: prevent Zod's object JIT from probing it.
 z.config({ jitless: true });
@@ -33,6 +34,7 @@ type PersistedTaskStateShape = {
 
 const finiteNumberSchema = z.number().finite();
 const positiveIntegerSchema = z.number().int().positive().finite();
+const nonNegativeIntegerSchema = z.number().int().nonnegative().finite();
 const nonEmptyStringSchema = z.string().trim().min(1);
 const normalizedDomainListSchema = z
   .array(z.unknown())
@@ -69,6 +71,7 @@ export const crawlingConfigSchema = z.object({
   container: selectorRuleSchema,
   item: selectorRuleSchema,
   fields: z.array(fieldSelectorSchema),
+  loadMoreBtn: selectorRuleSchema.optional(),
   replies: replyConfigSchema.optional(),
   videoTime: selectorRuleSchema.optional(),
   postContent: selectorRuleSchema.optional(),
@@ -215,6 +218,10 @@ export const settingsPatchSchema = z
       .min(UI_LIMITS.MAX_COMMENTS_MIN)
       .max(UI_LIMITS.MAX_COMMENTS_MAX)
       .optional(),
+    maxReplyDepth: nonNegativeIntegerSchema
+      .min(UI_LIMITS.MAX_REPLY_DEPTH_MIN)
+      .max(UI_LIMITS.MAX_REPLY_DEPTH_MAX)
+      .optional(),
     aiModel: aiConfigSchema.partial().optional(),
     aiTimeout: positiveIntegerSchema
       .min(TIMEOUT.MIN_AI_SECONDS * TIMEOUT.MS_PER_SEC)
@@ -357,6 +364,14 @@ export function sanitizeStoredSettings(value: unknown): Partial<Settings> {
     sanitized.maxComments = maxComments.data;
   }
 
+  const maxReplyDepth = nonNegativeIntegerSchema
+    .min(UI_LIMITS.MAX_REPLY_DEPTH_MIN)
+    .max(UI_LIMITS.MAX_REPLY_DEPTH_MAX)
+    .safeParse(raw.maxReplyDepth);
+  if (maxReplyDepth.success) {
+    sanitized.maxReplyDepth = maxReplyDepth.data;
+  }
+
   const aiTimeout = positiveIntegerSchema
     .min(TIMEOUT.MIN_AI_SECONDS * TIMEOUT.MS_PER_SEC)
     .max(TIMEOUT.MAX_AI_SECONDS * TIMEOUT.MS_PER_SEC)
@@ -468,7 +483,7 @@ export function sanitizeHistoryItem(
     videoTime: result.data.videoTime,
     postContent: result.data.postContent,
     extractedAt: result.data.extractedAt,
-    commentsCount: comments.length,
+    commentsCount: countComments(comments),
     comments,
     analysis,
     analyzedAt: result.data.analyzedAt,

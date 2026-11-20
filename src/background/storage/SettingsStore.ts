@@ -40,6 +40,7 @@ import {
 
 export const DEFAULT_SETTINGS: Settings = {
   maxComments: EXTRACTION_DEFAULTS.MAX_COMMENTS,
+  maxReplyDepth: EXTRACTION_DEFAULTS.MAX_REPLY_DEPTH,
   aiModel: {
     protocol: AI.DEFAULT_PROTOCOL,
     apiUrl: '',
@@ -227,6 +228,10 @@ export class SettingsStore {
       typeof stored.maxComments === 'number' && Number.isFinite(stored.maxComments)
         ? stored.maxComments
         : DEFAULT_SETTINGS.maxComments;
+    merged.maxReplyDepth =
+      typeof stored.maxReplyDepth === 'number' && Number.isFinite(stored.maxReplyDepth)
+        ? stored.maxReplyDepth
+        : DEFAULT_SETTINGS.maxReplyDepth;
     merged.aiTimeout =
       typeof stored.aiTimeout === 'number' && Number.isFinite(stored.aiTimeout)
         ? stored.aiTimeout

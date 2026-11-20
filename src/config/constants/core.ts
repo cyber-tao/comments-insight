@@ -71,13 +71,16 @@ export const STORAGE = {
  *   1 = pre-refactor baseline (extension version <= 0.6.0)
  *   2 = refactored layout (no persisted-shape change; version bump only)
  *   3 = Settings persists bundled-config tombstones and sparse overrides
+ *   4 = Separate field validation state from crawling configs
+ *   5 = Drop sampling parameters and backfill AI protocol
+ *   6 = Backfill history and historyMetadata commentsCount to include nested replies
  *
  * Versions 0.7.x-0.8.x also added the sandbox page and dynamic reports without
  * further persisted-shape changes; optional fields remain tolerated by the
  * existing sanitizers.
  */
 export const APP_DATA_VERSION = {
-  CURRENT: 5,
+  CURRENT: 6,
   INITIAL: 1,
 } as const;
 

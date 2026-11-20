@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PAGINATION } from '../src/config/constants';
 import { HistorySidebar } from '../src/history/components/HistorySidebar';
 import { HistoryDetailPanel } from '../src/history/components/HistoryDetailPanel';
+import { CommentTree } from '../src/history/components/CommentTree';
 import type { Comment, HistoryItem } from '../src/types';
 
 const exportUtilsMock = vi.hoisted(() => ({
@@ -46,6 +47,12 @@ vi.mock('react-i18next', () => ({
       }
       if ((key === 'history.reply' || key === 'history.replies') && options?.count !== undefined) {
         return `replies:${String(options.count)}`;
+      }
+      if (key === 'history.replyDepth' && options?.depth !== undefined) {
+        return `L${String(options.depth)}`;
+      }
+      if (key === 'history.replyingTo' && options?.username !== undefined) {
+        return `to:@${String(options.username)}`;
       }
       return key;
     },
@@ -756,5 +763,30 @@ describe('HistoryDetailPanel', () => {
     } finally {
       window.history.replaceState({}, '', previousUrl);
     }
+  });
+});
+
+describe('CommentTree', () => {
+  it('renders arbitrarily deep replies with total descendant counts and capped visual indentation', () => {
+    const buildChain = (depth: number, maxDepth: number): Comment =>
+      createComment(`lvl-${depth}`, {
+        replies: depth < maxDepth ? [buildChain(depth + 1, maxDepth)] : [],
+      });
+    const root = buildChain(0, 11);
+
+    render(<CommentTree comments={[root]} />);
+
+    // Root button reports all 11 descendant replies, not just 1 direct reply
+    expect(screen.getByText('replies:11')).toBeTruthy();
+
+    for (let depth = 0; depth < 11; depth += 1) {
+      fireEvent.click(screen.getByText(`replies:${11 - depth}`));
+    }
+
+    // Deepest 11th-level reply is visible without being hidden
+    expect(screen.getByText('content-lvl-11')).toBeTruthy();
+    expect(screen.getByText('L7')).toBeTruthy();
+    expect(screen.getByText('to:@user-lvl-6')).toBeTruthy();
+    expect(screen.getByText('L11')).toBeTruthy();
   });
 });

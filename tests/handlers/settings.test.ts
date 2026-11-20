@@ -35,6 +35,7 @@ describe('Settings Handlers', () => {
 
   const mockSettings: Settings = {
     maxComments: 100,
+    maxReplyDepth: 10,
     aiModel: {
       apiUrl: 'https://api.example.com',
       apiKey: 'test-key',

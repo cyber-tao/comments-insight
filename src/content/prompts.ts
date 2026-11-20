@@ -76,6 +76,7 @@ interface CrawlingConfig {
   container: SelectorRule; // The wrapper around ALL comments (the main list)
   item: SelectorRule;      // The selector for an INDIVIDUAL comment item
   fields: FieldSelector[]; // Fields to extract
+  loadMoreBtn?: SelectorRule; // Optional: top-level "View more comments" button directly inside container (omit if infinite scroll only)
   replies?: ReplyConfig;   // REQUIRED whenever reply items, nested comments, reply lists, or reply-expand buttons exist in the DOM
 }
 \`\`\`

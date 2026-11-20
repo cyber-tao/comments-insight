@@ -5,6 +5,7 @@ import { requireMessageSuccess } from '@/utils/message-response';
 import { ErrorCode, ExtensionError, toExtensionErrorPayload } from '@/utils/error-types';
 import { checkSourcePage, isSameSourcePage, sourcePageChangedError } from '@/utils/source-page';
 import { isWithinValidationBudget } from '@/utils/validation-budget';
+import { countComments } from '@/utils/comment-tree';
 import { globalExtractionState } from '../extractionState';
 import { ExtractionResponse } from '@/types/messages';
 import { ProgressStage } from '@/types';
@@ -58,11 +59,11 @@ export interface ExtractionOutcome {
 }
 
 export async function handleStartExtraction(
-  data: { taskId: string; maxComments: number; expectedUrl?: string },
+  data: { taskId: string; maxComments: number; maxReplyDepth?: number; expectedUrl?: string },
   sendResponse: (response: ExtractionResponse) => void,
   onComplete?: (outcome: ExtractionOutcome) => void,
 ): Promise<void> {
-  const { taskId, maxComments, expectedUrl } = data;
+  const { taskId, maxComments, maxReplyDepth, expectedUrl } = data;
   if (expectedUrl && !isSameSourcePage(window.location.href, expectedUrl)) {
     sendResponse({ success: false, error: toExtensionErrorPayload(sourcePageChangedError()) });
     return;
@@ -106,6 +107,7 @@ export async function handleStartExtraction(
           );
       },
       controller.signal,
+      maxReplyDepth,
     );
 
     if (!globalExtractionState.isCurrentTask(taskId, controller)) {
@@ -147,7 +149,7 @@ export async function handleStartExtraction(
       ),
     );
 
-    Logger.info('[Content] Extraction complete', { count: comments.length });
+    Logger.info('[Content] Extraction complete', { count: countComments(comments) });
     onComplete?.({ success: true, comments });
   } catch (error) {
     if (!globalExtractionState.isCurrentTask(taskId, controller)) {

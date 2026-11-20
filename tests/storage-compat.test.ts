@@ -1226,4 +1226,107 @@ describe('SettingsStore decryption resilience', () => {
     expect(writtenKeys).toContain(STORAGE.ENCRYPTION_SECRET_KEY);
     expect(writtenKeys).toContain(STORAGE.ENCRYPTION_SALT_KEY);
   });
+
+  it('migrates v5 history commentsCount to include nested replies across history and historyMetadata', async () => {
+    const database = new CommentsInsightDatabase();
+    const legacyHistoryItem: HistoryItem = {
+      id: 'v5_nested_history',
+      url: 'https://www.reddit.com/r/example/comments/abc/',
+      title: 'Nested thread',
+      platform: 'reddit.com',
+      extractedAt: 1_800_000,
+      commentsCount: 1, // v5 shape counted only top-level comments
+      comments: [
+        {
+          id: 'c1',
+          username: 'alice',
+          timestamp: '2026-01-01 00:00',
+          likes: 10,
+          content: 'Root',
+          replies: [
+            {
+              id: 'c2',
+              username: 'bob',
+              timestamp: '2026-01-01 00:05',
+              likes: 4,
+              content: 'Child',
+              replies: [
+                {
+                  id: 'c3',
+                  username: 'carol',
+                  timestamp: '2026-01-01 00:10',
+                  likes: 2,
+                  content: 'Grandchild',
+                  replies: [],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    try {
+      await database.history.clear();
+      await database.historyMetadata.clear();
+      await database.history.put(legacyHistoryItem);
+      await database.historyMetadata.put({
+        id: legacyHistoryItem.id,
+        url: legacyHistoryItem.url,
+        title: legacyHistoryItem.title,
+        platform: legacyHistoryItem.platform,
+        extractedAt: legacyHistoryItem.extractedAt,
+        commentsCount: 1,
+        hasAnalysis: false,
+      });
+    } finally {
+      database.close();
+    }
+
+    const storageState: Record<string, unknown> = {
+      [STORAGE.APP_DATA_VERSION_KEY]: 5,
+    };
+    mockStorageGet.mockImplementation(async (key: string) => ({ [key]: storageState[key] }));
+    mockStorageSet.mockImplementation(async (values: Record<string, unknown>) => {
+      Object.assign(storageState, structuredClone(values));
+    });
+
+    await new DataMigrator().migrate();
+    expect(storageState[STORAGE.APP_DATA_VERSION_KEY]).toBe(APP_DATA_VERSION.CURRENT);
+
+    const verifyDb = new CommentsInsightDatabase();
+    try {
+      const migratedRow = await verifyDb.history.get(legacyHistoryItem.id);
+      const migratedMeta = await verifyDb.historyMetadata.get(legacyHistoryItem.id);
+      expect(migratedRow?.commentsCount).toBe(3);
+      expect(migratedMeta?.commentsCount).toBe(3);
+    } finally {
+      verifyDb.close();
+    }
+
+    // Re-running v6 migration is idempotent
+    storageState[STORAGE.APP_DATA_VERSION_KEY] = 5;
+    await new DataMigrator().migrate();
+    expect(storageState[STORAGE.APP_DATA_VERSION_KEY]).toBe(APP_DATA_VERSION.CURRENT);
+  });
+
+  it('defaults missing maxReplyDepth for legacy settings and validates range 0-25', async () => {
+    const storage = useInMemorySettingsStorage({ maxComments: 150 });
+    const store = new SettingsStore(createEncryptionServiceMock());
+
+    expect((await store.getSettings()).maxReplyDepth).toBe(DEFAULT_SETTINGS.maxReplyDepth);
+
+    await store.saveSettings({ maxReplyDepth: 0 });
+    expect((storage.read() as Settings).maxReplyDepth).toBe(0);
+
+    await store.saveSettings({ maxReplyDepth: 25 });
+    expect((storage.read() as Settings).maxReplyDepth).toBe(25);
+
+    await expect(store.saveSettings({ maxReplyDepth: 26 })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
+    await expect(store.saveSettings({ maxReplyDepth: -1 })).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    });
+  });
 });

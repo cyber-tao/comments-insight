@@ -487,6 +487,12 @@ export class AIConfigGenerator {
       config.postContent = this.normalizeRule(config.postContent);
     }
 
+    if (!this.isValidRule(config.loadMoreBtn)) {
+      delete config.loadMoreBtn;
+    } else {
+      config.loadMoreBtn = this.normalizeRule(config.loadMoreBtn);
+    }
+
     if (config.replies == null) {
       delete config.replies;
       return;

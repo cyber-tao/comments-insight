@@ -6,20 +6,21 @@ export const EXTRACTION = {
 
 export const EXTRACTION_DEFAULTS = {
   MAX_COMMENTS: 100,
+  MAX_REPLY_DEPTH: 10,
 };
 
 export const EXTRACTION_PROGRESS = {
   AI_ANALYZING: 10,
   CONFIG_ANALYZING: 15,
-  MIN: 20,
-  RANGE: 75,
-  VALIDATING: 80,
-  NORMALIZING: 90,
+  MIN: 5,
+  RANGE: 85,
+  VALIDATING: 92,
+  NORMALIZING: 95,
   MAX: 95,
   COMPLETE: 100,
   STEPS: {
     AI_DETECTING: 5,
-    EXTRACTING_START: 5,
+    EXTRACTING_START: 0,
   },
 };
 
@@ -40,13 +41,13 @@ export const TASK = {
   MAX_FINISHED_TASKS: 50,
   PROGRESS_RANGES: {
     INITIALIZING: { START: 0, RANGE: 5 },
-    DETECTING: { START: 5, RANGE: 10 },
-    ANALYZING: { START: 15, RANGE: 10 },
-    EXTRACTING: { START: 25, RANGE: 50 },
+    DETECTING: { START: 5, RANGE: 5 },
+    ANALYZING: { START: 10, RANGE: 5 },
+    EXTRACTING: { START: 5, RANGE: 85 },
     SCROLLING: { START: 75, RANGE: 10 },
     EXPANDING: { START: 85, RANGE: 5 },
-    VALIDATING: { START: 90, RANGE: 5 },
-    NORMALIZING: { START: 90, RANGE: 5 },
+    VALIDATING: { START: 90, RANGE: 4 },
+    NORMALIZING: { START: 94, RANGE: 5 },
     // Dedicated range for the analyze task's dynamic-report generation phase.
     GENERATING: { START: 80, RANGE: 15 },
     COMPLETE: 100,

@@ -92,7 +92,7 @@ describe('bundled crawling rules', () => {
         </div>`;
     });
 
-    const comments = await extract('tiktok.com', 2);
+    const comments = await extract('tiktok.com', 4);
 
     expect(firstClick).toHaveBeenCalledOnce();
     expect(comments).toMatchObject([
@@ -141,7 +141,7 @@ describe('bundled crawling rules', () => {
       toggle.remove();
     });
 
-    expect(await extract('tiktok.com', 1)).toMatchObject([
+    expect(await extract('tiktok.com', 2)).toMatchObject([
       { content: 'Old comment', likes: 20, replies: [{ content: 'Old reply', likes: 6 }] },
     ]);
     expect(click).toHaveBeenCalledOnce();
@@ -178,7 +178,7 @@ describe('bundled crawling rules', () => {
         </shreddit-comment>`;
     });
 
-    expect(await extract('reddit.com', 1)).toMatchObject([
+    expect(await extract('reddit.com', 3)).toMatchObject([
       {
         content: 'Root comment',
         likes: 37,
@@ -201,5 +201,127 @@ describe('bundled crawling rules', () => {
     const field = bundledConfig('x.com').fields.find((item) => item.name === 'likes');
 
     expect(readField(document.querySelector('article')!, field)).toBe('13');
+  });
+
+  it('loads top-level Reddit more-comments button and multi-level nested replies', async () => {
+    document.body.innerHTML = `
+      <shreddit-comment-tree>
+        <shreddit-comment score="10">
+          <a noun="comment_author">Root 1</a><div slot="comment">First root</div>
+          <faceplate-partial loading="action" slot="children" src="/svc/shreddit/more-comments/r/example/1">
+            <button id="expand-child">More replies</button>
+          </faceplate-partial>
+        </shreddit-comment>
+        <faceplate-partial loading="action" src="/svc/shreddit/more-comments/r/example/top">
+          <button id="load-more-top">View more comments</button>
+        </faceplate-partial>
+      </shreddit-comment-tree>`;
+
+    const expandChild = document.querySelector<HTMLButtonElement>('#expand-child')!;
+    expandChild.addEventListener('click', () => {
+      expandChild.closest('faceplate-partial')!.outerHTML = `
+        <shreddit-comment score="5">
+          <a noun="comment_author">Child 1</a><div slot="comment">L1 reply</div>
+          <shreddit-comment score="2">
+            <a noun="comment_author">Grandchild 1</a><div slot="comment">L2 reply</div>
+          </shreddit-comment>
+        </shreddit-comment>`;
+    });
+
+    const loadMoreTop = document.querySelector<HTMLButtonElement>('#load-more-top')!;
+    loadMoreTop.addEventListener('click', () => {
+      loadMoreTop.closest('faceplate-partial')!.outerHTML = `
+        <shreddit-comment score="7">
+          <a noun="comment_author">Root 2</a><div slot="comment">Second root</div>
+        </shreddit-comment>`;
+    });
+
+    const comments = await extract('reddit.com', 4);
+    expect(comments).toMatchObject([
+      {
+        username: 'Root 1',
+        replies: [
+          {
+            username: 'Child 1',
+            replies: [{ username: 'Grandchild 1', content: 'L2 reply' }],
+          },
+        ],
+      },
+      { username: 'Root 2', content: 'Second root', replies: [] },
+    ]);
+  });
+
+  it('expands YouTube nested sub-threads and continuation reply batches', async () => {
+    document.body.innerHTML = `
+      <ytd-comments id="comments">
+        <ytd-item-section-renderer id="sections">
+          <ytd-comment-thread-renderer>
+            <ytd-comment-view-model id="comment">
+              <a id="author-text"><span>Root YT</span></a>
+              <div id="content-text">Main video comment</div>
+            </ytd-comment-view-model>
+            <ytd-comment-replies-renderer id="replies">
+              <div id="more-replies"><button id="open-l1">2 replies</button></div>
+            </ytd-comment-replies-renderer>
+          </ytd-comment-thread-renderer>
+        </ytd-item-section-renderer>
+      </ytd-comments>`;
+
+    const openL1 = document.querySelector<HTMLButtonElement>('#open-l1')!;
+    openL1.addEventListener('click', () => {
+      openL1.closest('#more-replies')!.setAttribute('hidden', '');
+      openL1.closest('#replies')!.insertAdjacentHTML(
+        'beforeend',
+        `
+          <div id="expanded-threads">
+            <yt-sub-thread>
+              <ytd-comment-thread-renderer>
+                <ytd-comment-view-model id="comment">
+                  <a id="author-text"><span>SubThread L1</span></a>
+                  <div id="content-text">First sub-thread reply</div>
+                </ytd-comment-view-model>
+                <ytd-comment-replies-renderer id="replies">
+                  <div id="more-replies-sub-thread"><button id="open-l2">1 reply</button></div>
+                </ytd-comment-replies-renderer>
+              </ytd-comment-thread-renderer>
+            </yt-sub-thread>
+            <ytd-continuation-item-renderer>
+              <button id="more-l1-batch">Show more replies</button>
+            </ytd-continuation-item-renderer>
+          </div>
+        `,
+      );
+
+      const openL2 = document.querySelector<HTMLButtonElement>('#open-l2')!;
+      openL2.addEventListener('click', () => {
+        openL2.closest('#more-replies-sub-thread')!.setAttribute('hidden', '');
+        openL2
+          .closest('#replies')!
+          .insertAdjacentHTML(
+            'beforeend',
+            `<ytd-comment-view-model><a id="author-text"><span>SubThread L2</span></a><div id="content-text">Nested L2 reply</div></ytd-comment-view-model>`,
+          );
+      });
+
+      const moreL1 = document.querySelector<HTMLButtonElement>('#more-l1-batch')!;
+      moreL1.addEventListener('click', () => {
+        moreL1.closest('ytd-continuation-item-renderer')!.outerHTML =
+          '<ytd-comment-view-model><a id="author-text"><span>Batch2 L1</span></a><div id="content-text">Second batch reply</div></ytd-comment-view-model>';
+      });
+    });
+
+    const comments = await extract('youtube.com', 4);
+    expect(comments).toMatchObject([
+      {
+        username: 'Root YT',
+        replies: [
+          {
+            username: 'SubThread L1',
+            replies: [{ username: 'SubThread L2', content: 'Nested L2 reply' }],
+          },
+          { username: 'Batch2 L1', content: 'Second batch reply', replies: [] },
+        ],
+      },
+    ]);
   });
 });

@@ -537,7 +537,7 @@ describe('TaskManager', () => {
       expect(observed[observed.length - 1]).toBe(100);
     });
 
-    it('maps extract scrolling into the extracting range to avoid percent jitter', async () => {
+    it('maps extract scrolling and expanding into the extracting range to avoid percent jitter', async () => {
       const taskId = taskManager.createTask('extract', 'https://example.com', 'Generic');
       await taskManager.startTask(taskId);
 
@@ -555,7 +555,15 @@ describe('TaskManager', () => {
       });
       const scrollingPercent = taskManager.getTask(taskId)!.progress;
 
+      taskManager.updateDetailedProgress(taskId, {
+        stage: 'expanding',
+        current: 10,
+        total: 100,
+      });
+      const expandingPercent = taskManager.getTask(taskId)!.progress;
+
       expect(scrollingPercent).toBe(extractingPercent);
+      expect(expandingPercent).toBe(extractingPercent);
     });
 
     it('drops stale detailedProgress when a raw percent update arrives', async () => {

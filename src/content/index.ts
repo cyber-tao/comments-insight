@@ -34,7 +34,11 @@ function isContentMessage(value: unknown): value is ContentMessage {
           typeof value.payload.expectedUrl === 'string') &&
         typeof value.payload.maxComments === 'number' &&
         Number.isInteger(value.payload.maxComments) &&
-        value.payload.maxComments > 0
+        value.payload.maxComments > 0 &&
+        (value.payload.maxReplyDepth === undefined ||
+          (typeof value.payload.maxReplyDepth === 'number' &&
+            Number.isInteger(value.payload.maxReplyDepth) &&
+            value.payload.maxReplyDepth >= 0))
       );
     case MESSAGES.RUN_CONFIG_GENERATION:
       return (

@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { ERROR_KEYS, LANGUAGES, RETRY, TIMING } from '@/config/constants';
+import { ERROR_KEYS, LANGUAGES, MESSAGES, RETRY, TIMING } from '@/config/constants';
 import { Comment, Task, TaskProgress } from '@/types';
 import { Logger } from '@/utils/logger';
 import { ExtensionAPI } from '@/utils/extension-api';
@@ -49,37 +49,100 @@ export function useTask(options: UseTaskOptions = {}) {
   const [currentTask, setCurrentTask] = useState<CurrentTask | null>(null);
   const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const monitorGenerationRef = useRef(0);
+  const trackedTaskIdRef = useRef<string | null>(null);
+  const completedTaskIdRef = useRef<string | null>(null);
+  const onTaskCompleteRef = useRef(onTaskComplete);
+  const onStatusRefreshRef = useRef(onStatusRefresh);
   const isUnmountedRef = useRef(false);
   const isStartingRef = useRef(false);
 
+  onTaskCompleteRef.current = onTaskComplete;
+  onStatusRefreshRef.current = onStatusRefresh;
+
+  const clearMonitorTimer = useCallback(() => {
+    if (monitorTimeoutRef.current) {
+      clearTimeout(monitorTimeoutRef.current);
+      monitorTimeoutRef.current = null;
+    }
+  }, []);
+
+  const applyTaskSnapshot = useCallback(
+    async (task: Task, expectedGeneration: number) => {
+      const isCurrentMonitor = () =>
+        !isUnmountedRef.current && monitorGenerationRef.current === expectedGeneration;
+      if (!isCurrentMonitor()) return false;
+
+      if (isCancelledTask(task)) {
+        clearMonitorTimer();
+        trackedTaskIdRef.current = null;
+        setCurrentTask(null);
+        return false;
+      }
+
+      const updatedTask = toCurrentTask(task);
+      setCurrentTask(updatedTask);
+
+      if (hasActiveTask(task)) {
+        return true;
+      }
+
+      clearMonitorTimer();
+      trackedTaskIdRef.current = null;
+      if (task.status === 'completed') {
+        if (completedTaskIdRef.current === task.id) {
+          return false;
+        }
+        completedTaskIdRef.current = task.id;
+        await onStatusRefreshRef.current?.();
+        if (!isCurrentMonitor()) return false;
+        onTaskCompleteRef.current?.(updatedTask);
+        monitorTimeoutRef.current = setTimeout(() => {
+          if (isCurrentMonitor()) setCurrentTask(null);
+        }, TIMING.CLEAR_TASK_DELAY_MS);
+      }
+      return false;
+    },
+    [clearMonitorTimer],
+  );
+
   useEffect(() => {
     isUnmountedRef.current = false;
+
+    const handleRuntimeMessage = (message: unknown) => {
+      if (
+        !message ||
+        typeof message !== 'object' ||
+        (message as { type?: unknown }).type !== MESSAGES.TASK_UPDATE
+      ) {
+        return;
+      }
+      const payload = (message as { payload?: Task }).payload;
+      if (!payload || typeof payload.id !== 'string' || payload.id !== trackedTaskIdRef.current) {
+        return;
+      }
+      void applyTaskSnapshot(payload, monitorGenerationRef.current);
+    };
+
+    chrome.runtime?.onMessage?.addListener(handleRuntimeMessage);
+
     return () => {
       isUnmountedRef.current = true;
-      if (monitorTimeoutRef.current) {
-        clearTimeout(monitorTimeoutRef.current);
-        monitorTimeoutRef.current = null;
-      }
+      trackedTaskIdRef.current = null;
+      chrome.runtime?.onMessage?.removeListener(handleRuntimeMessage);
+      clearMonitorTimer();
     };
-  }, []);
+  }, [applyTaskSnapshot, clearMonitorTimer]);
 
   const monitorTask = useCallback(
     (taskId: string, type: Task['type']) => {
       monitorGenerationRef.current += 1;
       const currentGeneration = monitorGenerationRef.current;
+      trackedTaskIdRef.current = taskId;
+      completedTaskIdRef.current = null;
       const isCurrentMonitor = () =>
         !isUnmountedRef.current && monitorGenerationRef.current === currentGeneration;
 
-      if (monitorTimeoutRef.current) {
-        clearTimeout(monitorTimeoutRef.current);
-        monitorTimeoutRef.current = null;
-      }
-
-      const clearTaskAfter = (delay: number) => {
-        monitorTimeoutRef.current = setTimeout(() => {
-          if (isCurrentMonitor()) setCurrentTask(null);
-        }, delay);
-      };
+      clearMonitorTimer();
 
       let consecutiveErrors = 0;
       const checkStatus = async () => {
@@ -93,6 +156,7 @@ export function useTask(options: UseTaskOptions = {}) {
 
           if (!task) {
             Logger.warn('[useTask] Task status returned empty result', { taskId });
+            trackedTaskIdRef.current = null;
             setCurrentTask((current) =>
               current?.id === taskId && type === 'analyze'
                 ? { ...current, status: 'unavailable', message: i18n.t('errors.taskNotFound') }
@@ -101,21 +165,9 @@ export function useTask(options: UseTaskOptions = {}) {
             return;
           }
 
-          if (isCancelledTask(task)) {
-            setCurrentTask(null);
-            return;
-          }
-
-          const updatedTask = toCurrentTask(task);
-          setCurrentTask(updatedTask);
-
-          if (hasActiveTask(task)) {
+          const shouldContinue = await applyTaskSnapshot(task, currentGeneration);
+          if (shouldContinue && isCurrentMonitor()) {
             monitorTimeoutRef.current = setTimeout(checkStatus, TIMING.POLL_TASK_RUNNING_MS);
-          } else if (task.status === 'completed') {
-            await onStatusRefresh?.();
-            if (!isCurrentMonitor()) return;
-            onTaskComplete?.(updatedTask);
-            clearTaskAfter(TIMING.CLEAR_TASK_DELAY_MS);
           }
         } catch (error) {
           if (!isCurrentMonitor()) return;
@@ -129,6 +181,7 @@ export function useTask(options: UseTaskOptions = {}) {
             return;
           }
 
+          trackedTaskIdRef.current = null;
           const message = error instanceof Error ? error.message : String(error);
           setCurrentTask((current) =>
             current?.id === taskId
@@ -140,7 +193,7 @@ export function useTask(options: UseTaskOptions = {}) {
 
       void checkStatus();
     },
-    [onStatusRefresh, onTaskComplete],
+    [applyTaskSnapshot, clearMonitorTimer],
   );
 
   const loadCurrentTask = useCallback(

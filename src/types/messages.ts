@@ -46,7 +46,13 @@ export type SettingsMessage =
 export type ExtractionMessage =
   | {
       type: 'START_EXTRACTION';
-      payload: { taskId?: string; url: string; maxComments?: number; tabId?: number };
+      payload: {
+        taskId?: string;
+        url: string;
+        maxComments?: number;
+        maxReplyDepth?: number;
+        tabId?: number;
+      };
     }
   | {
       type: 'START_CONFIG_GENERATION';
@@ -180,7 +186,12 @@ export type ContentMessage =
   | { type: 'GET_PLATFORM_INFO'; payload?: never }
   | {
       type: 'RUN_EXTRACTION';
-      payload: { taskId: string; maxComments: number; expectedUrl?: string };
+      payload: {
+        taskId: string;
+        maxComments: number;
+        maxReplyDepth?: number;
+        expectedUrl?: string;
+      };
     }
   | { type: 'RUN_CONFIG_GENERATION'; payload: { taskId: string; expectedUrl?: string } }
   | { type: 'CANCEL_EXTRACTION'; payload: { taskId: string } }

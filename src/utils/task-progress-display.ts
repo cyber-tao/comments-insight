@@ -72,11 +72,14 @@ export const formatTaskProgressMessage = ({
       return compact ? stageText : `${stageText}: ${stageMessage}`;
     }
 
-    return total > 0 && current >= 0
-      ? compact
-        ? stageText
-        : `${stageText} ${current}/${total}`
-      : stageText;
+    if (total > 0 && current >= 0) {
+      if (compact && (type !== 'extract' || stage === 'initializing')) {
+        return stageText;
+      }
+      return `${stageText} ${current}/${total}`;
+    }
+
+    return stageText;
   }
 
   const parts = (message || '').split(':');

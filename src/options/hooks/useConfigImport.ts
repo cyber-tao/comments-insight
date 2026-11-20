@@ -52,6 +52,7 @@ export const useConfigImport = (currentConfigs: CrawlingConfig[]) => {
       Array.isArray(config.fields) &&
       config.fields.every(isFieldSelector) &&
       (config.lastUpdated === undefined || typeof config.lastUpdated === 'number') &&
+      (config.loadMoreBtn === undefined || isSelectorRule(config.loadMoreBtn)) &&
       (config.replies === undefined || isReplyConfig(config.replies)) &&
       (config.videoTime === undefined || isSelectorRule(config.videoTime)) &&
       (config.postContent === undefined || isSelectorRule(config.postContent)) &&
@@ -91,6 +92,8 @@ export const useConfigImport = (currentConfigs: CrawlingConfig[]) => {
         return config.container;
       case 'item':
         return config.item;
+      case 'loadMoreBtn':
+        return config.loadMoreBtn || null;
       case 'fieldUsername':
         return findField(config.fields, 'username');
       case 'fieldContent':

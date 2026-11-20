@@ -94,6 +94,12 @@ const messagePayloadSchemas: Record<Message['type'], z.ZodTypeAny> = {
   START_EXTRACTION: z.object({
     url: nonEmptyString,
     maxComments: z.number().int().positive().optional(),
+    maxReplyDepth: z
+      .number()
+      .int()
+      .min(UI_LIMITS.MAX_REPLY_DEPTH_MIN)
+      .max(UI_LIMITS.MAX_REPLY_DEPTH_MAX)
+      .optional(),
     tabId: z.number().int().positive().optional(),
     taskId: nonEmptyString.optional(),
   }),

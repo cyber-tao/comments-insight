@@ -7,6 +7,7 @@ import { changeLanguage } from '../utils/i18n';
 import { useTheme } from '@/hooks/useTheme';
 import { Logger } from '@/utils/logger';
 import { ExtensionAPI } from '@/utils/extension-api';
+import { countCommentReplies } from '@/utils/comment-tree';
 import { formatCommentTimestamp } from '@/utils/date-formatter';
 import { HistorySidebar } from './components/HistorySidebar';
 import { HistoryDetailPanel } from './components/HistoryDetailPanel';
@@ -100,26 +101,26 @@ const History: React.FC = () => {
 
   const sortComments = useCallback(
     (comments: Comment[]): Comment[] => {
-      const sorted = comments.toSorted((a, b) => {
+      const compare = (a: Comment, b: Comment): number => {
         switch (sortBy) {
           case 'time':
             return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
           case 'likes':
             return b.likes - a.likes;
           case 'replies':
-            return b.replies.length - a.replies.length;
+            return countCommentReplies(b) - countCommentReplies(a);
           default:
             return 0;
         }
-      });
+      };
 
-      const sortReplies = (c: Comment[]): Comment[] =>
-        c.map((comment) => ({
+      const sortTree = (items: Comment[]): Comment[] =>
+        items.toSorted(compare).map((comment) => ({
           ...comment,
-          replies: comment.replies.length > 0 ? sortReplies(comment.replies) : comment.replies,
+          replies: comment.replies.length > 0 ? sortTree(comment.replies) : comment.replies,
         }));
 
-      return sortReplies(sorted);
+      return sortTree(comments);
     },
     [sortBy],
   );

@@ -586,7 +586,7 @@ describe('AIStrategy execution', () => {
         return { contentChanged: false };
       });
 
-      const comments = await new AIStrategy(pageController).execute(2, 'test-platform');
+      const comments = await new AIStrategy(pageController).execute(10, 'test-platform');
 
       expect(comments).toHaveLength(1);
       expect(comments[0]).toMatchObject({ id: root.id, likes: 9, platform: 'test-platform' });
@@ -620,7 +620,7 @@ describe('AIStrategy execution', () => {
         comments: [{ ...root, replies: scrolls === 0 ? [] : [createComment(`reply-${scrolls}`)] }],
       }));
 
-      const comments = await new AIStrategy(pageController).execute(2, 'test-platform');
+      const comments = await new AIStrategy(pageController).execute(10, 'test-platform');
 
       expect(comments).toHaveLength(1);
       expect(comments[0].replies.map((reply) => reply.id)).toEqual(
@@ -630,7 +630,7 @@ describe('AIStrategy execution', () => {
       expect(root.replies).toEqual([]);
     });
 
-    it('preserves the requested root limit when a batch contains extra comments and replies', async () => {
+    it('enforces the total comment plus reply limit when a batch contains extra comments and replies', async () => {
       aiServiceMock.callAI.mockResolvedValue({
         comments: [
           { ...createComment('first'), replies: [createComment('reply')] },
@@ -639,7 +639,7 @@ describe('AIStrategy execution', () => {
         ],
       });
 
-      const comments = await new AIStrategy(createPageController()).execute(2, 'test-platform');
+      const comments = await new AIStrategy(createPageController()).execute(3, 'test-platform');
 
       expect(comments.map((comment) => comment.id)).toEqual(['first', 'second']);
       expect(comments[0].replies).toHaveLength(1);

@@ -80,6 +80,9 @@ export const UI_LIMITS = {
   /** Max comments input range */
   MAX_COMMENTS_MIN: 1,
   MAX_COMMENTS_MAX: 10000,
+  /** Max reply nesting depth range (0 = top-level comments only) */
+  MAX_REPLY_DEPTH_MIN: 0,
+  MAX_REPLY_DEPTH_MAX: 25,
   /** DOM analysis depth limits */
   INITIAL_DEPTH_MIN: 1,
   INITIAL_DEPTH_MAX: 5,
@@ -116,7 +119,7 @@ export const PAGINATION = {
 };
 
 export const HISTORY_UI = {
-  MAX_COMMENT_DEPTH: 10,
+  MAX_INDENT_DEPTH: 6,
 };
 
 export const NOTIFICATION_KEYS = {

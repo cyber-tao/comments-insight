@@ -2,8 +2,10 @@ import { AI, APP_DATA_VERSION, STORAGE } from '@/config/constants';
 import DEFAULT_CRAWLING_RULES from '@/config/default_rules.json';
 import type { CrawlingConfig } from '@/types';
 import { hasPersistedCrawlingConfigChanged } from '@/utils/crawling-config';
+import { countComments } from '@/utils/comment-tree';
 import { Logger } from '@/utils/logger';
 import { crawlingConfigSchema, crawlingValidationSchema } from '@/utils/storage-validation';
+import { CommentsInsightDatabase } from './HistoryStore';
 
 type MigrationStep = () => Promise<void>;
 
@@ -192,6 +194,32 @@ export class DataMigrator {
           await chrome.storage.local.set({
             [STORAGE.SETTINGS_KEY]: { ...settings, aiModel: nextModel },
           });
+        }
+      },
+      6: async () => {
+        if (typeof indexedDB === 'undefined') {
+          return;
+        }
+        const database = new CommentsInsightDatabase();
+        try {
+          await database.transaction('rw', database.history, database.historyMetadata, async () => {
+            const items = await database.history.toArray();
+            for (const item of items) {
+              if (!item || typeof item.id !== 'string' || !Array.isArray(item.comments)) {
+                continue;
+              }
+              const totalCount = countComments(item.comments);
+              if (item.commentsCount !== totalCount) {
+                await database.history.put({ ...item, commentsCount: totalCount });
+              }
+              const metadata = await database.historyMetadata.get(item.id);
+              if (metadata && metadata.commentsCount !== totalCount) {
+                await database.historyMetadata.put({ ...metadata, commentsCount: totalCount });
+              }
+            }
+          });
+        } finally {
+          database.close();
         }
       },
     };

@@ -676,7 +676,7 @@ export const HistoryDetailPanel: React.FC<HistoryDetailPanelProps> = ({
                 className="text-lg font-bold font-serif-editorial tabular-nums"
                 style={{ color: 'var(--text-primary)' }}
               >
-                {t('history.allComments')} ({selectedItem.comments.length})
+                {t('history.allComments')} ({selectedItem.commentsCount})
               </h3>
               <button
                 onClick={() => exportCommentsAsCSV(selectedItem.comments, selectedItem.title)}

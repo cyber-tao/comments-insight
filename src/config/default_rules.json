@@ -51,7 +51,7 @@
         "type": "css"
       },
       "expandBtn": {
-        "selector": ":is(#more-replies, #more-replies-sub-thread) button",
+        "selector": ":is(#more-replies, #more-replies-sub-thread, ytd-continuation-item-renderer) button",
         "type": "css"
       },
       "fields": [
@@ -234,6 +234,10 @@
       "type": "css"
     },
     "lastUpdated": 1794482273529,
+    "loadMoreBtn": {
+      "selector": "faceplate-partial[loading=\"action\"][src^=\"/svc/shreddit/more-comments/\"]:not([slot=\"children\"]) button:not(.invisible):not(.pointer-events-none)",
+      "type": "css"
+    },
     "postContent": {
       "selector": "shreddit-post-text-body",
       "type": "css"

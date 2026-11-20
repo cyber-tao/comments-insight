@@ -105,6 +105,7 @@ function createConfig(overrides: Partial<CrawlingConfig> = {}): CrawlingConfig {
 function createSettings(configs: CrawlingConfig[] = []): Settings {
   return {
     maxComments: 100,
+    maxReplyDepth: 10,
     aiModel: {
       apiUrl: 'https://api.example.com/v1',
       apiKey: 'secret-key',

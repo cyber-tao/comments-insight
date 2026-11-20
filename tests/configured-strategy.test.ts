@@ -5,7 +5,14 @@ import { PageController } from '@/content/PageController';
 import { setExtractionActive, resetExtractionState } from '@/content/extractionState';
 import type { Comment, CrawlingConfig, SelectorRule } from '@/types';
 import { CommentExtractor } from '@/content/CommentExtractor';
-import { DOM, EXTRACTION, MESSAGES, TIMEOUT, TIMING } from '@/config/constants';
+import {
+  DOM,
+  EXTRACTION,
+  EXTRACTION_DEFAULTS,
+  MESSAGES,
+  TIMEOUT,
+  TIMING,
+} from '@/config/constants';
 import defaultRules from '@/config/default_rules.json';
 import { findElementsByRule, readField } from '@/content/utils/selector-rule';
 
@@ -46,8 +53,13 @@ function commentTree(comments: Comment[]): unknown[] {
   return comments.map((comment) => [comment.username, commentTree(comment.replies)]);
 }
 
-async function executeStrategy(strategy: ConfiguredStrategy, maxComments = 1): Promise<Comment[]> {
-  const result = strategy.execute(maxComments, 'example.com');
+async function executeStrategy(
+  strategy: ConfiguredStrategy,
+  maxComments = 10,
+  onProgress?: Parameters<ConfiguredStrategy['execute']>[2],
+  maxReplyDepth?: number,
+): Promise<Comment[]> {
+  const result = strategy.execute(maxComments, 'example.com', onProgress, undefined, maxReplyDepth);
   await vi.runAllTimersAsync();
   return result;
 }
@@ -240,7 +252,7 @@ describe('ConfiguredStrategy', () => {
       </shreddit-comment-tree>
     `;
     const config = defaultRules.find((rule) => rule.id === 'reddit') as CrawlingConfig;
-    const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 2);
+    const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 10);
 
     expect(commentTree(comments)).toEqual([
       [
@@ -273,7 +285,10 @@ describe('ConfiguredStrategy', () => {
       config.replies!.container = config.item;
       config.replies!.item = config.item;
 
-      const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 2);
+      const comments = await executeStrategy(
+        new ConfiguredStrategy(mockPageController, config),
+        10,
+      );
 
       expect(commentTree(comments)).toEqual([
         [
@@ -419,6 +434,7 @@ describe('ConfiguredStrategy', () => {
 
     const comments = await executeStrategy(
       new ConfiguredStrategy(mockPageController, createConfig()),
+      1,
     );
 
     expect(comments).toHaveLength(1);
@@ -466,7 +482,7 @@ describe('ConfiguredStrategy', () => {
     const config = createConfig();
     config.replies!.expandBtn = { type: 'css', selector: '.expand' };
 
-    const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 2);
+    const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 5);
 
     expect(comments).toHaveLength(1);
     expect(mockPageController.scrollContainer).toHaveBeenCalledTimes(
@@ -515,7 +531,7 @@ describe('ConfiguredStrategy', () => {
       const config = defaultRules.find((rule) => rule.domain === 'youtube.com') as CrawlingConfig;
       const startedAt = Date.now();
       const result = new ConfiguredStrategy(mockPageController, config)
-        .execute(2, 'youtube.com')
+        .execute(4, 'youtube.com')
         .then((comments) => ({ comments, elapsed: Date.now() - startedAt }));
       await vi.runAllTimersAsync();
       const { comments, elapsed } = await result;
@@ -546,7 +562,7 @@ describe('ConfiguredStrategy', () => {
     setTimeout(() => document.body.append(section), TIMING.SHORT_WAIT_MS * 2);
 
     const config = defaultRules.find((rule) => rule.domain === 'youtube.com') as CrawlingConfig;
-    const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config));
+    const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 1);
 
     expect(section.scrollIntoView).toHaveBeenCalledOnce();
     expect(comments.map((comment) => comment.content)).toEqual(['Lazy comment']);
@@ -586,7 +602,7 @@ describe('ConfiguredStrategy', () => {
       return { contentChanged: true, scrollPositionChanged: true, hasMore: true };
     });
 
-    const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 2);
+    const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 5);
 
     expect(commentTree(comments)).toEqual([
       [
@@ -650,10 +666,197 @@ describe('ConfiguredStrategy', () => {
     await vi.runAllTimersAsync();
     const comments = await result;
 
-    expect(execute).toHaveBeenCalledWith(target, 'example.com', undefined, undefined);
+    expect(execute).toHaveBeenCalledWith(
+      target,
+      'example.com',
+      undefined,
+      undefined,
+      EXTRACTION_DEFAULTS.MAX_REPLY_DEPTH,
+    );
     expect(comments).toHaveLength(1);
     expect(comments[0].content).toBe('Comment 0');
     expect(scrollIntoView).toHaveBeenCalledTimes(target);
     expect(mockPageController.scrollContainer).not.toHaveBeenCalled();
+  });
+
+  it('counts replies toward maxComments, stops immediately at budget, and emits per-item progress', async () => {
+    document.body.innerHTML = `
+      <section id="comments-root">
+        <article class="comment-item">
+          <b class="user">Root 1</b><p class="text">First root</p>
+          <div class="reply-container">
+            <article class="reply-item">
+              <b class="user">Reply 1.1</b><p class="text">L1 reply</p>
+              <div class="reply-container">
+                <article class="reply-item"><b class="user">Reply 1.1.1</b><p class="text">L2 reply</p></article>
+              </div>
+            </article>
+            <article class="reply-item"><b class="user">Reply 1.2</b><p class="text">L1 sibling</p></article>
+          </div>
+          <button class="expand">More replies</button>
+        </article>
+        <article class="comment-item"><b class="user">Root 2</b><p class="text">Second root</p></article>
+      </section>
+    `;
+    const expandBtn = document.querySelector<HTMLButtonElement>('.expand')!;
+    const expandClick = vi.spyOn(expandBtn, 'click');
+    const config = createConfig();
+    config.replies!.expandBtn = { type: 'css', selector: '.expand' };
+
+    const progressUpdates: Array<{ stage?: string; current?: number; total?: number }> = [];
+    const comments = await executeStrategy(
+      new ConfiguredStrategy(mockPageController, config),
+      3,
+      (_percent, _message, stage, current, total) => {
+        progressUpdates.push({ stage, current, total });
+      },
+      10,
+    );
+
+    expect(commentTree(comments)).toEqual([['Root 1', [['Reply 1.1', [['Reply 1.1.1', []]]]]]]);
+    expect(expandClick).not.toHaveBeenCalled();
+    expect(mockPageController.scrollContainer).not.toHaveBeenCalled();
+
+    const extractingCounts = progressUpdates
+      .filter((u) => u.stage === 'extracting')
+      .map((u) => u.current);
+    expect(extractingCounts).toEqual([0, 1, 2, 3]);
+  });
+
+  it('supports deep multi-level nesting beyond 5 levels and respects maxReplyDepth=0 and custom depths', async () => {
+    const buildLevel = (level: number, maxLevel: number): string => `
+      <shreddit-comment score="${level}">
+        <a noun="comment_author">User L${level}</a>
+        <div slot="comment">Comment at level ${level}</div>
+        ${level < maxLevel ? buildLevel(level + 1, maxLevel) : ''}
+      </shreddit-comment>
+    `;
+    document.body.innerHTML = `<shreddit-comment-tree>${buildLevel(0, 7)}</shreddit-comment-tree>`;
+    const redditConfig = defaultRules.find((rule) => rule.id === 'reddit') as CrawlingConfig;
+
+    const full = await executeStrategy(
+      new ConfiguredStrategy(mockPageController, redditConfig),
+      20,
+      undefined,
+      10,
+    );
+    let node = full[0];
+    let depthReached = 0;
+    while (node.replies.length > 0) {
+      node = node.replies[0];
+      depthReached += 1;
+    }
+    expect(depthReached).toBe(7);
+
+    setExtractionActive(true, 'test-task-roots');
+    const rootsOnly = await executeStrategy(
+      new ConfiguredStrategy(mockPageController, redditConfig),
+      20,
+      undefined,
+      0,
+    );
+    expect(commentTree(rootsOnly)).toEqual([['User L0', []]]);
+
+    setExtractionActive(true, 'test-task-depth-2');
+    const depthTwo = await executeStrategy(
+      new ConfiguredStrategy(mockPageController, redditConfig),
+      20,
+      undefined,
+      2,
+    );
+    expect(commentTree(depthTwo)).toEqual([['User L0', [['User L1', [['User L2', []]]]]]]);
+  });
+
+  it('expands multiple reply batches at the same level and clicks top-level loadMoreBtn', async () => {
+    document.body.innerHTML = `
+      <section id="comments-root">
+        <article class="comment-item">
+          <b class="user">Root 1</b><p class="text">First</p>
+          <div class="reply-container">
+            <button class="expand" id="batch-1">Load batch 1</button>
+          </div>
+        </article>
+        <button class="load-more">View more comments</button>
+      </section>
+    `;
+    const replyContainer = document.querySelector('.reply-container')!;
+    const batch1Btn = document.querySelector<HTMLButtonElement>('#batch-1')!;
+    batch1Btn.addEventListener('click', () => {
+      batch1Btn.remove();
+      replyContainer.insertAdjacentHTML(
+        'beforeend',
+        `
+          <article class="reply-item"><b class="user">Reply A</b><p class="text">Batch 1</p></article>
+          <button class="expand" id="batch-2">Load batch 2</button>
+        `,
+      );
+      const batch2Btn = document.querySelector<HTMLButtonElement>('#batch-2')!;
+      batch2Btn.addEventListener('click', () => {
+        batch2Btn.remove();
+        replyContainer.insertAdjacentHTML(
+          'beforeend',
+          '<article class="reply-item"><b class="user">Reply B</b><p class="text">Batch 2</p></article>',
+        );
+      });
+    });
+
+    const loadMoreBtn = document.querySelector<HTMLButtonElement>('.load-more')!;
+    loadMoreBtn.addEventListener('click', () => {
+      loadMoreBtn.remove();
+      document
+        .querySelector('#comments-root')!
+        .insertAdjacentHTML(
+          'beforeend',
+          '<article class="comment-item"><b class="user">Root 2</b><p class="text">Second</p></article>',
+        );
+    });
+
+    const config = createConfig();
+    config.replies!.expandBtn = { type: 'css', selector: '.expand' };
+    config.loadMoreBtn = { type: 'css', selector: '.load-more' };
+
+    const comments = await executeStrategy(
+      new ConfiguredStrategy(mockPageController, config),
+      4,
+      undefined,
+      5,
+    );
+
+    expect(commentTree(comments)).toEqual([
+      [
+        'Root 1',
+        [
+          ['Reply A', []],
+          ['Reply B', []],
+        ],
+      ],
+      ['Root 2', []],
+    ]);
+  });
+
+  it('does not borrow fields from nested child replies when a parent lacks an author', async () => {
+    document.body.innerHTML = `
+      <shreddit-comment-tree>
+        <shreddit-comment score="5">
+          <div slot="comment">[deleted]</div>
+          <shreddit-comment score="12">
+            <a noun="comment_author">ChildAuthor</a>
+            <div slot="comment">Actual child comment</div>
+          </shreddit-comment>
+        </shreddit-comment>
+      </shreddit-comment-tree>
+    `;
+    const redditConfig = defaultRules.find((rule) => rule.id === 'reddit') as CrawlingConfig;
+    const comments = await executeStrategy(
+      new ConfiguredStrategy(mockPageController, redditConfig),
+      10,
+    );
+
+    expect(comments).toHaveLength(1);
+    expect(comments[0].username).toBe('Unknown');
+    expect(comments[0].content).toBe('[deleted]');
+    expect(comments[0].replies).toHaveLength(1);
+    expect(comments[0].replies[0].username).toBe('ChildAuthor');
+    expect(comments[0].replies[0].content).toBe('Actual child comment');
   });
 });

@@ -4,10 +4,16 @@ import { Logger } from '@/utils/logger';
 import { AIStrategy } from './strategies/AIStrategy';
 import { ConfiguredStrategy } from './strategies/ConfiguredStrategy';
 import type { ProgressCallback } from './strategies/ExtractionStrategy';
-import { EXTRACTION, EXTRACTION_PROGRESS, ANALYSIS_FORMAT } from '@/config/constants';
+import {
+  EXTRACTION,
+  EXTRACTION_DEFAULTS,
+  EXTRACTION_PROGRESS,
+  ANALYSIS_FORMAT,
+  MESSAGES,
+} from '@/config/constants';
 import { getCurrentHostname } from '@/utils/url';
 import { sendMessage } from '@/utils/chrome-message';
-import { MESSAGES } from '@/config/constants';
+import { countComments, trimCommentsToDepth, trimCommentsToLimit } from '@/utils/comment-tree';
 import { CrawlingConfig } from '../types';
 
 /**
@@ -65,8 +71,12 @@ export class CommentExtractor {
     platform: Platform,
     onProgress?: ProgressCallback,
     signal?: AbortSignal,
+    maxReplyDepth: number = EXTRACTION_DEFAULTS.MAX_REPLY_DEPTH,
   ): Promise<Comment[]> {
-    Logger.info('[CommentExtractor] Starting extraction process');
+    Logger.info('[CommentExtractor] Starting extraction process', {
+      maxComments,
+      maxReplyDepth,
+    });
 
     let strategy: import('./strategies/ExtractionStrategy').ExtractionStrategy | null = null;
 
@@ -103,12 +113,27 @@ export class CommentExtractor {
         : undefined;
 
       // Execute strategy
-      const comments = await strategy.execute(targetComments, platform, progressAdapter, signal);
+      const comments = await strategy.execute(
+        targetComments,
+        platform,
+        progressAdapter,
+        signal,
+        maxReplyDepth,
+      );
 
-      onProgress?.(EXTRACTION_PROGRESS.VALIDATING, 'validating');
+      const rawTotal = Math.min(countComments(comments), maxComments);
+      onProgress?.(EXTRACTION_PROGRESS.VALIDATING, '', 'validating', 0, Math.max(1, rawTotal));
       const validComments = this.validateComments(comments, platform);
-      const limitedComments = validComments.slice(0, maxComments);
-      onProgress?.(EXTRACTION_PROGRESS.COMPLETE, 'complete');
+      const depthLimited = trimCommentsToDepth(validComments, maxReplyDepth);
+      const limitedComments = trimCommentsToLimit(depthLimited, maxComments);
+      const finalCount = countComments(limitedComments);
+      onProgress?.(
+        EXTRACTION_PROGRESS.VALIDATING,
+        '',
+        'validating',
+        Math.max(1, finalCount),
+        Math.max(1, finalCount),
+      );
 
       return limitedComments;
     } finally {

@@ -16,6 +16,7 @@ export class TimestampNormalizer {
     referenceTimeISO: string,
     timeout?: number,
     signal?: AbortSignal,
+    onProgress?: (completed: number, total: number) => void,
   ): Promise<Comment[]> {
     if (!comments.length) {
       return comments;
@@ -42,14 +43,13 @@ export class TimestampNormalizer {
           signal,
         });
         const parsed = DataNormalizer.parseTimestampNormalizationResponse(response.content);
-        if (!parsed) {
-          continue;
-        }
-        for (const item of parsed) {
-          if (item.path && item.timestamp) {
-            const normalized = DataNormalizer.normalizeTimestampToMinute(item.timestamp);
-            if (normalized) {
-              normalizedMap.set(item.path, normalized);
+        if (parsed) {
+          for (const item of parsed) {
+            if (item.path && item.timestamp) {
+              const normalized = DataNormalizer.normalizeTimestampToMinute(item.timestamp);
+              if (normalized) {
+                normalizedMap.set(item.path, normalized);
+              }
             }
           }
         }
@@ -59,6 +59,7 @@ export class TimestampNormalizer {
         }
         Logger.warn('[TimestampNormalizer] Timestamp normalization failed', { error });
       }
+      onProgress?.(Math.min(i + batch.length, items.length), items.length);
     }
 
     if (normalizedMap.size === 0) {

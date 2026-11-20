@@ -15,6 +15,7 @@ export interface ExtractionStrategy {
     platform: Platform,
     onProgress?: ProgressCallback,
     signal?: AbortSignal,
+    maxReplyDepth?: number,
   ): Promise<Comment[]>;
 
   /**

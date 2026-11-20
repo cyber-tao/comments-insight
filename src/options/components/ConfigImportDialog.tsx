@@ -8,6 +8,7 @@ export type MergeField =
   | 'siteName'
   | 'container'
   | 'item'
+  | 'loadMoreBtn'
   | 'fieldUsername'
   | 'fieldContent'
   | 'fieldTimestamp'
@@ -33,6 +34,7 @@ export const MERGE_FIELDS: MergeField[] = [
   'siteName',
   'container',
   'item',
+  'loadMoreBtn',
   'fieldUsername',
   'fieldContent',
   'fieldTimestamp',
@@ -103,6 +105,8 @@ export const ConfigImportDialog: React.FC<ConfigImportDialogProps> = ({
         return formatRule(config.container);
       case 'item':
         return formatRule(config.item);
+      case 'loadMoreBtn':
+        return formatRule(config.loadMoreBtn);
       case 'fieldUsername':
         return formatFieldSelector(findField(config.fields, 'username'));
       case 'fieldContent':
@@ -142,6 +146,8 @@ export const ConfigImportDialog: React.FC<ConfigImportDialogProps> = ({
         return t('options.crawlingConfigs.fieldContainer');
       case 'item':
         return t('options.crawlingConfigs.fieldItem');
+      case 'loadMoreBtn':
+        return t('options.crawlingConfigs.fieldLoadMoreBtn');
       case 'fieldUsername':
         return t('options.crawlingConfigs.fieldUsername');
       case 'fieldContent':

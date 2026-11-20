@@ -3,15 +3,21 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { HISTORY_UI } from '@/config/constants';
 import { Comment } from '@/types';
+import { countCommentReplies } from '@/utils/comment-tree';
 import { formatCommentTimestamp } from '@/utils/date-formatter';
 import { CommentsIcon, HeartIcon } from '@/components/Icons';
 
 interface CommentTreeProps {
   comments: Comment[];
   depth?: number;
+  parentUsername?: string;
 }
 
-export const CommentTree: React.FC<CommentTreeProps> = ({ comments, depth = 0 }) => {
+export const CommentTree: React.FC<CommentTreeProps> = ({
+  comments,
+  depth = 0,
+  parentUsername,
+}) => {
   const { t } = useTranslation();
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
 
@@ -27,21 +33,25 @@ export const CommentTree: React.FC<CommentTreeProps> = ({ comments, depth = 0 })
     });
   };
 
-  if (depth >= HISTORY_UI.MAX_COMMENT_DEPTH) {
-    return (
-      <div className="ml-4 pl-4 text-xs italic" style={{ color: 'var(--text-muted)' }}>
-        {t('history.deepRepliesHidden')}
-      </div>
-    );
-  }
+  const isDeeplyNested = depth > HISTORY_UI.MAX_INDENT_DEPTH;
+  const containerIndentClass = depth === 0 ? '' : isDeeplyNested ? 'pl-3' : 'ml-4 pl-4';
 
   return (
     <div
-      className={`${depth > 0 ? 'ml-4 pl-4' : ''}`}
-      style={depth > 0 ? { borderLeft: '2px solid var(--border-primary)' } : {}}
+      className={containerIndentClass}
+      style={
+        depth > 0
+          ? {
+              borderLeft: isDeeplyNested
+                ? '2px dashed var(--border-primary)'
+                : '2px solid var(--border-primary)',
+            }
+          : {}
+      }
     >
       {comments.map((comment, index) => {
-        const hasReplies = comment.replies && comment.replies.length > 0;
+        const totalReplyCount = countCommentReplies(comment);
+        const hasReplies = totalReplyCount > 0;
         const isExpanded = expandedReplies.has(comment.id);
         const deferClass = depth === 0 && index >= 8 ? ' comment-item-deferred' : '';
 
@@ -67,12 +77,30 @@ export const CommentTree: React.FC<CommentTreeProps> = ({ comments, depth = 0 })
                   {comment.username.charAt(0).toUpperCase()}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <span
-                    className="font-semibold text-sm block truncate"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
-                    {comment.username}
-                  </span>
+                  <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                    <span
+                      className="font-semibold text-sm truncate"
+                      style={{ color: 'var(--text-primary)' }}
+                    >
+                      {comment.username}
+                    </span>
+                    {isDeeplyNested && (
+                      <span
+                        className="px-1.5 py-0.5 rounded text-[10px] font-mono-code font-medium shrink-0"
+                        style={{
+                          backgroundColor: 'var(--accent-primary-soft)',
+                          color: 'var(--accent-primary)',
+                        }}
+                      >
+                        {t('history.replyDepth', { depth })}
+                      </span>
+                    )}
+                    {isDeeplyNested && parentUsername && (
+                      <span className="text-xs truncate" style={{ color: 'var(--text-muted)' }}>
+                        {t('history.replyingTo', { username: parentUsername })}
+                      </span>
+                    )}
+                  </div>
                   <div
                     className="flex items-center gap-3 text-xs tabular-nums mt-0.5"
                     style={{ color: 'var(--text-muted)' }}
@@ -101,9 +129,9 @@ export const CommentTree: React.FC<CommentTreeProps> = ({ comments, depth = 0 })
                     <span>{isExpanded ? '▼' : '▶'}</span>
                     <CommentsIcon size={11} />
                     <span>
-                      {comment.replies.length === 1
-                        ? t('history.reply', { count: comment.replies.length })
-                        : t('history.replies', { count: comment.replies.length })}
+                      {totalReplyCount === 1
+                        ? t('history.reply', { count: totalReplyCount })
+                        : t('history.replies', { count: totalReplyCount })}
                     </span>
                   </button>
                 )}
@@ -117,7 +145,11 @@ export const CommentTree: React.FC<CommentTreeProps> = ({ comments, depth = 0 })
             </div>
             {hasReplies && isExpanded && (
               <div className="mt-2.5">
-                <CommentTree comments={comment.replies} depth={depth + 1} />
+                <CommentTree
+                  comments={comment.replies}
+                  depth={depth + 1}
+                  parentUsername={comment.username}
+                />
               </div>
             )}
           </div>

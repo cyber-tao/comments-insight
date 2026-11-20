@@ -8,6 +8,7 @@ import { ErrorCode, ExtensionError } from '@/utils/error-types';
 import { requireMessageSuccess } from '@/utils/message-response';
 import { checkSourcePage } from '@/utils/source-page';
 import {
+  EXTRACTION_DEFAULTS,
   EXTRACTION_PROGRESS,
   CONFIG_GENERATION_PROGRESS,
   MESSAGES,
@@ -22,6 +23,7 @@ import { sendMessage } from '@/utils/chrome-message';
 import { getCurrentHostname, extractDomain } from '@/utils/url';
 import { runWithConcurrencyLimit } from '@/utils/promise';
 import { generateCommentHash } from '@/utils/comment-hash';
+import { countComments, trimCommentsToDepth, trimCommentsToLimit } from '@/utils/comment-tree';
 import { querySelectorDeep } from '@/utils/dom-query';
 import { ContentAIService } from '../ContentAIService';
 import { AIConfigGenerator, ConfigGenerationCallback } from './AIConfigGenerator';
@@ -51,7 +53,9 @@ export class AIStrategy implements ExtractionStrategy {
     platform: Platform,
     onProgress?: ProgressCallback,
     signal?: AbortSignal,
+    maxReplyDepth: number = EXTRACTION_DEFAULTS.MAX_REPLY_DEPTH,
   ): Promise<Comment[]> {
+    const safeMaxReplyDepth = Math.max(0, Math.floor(maxReplyDepth));
     Logger.info('[AIStrategy] Starting Pure AI Extraction (Legacy Mode)');
     onProgress?.(EXTRACTION_PROGRESS.AI_ANALYZING, 'loading settings', 'initializing', 0, 1);
 
@@ -193,7 +197,10 @@ export class AIStrategy implements ExtractionStrategy {
 
     try {
       // Step 2: Loop - Scroll & Extract
-      while (allComments.length < maxComments && iterationCount++ < SCROLL.MAX_SCROLL_ITERATIONS) {
+      while (
+        countComments(allComments) < maxComments &&
+        iterationCount++ < SCROLL.MAX_SCROLL_ITERATIONS
+      ) {
         // Check abort status at the start of each iteration
         checkAborted(signal);
 
@@ -202,26 +209,21 @@ export class AIStrategy implements ExtractionStrategy {
           break;
         }
 
+        const totalExtracted = countComments(allComments);
         const currentProgress = Math.min(
           EXTRACTION_PROGRESS.NORMALIZING,
-          EXTRACTION_PROGRESS.MIN + (allComments.length / maxComments) * EXTRACTION_PROGRESS.RANGE,
+          EXTRACTION_PROGRESS.MIN + (totalExtracted / maxComments) * EXTRACTION_PROGRESS.RANGE,
         );
 
         // 2.1 Scroll first to load more content before extraction
         if (scrollCount > 0) {
-          onProgress?.(
-            currentProgress,
-            `scrolling (${scrollCount})`,
-            'scrolling',
-            allComments.length,
-            maxComments,
-          );
+          onProgress?.(currentProgress, '', 'scrolling', totalExtracted, maxComments);
 
           await this.pageController.scrollContainer(sectionElement, signal);
         }
         scrollCount++;
 
-        onProgress?.(currentProgress, `extracting`, 'extracting', allComments.length, maxComments);
+        onProgress?.(currentProgress, '', 'extracting', totalExtracted, maxComments);
 
         const chunksToProcess: string[] = [];
         const elementsBatch = pendingElements.has(sectionElement)
@@ -267,13 +269,7 @@ export class AIStrategy implements ExtractionStrategy {
         // 2.3 AI Extraction
         let newComments: Comment[] = [];
         if (chunksToProcess.length > 0) {
-          onProgress?.(
-            currentProgress,
-            `analyzing chunks (${chunksToProcess.length})`,
-            'analyzing',
-            allComments.length,
-            maxComments,
-          );
+          onProgress?.(currentProgress, '', 'analyzing', totalExtracted, maxComments);
           newComments = await this.extractFromChunks(chunksToProcess, signal, aiTimeout);
         }
 
@@ -286,12 +282,29 @@ export class AIStrategy implements ExtractionStrategy {
         }
 
         // 2.4 Merge & Dedup
-        const added = this.mergeComments(allComments, newComments, platform);
+        const depthLimitedBatch = trimCommentsToDepth(newComments, safeMaxReplyDepth);
+        let runningTotal = countComments(allComments);
+        const added = this.mergeComments(
+          allComments,
+          depthLimitedBatch,
+          platform,
+          () => {
+            runningTotal += 1;
+            const safeCurrent = Math.min(runningTotal, maxComments);
+            const updatedProgress = Math.min(
+              EXTRACTION_PROGRESS.NORMALIZING,
+              EXTRACTION_PROGRESS.MIN + (safeCurrent / maxComments) * EXTRACTION_PROGRESS.RANGE,
+            );
+            onProgress?.(updatedProgress, '', 'extracting', safeCurrent, maxComments);
+          },
+          maxComments - runningTotal,
+        );
 
+        const nextTotal = countComments(allComments);
         Logger.info('[AIStrategy] Extracted batch', {
-          found: newComments.length,
+          found: countComments(depthLimitedBatch),
           new: added,
-          total: allComments.length,
+          total: nextTotal,
         });
 
         if (added === 0) {
@@ -300,28 +313,32 @@ export class AIStrategy implements ExtractionStrategy {
           noNewCommentsCount = 0;
         }
 
-        if (allComments.length >= maxComments) break;
+        if (nextTotal >= maxComments) break;
       }
 
       if (iterationCount >= SCROLL.MAX_SCROLL_ITERATIONS) {
         Logger.warn('[AIStrategy] Reached maximum scroll iterations', {
           iterationCount,
-          commentsFound: allComments.length,
+          commentsFound: countComments(allComments),
         });
       }
     } finally {
       observer.disconnect();
     }
 
+    const totalBeforeTrim = countComments(allComments);
     onProgress?.(
       EXTRACTION_PROGRESS.MAX,
       'validating results',
       'validating',
-      allComments.length,
+      Math.min(totalBeforeTrim, maxComments),
       maxComments,
     );
 
-    const result = allComments.slice(0, maxComments);
+    const result = trimCommentsToLimit(
+      trimCommentsToDepth(allComments, safeMaxReplyDepth),
+      maxComments,
+    );
 
     try {
       const config = await this.configGenerator.generateIntelligentConfig(
@@ -343,23 +360,55 @@ export class AIStrategy implements ExtractionStrategy {
     return result;
   }
 
-  private mergeComments(previous: Comment[], current: Comment[], platform: Platform): number {
+  private mergeComments(
+    previous: Comment[],
+    current: Comment[],
+    platform: Platform,
+    onAdded?: () => void,
+    remainingBudget: number = Number.MAX_SAFE_INTEGER,
+  ): number {
     const commentsByHash = new Map(
       previous.map((comment) => [generateCommentHash(comment), comment]),
     );
     let added = 0;
+    let remaining = remainingBudget;
     for (const comment of current) {
       const hash = generateCommentHash(comment);
       const existing = commentsByHash.get(hash);
-      const replies = existing?.replies || [];
-      added += this.mergeComments(replies, comment.replies, platform);
       if (existing) {
+        const replies = existing.replies || [];
         Object.assign(existing, comment, { id: existing.id, platform, replies });
+        if (remaining > 0 && comment.replies?.length) {
+          const addedReplies = this.mergeComments(
+            replies,
+            comment.replies,
+            platform,
+            onAdded,
+            remaining,
+          );
+          added += addedReplies;
+          remaining -= addedReplies;
+        }
       } else {
+        if (remaining <= 0) break;
+        const replies: Comment[] = [];
         const merged = { ...comment, id: comment.id || hash, platform, replies };
         previous.push(merged);
         commentsByHash.set(hash, merged);
-        added++;
+        added += 1;
+        remaining -= 1;
+        onAdded?.();
+        if (remaining > 0 && comment.replies?.length) {
+          const addedReplies = this.mergeComments(
+            replies,
+            comment.replies,
+            platform,
+            onAdded,
+            remaining,
+          );
+          added += addedReplies;
+          remaining -= addedReplies;
+        }
       }
     }
     return added;

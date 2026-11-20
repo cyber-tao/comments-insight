@@ -8,6 +8,7 @@ import { getDomain } from '@/utils/url';
 import { generateUniqueId } from '@/utils/id-generator';
 import { runWithConcurrencyLimit } from '@/utils/promise';
 import { cleanAndParseJsonObject, cleanAndParseJsonArray } from '@/utils/json-parser';
+import { countComments } from '@/utils/comment-tree';
 
 interface ScraperAnalysisResult {
   selectors: Record<string, string>;
@@ -121,6 +122,7 @@ export async function handleStartAnalysis(
         throw new ExtensionError(ErrorCode.TASK_CANCELLED, 'Analysis cancelled before persistence');
       }
 
+      const totalCommentsCount = countComments(comments);
       const savedHistoryId = historyId || generateUniqueId('history');
       try {
         if (historyId) {
@@ -150,7 +152,7 @@ export async function handleStartAnalysis(
               platform: task.platform || ANALYSIS_FORMAT.UNKNOWN_PLATFORM,
               postContent: metadata?.postContent,
               extractedAt: Date.now(),
-              commentsCount: comments.length,
+              commentsCount: totalCommentsCount,
               comments,
               analysis: result,
               analyzedAt: Date.now(),
@@ -182,7 +184,7 @@ export async function handleStartAnalysis(
             settings.dynamicReportPromptTemplate,
             settings.language,
             analysisMetadata,
-            comments.length,
+            totalCommentsCount,
             combinedSignal,
             settings.aiTimeout,
             (progress) => {
@@ -239,7 +241,7 @@ export async function handleStartAnalysis(
       }
       return {
         tokensUsed,
-        commentsCount: comments.length,
+        commentsCount: totalCommentsCount,
         title,
         historyId: savedHistoryId,
         historyTab: 'analysis' as const,
@@ -323,7 +325,7 @@ export async function handleGenerateDynamicReport(
           videoTime: historyItem.videoTime,
           postContent: historyItem.postContent,
         },
-        historyItem.commentsCount || historyItem.comments?.length || 0,
+        historyItem.commentsCount || countComments(historyItem.comments),
         signal,
         settings.aiTimeout,
         (progress) => {

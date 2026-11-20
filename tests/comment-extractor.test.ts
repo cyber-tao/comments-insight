@@ -114,9 +114,35 @@ describe('CommentExtractor', () => {
 
       await extractor.extractWithAI(10, 'YouTube', onProgress);
 
-      // Should call progress at validation (80%) and complete (100%)
-      expect(onProgress).toHaveBeenCalledWith(80, 'validating');
-      expect(onProgress).toHaveBeenCalledWith(100, 'complete');
+      // Should call detailed progress at validation start and finish without premature 100% complete
+      expect(onProgress).toHaveBeenCalledWith(92, '', 'validating', 0, 3);
+      expect(onProgress).toHaveBeenCalledWith(92, '', 'validating', 3, 3);
+    });
+
+    it('should limit total comments and nested replies to maxComments and respect maxReplyDepth', async () => {
+      const comments = [
+        mockComment({
+          id: 'root-1',
+          replies: [
+            mockComment({
+              id: 'reply-1',
+              replies: [mockComment({ id: 'reply-1-1' })],
+            }),
+            mockComment({ id: 'reply-2' }),
+          ],
+        }),
+        mockComment({ id: 'root-2' }),
+      ];
+      mockAIExecute.mockResolvedValue(comments);
+
+      const limited = await extractor.extractWithAI(3, 'YouTube', undefined, undefined, 10);
+      expect(limited).toHaveLength(1);
+      expect(limited[0].replies).toHaveLength(1);
+      expect(limited[0].replies[0].replies).toHaveLength(1);
+
+      const shallow = await extractor.extractWithAI(10, 'YouTube', undefined, undefined, 1);
+      expect(shallow[0].replies).toHaveLength(2);
+      expect(shallow[0].replies[0].replies).toEqual([]);
     });
 
     it('should limit comments to maxComments', async () => {

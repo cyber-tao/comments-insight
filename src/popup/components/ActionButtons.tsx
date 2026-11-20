@@ -94,7 +94,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
       aria-valuemin={UI_LIMITS.PROGRESS_MIN_PERCENT}
       aria-valuemax={UI_LIMITS.PROGRESS_MAX_PERCENT}
       aria-valuenow={Math.round(activeProgress)}
-      className="absolute bottom-0 left-0 h-1 transition-all duration-300"
+      className="absolute bottom-0 left-0 h-1 transition-all duration-150"
       style={{
         width: `${activeProgress}%`,
         backgroundColor: 'var(--accent-primary)',
@@ -159,7 +159,7 @@ export const ActionButtons: React.FC<ActionButtonsProps> = ({
                       borderTopColor: 'transparent',
                     }}
                   />
-                  <span className="truncate max-w-[190px]" title={progressMessage}>
+                  <span className="truncate max-w-[190px] tabular-nums" title={progressMessage}>
                     {isConfigActive ? t('popup.generatingConfig') : compactProgressMessage}
                   </span>
                 </span>

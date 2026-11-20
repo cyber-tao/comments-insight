@@ -32,6 +32,7 @@ vi.mock('react-i18next', () => ({
 function createSettings(overrides: Partial<Settings> = {}): Settings {
   return {
     maxComments: 100,
+    maxReplyDepth: 10,
     aiModel: {
       apiUrl: 'https://api.example.com/v1',
       apiKey: 'secret-key',
@@ -83,6 +84,14 @@ describe('BasicSettings', () => {
     expect(onSettingsChange).toHaveBeenCalledWith(
       expect.objectContaining({
         maxComments: 250,
+      }),
+    );
+
+    const depthInput = screen.getByDisplayValue('10');
+    fireEvent.change(depthInput, { target: { value: '0' } });
+    expect(onSettingsChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        maxReplyDepth: 0,
       }),
     );
 

@@ -164,6 +164,7 @@ export interface CrawlingConfig {
   container: SelectorRule;
   item: SelectorRule;
   fields: FieldSelector[];
+  loadMoreBtn?: SelectorRule;
   replies?: ReplyConfig;
   videoTime?: SelectorRule;
   postContent?: SelectorRule;
@@ -180,6 +181,7 @@ export interface DOMAnalysisConfig {
 
 export interface Settings {
   maxComments: number;
+  maxReplyDepth: number;
   aiModel: AIConfig;
   aiTimeout: number; // Timeout in milliseconds
   analyzerPromptTemplate: string;

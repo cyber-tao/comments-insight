@@ -5,6 +5,7 @@ export function findElementsByRule(
   context: Document | Element,
   rule?: SelectorRule | null,
   maxResults?: number,
+  maxVisited?: number,
 ): Element[] {
   if (!rule || typeof rule.selector !== 'string' || !rule.selector.trim()) return [];
   if (rule.type === 'xpath') {
@@ -12,7 +13,7 @@ export function findElementsByRule(
     return maxResults === undefined ? elements : elements.slice(0, maxResults);
   }
   if (rule.type !== 'css') return [];
-  return querySelectorAllDeep(context, rule.selector, { maxResults });
+  return querySelectorAllDeep(context, rule.selector, { maxResults, maxVisited });
 }
 
 export function findElementByRule(

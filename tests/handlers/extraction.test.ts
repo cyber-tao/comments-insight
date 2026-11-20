@@ -297,7 +297,12 @@ describe('extraction handlers', () => {
         1,
         {
           type: 'RUN_EXTRACTION',
-          payload: { taskId: 'task_123', maxComments: 50, expectedUrl: sourceUrl },
+          payload: {
+            taskId: 'task_123',
+            maxComments: 50,
+            maxReplyDepth: 10,
+            expectedUrl: sourceUrl,
+          },
         },
         { documentId: sourceDocumentId },
       );
@@ -756,6 +761,7 @@ describe('extraction handlers', () => {
         expect.any(String),
         1000,
         controller.signal,
+        expect.any(Function),
       );
       expect(context.historyStore.createHistory).not.toHaveBeenCalled();
       expect(context.taskManager.completeTask).not.toHaveBeenCalled();
