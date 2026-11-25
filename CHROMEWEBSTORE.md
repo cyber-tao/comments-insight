@@ -1,6 +1,6 @@
 # Chrome Web Store Listing — Comments Insight
 
-> Last Updated: 2026-11-19
+> Last Updated: 2026-11-25
 
 ## Store Listing
 
@@ -376,13 +376,14 @@ https://github.com/cyber-tao/comments-insight/blob/master/PRIVACY.md
 
 ## Version History
 
-| Version | Date       | Changes                                                                                                                                      | Status                 |
-| ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| 0.13.1  | 2026-11-20 | On-demand content script injection, native `<dialog>`, accessibility and sandbox hardening, Chrome Web Store API v2 publishing               | Release tag            |
-| 0.12.1  | 2026-11-13 | GitHub follow-up to the 0.12.0 feature release; store package was not submitted                                                              | Released on GitHub     |
-| 0.12.0  | 2026-11-18 | Deep-linked task notifications, AI-generated reply crawling configs, K-unit token presets, editable API URLs with streaming connection tests | Released on GitHub     |
-| 0.11.1  | 2026-11-13 | Dependency security fixes, pagination/search race fixes, streaming frame hardening, and full a11y/error recovery improvements                | Released on GitHub     |
-| 0.7.0   | Prior      | Earlier Chrome Web Store published baseline                                                                                                  | Published (Superseded) |
+| Version | Date       | Changes                                                                                                                                        | Status                 |
+| ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| 0.14.0  | 2026-11-25 | Multi-level reply extraction with configurable depth, value-guided breadth-depth frontier traversal, total comment caps, and per-item progress | Release tag            |
+| 0.13.1  | 2026-11-20 | On-demand content script injection, native `<dialog>`, accessibility and sandbox hardening, Chrome Web Store API v2 publishing                 | Released on GitHub     |
+| 0.12.1  | 2026-11-13 | GitHub follow-up to the 0.12.0 feature release; store package was not submitted                                                                | Released on GitHub     |
+| 0.12.0  | 2026-11-18 | Deep-linked task notifications, AI-generated reply crawling configs, K-unit token presets, editable API URLs with streaming connection tests   | Released on GitHub     |
+| 0.11.1  | 2026-11-13 | Dependency security fixes, pagination/search race fixes, streaming frame hardening, and full a11y/error recovery improvements                  | Released on GitHub     |
+| 0.7.0   | Prior      | Earlier Chrome Web Store published baseline                                                                                                    | Published (Superseded) |
 
 ## Review Notes
 
