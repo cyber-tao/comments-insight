@@ -5,6 +5,7 @@ import { PageController } from '@/content/PageController';
 import { setExtractionActive, resetExtractionState } from '@/content/extractionState';
 import type { Comment, CrawlingConfig, SelectorRule } from '@/types';
 import { CommentExtractor } from '@/content/CommentExtractor';
+import { countComments } from '@/utils/comment-tree';
 import {
   DOM,
   EXTRACTION,
@@ -485,9 +486,7 @@ describe('ConfiguredStrategy', () => {
     const comments = await executeStrategy(new ConfiguredStrategy(mockPageController, config), 5);
 
     expect(comments).toHaveLength(1);
-    expect(mockPageController.scrollContainer).toHaveBeenCalledTimes(
-      DOM.NO_NEW_COMMENTS_THRESHOLD + 1,
-    );
+    expect(mockPageController.scrollContainer).toHaveBeenCalledTimes(DOM.NO_NEW_COMMENTS_THRESHOLD);
     expect(item.scrollIntoView).toHaveBeenCalledOnce();
     expect(click).toHaveBeenCalledOnce();
     expect(commentTree(comments)).toEqual([['User', [['Loaded child', []]]]]);
@@ -583,7 +582,7 @@ describe('ConfiguredStrategy', () => {
     );
 
     expect(comments.map((comment) => comment.content)).toEqual(['Content']);
-    expect(scroll).toHaveBeenCalledTimes(DOM.NO_NEW_COMMENTS_THRESHOLD + 1);
+    expect(scroll).toHaveBeenCalledTimes(DOM.NO_NEW_COMMENTS_THRESHOLD);
   });
 
   it('refreshes and deduplicates a previously extracted parent when its reply fields change', async () => {
@@ -713,7 +712,10 @@ describe('ConfiguredStrategy', () => {
       10,
     );
 
-    expect(commentTree(comments)).toEqual([['Root 1', [['Reply 1.1', [['Reply 1.1.1', []]]]]]]);
+    expect(commentTree(comments)).toEqual([
+      ['Root 1', [['Reply 1.1', []]]],
+      ['Root 2', []],
+    ]);
     expect(expandClick).not.toHaveBeenCalled();
     expect(mockPageController.scrollContainer).not.toHaveBeenCalled();
 
@@ -858,5 +860,323 @@ describe('ConfiguredStrategy', () => {
     expect(comments[0].replies).toHaveLength(1);
     expect(comments[0].replies[0].username).toBe('ChildAuthor');
     expect(comments[0].replies[0].content).toBe('Actual child comment');
+  });
+
+  it('prevents a 120-reply Reddit mega-thread from monopolizing budget while capturing deep viral gems and bridges', async () => {
+    const buildNestedChain = (
+      prefix: string,
+      depth: number,
+      maxDepth: number,
+      score: number,
+      branchCount: number,
+    ): string => {
+      if (depth > maxDepth) return '';
+      return Array.from({ length: branchCount }, (_, idx) => {
+        const childScore = Math.max(1, Math.round(score / (idx + 1.2)));
+        const childBranches =
+          depth < maxDepth && idx < 3 ? Math.max(1, Math.floor(branchCount / (idx + 2))) : 0;
+        return `
+          <shreddit-comment score="${childScore}">
+            <a noun="comment_author">${prefix}_d${depth}_${idx}</a>
+            <div slot="comment">Reply ${prefix} d${depth} #${idx}</div>
+            ${childBranches > 0 ? buildNestedChain(`${prefix}_${idx}`, depth + 1, maxDepth, childScore, childBranches) : ''}
+          </shreddit-comment>
+        `;
+      }).join('');
+    };
+
+    // Root 0 has 120+ nested replies across 5 levels
+    const root0Subtree = buildNestedChain('R0', 1, 5, 1600, 30);
+    const otherRoots = Array.from({ length: 25 }, (_, idx) => {
+      const r = idx + 1;
+      const rootScore = Math.round(1200 / (r + 1));
+      if (r === 3) {
+        // 0-score [deleted] bridge hiding a 1500-score child
+        return `
+          <shreddit-comment score="${rootScore}">
+            <a noun="comment_author">Root ${r}</a>
+            <div slot="comment">Root comment ${r}</div>
+            <shreddit-comment score="0">
+              <a noun="comment_author">BridgeAuthor</a>
+              <div slot="comment">[deleted]</div>
+              <shreddit-comment score="1500">
+                <a noun="comment_author">BridgedChild</a>
+                <div slot="comment">High value explanation behind bridge</div>
+              </shreddit-comment>
+            </shreddit-comment>
+          </shreddit-comment>
+        `;
+      }
+      if (r === 8) {
+        // Deep viral gem in Root 8
+        return `
+          <shreddit-comment score="${rootScore}">
+            <a noun="comment_author">Root ${r}</a>
+            <div slot="comment">Root comment ${r}</div>
+            <shreddit-comment score="2200">
+              <a noun="comment_author">ViralL1</a>
+              <div slot="comment">Viral L1 reply</div>
+              <shreddit-comment score="1400">
+                <a noun="comment_author">ViralL2</a>
+                <div slot="comment">Viral L2 reply</div>
+              </shreddit-comment>
+            </shreddit-comment>
+          </shreddit-comment>
+        `;
+      }
+      return `
+        <shreddit-comment score="${rootScore}">
+          <a noun="comment_author">Root ${r}</a>
+          <div slot="comment">Root comment ${r}</div>
+          <shreddit-comment score="${Math.round(rootScore * 0.4)}">
+            <a noun="comment_author">Reply_R${r}_0</a>
+            <div slot="comment">Child of Root ${r}</div>
+          </shreddit-comment>
+        </shreddit-comment>
+      `;
+    }).join('');
+
+    document.body.innerHTML = `
+      <shreddit-comment-tree>
+        <shreddit-comment score="3000">
+          <a noun="comment_author">Root 0</a>
+          <div slot="comment">Mega-thread root</div>
+          ${root0Subtree}
+        </shreddit-comment>
+        ${otherRoots}
+      </shreddit-comment-tree>
+    `;
+
+    const redditConfig = defaultRules.find((rule) => rule.id === 'reddit') as CrawlingConfig;
+    const comments = await executeStrategy(
+      new ConfiguredStrategy(mockPageController, redditConfig),
+      50,
+      undefined,
+      10,
+    );
+
+    expect(countComments(comments)).toBe(50);
+    expect(comments.length).toBeGreaterThanOrEqual(15);
+    expect(countComments([comments[0]])).toBeLessThan(20);
+
+    // Preserves DOM root order
+    const rootIds = comments.map((c) => Number(c.username.replace('Root ', '')));
+    expect(rootIds).toEqual([...rootIds].sort((a, b) => a - b));
+
+    // Reaches depth >= 2
+    const maxDepthReached = (items: Comment[], depth = 0): number =>
+      items.reduce(
+        (max, item) => Math.max(max, depth, maxDepthReached(item.replies, depth + 1)),
+        depth,
+      );
+    expect(maxDepthReached(comments)).toBeGreaterThanOrEqual(2);
+
+    // Captures viral deep gem in Root 8 and bridged child in Root 3
+    const root3 = comments.find((c) => c.username === 'Root 3');
+    expect(root3?.replies.some((r) => r.username === 'BridgeAuthor')).toBe(true);
+    expect(root3?.replies[0]?.replies.some((r) => r.username === 'BridgedChild')).toBe(true);
+
+    const root8 = comments.find((c) => c.username === 'Root 8');
+    expect(root8?.replies.some((r) => r.username === 'ViralL1')).toBe(true);
+    expect(root8?.replies[0]?.replies.some((r) => r.username === 'ViralL2')).toBe(true);
+  });
+
+  it('interleaves collapsed expand buttons fairly across multiple roots instead of draining one thread', async () => {
+    document.body.innerHTML = `
+      <section id="comments-root">
+        <article class="comment-item" id="root-1">
+          <b class="user">Root 1</b><p class="text">First root</p>
+          <div class="reply-container">
+            <button class="expand" id="exp-r1-b1">Expand R1 batch 1</button>
+          </div>
+        </article>
+        <article class="comment-item" id="root-2">
+          <b class="user">Root 2</b><p class="text">Second root</p>
+          <div class="reply-container">
+            <button class="expand" id="exp-r2">Expand R2</button>
+          </div>
+        </article>
+        <article class="comment-item" id="root-3">
+          <b class="user">Root 3</b><p class="text">Third root</p>
+          <div class="reply-container">
+            <button class="expand" id="exp-r3">Expand R3</button>
+          </div>
+        </article>
+      </section>
+    `;
+
+    const attachExpand = (btnId: string, rootLabel: string, hasSecondBatch = false) => {
+      const btn = document.querySelector<HTMLButtonElement>(`#${btnId}`)!;
+      btn.addEventListener('click', () => {
+        const container = btn.closest('.reply-container')!;
+        btn.remove();
+        const replies = Array.from(
+          { length: 5 },
+          (_, idx) =>
+            `<article class="reply-item"><b class="user">${rootLabel}_Reply_${idx}</b><p class="text">${rootLabel} reply ${idx}</p></article>`,
+        ).join('');
+        container.insertAdjacentHTML('beforeend', replies);
+        if (hasSecondBatch) {
+          container.insertAdjacentHTML(
+            'beforeend',
+            '<button class="expand" id="exp-r1-b2">Expand R1 batch 2</button>',
+          );
+          attachExpand('exp-r1-b2', `${rootLabel}_B2`, false);
+        }
+      });
+    };
+
+    attachExpand('exp-r1-b1', 'R1', true);
+    attachExpand('exp-r2', 'R2', false);
+    attachExpand('exp-r3', 'R3', false);
+
+    const config = createConfig();
+    config.replies!.expandBtn = { type: 'css', selector: '.expand' };
+
+    const comments = await executeStrategy(
+      new ConfiguredStrategy(mockPageController, config),
+      10,
+      undefined,
+      5,
+    );
+
+    expect(countComments(comments)).toBe(10);
+    expect(comments.map((c) => c.username)).toEqual(['Root 1', 'Root 2', 'Root 3']);
+    expect(comments[1].replies.length).toBeGreaterThan(0);
+    expect(comments[2].replies.length).toBeGreaterThan(0);
+    // Root 1's second batch should not have been needed or allowed to starve Root 2/3
+    expect(document.querySelector('#exp-r1-b2')).not.toBeNull();
+  });
+
+  it('spills remaining budget fairly into nested replies when only two roots exist', async () => {
+    const makeReplyTree = (prefix: string) =>
+      Array.from(
+        { length: 5 },
+        (_, i) => `
+        <div class="reply-container">
+          <article class="reply-item">
+            <b class="user">${prefix}_L1_${i}</b><p class="text">${prefix} L1 ${i}</p>
+            <div class="reply-container">
+              <article class="reply-item">
+                <b class="user">${prefix}_L2_${i}_0</b><p class="text">${prefix} L2 ${i} 0</p>
+                <div class="reply-container">
+                  <article class="reply-item">
+                    <b class="user">${prefix}_L3_${i}_0</b><p class="text">${prefix} L3 ${i} 0</p>
+                  </article>
+                </div>
+              </article>
+            </div>
+          </article>
+        </div>
+      `,
+      ).join('');
+
+    document.body.innerHTML = `
+      <section id="comments-root">
+        <article class="comment-item"><b class="user">Root A</b><p class="text">Thread A</p>${makeReplyTree('A')}</article>
+        <article class="comment-item"><b class="user">Root B</b><p class="text">Thread B</p>${makeReplyTree('B')}</article>
+      </section>
+    `;
+
+    const comments = await executeStrategy(
+      new ConfiguredStrategy(mockPageController, createConfig()),
+      20,
+      undefined,
+      10,
+    );
+
+    expect(countComments(comments)).toBe(20);
+    expect(comments).toHaveLength(2);
+    const shareA = countComments([comments[0]]);
+    const shareB = countComments([comments[1]]);
+    expect(shareA).toBeGreaterThanOrEqual(7);
+    expect(shareB).toBeGreaterThanOrEqual(7);
+  });
+
+  it('restores top-level scroll watermark after expanding an earlier thread before scrolling for more roots', async () => {
+    document.body.innerHTML = `
+      <section id="comments-root">
+        <article class="comment-item" id="r1">
+          <b class="user">Root 1</b><p class="text">First</p>
+          <div class="reply-container"><button class="expand" id="exp-r1">Expand</button></div>
+        </article>
+        <article class="comment-item" id="r2">
+          <b class="user">Root 2</b><p class="text">Second</p>
+        </article>
+      </section>
+    `;
+
+    let currentScrollY = 0;
+    const originalScrollYDesc = Object.getOwnPropertyDescriptor(window, 'scrollY');
+    const originalScrollTo = window.scrollTo;
+    Object.defineProperty(window, 'scrollY', {
+      configurable: true,
+      get: () => currentScrollY,
+    });
+    window.scrollTo = vi.fn((opts?: ScrollToOptions | number, y?: number) => {
+      if (typeof opts === 'number') {
+        currentScrollY = y ?? 0;
+      } else if (opts && typeof opts.top === 'number') {
+        currentScrollY = opts.top;
+      }
+    }) as typeof window.scrollTo;
+
+    const r1 = document.querySelector<HTMLElement>('#r1')!;
+    const r2 = document.querySelector<HTMLElement>('#r2')!;
+    const expBtn = document.querySelector<HTMLButtonElement>('#exp-r1')!;
+    r1.scrollIntoView = vi.fn(() => {
+      currentScrollY = 50;
+    });
+    r2.scrollIntoView = vi.fn(() => {
+      currentScrollY = 400;
+    });
+    expBtn.scrollIntoView = vi.fn(() => {
+      // Simulates viewport jumping back up to Root 1 before clicking expand
+      currentScrollY = 50;
+    });
+    expBtn.addEventListener('click', () => {
+      expBtn.closest('.reply-container')!.innerHTML =
+        '<article class="reply-item"><b class="user">Child 1</b><p class="text">Expanded</p></article>';
+    });
+
+    const scrollObservedY: number[] = [];
+    vi.mocked(mockPageController.scrollContainer).mockImplementation(async () => {
+      scrollObservedY.push(window.scrollY);
+      if (scrollObservedY.length === 1) {
+        document
+          .querySelector('#comments-root')!
+          .insertAdjacentHTML(
+            'beforeend',
+            '<article class="comment-item" id="r3"><b class="user">Root 3</b><p class="text">Third</p></article>',
+          );
+      }
+      return { contentChanged: scrollObservedY.length === 1 };
+    });
+
+    try {
+      const config = createConfig();
+      config.replies!.expandBtn = { type: 'css', selector: '.expand' };
+
+      const comments = await executeStrategy(
+        new ConfiguredStrategy(mockPageController, config),
+        4,
+        undefined,
+        5,
+      );
+
+      expect(commentTree(comments)).toEqual([
+        ['Root 1', [['Child 1', []]]],
+        ['Root 2', []],
+        ['Root 3', []],
+      ]);
+      expect(scrollObservedY[0]).toBe(400);
+    } finally {
+      window.scrollTo = originalScrollTo;
+      if (originalScrollYDesc) {
+        Object.defineProperty(window, 'scrollY', originalScrollYDesc);
+      } else {
+        delete (window as unknown as { scrollY?: number }).scrollY;
+      }
+    }
   });
 });

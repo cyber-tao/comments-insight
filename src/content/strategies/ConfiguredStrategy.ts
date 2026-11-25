@@ -15,6 +15,7 @@ import { ErrorCode, ExtensionError } from '@/utils/error-types';
 import {
   EXTRACTION_DEFAULTS,
   EXTRACTION_PROGRESS,
+  REPLY_TRAVERSAL,
   MESSAGES,
   TIMEOUT,
   TIMING,
@@ -25,6 +26,12 @@ import {
   REGEX,
 } from '@/config/constants';
 import { sendMessage } from '@/utils/chrome-message';
+import {
+  LazyMaxHeap,
+  scoreCommentCandidate,
+  scoreExpandCandidate,
+  scoreLoadMoreRoots,
+} from '@/utils/comment-tree';
 import { findElementByRule, findElementsByRule, readField } from '../utils/selector-rule';
 import { createYieldBudget } from '../utils/yield';
 import { generateCommentHash } from '@/utils/comment-hash';
@@ -44,6 +51,52 @@ interface ExtractionBudget {
   yieldBudget: ReturnType<typeof createYieldBudget>;
   failedExpandButtons: WeakSet<HTMLElement>;
   clickedExpandSnapshots: WeakMap<HTMLElement, string>;
+}
+
+interface FrontierNode {
+  id: string;
+  comment: Comment;
+  element: HTMLElement;
+  fieldsVersion: string;
+  depth: number;
+  rootRank: number;
+  siblingRank: number;
+  rootId: string;
+  parent: FrontierNode | null;
+  children: FrontierNode[];
+  childrenById: Map<string, FrontierNode>;
+  discoveredChildElements: WeakMap<Element, { fieldsVersion: string; node: FrontierNode }>;
+  bridgedLikes: number;
+  committed: boolean;
+  inCommitHeap: boolean;
+  expandClicks: number;
+  commitVersion: number;
+  expandVersion: number;
+}
+
+interface FrontierState {
+  itemQueryLimit: number;
+  itemQueryVisitBudget: number;
+  allItemSet: Set<Element>;
+  rootNodesById: Map<string, FrontierNode>;
+  discoveredRootElements: WeakMap<Element, { fieldsVersion: string; node: FrontierNode }>;
+  commitHeap: LazyMaxHeap<FrontierNode>;
+  expandHeap: LazyMaxHeap<FrontierNode>;
+  threadReplies: Map<string, number>;
+  parentSelected: Map<FrontierNode, number>;
+  uncommittedRoots: Set<FrontierNode>;
+  committedRoots: FrontierNode[];
+  recentRootLikes: number[];
+  failedLoadMoreButtons: WeakSet<HTMLElement>;
+  hasMoreVisibleRootsInDom: boolean;
+  maxRootScrollY: number;
+  maxContainerScrollTop: number;
+  scrolledForExpand: boolean;
+  noNewRootsCount: number;
+  rootsExhausted: boolean;
+  loadMoreClicks: number;
+  nextRootRank: number;
+  seq: number;
 }
 
 export class ConfiguredStrategy implements ExtractionStrategy {
@@ -74,7 +127,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     });
     onProgress?.(EXTRACTION_PROGRESS.MIN, '', 'initializing', 0, maxComments);
 
-    let container = await this.findCommentContainer(signal);
+    const container = await this.findCommentContainer(signal);
     if (!container) {
       throw new ExtensionError(
         ErrorCode.DOM_ANALYSIS_FAILED,
@@ -82,13 +135,7 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       );
     }
 
-    const allComments: Comment[] = [];
-    let noNewCommentsCount = 0;
-    let loadMoreClicks = 0;
-    const commentsByHash = new Map<string, Comment>();
-    const failedLoadMoreButtons = new WeakSet<HTMLElement>();
     this.processedVersions = new WeakMap();
-
     const budget: ExtractionBudget = {
       maxComments,
       maxReplyDepth: safeMaxReplyDepth,
@@ -103,21 +150,33 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     };
 
     this.reportProgress(budget, 'extracting');
-
     this.validationRecorded = false;
     this.recordFieldValidation(container);
 
-    const itemQueryLimit = Math.max(LIMITS.DOM_QUERY_MAX_RESULTS, maxComments * 5);
+    if (!this.config.replies || safeMaxReplyDepth === 0) {
+      return this.executeFlat(container, budget);
+    }
+
+    return this.executeFrontier(container, this.config.replies, budget);
+  }
+
+  private async executeFlat(
+    initialContainer: Element,
+    budget: ExtractionBudget,
+  ): Promise<Comment[]> {
+    let container = initialContainer;
+    const allComments: Comment[] = [];
+    const commentsByHash = new Map<string, Comment>();
+    const failedLoadMoreButtons = new WeakSet<HTMLElement>();
+    let noNewCommentsCount = 0;
+    let loadMoreClicks = 0;
+
+    const itemQueryLimit = Math.max(LIMITS.DOM_QUERY_MAX_RESULTS, budget.maxComments * 5);
     const itemQueryVisitBudget = Math.max(LIMITS.DOM_QUERY_MAX_VISITED, itemQueryLimit * 5);
 
-    while (budget.totalCount < maxComments) {
-      checkAborted(signal);
+    while (budget.totalCount < budget.maxComments) {
+      checkAborted(budget.signal);
 
-      if (noNewCommentsCount >= DOM.NO_NEW_COMMENTS_THRESHOLD) {
-        break;
-      }
-
-      // 1. Extract visible items (use deep query for Shadow DOM support and xpath)
       const items = findElementsByRule(
         container,
         this.config.item,
@@ -128,127 +187,886 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       budget.addedInRound = 0;
 
       for (const itemElement of items) {
-        // The caller already includes its validation buffer in this target.
-        if (budget.totalCount >= maxComments) break;
-        checkAborted(signal);
-        await budget.yieldBudget.yieldIfNeeded(signal);
+        if (budget.totalCount >= budget.maxComments) break;
+        checkAborted(budget.signal);
+        await budget.yieldBudget.yieldIfNeeded(budget.signal);
 
-        // Use matched elements rather than CSS closest() so XPath and shadow
-        // descendants have the same nearest-parent ownership.
         if (this.nearestParentItem(itemElement, itemSet)) continue;
 
-        const version = this.getElementVersion(
-          itemElement,
-          this.config.fields,
-          safeMaxReplyDepth > 0,
-        );
+        const version = this.getElementVersion(itemElement, this.config.fields, false);
         if (this.processedVersions.get(itemElement)?.version === version) continue;
 
-        // Scroll element into view to trigger lazy loading before extraction.
         (itemElement as HTMLElement).scrollIntoView?.({ behavior: 'instant', block: 'center' });
-        const initialDirectReplies =
-          this.config.replies && safeMaxReplyDepth > 0
-            ? this.directReplyItems(itemElement, this.config.replies)
-            : [];
+        const initialBoundaries = this.getRootFieldBoundaries(itemElement);
         const preContent = this.readOwnedField(
           itemElement,
           this.config.fields.find((f) => f.name === 'content'),
-          this.buildFieldBoundaries(itemElement, initialDirectReplies),
+          initialBoundaries,
         );
         if (!preContent) {
-          await abortableDelay(TIMING.SCROLL_PAUSE_MS, signal);
+          await abortableDelay(TIMING.SCROLL_PAUSE_MS, budget.signal);
         }
 
-        const fieldBoundaries = this.buildFieldBoundaries(
-          itemElement,
-          this.config.replies && safeMaxReplyDepth > 0
-            ? this.directReplyItems(itemElement, this.config.replies)
-            : [],
-        );
         const fieldsVersion = this.getFieldVersion(
           itemElement,
           this.config.fields,
-          fieldBoundaries,
+          this.getRootFieldBoundaries(itemElement),
         );
         const comment = await this.extractCommentFromElement(
           itemElement as HTMLElement,
-          platform,
-          signal,
-          budget,
-          commentsByHash,
-          allComments,
+          budget.platform,
+          budget.signal,
         );
-        if (comment && budget.totalCount < maxComments) {
-          const postBoundaries = this.buildFieldBoundaries(
-            itemElement,
-            this.config.replies && safeMaxReplyDepth > 0
-              ? this.directReplyItems(itemElement, this.config.replies)
-              : [],
-          );
-          // Expansion may have changed the reply fields. Only remember a
-          // successfully extracted, post-expansion version; skeletons retry.
-          if (
-            fieldsVersion === this.getFieldVersion(itemElement, this.config.fields, postBoundaries)
-          ) {
-            this.processedVersions.set(itemElement, {
-              version: this.getElementVersion(
-                itemElement,
-                this.config.fields,
-                safeMaxReplyDepth > 0,
-              ),
-              comment,
-            });
-          }
+        if (!comment) continue;
+
+        const existing = commentsByHash.get(comment.id);
+        if (existing) {
+          this.updateMutableCommentFields(existing, comment);
+        } else {
+          if (budget.totalCount >= budget.maxComments) break;
+          commentsByHash.set(comment.id, comment);
+          allComments.push(comment);
+          budget.totalCount += 1;
+          budget.addedInRound += 1;
+          this.reportProgress(budget, 'extracting');
+        }
+
+        if (
+          budget.totalCount < budget.maxComments &&
+          fieldsVersion ===
+            this.getFieldVersion(
+              itemElement,
+              this.config.fields,
+              this.getRootFieldBoundaries(itemElement),
+            )
+        ) {
+          this.processedVersions.set(itemElement, {
+            version: this.getElementVersion(itemElement, this.config.fields, false),
+            comment: existing ?? comment,
+          });
         }
       }
 
-      if (budget.addedInRound === 0) {
-        noNewCommentsCount++;
-      } else {
-        noNewCommentsCount = 0;
+      noNewCommentsCount = budget.addedInRound === 0 ? noNewCommentsCount + 1 : 0;
+      if (
+        budget.totalCount >= budget.maxComments ||
+        noNewCommentsCount >= DOM.NO_NEW_COMMENTS_THRESHOLD
+      ) {
+        break;
       }
-
-      if (budget.totalCount >= maxComments) break;
 
       this.reportProgress(budget, 'scrolling');
 
       let loadedMoreViaButton = false;
-      if (this.config.loadMoreBtn && loadMoreClicks < TIMING.MAX_LOAD_MORE_CLICKS) {
-        const loadMoreBtn = findElementsByRule(container, this.config.loadMoreBtn).find(
-          (button): button is HTMLElement =>
-            button instanceof HTMLElement &&
-            !failedLoadMoreButtons.has(button) &&
-            this.nearestParentItem(button, itemSet) === null &&
-            this.canExpandReplies(button),
+      const loadMoreBtn = this.findEligibleLoadMoreButton(
+        container,
+        itemSet,
+        failedLoadMoreButtons,
+        loadMoreClicks,
+      );
+      if (loadMoreBtn) {
+        loadMoreClicks += 1;
+        loadedMoreViaButton = await this.clickLoadMoreButton(
+          container,
+          loadMoreBtn,
+          items.length,
+          itemQueryLimit,
+          itemQueryVisitBudget,
+          budget.signal,
         );
-        if (loadMoreBtn) {
-          loadMoreClicks += 1;
-          loadedMoreViaButton = await this.clickLoadMoreButton(
-            container,
-            loadMoreBtn,
-            items.length,
-            itemQueryLimit,
-            itemQueryVisitBudget,
-            signal,
-          );
-          if (!loadedMoreViaButton) {
-            failedLoadMoreButtons.add(loadMoreBtn);
-          }
+        if (!loadedMoreViaButton) {
+          failedLoadMoreButtons.add(loadMoreBtn);
         }
       }
 
       if (!loadedMoreViaButton) {
-        await this.pageController.scrollContainer(container, signal);
+        await this.pageController.scrollContainer(container, budget.signal);
       }
 
-      // Re-query container in case of re-render
-      const newContainer = findElementByRule(document, this.config.container);
-      if (newContainer) {
-        container = newContainer;
-      }
+      container = findElementByRule(document, this.config.container) ?? container;
     }
 
     return allComments;
+  }
+
+  private async executeFrontier(
+    initialContainer: Element,
+    replyConfig: ReplyConfig,
+    budget: ExtractionBudget,
+  ): Promise<Comment[]> {
+    let container = initialContainer;
+    const isRecursiveSameRule = this.isSameRule(this.config.item, replyConfig.item);
+    const itemQueryLimit = isRecursiveSameRule
+      ? Math.max(
+          LIMITS.DOM_QUERY_MAX_RESULTS * REPLY_TRAVERSAL.RECURSIVE_QUERY_MULTIPLIER,
+          budget.maxComments * REPLY_TRAVERSAL.RECURSIVE_QUERY_BUDGET_FACTOR,
+        )
+      : Math.max(LIMITS.DOM_QUERY_MAX_RESULTS, budget.maxComments * 5);
+    const itemQueryVisitBudget = Math.max(LIMITS.DOM_QUERY_MAX_VISITED, itemQueryLimit * 5);
+
+    const state: FrontierState = {
+      itemQueryLimit,
+      itemQueryVisitBudget,
+      allItemSet: new Set(),
+      rootNodesById: new Map(),
+      discoveredRootElements: new WeakMap(),
+      commitHeap: new LazyMaxHeap(),
+      expandHeap: new LazyMaxHeap(),
+      threadReplies: new Map(),
+      parentSelected: new Map(),
+      uncommittedRoots: new Set(),
+      committedRoots: [],
+      recentRootLikes: [],
+      failedLoadMoreButtons: new WeakSet(),
+      hasMoreVisibleRootsInDom: false,
+      maxRootScrollY: 0,
+      maxContainerScrollTop: 0,
+      scrolledForExpand: false,
+      noNewRootsCount: 0,
+      rootsExhausted: false,
+      loadMoreClicks: 0,
+      nextRootRank: 0,
+      seq: 0,
+    };
+
+    await this.discoverRoots(container, replyConfig, budget, state);
+
+    while (budget.totalCount < budget.maxComments) {
+      checkAborted(budget.signal);
+      await budget.yieldBudget.yieldIfNeeded(budget.signal);
+
+      if (state.uncommittedRoots.size === 0 && state.hasMoreVisibleRootsInDom) {
+        await this.discoverRoots(container, replyConfig, budget, state);
+      }
+
+      const decision = this.selectNextFrontierAction(container, replyConfig, budget, state);
+      if (!decision) {
+        break;
+      }
+
+      if (decision.action === 'commit') {
+        await this.commitFrontierNode(decision.node, replyConfig, budget, state);
+      } else if (decision.action === 'expand') {
+        await this.expandFrontierNode(decision.node, replyConfig, budget, state);
+      } else {
+        container = await this.loadMoreFrontierRoots(container, replyConfig, budget, state);
+      }
+    }
+
+    return this.buildOrderedFrontierResult(state);
+  }
+
+  private scoreFrontierCommit(
+    node: FrontierNode,
+    budget: ExtractionBudget,
+    state: FrontierState,
+  ): number {
+    return scoreCommentCandidate({
+      depth: node.depth,
+      rootRank: node.rootRank,
+      siblingRank: node.siblingRank,
+      likes: node.comment.likes,
+      bridgedLikes: node.bridgedLikes,
+      threadReplies: state.threadReplies.get(node.rootId) || 0,
+      parentSelected: node.parent ? state.parentSelected.get(node.parent) || 0 : 0,
+      budget: budget.maxComments,
+    });
+  }
+
+  private scoreFrontierExpand(
+    node: FrontierNode,
+    budget: ExtractionBudget,
+    state: FrontierState,
+  ): number {
+    return scoreExpandCandidate({
+      depth: node.depth,
+      rootRank: node.rootRank,
+      parentLikes: node.comment.likes,
+      threadReplies: state.threadReplies.get(node.rootId) || 0,
+      parentSelected: state.parentSelected.get(node) || 0,
+      expandClicks: node.expandClicks,
+      budget: budget.maxComments,
+    });
+  }
+
+  private pushCommitNode(node: FrontierNode, budget: ExtractionBudget, state: FrontierState): void {
+    node.inCommitHeap = true;
+    node.commitVersion += 1;
+    state.commitHeap.push({
+      item: node,
+      score: this.scoreFrontierCommit(node, budget, state),
+      depth: node.depth,
+      rootRank: node.rootRank,
+      siblingRank: node.siblingRank,
+      seq: state.seq++,
+      version: node.commitVersion,
+    });
+  }
+
+  private enqueueExpandIfEligible(
+    node: FrontierNode,
+    replyConfig: ReplyConfig,
+    budget: ExtractionBudget,
+    state: FrontierState,
+  ): void {
+    if (
+      !node.committed ||
+      node.depth >= budget.maxReplyDepth ||
+      !replyConfig.expandBtn ||
+      node.expandClicks >= TIMING.MAX_EXPAND_CLICKS_PER_NODE ||
+      !node.children.every((child) => child.committed)
+    ) {
+      return;
+    }
+
+    if (!this.findEligibleExpandButton(node, replyConfig, budget)) {
+      return;
+    }
+
+    node.expandVersion += 1;
+    state.expandHeap.push({
+      item: node,
+      score: this.scoreFrontierExpand(node, budget, state),
+      depth: node.depth + 1,
+      rootRank: node.rootRank,
+      siblingRank: state.parentSelected.get(node) || 0,
+      seq: state.seq++,
+      version: node.expandVersion,
+    });
+  }
+
+  private selectNextFrontierAction(
+    container: Element,
+    replyConfig: ReplyConfig,
+    budget: ExtractionBudget,
+    state: FrontierState,
+  ):
+    | { action: 'commit'; node: FrontierNode }
+    | { action: 'expand'; node: FrontierNode }
+    | { action: 'loadMoreRoots' }
+    | null {
+    const scoreCommit = (node: FrontierNode) => this.scoreFrontierCommit(node, budget, state);
+    const isValidCommit = (entry: { item: FrontierNode; version?: number }) =>
+      !entry.item.committed &&
+      entry.item.inCommitHeap &&
+      entry.version === entry.item.commitVersion;
+
+    const scoreExpand = (node: FrontierNode) => this.scoreFrontierExpand(node, budget, state);
+    const isValidExpand = (entry: { item: FrontierNode; version?: number }) => {
+      const node = entry.item;
+      return (
+        entry.version === node.expandVersion &&
+        node.committed &&
+        node.depth < budget.maxReplyDepth &&
+        node.expandClicks < TIMING.MAX_EXPAND_CLICKS_PER_NODE &&
+        node.children.every((child) => child.committed) &&
+        this.findEligibleExpandButton(node, replyConfig, budget) !== null
+      );
+    };
+
+    const bestCommit = state.commitHeap.peekBest(scoreCommit, isValidCommit);
+    const bestExpand = state.expandHeap.peekBest(scoreExpand, isValidExpand);
+    const canLoadMoreRoots = state.uncommittedRoots.size === 0 && !state.rootsExhausted;
+
+    if (!canLoadMoreRoots) {
+      if (!bestCommit && !bestExpand) return null;
+      if (bestCommit && (!bestExpand || bestCommit.score >= bestExpand.score)) {
+        return { action: 'commit', node: bestCommit.item };
+      }
+      return { action: 'expand', node: bestExpand!.item };
+    }
+
+    if (!bestCommit && !bestExpand) {
+      return { action: 'loadMoreRoots' };
+    }
+
+    const loadMoreBtn = this.findEligibleLoadMoreButton(
+      container,
+      state.allItemSet,
+      state.failedLoadMoreButtons,
+      state.loadMoreClicks,
+    );
+    const loadScore = scoreLoadMoreRoots({
+      nextRootRank: state.nextRootRank,
+      recentRootLikes: state.recentRootLikes,
+      hasLoadMoreBtn: loadMoreBtn !== null,
+      consecutiveEmptyLoads: state.noNewRootsCount,
+    });
+
+    if (
+      bestCommit &&
+      bestCommit.score >= loadScore &&
+      (!bestExpand || bestCommit.score >= bestExpand.score)
+    ) {
+      return { action: 'commit', node: bestCommit.item };
+    }
+
+    if (loadScore >= (bestExpand?.score ?? -Infinity)) {
+      return { action: 'loadMoreRoots' };
+    }
+
+    return { action: 'expand', node: bestExpand!.item };
+  }
+
+  private async commitFrontierNode(
+    node: FrontierNode,
+    replyConfig: ReplyConfig,
+    budget: ExtractionBudget,
+    state: FrontierState,
+  ): Promise<void> {
+    const popped = state.commitHeap.popBest(
+      (n) => this.scoreFrontierCommit(n, budget, state),
+      (entry) =>
+        entry.item === node &&
+        !node.committed &&
+        node.inCommitHeap &&
+        entry.version === node.commitVersion,
+    );
+    if (!popped) return;
+
+    node.inCommitHeap = false;
+    node.committed = true;
+    budget.totalCount += 1;
+    this.reportProgress(budget, 'extracting');
+
+    if (node.depth === 0) {
+      state.uncommittedRoots.delete(node);
+      state.committedRoots.push(node);
+      state.recentRootLikes.push(node.comment.likes);
+    } else if (node.parent) {
+      if (!node.parent.comment.replies.some((reply) => reply.id === node.id)) {
+        node.parent.comment.replies.push(node.comment);
+      }
+      state.threadReplies.set(node.rootId, (state.threadReplies.get(node.rootId) || 0) + 1);
+      state.parentSelected.set(node.parent, (state.parentSelected.get(node.parent) || 0) + 1);
+      this.enqueueExpandIfEligible(node.parent, replyConfig, budget, state);
+    }
+
+    if (budget.totalCount >= budget.maxComments || node.depth >= budget.maxReplyDepth) {
+      return;
+    }
+
+    await this.scanVisibleChildren(node, 2, replyConfig, budget, state);
+    for (const child of node.children) {
+      if (!child.committed && !child.inCommitHeap) {
+        this.pushCommitNode(child, budget, state);
+      }
+    }
+    this.enqueueExpandIfEligible(node, replyConfig, budget, state);
+  }
+
+  private async expandFrontierNode(
+    node: FrontierNode,
+    replyConfig: ReplyConfig,
+    budget: ExtractionBudget,
+    state: FrontierState,
+  ): Promise<void> {
+    const popped = state.expandHeap.popBest(
+      (n) => this.scoreFrontierExpand(n, budget, state),
+      (entry) => entry.item === node && entry.version === node.expandVersion,
+    );
+    if (!popped) return;
+
+    const expandBtn = this.findEligibleExpandButton(node, replyConfig, budget);
+    if (!expandBtn) return;
+
+    budget.clickedExpandSnapshots.set(expandBtn, this.getButtonSnapshot(expandBtn));
+    this.reportProgress(budget, 'expanding');
+    state.scrolledForExpand = true;
+
+    const expanded = await this.clickExpandButton(
+      node.element,
+      expandBtn,
+      replyConfig,
+      budget.signal,
+      node.depth > 0,
+    );
+    node.expandClicks += 1;
+    if (!expanded) {
+      budget.failedExpandButtons.add(expandBtn);
+    }
+
+    await this.scanVisibleChildren(node, 2, replyConfig, budget, state);
+    this.enqueueExpandIfEligible(node, replyConfig, budget, state);
+  }
+
+  private async loadMoreFrontierRoots(
+    currentContainer: Element,
+    replyConfig: ReplyConfig,
+    budget: ExtractionBudget,
+    state: FrontierState,
+  ): Promise<Element> {
+    let container = currentContainer;
+    this.reportProgress(budget, 'scrolling');
+
+    const currentItems = findElementsByRule(
+      container,
+      this.config.item,
+      state.itemQueryLimit,
+      state.itemQueryVisitBudget,
+    );
+    state.allItemSet = new Set(currentItems);
+
+    let loadedMoreViaButton = false;
+    const loadMoreBtn = this.findEligibleLoadMoreButton(
+      container,
+      state.allItemSet,
+      state.failedLoadMoreButtons,
+      state.loadMoreClicks,
+    );
+    if (loadMoreBtn) {
+      state.loadMoreClicks += 1;
+      loadedMoreViaButton = await this.clickLoadMoreButton(
+        container,
+        loadMoreBtn,
+        currentItems.length,
+        state.itemQueryLimit,
+        state.itemQueryVisitBudget,
+        budget.signal,
+      );
+      if (!loadedMoreViaButton) {
+        state.failedLoadMoreButtons.add(loadMoreBtn);
+      }
+    }
+
+    if (!loadedMoreViaButton) {
+      this.restoreRootScrollWatermark(container, state);
+      await this.pageController.scrollContainer(container, budget.signal);
+      this.updateScrollWatermarks(container, state);
+    }
+
+    container = findElementByRule(document, this.config.container) ?? container;
+    const discoveredNewCount = await this.discoverRoots(container, replyConfig, budget, state);
+    state.noNewRootsCount = discoveredNewCount > 0 ? 0 : state.noNewRootsCount + 1;
+    if (state.noNewRootsCount >= DOM.NO_NEW_COMMENTS_THRESHOLD) {
+      state.rootsExhausted = true;
+    }
+
+    return container;
+  }
+
+  private updateScrollWatermarks(container: Element, state: FrontierState): void {
+    if (typeof window !== 'undefined' && typeof window.scrollY === 'number') {
+      state.maxRootScrollY = Math.max(state.maxRootScrollY, window.scrollY);
+    }
+    const scrollTop = (container as HTMLElement).scrollTop;
+    if (typeof scrollTop === 'number') {
+      state.maxContainerScrollTop = Math.max(state.maxContainerScrollTop, scrollTop);
+    }
+  }
+
+  private restoreRootScrollWatermark(container: Element, state: FrontierState): void {
+    if (!state.scrolledForExpand) return;
+    state.scrolledForExpand = false;
+
+    const isScrollable =
+      container.scrollHeight > container.clientHeight &&
+      (container as HTMLElement).style?.overflow !== 'hidden';
+    if (isScrollable && container.scrollTop < state.maxContainerScrollTop) {
+      if (typeof container.scrollTo === 'function') {
+        container.scrollTo({ top: state.maxContainerScrollTop, behavior: 'instant' });
+      } else {
+        (container as HTMLElement).scrollTop = state.maxContainerScrollTop;
+      }
+    } else if (
+      !isScrollable &&
+      typeof window !== 'undefined' &&
+      typeof window.scrollY === 'number' &&
+      window.scrollY < state.maxRootScrollY
+    ) {
+      window.scrollTo?.({ top: state.maxRootScrollY, behavior: 'instant' });
+    }
+  }
+
+  private async discoverRoots(
+    container: Element,
+    replyConfig: ReplyConfig,
+    budget: ExtractionBudget,
+    state: FrontierState,
+  ): Promise<number> {
+    const items = findElementsByRule(
+      container,
+      this.config.item,
+      state.itemQueryLimit,
+      state.itemQueryVisitBudget,
+    );
+    const itemSet = new Set(items);
+    state.allItemSet = itemSet;
+    const topLevelElements = items.filter((el) => !this.nearestParentItem(el, itemSet));
+
+    const remaining = Math.max(0, budget.maxComments - budget.totalCount);
+    const lookaheadTarget = Math.min(
+      remaining,
+      Math.max(
+        REPLY_TRAVERSAL.MIN_ROOT_LOOKAHEAD,
+        Math.ceil(remaining * REPLY_TRAVERSAL.ROOT_LOOKAHEAD_RATIO),
+      ),
+    );
+
+    const unchangedCached = new Set<Element>();
+    for (const rootEl of topLevelElements) {
+      checkAborted(budget.signal);
+      await budget.yieldBudget.yieldIfNeeded(budget.signal);
+      const cached = state.discoveredRootElements.get(rootEl);
+      if (!cached) continue;
+
+      const boundaries = this.getRootFieldBoundaries(rootEl);
+      const currentVersion = this.getFieldVersion(rootEl, this.config.fields, boundaries);
+      if (cached.fieldsVersion === currentVersion) {
+        unchangedCached.add(rootEl);
+        await this.refreshVisibleSubtree(cached.node, replyConfig, budget, state);
+      }
+    }
+
+    let discoveredNewCount = 0;
+    state.hasMoreVisibleRootsInDom = false;
+
+    for (const rootEl of topLevelElements) {
+      if (unchangedCached.has(rootEl)) continue;
+      if (state.uncommittedRoots.size >= lookaheadTarget || discoveredNewCount >= remaining) {
+        state.hasMoreVisibleRootsInDom = true;
+        break;
+      }
+
+      checkAborted(budget.signal);
+      await budget.yieldBudget.yieldIfNeeded(budget.signal);
+
+      (rootEl as HTMLElement).scrollIntoView?.({ behavior: 'instant', block: 'center' });
+      this.updateScrollWatermarks(container, state);
+
+      const initialBoundaries = this.getRootFieldBoundaries(rootEl);
+      const preContent = this.readOwnedField(
+        rootEl,
+        this.config.fields.find((f) => f.name === 'content'),
+        initialBoundaries,
+      );
+      if (!preContent) {
+        await abortableDelay(TIMING.SCROLL_PAUSE_MS, budget.signal);
+      }
+
+      const preFieldsVersion = this.getFieldVersion(
+        rootEl,
+        this.config.fields,
+        this.getRootFieldBoundaries(rootEl),
+      );
+      const comment = await this.extractCommentFromElement(
+        rootEl as HTMLElement,
+        budget.platform,
+        budget.signal,
+      );
+      if (!comment) continue;
+
+      const postFieldsVersion = this.getFieldVersion(
+        rootEl,
+        this.config.fields,
+        this.getRootFieldBoundaries(rootEl),
+      );
+      const existing = state.rootNodesById.get(comment.id);
+      if (existing) {
+        existing.element = rootEl as HTMLElement;
+        existing.fieldsVersion = postFieldsVersion;
+        const prevLikes = existing.comment.likes;
+        this.updateMutableCommentFields(existing.comment, comment);
+        if (comment.likes > prevLikes) {
+          existing.bridgedLikes = Math.max(existing.bridgedLikes, comment.likes);
+          if (!existing.committed && existing.inCommitHeap) {
+            this.pushCommitNode(existing, budget, state);
+          }
+        }
+        if (preFieldsVersion === postFieldsVersion) {
+          state.discoveredRootElements.set(rootEl, {
+            fieldsVersion: postFieldsVersion,
+            node: existing,
+          });
+        }
+        await this.refreshVisibleSubtree(existing, replyConfig, budget, state);
+        continue;
+      }
+
+      const rootRank = state.nextRootRank++;
+      const rootNode: FrontierNode = {
+        id: comment.id,
+        comment,
+        element: rootEl as HTMLElement,
+        fieldsVersion: postFieldsVersion,
+        depth: 0,
+        rootRank,
+        siblingRank: rootRank,
+        rootId: comment.id,
+        parent: null,
+        children: [],
+        childrenById: new Map(),
+        discoveredChildElements: new WeakMap(),
+        bridgedLikes: Math.max(0, comment.likes),
+        committed: false,
+        inCommitHeap: false,
+        expandClicks: 0,
+        commitVersion: 0,
+        expandVersion: 0,
+      };
+      state.rootNodesById.set(rootNode.id, rootNode);
+      if (preFieldsVersion === postFieldsVersion) {
+        state.discoveredRootElements.set(rootEl, {
+          fieldsVersion: postFieldsVersion,
+          node: rootNode,
+        });
+      }
+      state.uncommittedRoots.add(rootNode);
+      discoveredNewCount += 1;
+
+      await this.scanVisibleChildren(rootNode, 2, replyConfig, budget, state);
+      this.pushCommitNode(rootNode, budget, state);
+    }
+
+    return discoveredNewCount;
+  }
+
+  private async refreshVisibleSubtree(
+    rootNode: FrontierNode,
+    replyConfig: ReplyConfig,
+    budget: ExtractionBudget,
+    state: FrontierState,
+  ): Promise<void> {
+    if (!rootNode.committed) {
+      await this.scanVisibleChildren(rootNode, 2, replyConfig, budget, state);
+      return;
+    }
+
+    const stack: FrontierNode[] = [rootNode];
+    while (stack.length > 0) {
+      const current = stack.pop()!;
+      if (!current.element.isConnected || current.depth >= budget.maxReplyDepth) {
+        continue;
+      }
+      await this.scanVisibleChildren(current, 2, replyConfig, budget, state);
+      this.enqueueExpandIfEligible(current, replyConfig, budget, state);
+      for (const child of current.children) {
+        if (child.committed && child.depth < budget.maxReplyDepth) {
+          stack.push(child);
+        }
+      }
+    }
+  }
+
+  private async scanVisibleChildren(
+    parentNode: FrontierNode,
+    lookaheadHops: number,
+    replyConfig: ReplyConfig,
+    budget: ExtractionBudget,
+    state: FrontierState,
+  ): Promise<number> {
+    if (
+      parentNode.depth >= budget.maxReplyDepth ||
+      lookaheadHops <= 0 ||
+      !parentNode.element.isConnected
+    ) {
+      return 0;
+    }
+
+    const directElements = this.directReplyItems(parentNode.element, replyConfig);
+    let newlyDiscovered = 0;
+    let maxChildBridged = 0;
+
+    for (const replyEl of directElements) {
+      checkAborted(budget.signal);
+      await budget.yieldBudget.yieldIfNeeded(budget.signal);
+
+      const childDirect =
+        parentNode.depth + 1 < budget.maxReplyDepth
+          ? this.directReplyItems(replyEl, replyConfig)
+          : [];
+      const childBoundaries = this.buildFieldBoundaries(replyEl, childDirect);
+      const childFieldsVersion = this.getFieldVersion(replyEl, replyConfig.fields, childBoundaries);
+
+      const cachedEl = parentNode.discoveredChildElements.get(replyEl);
+      if (cachedEl && cachedEl.fieldsVersion === childFieldsVersion) {
+        const existingChild = cachedEl.node;
+        if (lookaheadHops > 1) {
+          newlyDiscovered += await this.scanVisibleChildren(
+            existingChild,
+            lookaheadHops - 1,
+            replyConfig,
+            budget,
+            state,
+          );
+        }
+        if (existingChild.bridgedLikes > maxChildBridged) {
+          maxChildBridged = existingChild.bridgedLikes;
+        }
+        continue;
+      }
+
+      const replyComment = this.buildCommentFromElement(
+        replyEl as HTMLElement,
+        replyConfig.fields,
+        budget.platform,
+        childBoundaries,
+      );
+      if (!replyComment) continue;
+
+      replyComment.id = generateCommentHash(replyComment);
+      let childNode = parentNode.childrenById.get(replyComment.id);
+      if (childNode) {
+        childNode.element = replyEl as HTMLElement;
+        childNode.fieldsVersion = childFieldsVersion;
+        this.updateMutableCommentFields(childNode.comment, replyComment);
+        childNode.bridgedLikes = Math.max(childNode.bridgedLikes, replyComment.likes);
+        parentNode.discoveredChildElements.set(replyEl, {
+          fieldsVersion: childFieldsVersion,
+          node: childNode,
+        });
+      } else {
+        childNode = {
+          id: replyComment.id,
+          comment: replyComment,
+          element: replyEl as HTMLElement,
+          fieldsVersion: childFieldsVersion,
+          depth: parentNode.depth + 1,
+          rootRank: parentNode.rootRank,
+          siblingRank: parentNode.children.length,
+          rootId: parentNode.rootId,
+          parent: parentNode,
+          children: [],
+          childrenById: new Map(),
+          discoveredChildElements: new WeakMap(),
+          bridgedLikes: Math.max(0, replyComment.likes),
+          committed: false,
+          inCommitHeap: false,
+          expandClicks: 0,
+          commitVersion: 0,
+          expandVersion: 0,
+        };
+        parentNode.children.push(childNode);
+        parentNode.childrenById.set(childNode.id, childNode);
+        parentNode.discoveredChildElements.set(replyEl, {
+          fieldsVersion: childFieldsVersion,
+          node: childNode,
+        });
+        newlyDiscovered += 1;
+
+        if (parentNode.committed) {
+          this.pushCommitNode(childNode, budget, state);
+        }
+      }
+
+      if (lookaheadHops > 1) {
+        newlyDiscovered += await this.scanVisibleChildren(
+          childNode,
+          lookaheadHops - 1,
+          replyConfig,
+          budget,
+          state,
+        );
+      }
+      if (childNode.bridgedLikes > maxChildBridged) {
+        maxChildBridged = childNode.bridgedLikes;
+      }
+    }
+
+    this.propagateBridgedLikes(parentNode, maxChildBridged, budget, state);
+    return newlyDiscovered;
+  }
+
+  private propagateBridgedLikes(
+    startNode: FrontierNode,
+    initialChildMax: number,
+    budget: ExtractionBudget,
+    state: FrontierState,
+  ): void {
+    let current: FrontierNode | null = startNode;
+    let childMax = initialChildMax;
+    while (current) {
+      const prevBridged = current.bridgedLikes;
+      const nextBridged = Math.max(
+        Math.max(0, current.comment.likes),
+        prevBridged,
+        REPLY_TRAVERSAL.BRIDGED_LIKE_DECAY * childMax,
+      );
+      if (nextBridged > prevBridged) {
+        current.bridgedLikes = nextBridged;
+        if (!current.committed && current.inCommitHeap) {
+          this.pushCommitNode(current, budget, state);
+        }
+      }
+      childMax = current.bridgedLikes;
+      current = current.parent;
+    }
+  }
+
+  private buildOrderedFrontierResult(state: FrontierState): Comment[] {
+    const finalizeReplies = (node: FrontierNode): void => {
+      const committedChildren = node.children
+        .filter((child) => child.committed)
+        .sort((a, b) => a.siblingRank - b.siblingRank);
+      node.comment.replies = committedChildren.map((child) => {
+        finalizeReplies(child);
+        return child.comment;
+      });
+    };
+
+    const orderedRoots = [...state.committedRoots].sort((a, b) => a.rootRank - b.rootRank);
+    return orderedRoots.map((root) => {
+      finalizeReplies(root);
+      return root.comment;
+    });
+  }
+
+  private findEligibleExpandButton(
+    node: FrontierNode,
+    replyConfig: ReplyConfig,
+    budget: ExtractionBudget,
+  ): HTMLElement | null {
+    if (!replyConfig.expandBtn || !node.element.isConnected) {
+      return null;
+    }
+
+    const currentDirectReplies = this.directReplyItems(node.element, replyConfig);
+    const boundaries = this.replyItemBoundaries(node.element, replyConfig, currentDirectReplies);
+    return (
+      findElementsByRule(node.element, replyConfig.expandBtn).find(
+        (button): button is HTMLElement =>
+          button instanceof HTMLElement &&
+          !budget.failedExpandButtons.has(button) &&
+          budget.clickedExpandSnapshots.get(button) !== this.getButtonSnapshot(button) &&
+          this.nearestParentItem(button, boundaries) === node.element &&
+          this.canExpandReplies(button),
+      ) ?? null
+    );
+  }
+
+  private findEligibleLoadMoreButton(
+    container: Element,
+    itemSet: ReadonlySet<Element>,
+    failedLoadMoreButtons: WeakSet<HTMLElement>,
+    loadMoreClicks: number,
+  ): HTMLElement | null {
+    if (!this.config.loadMoreBtn || loadMoreClicks >= TIMING.MAX_LOAD_MORE_CLICKS) {
+      return null;
+    }
+    return (
+      findElementsByRule(container, this.config.loadMoreBtn).find(
+        (button): button is HTMLElement =>
+          button instanceof HTMLElement &&
+          !failedLoadMoreButtons.has(button) &&
+          this.nearestParentItem(button, itemSet) === null &&
+          this.canExpandReplies(button),
+      ) ?? null
+    );
+  }
+
+  private updateMutableCommentFields(target: Comment, source: Comment): void {
+    target.username = source.username;
+    target.content = source.content;
+    target.timestamp = source.timestamp;
+    target.likes = source.likes;
+    target.platform = source.platform;
+  }
+
+  private getRootFieldBoundaries(element: Element): ReadonlySet<Element> {
+    const directReplies = this.config.replies
+      ? this.directReplyItems(element, this.config.replies)
+      : [];
+    return this.buildFieldBoundaries(element, directReplies);
   }
 
   private reportProgress(budget: ExtractionBudget, stage: ProgressStage): void {
@@ -319,8 +1137,12 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     replyConfig: ReplyConfig,
     maxResults?: number,
   ): Element[] {
-    const queryLimit = maxResults ?? LIMITS.DOM_QUERY_MAX_RESULTS;
     const sameContainerAndItem = this.isSameRule(replyConfig.container, replyConfig.item);
+    const queryLimit =
+      maxResults ??
+      (sameContainerAndItem
+        ? LIMITS.DOM_QUERY_MAX_RESULTS * REPLY_TRAVERSAL.RECURSIVE_QUERY_MULTIPLIER
+        : LIMITS.DOM_QUERY_MAX_RESULTS);
     const matchedItems = findElementsByRule(element, replyConfig.item, queryLimit);
     const boundaries = new Set<Element>([element, ...matchedItems]);
     if (!this.isSameRule(this.config.item, replyConfig.item)) {
@@ -443,80 +1265,20 @@ export class ConfiguredStrategy implements ExtractionStrategy {
     element: HTMLElement,
     platform: Platform,
     signal?: AbortSignal,
-    budget?: ExtractionBudget,
-    commentsByHash?: Map<string, Comment>,
-    allComments?: Comment[],
   ): Promise<Comment | null> {
     try {
       checkAborted(signal);
 
-      const directReplies =
-        this.config.replies && (!budget || budget.maxReplyDepth > 0)
-          ? this.directReplyItems(element, this.config.replies)
-          : [];
       const comment = this.buildCommentFromElement(
         element,
         this.config.fields,
         platform,
-        this.buildFieldBoundaries(element, directReplies),
+        this.getRootFieldBoundaries(element),
       );
       if (!comment) return null;
 
-      const hash = generateCommentHash(comment);
-      comment.id = hash;
-
-      let targetComment = comment;
-      if (budget && commentsByHash && allComments) {
-        const existing = commentsByHash.get(hash);
-        if (existing) {
-          existing.username = comment.username;
-          existing.content = comment.content;
-          existing.timestamp = comment.timestamp;
-          existing.likes = comment.likes;
-          existing.platform = comment.platform;
-          targetComment = existing;
-        } else {
-          if (budget.totalCount >= budget.maxComments) {
-            return null;
-          }
-          commentsByHash.set(hash, comment);
-          allComments.push(comment);
-          budget.totalCount += 1;
-          budget.addedInRound += 1;
-          this.reportProgress(budget, 'extracting');
-          targetComment = comment;
-        }
-      }
-
-      if (
-        this.config.replies &&
-        (!budget || (budget.maxReplyDepth > 0 && budget.totalCount < budget.maxComments))
-      ) {
-        if (budget) {
-          await this.extractRepliesInto(element, targetComment, this.config.replies, 1, budget);
-        } else {
-          const fallbackBudget: ExtractionBudget = {
-            maxComments: Number.MAX_SAFE_INTEGER,
-            maxReplyDepth: EXTRACTION_DEFAULTS.MAX_REPLY_DEPTH,
-            totalCount: 1,
-            addedInRound: 0,
-            platform,
-            signal,
-            yieldBudget: createYieldBudget(),
-            failedExpandButtons: new WeakSet<HTMLElement>(),
-            clickedExpandSnapshots: new WeakMap<HTMLElement, string>(),
-          };
-          await this.extractRepliesInto(
-            element,
-            targetComment,
-            this.config.replies,
-            1,
-            fallbackBudget,
-          );
-        }
-      }
-
-      return targetComment;
+      comment.id = generateCommentHash(comment);
+      return comment;
     } catch (e: unknown) {
       if (e instanceof ExtensionError && e.code === ErrorCode.TASK_CANCELLED) {
         throw e;
@@ -558,146 +1320,6 @@ export class ConfiguredStrategy implements ExtractionStrategy {
       platform,
       replies: [],
     };
-  }
-
-  private async extractRepliesInto(
-    element: HTMLElement,
-    parentComment: Comment,
-    replyConfig: ReplyConfig,
-    depth: number,
-    budget: ExtractionBudget,
-  ): Promise<void> {
-    if (depth > budget.maxReplyDepth || budget.totalCount >= budget.maxComments) {
-      return;
-    }
-
-    checkAborted(budget.signal);
-
-    if (replyConfig.expandBtn) {
-      let expandClicks = 0;
-      while (
-        expandClicks < TIMING.MAX_EXPAND_CLICKS_PER_NODE &&
-        budget.totalCount < budget.maxComments
-      ) {
-        checkAborted(budget.signal);
-        const currentDirectReplies = this.directReplyItems(element, replyConfig);
-        const remaining = budget.maxComments - budget.totalCount;
-        const unprocessedDirectCount = currentDirectReplies.filter(
-          (item) => !this.processedVersions.has(item),
-        ).length;
-        if (unprocessedDirectCount >= remaining) {
-          break;
-        }
-
-        const boundaries = this.replyItemBoundaries(element, replyConfig, currentDirectReplies);
-        const expandBtn = findElementsByRule(element, replyConfig.expandBtn).find(
-          (button): button is HTMLElement =>
-            button instanceof HTMLElement &&
-            !budget.failedExpandButtons.has(button) &&
-            budget.clickedExpandSnapshots.get(button) !== this.getButtonSnapshot(button) &&
-            this.nearestParentItem(button, boundaries) === element &&
-            this.canExpandReplies(button),
-        );
-        if (!expandBtn) break;
-
-        budget.clickedExpandSnapshots.set(expandBtn, this.getButtonSnapshot(expandBtn));
-        this.reportProgress(budget, 'expanding');
-        const expanded = await this.clickExpandButton(
-          element,
-          expandBtn,
-          replyConfig,
-          budget.signal,
-          depth > 1,
-        );
-        expandClicks += 1;
-        if (!expanded) {
-          budget.failedExpandButtons.add(expandBtn);
-        }
-      }
-    }
-
-    const replyItems = this.directReplyItems(element, replyConfig);
-    if (replyItems.length > 0) {
-      Logger.info(
-        depth > 1
-          ? `[ReplyDebug] Found ${replyItems.length} nested replies at depth ${depth}`
-          : `[ReplyDebug] Found ${replyItems.length} reply items`,
-      );
-    }
-
-    const existingRepliesById = new Map(parentComment.replies.map((reply) => [reply.id, reply]));
-
-    for (const replyItem of replyItems) {
-      if (budget.totalCount >= budget.maxComments) break;
-      checkAborted(budget.signal);
-      await budget.yieldBudget.yieldIfNeeded(budget.signal);
-
-      const canRecurse = depth < budget.maxReplyDepth;
-      const version = this.getElementVersion(replyItem, replyConfig.fields, canRecurse);
-      const cached = this.processedVersions.get(replyItem);
-      if (cached?.version === version) {
-        if (!existingRepliesById.has(cached.comment.id)) {
-          parentComment.replies.push(cached.comment);
-          existingRepliesById.set(cached.comment.id, cached.comment);
-        }
-        continue;
-      }
-
-      const childDirectReplies = canRecurse ? this.directReplyItems(replyItem, replyConfig) : [];
-      const childBoundaries = this.buildFieldBoundaries(replyItem, childDirectReplies);
-      const fieldsVersion = this.getFieldVersion(replyItem, replyConfig.fields, childBoundaries);
-      const reply = this.buildCommentFromElement(
-        replyItem as HTMLElement,
-        replyConfig.fields,
-        budget.platform,
-        childBoundaries,
-      );
-      if (!reply) continue;
-
-      reply.id = generateCommentHash(reply);
-      const existingReply = existingRepliesById.get(reply.id);
-      let targetReply: Comment;
-      if (existingReply) {
-        existingReply.username = reply.username;
-        existingReply.content = reply.content;
-        existingReply.timestamp = reply.timestamp;
-        existingReply.likes = reply.likes;
-        existingReply.platform = reply.platform;
-        targetReply = existingReply;
-      } else {
-        parentComment.replies.push(reply);
-        existingRepliesById.set(reply.id, reply);
-        budget.totalCount += 1;
-        budget.addedInRound += 1;
-        this.reportProgress(budget, 'extracting');
-        targetReply = reply;
-      }
-
-      if (canRecurse && budget.totalCount < budget.maxComments) {
-        await this.extractRepliesInto(
-          replyItem as HTMLElement,
-          targetReply,
-          replyConfig,
-          depth + 1,
-          budget,
-        );
-      }
-
-      if (budget.totalCount < budget.maxComments) {
-        const postChildBoundaries = this.buildFieldBoundaries(
-          replyItem,
-          canRecurse ? this.directReplyItems(replyItem, replyConfig) : [],
-        );
-        if (
-          fieldsVersion === this.getFieldVersion(replyItem, replyConfig.fields, postChildBoundaries)
-        ) {
-          this.processedVersions.set(replyItem, {
-            version: this.getElementVersion(replyItem, replyConfig.fields, canRecurse),
-            comment: targetReply,
-          });
-        }
-      }
-    }
   }
 
   private getButtonSnapshot(button: HTMLElement): string {

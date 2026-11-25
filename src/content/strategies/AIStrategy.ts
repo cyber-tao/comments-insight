@@ -284,21 +284,15 @@ export class AIStrategy implements ExtractionStrategy {
         // 2.4 Merge & Dedup
         const depthLimitedBatch = trimCommentsToDepth(newComments, safeMaxReplyDepth);
         let runningTotal = countComments(allComments);
-        const added = this.mergeComments(
-          allComments,
-          depthLimitedBatch,
-          platform,
-          () => {
-            runningTotal += 1;
-            const safeCurrent = Math.min(runningTotal, maxComments);
-            const updatedProgress = Math.min(
-              EXTRACTION_PROGRESS.NORMALIZING,
-              EXTRACTION_PROGRESS.MIN + (safeCurrent / maxComments) * EXTRACTION_PROGRESS.RANGE,
-            );
-            onProgress?.(updatedProgress, '', 'extracting', safeCurrent, maxComments);
-          },
-          maxComments - runningTotal,
-        );
+        const added = this.mergeComments(allComments, depthLimitedBatch, platform, () => {
+          runningTotal += 1;
+          const safeCurrent = Math.min(runningTotal, maxComments);
+          const updatedProgress = Math.min(
+            EXTRACTION_PROGRESS.NORMALIZING,
+            EXTRACTION_PROGRESS.MIN + (safeCurrent / maxComments) * EXTRACTION_PROGRESS.RANGE,
+          );
+          onProgress?.(updatedProgress, '', 'extracting', safeCurrent, maxComments);
+        });
 
         const nextTotal = countComments(allComments);
         Logger.info('[AIStrategy] Extracted batch', {

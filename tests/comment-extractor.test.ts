@@ -3,6 +3,7 @@ import { CommentExtractor } from '../src/content/CommentExtractor';
 import { MESSAGES } from '../src/config/constants';
 import type { PageController } from '../src/content/PageController';
 import type { CrawlingConfig } from '../src/types';
+import { countComments } from '../src/utils/comment-tree';
 import { mockComment, mockComments } from './fixtures';
 
 const {
@@ -136,9 +137,10 @@ describe('CommentExtractor', () => {
       mockAIExecute.mockResolvedValue(comments);
 
       const limited = await extractor.extractWithAI(3, 'YouTube', undefined, undefined, 10);
-      expect(limited).toHaveLength(1);
-      expect(limited[0].replies).toHaveLength(1);
-      expect(limited[0].replies[0].replies).toHaveLength(1);
+      expect(countComments(limited)).toBe(3);
+      expect(limited.map((c) => c.id)).toEqual(['root-1', 'root-2']);
+      expect(limited[0].replies.map((r) => r.id)).toEqual(['reply-1']);
+      expect(limited[1].replies).toEqual([]);
 
       const shallow = await extractor.extractWithAI(10, 'YouTube', undefined, undefined, 1);
       expect(shallow[0].replies).toHaveLength(2);

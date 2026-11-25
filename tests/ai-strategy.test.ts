@@ -646,6 +646,35 @@ describe('AIStrategy execution', () => {
       expect(aiServiceMock.callAI).toHaveBeenCalledOnce();
     });
 
+    it('preserves sibling roots alongside top replies instead of DFS-truncating a mega-thread batch', async () => {
+      aiServiceMock.callAI.mockResolvedValue({
+        comments: [
+          {
+            ...createComment('root-0'),
+            likes: 1000,
+            replies: Array.from({ length: 10 }, (_, idx) => ({
+              ...createComment(`reply-0-${idx}`),
+              likes: 200 - idx * 15,
+            })),
+          },
+          { ...createComment('root-1'), likes: 800 },
+          { ...createComment('root-2'), likes: 600 },
+          { ...createComment('root-3'), likes: 400 },
+        ],
+      });
+
+      const comments = await new AIStrategy(createPageController()).execute(5, 'test-platform');
+
+      expect(comments.map((comment) => comment.id)).toEqual([
+        'root-0',
+        'root-1',
+        'root-2',
+        'root-3',
+      ]);
+      expect(comments[0].replies.map((reply) => reply.id)).toEqual(['reply-0-0']);
+      expect(aiServiceMock.callAI).toHaveBeenCalledOnce();
+    });
+
     it('disconnects the container observer when extraction is cancelled', async () => {
       const disconnect = vi.spyOn(MutationObserver.prototype, 'disconnect');
       const observe = vi.spyOn(MutationObserver.prototype, 'observe');
